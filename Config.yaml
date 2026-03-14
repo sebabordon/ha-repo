@@ -1,0 +1,29 @@
+name: "Deco → AdGuard Sync"
+description: "Sincroniza clientes del TP-Link Deco XE75 Pro con AdGuard Home via API"
+version: "1.0.0"
+slug: "deco-adguard-sync"
+init: false
+arch:
+  - aarch64
+  - armv7
+  - amd64
+homeassistant_api: false
+hassio_api: false
+
+options:
+  deco_host: "https://10.0.2.1"
+  deco_pass: ""
+  agh_host: "https://10.0.2.232:3002"
+  agh_user: "admin"
+  agh_pass: ""
+  min_ip_suffix: 100
+  run_on_start: true
+
+schema:
+  deco_host: str
+  deco_pass: str
+  agh_host: str
+  agh_user: str
+  agh_pass: str
+  min_ip_suffix: int
+  run_on_start: bool
