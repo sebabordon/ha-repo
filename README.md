@@ -1,29 +1,53 @@
 # Deco → AdGuard Sync — Home Assistant Add-on
 
-Sincroniza automáticamente los clientes del **TP-Link Deco XE75 Pro** con **AdGuard Home**, usando la API de ambos.
+Automatically syncs connected devices from your **TP-Link Deco XE75 Pro** into **AdGuard Home** as persistent clients, using both devices' local APIs.
 
-## Instalación
+## How it works
 
-1. En Home Assistant ir a **Settings → Add-ons → Add-on Store**
-2. Click en los 3 puntos (arriba a la derecha) → **Repositories**
-3. Agregar la URL de este repo: `https://github.com/TU_USUARIO/TU_REPO`
-4. Buscar **"Deco → AdGuard Sync"** e instalar
+1. Connects to the Deco and fetches all currently connected devices
+2. Filters out infrastructure devices by minimum IP (configurable)
+3. Compares against existing AdGuard Home clients (by name and by IP)
+4. Adds only new clients — existing ones are safely skipped
+5. All new clients are created with global settings and global blocked services enabled
 
-## Configuración
+The sync runs once on startup, then automatically every 6 hours.
 
-| Opción | Descripción | Ejemplo |
+## Installation
+
+1. In Home Assistant go to **Settings → Add-ons → Add-on Store**
+2. Click the **⋮** menu (top right) → **Repositories**
+3. Add: `https://github.com/sebabordon/deco-to-adguard`
+4. Click **Add** → **Close**
+5. Find **"Deco → AdGuard Sync"** in the store and install it
+6. Go to the **Configuration** tab and fill in your credentials
+7. Click **Start**
+
+## Configuration
+
+| Option | Description | Example |
 |---|---|---|
-| `deco_host` | URL del Deco principal | `https://10.0.2.1` |
-| `deco_pass` | Contraseña de administración local del Deco | `micontrasena` |
-| `agh_host` | URL de AdGuard Home | `https://10.0.2.232:3002` |
-| `agh_user` | Usuario de AdGuard Home | `admin` |
-| `agh_pass` | Contraseña de AdGuard Home | `micontrasena` |
-| `min_ip_suffix` | Último octeto mínimo de IP a exportar | `100` (exporta desde 10.0.2.100) |
-| `run_on_start` | Correr sync al iniciar el add-on | `true` |
+| `deco_host` | URL of your main Deco node | `https://10.0.2.1` |
+| `deco_pass` | Deco local admin password | set in Deco app → More → Local Management |
+| `agh_host` | AdGuard Home URL with port | `https://10.0.2.232:3002` |
+| `agh_user` | AdGuard Home username | `admin` |
+| `agh_pass` | AdGuard Home password | — |
+| `min_ip_suffix` | Minimum last IP octet to export | `100` → exports from x.x.x.100 upward |
+| `run_on_start` | Run a sync immediately on startup | `true` |
 
-## Funcionamiento
+### About `min_ip_suffix`
 
-- Al iniciar corre una sincronización inmediata (si `run_on_start: true`)
-- Luego sincroniza automáticamente **cada 6 horas**
-- Los clientes que ya existen en AdGuard Home (por nombre o por IP) se saltean
-- Los nuevos se crean con `use_global_settings: true` y `use_global_blocked_services: true`
+This filters out infrastructure devices (router, APs, switches, servers) which typically have low IPs like `.1`, `.2`, `.10`, etc.
+
+For example, with `min_ip_suffix: 100`, only devices with IPs ending in `.100` or higher will be exported to AdGuard Home.
+
+## Notes
+
+- SSL certificate verification is disabled for both the Deco and AdGuard Home connections, since both typically use self-signed certificates on local networks
+- Clients already in AdGuard Home are matched by **name** and by **IP address** — so renaming a client in AdGuard Home won't cause duplicates
+- To force an immediate sync without waiting 6 hours, simply restart the add-on
+
+## Requirements
+
+- TP-Link Deco XE75 Pro (or compatible Deco model)
+- AdGuard Home with API access enabled
+- Local Management enabled on the Deco app (More → Local Management)
