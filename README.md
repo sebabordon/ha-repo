@@ -1,4 +1,4 @@
-# Homeassistant Apps by me (actually Claude, but wiht my ideas)
+# Homeassistant Apps by me (actually Claude, but with my ideas)
 
 # Deco → AdGuard Sync — Home Assistant Add-on
 
