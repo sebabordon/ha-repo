@@ -16,24 +16,19 @@ RUN apk add --no-cache \
         ghostscript \
         libjpeg-turbo \
         net-snmp \
+        patchelf \
+        libstdc++ \
         curl \
-        git \
-        make \
-        g++ \
-        cups-dev \
-        ghostscript-dev \
-        epson-inkjet-printer-escpr
+        epson-inkjet-printer-escpr 
 
-# Compilar SpliX desde el branch xerox-3020
-RUN git clone --branch xerox-3020 https://github.com/OpenPrinting/splix.git /tmp/splix \
-    && cd /tmp/splix \
-    && make \
-    && make install \
-    && rm -rf /tmp/splix
 # Copy data
 COPY rootfs /
-RUN chmod a+x /etc/cont-init.d/cups.sh
-# Expose CUPS web interface port
+RUN chmod a+x /etc/cont-init.d/cups.sh && \
+    chmod a+x /usr/lib/cups/filter/rastertospl && \
+    chmod a+x /usr/lib/cups/filter/pstosecps && \
+    patchelf --set-interpreter /lib/ld-linux-armhf.so.3 /usr/lib/cups/filter/rastertospl && \
+    patchelf --set-interpreter /lib/ld-linux-armhf.so.3 /usr/lib/cups/filter/pstosecps
+
 EXPOSE 631
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:631/ || exit 1
