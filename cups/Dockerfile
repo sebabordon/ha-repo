@@ -20,7 +20,7 @@ RUN \
         libjpeg-turbo \
         net-snmp \
         epson-inkjet-printer-escpr \
-        curl
+        curl \
         splix
 # Copy data
 COPY rootfs /
