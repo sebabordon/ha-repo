@@ -33,7 +33,7 @@ RUN apt-get update && \
 
 COPY rootfs /
 
-RUN chmod a+x /etc/cont-init.d/cups.sh && \
+RUN find /etc/cont-init.d/ -type f -exec chmod a+x {} \; && \
     chmod a+x /usr/lib/cups/filter/rastertospl && \
     chmod a+x /usr/lib/cups/filter/pstosecps && \
     patchelf --set-interpreter /lib/ld-linux-armhf.so.3 /usr/lib/cups/filter/rastertospl && \
