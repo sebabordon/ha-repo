@@ -9,19 +9,27 @@ ENV CUPS_LOGDIR=/data/cups/logs
 ENV CUPS_STATEDIR=/data/cups/state
 ENV CUPS_SERVERROOT=/data/cups/config
 # Setup base
-RUN \
-    echo "http://dl-cdn.alpinelinux.org/alpine/v$(cat /etc/alpine-release | cut -d'.' -f1,2)/main" > /etc/apk/repositories && \
-    echo "http://dl-cdn.alpinelinux.org/alpine/v$(cat /etc/alpine-release | cut -d'.' -f1,2)/community" >> /etc/apk/repositories && \
-    apk update && \
-    apk add --no-cache \
+# Dependencias para compilar SpliX
+RUN apk add --no-cache \
         cups \
         cups-filters \
         ghostscript \
         libjpeg-turbo \
         net-snmp \
-        epson-inkjet-printer-escpr \
         curl \
-        splix
+        git \
+        make \
+        g++ \
+        cups-dev \
+        ghostscript-dev \
+        epson-inkjet-printer-escpr
+
+# Compilar SpliX desde el branch xerox-3020
+RUN git clone --branch xerox-3020 https://github.com/OpenPrinting/splix.git /tmp/splix \
+    && cd /tmp/splix \
+    && make \
+    && make install \
+    && rm -rf /tmp/splix
 # Copy data
 COPY rootfs /
 RUN chmod a+x /etc/cont-init.d/cups.sh
