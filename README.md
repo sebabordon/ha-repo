@@ -7,19 +7,20 @@ A collection of Home Assistant add-ons built to scratch my own itches.
 
 ## Add-ons
 
-### 🖨️ CUPS Print Server
-
-Runs a CUPS print server inside Home Assistant, allowing you to share a USB printer over your local network. macOS devices discover it automatically via Bonjour/AirPrint — no manual configuration needed.
-
-[View add-on →](./cups)
-
----
 
 ### 🔄 Deco → AdGuard Sync
 
 Automatically syncs connected devices from your TP-Link Deco mesh network into AdGuard Home as persistent clients. Runs on startup and every 6 hours, skipping devices that are already registered.
 
 [View add-on →](./deco-to-adguard)
+
+---
+
+### 🖨️ CUPS Print Server - NonWorking for Xerox 3020
+
+Runs a CUPS print server inside Home Assistant, allowing you to share a USB printer over your local network. macOS devices discover it automatically via Bonjour/AirPrint — no manual configuration needed.
+
+[View add-on →](./cups)
 
 ---
 
