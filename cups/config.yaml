@@ -1,0 +1,35 @@
+---
+version: 1.0.1
+slug: cups
+name: CUPS Print Server
+description: CUPS print server for network printing
+url: https://github.com/arest/cups-addon
+arch:
+  - armhf
+  - armv7
+  - aarch64
+  - amd64
+  - i386
+hassio_api: true
+host_network: true
+privileged:
+  - SYS_ADMIN
+devices:
+  - /dev/bus/usb
+map:
+  - data:rw
+  - share:rw
+init: false
+ports:
+  631/tcp: 631
+ports_description:
+  631/tcp: CUPS web interface and printing port
+options:
+  admin_username: "admin"
+  admin_password: "admin"
+schema:
+  admin_username: str
+  admin_password: password
+startup: services
+webui: http://[HOST]:[PORT:631]
+ingress: false
