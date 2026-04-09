@@ -2,8 +2,10 @@ import os
 import json
 import sqlite3
 import logging
+import base64
 from datetime import datetime, date
-from flask import Flask, render_template, redirect, request, session, url_for, jsonify
+from functools import wraps
+from flask import Flask, render_template, redirect, request, session, url_for, jsonify, Response
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -26,8 +28,32 @@ CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
 SCAN_DAY = os.environ.get("SCAN_DAY", "sunday")
 SCAN_HOUR = int(os.environ.get("SCAN_HOUR", "0"))
 INGRESS_ENTRY = os.environ.get("INGRESS_ENTRY", "")
+AUTH_USER = os.environ.get("AUTH_USER", "")
+AUTH_PASS = os.environ.get("AUTH_PASS", "")
 
 SCOPE = "user-library-read user-library-modify"
+
+def check_auth(username, password):
+    if not AUTH_USER and not AUTH_PASS:
+        return True
+    return username == AUTH_USER and password == AUTH_PASS
+
+def require_auth():
+    return Response(
+        "Authentication required.", 401,
+        {"WWW-Authenticate": 'Basic realm="Spotify Tracker"'}
+    )
+
+def auth_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not AUTH_USER and not AUTH_PASS:
+            return f(*args, **kwargs)
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return require_auth()
+        return f(*args, **kwargs)
+    return decorated
 
 DAY_MAP = {
     "monday": "mon", "tuesday": "tue", "wednesday": "wed",
@@ -225,6 +251,7 @@ def start_scheduler():
 # ─── Routes ──────────────────────────────────────────────────────────────────
 
 @app.route("/")
+@auth_required
 def index():
     sp = get_spotify_client()
     authed = sp is not None
@@ -267,6 +294,7 @@ def index():
     )
 
 @app.route("/login")
+@auth_required
 def login():
     oauth = get_sp_oauth()
     auth_url = oauth.get_authorize_url()
@@ -282,6 +310,7 @@ def callback():
     return redirect(url_for("index"))
 
 @app.route("/scan", methods=["POST"])
+@auth_required
 def manual_scan():
     sp = get_spotify_client()
     if not sp:
@@ -297,6 +326,7 @@ def manual_scan():
     })
 
 @app.route("/snapshot/<int:snap_id>")
+@auth_required
 def snapshot_detail(snap_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -311,6 +341,7 @@ def snapshot_detail(snap_id):
     return render_template("snapshot.html", snap=snap, tracks=tracks, snap_id=snap_id, ingress_entry=INGRESS_ENTRY)
 
 @app.route("/unlike/<spotify_id>", methods=["POST"])
+@auth_required
 def unlike_track(spotify_id):
     sp = get_spotify_client()
     if not sp:
@@ -336,6 +367,7 @@ def unlike_track(spotify_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/stats")
+@auth_required
 def api_stats():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()

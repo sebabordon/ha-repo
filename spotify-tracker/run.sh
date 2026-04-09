@@ -6,6 +6,8 @@ export REDIRECT_URI=$(bashio::config 'redirect_uri')
 export SCAN_DAY=$(bashio::config 'scan_day')
 export SCAN_HOUR=$(bashio::config 'scan_hour')
 export DATA_DIR="/data"
+export AUTH_USER=$(bashio::config 'auth_user')
+export AUTH_PASS=$(bashio::config 'auth_pass')
 
 mkdir -p "${DATA_DIR}"
 
