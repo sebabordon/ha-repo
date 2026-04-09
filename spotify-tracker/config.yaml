@@ -1,6 +1,6 @@
 name: "Spotify Liked Songs Tracker"
 description: "Tracks your Spotify liked songs weekly and shows what disappeared"
-version: "1.0.1"
+version: "1.0.3"
 slug: "spotify-tracker"
 init: false
 arch:
@@ -10,8 +10,8 @@ arch:
   - i386
 homeassistant_api: false
 ingress: true
-ingress_port: 8099
-panel_icon: mdi:spotify
+ingress_port: 8765
+panel_icon: mdi:music-note-heart
 panel_title: Spotify Tracker
 options:
   spotify_client_id: ""
