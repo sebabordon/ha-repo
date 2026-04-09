@@ -449,33 +449,41 @@ def snapshot_detail(snap_id):
 @app.route("/unlike/<spotify_id>", methods=["POST"])
 @auth_required
 def unlike_track(spotify_id):
-    token = get_valid_token()
 
-    if not token:
-        return jsonify({"error": "Not authenticated"}), 401
+    oauth = get_sp_oauth()
+    token_info = oauth.get_cached_token()
 
+    if not token_info:
+        return jsonify({"error": "No token"}), 401
+
+    if oauth.is_token_expired(token_info):
+        token_info = oauth.refresh_access_token(token_info["refresh_token"])
+
+    access_token = token_info["access_token"]
+
+    logger.info("Token scopes: %s", token_info.get("scope"))
     logger.info("Attempting unlike: %s", spotify_id)
 
-    r = requests.delete(
-        "https://api.spotify.com/v1/me/tracks",
+    import requests
+
+    url = f"https://api.spotify.com/v1/me/tracks?ids={spotify_id}"
+
+    r = requests.request(
+        "DELETE",
+        url,
         headers={
-            "Authorization": f"Bearer {token}"
-        },
-        params={
-            "ids": spotify_id
+            "Authorization": f"Bearer {access_token}"
         }
     )
 
     logger.info("Spotify DELETE response: %s %s", r.status_code, r.text)
 
     if r.status_code in (200, 204):
-        return jsonify({
-            "status": "ok",
-            "spotify_id": spotify_id
-        })
+        return jsonify({"status": "ok"})
 
     return jsonify({
-        "error": f"Spotify returned {r.status_code}: {r.text}"
+        "error": r.text,
+        "status": r.status_code
     }), 500
 
 
