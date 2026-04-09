@@ -305,7 +305,7 @@ def snapshot_detail(snap_id):
     if not snap:
         conn.close()
         return "Snapshot not found", 404
-    c.execute("SELECT name, artist, album, added_at FROM tracks WHERE snapshot_id = ? ORDER BY name", (snap_id,))
+    c.execute("SELECT name, artist, album, added_at, spotify_id FROM tracks WHERE snapshot_id = ? ORDER BY name", (snap_id,))
     tracks = c.fetchall()
     conn.close()
     return render_template("snapshot.html", snap=snap, tracks=tracks, snap_id=snap_id, ingress_entry=INGRESS_ENTRY)
