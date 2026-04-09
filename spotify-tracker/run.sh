@@ -9,7 +9,5 @@ export INGRESS_ENTRY=$(bashio::addon.ingress_entry)
 
 mkdir -p "${DATA_DIR}"
 
-nginx
-
-bashio::log.info "Starting Spotify Tracker..."
+bashio::log.info "Starting Spotify Tracker on port 8765..."
 exec python3 /app/app.py
