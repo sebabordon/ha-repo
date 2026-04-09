@@ -7,7 +7,4 @@ RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY rootfs /
-
-RUN chmod +x /usr/bin/run.sh
-
-CMD ["/usr/bin/run.sh"]
+RUN chmod +x /etc/services.d/spotify-tracker/run
