@@ -1,10 +1,17 @@
-FROM ghcr.io/home-assistant/aarch64-base:latest
+ARG BUILD_FROM
+FROM $BUILD_FROM
 
-RUN apk add --no-cache python3 py3-pip py3-virtualenv nginx
+RUN apk add --no-cache python3 py3-pip nginx
 
-COPY requirements.txt /tmp/
-RUN python3 -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
+WORKDIR /app
 
-COPY rootfs /
-RUN chmod +x /etc/services.d/spotify-tracker/run
+COPY requirements.txt .
+RUN pip3 install --break-system-packages -r requirements.txt
+
+COPY rootfs/app/ .
+COPY rootfs/etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf
+
+COPY run.sh .
+RUN chmod +x run.sh
+
+CMD ["/app/run.sh"]
