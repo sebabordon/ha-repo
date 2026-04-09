@@ -18,6 +18,6 @@ mkdir -p "$DATA_DIR"
 # Start nginx
 nginx &
 
-# Start Flask app
+# Start Flask app using venv
 bashio::log.info "Starting web app on port 5000..."
-python3 /app/app.py
+/opt/venv/bin/python3 /app/app.py

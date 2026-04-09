@@ -1,6 +1,6 @@
 name: "Spotify Liked Songs Tracker"
 description: "Tracks your Spotify liked songs weekly and shows what disappeared"
-version: "1.0.0"
+version: "1.0.1"
 slug: "spotify_tracker"
 init: false
 arch:
@@ -21,9 +21,7 @@ options:
 schema:
   spotify_client_id: str
   spotify_client_secret: str
-  scan_day: list(monday|tuesday|wednesday|thursday|friday|saturday|sunday)
-  scan_hour: int(0,23)
+  scan_day: "select(monday,tuesday,wednesday,thursday,friday,saturday,sunday)"
+  scan_hour: "int(0,23)"
 map:
   - data:rw
-ports:
-  8099/tcp: null
