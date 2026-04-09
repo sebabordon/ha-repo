@@ -346,7 +346,7 @@ def api_stats():
     conn.close()
     return jsonify({"snapshots": rows, "removed_by_week": removed})
 
-# ─── Main ─────────────────────────────────────────────────────────────────────
+# ─── Main ──2───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     init_db()
