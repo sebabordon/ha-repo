@@ -459,42 +459,25 @@ def unlike_track(spotify_id):
     if oauth.is_token_expired(token_info):
         token_info = oauth.refresh_access_token(token_info["refresh_token"])
 
-    if not token_info or "access_token" not in token_info:
-        return jsonify({"error": "Token refresh failed"}), 401
-
     access_token = token_info["access_token"]
 
     me = requests.get(
         "https://api.spotify.com/v1/me",
-        headers={
-            "Authorization": f"Bearer {access_token}"
-        }
+        headers={"Authorization": f"Bearer {access_token}"}
     )
 
     logger.info("User check: %s %s", me.status_code, me.text)
 
-    r = requests.request(
-        "DELETE",
-        "https://api.spotify.com/v1/me/tracks",
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "ids": [spotify_id]
-        }
-    )
+    sp = spotipy.Spotify(auth=access_token)
 
-    logger.info("Spotify DELETE response: %s %s", r.status_code, r.text)
-
-    if r.status_code in (200, 204):
+    try:
+        sp.current_user_saved_tracks_delete(tracks=[spotify_id])
+        logger.info("Unlike successful")
         return jsonify({"status": "ok"})
 
-    return jsonify({
-        "status": r.status_code,
-        "error": r.text
-    }), 500
-
+    except Exception as e:
+        logger.error("Spotipy unlike failed: %s", str(e))
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/stats")
 @auth_required
