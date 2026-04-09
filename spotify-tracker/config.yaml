@@ -1,6 +1,6 @@
 name: "Spotify Liked Songs Tracker"
 description: "Tracks your Spotify liked songs weekly and shows what disappeared"
-version: "1.0.11"
+version: "1.0.12"
 slug: "spotify-tracker"
 init: false
 arch:
@@ -10,11 +10,13 @@ homeassistant_api: false
 options:
   spotify_client_id: ""
   spotify_client_secret: ""
+  redirect_uri: "http://192.168.1.100:8765/callback"
   scan_day: "sunday"
   scan_hour: 0
 schema:
   spotify_client_id: str
   spotify_client_secret: str
+  redirect_uri: url
   scan_day: list(monday|tuesday|wednesday|thursday|friday|saturday|sunday)
   scan_hour: int(0,23)
 map:
@@ -23,4 +25,3 @@ ports:
   8765/tcp: 8765
 ports_description:
   8765/tcp: "Web interface"
- 

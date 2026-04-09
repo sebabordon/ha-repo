@@ -19,7 +19,7 @@ app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret-key")
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_PATH = os.path.join(DATA_DIR, "spotify_tracker.db")
 TOKEN_PATH = os.path.join(DATA_DIR, ".spotify_token")
-REDIRECT_URI = "http://localhost:8099/callback"
+REDIRECT_URI = os.environ.get("REDIRECT_URI", "http://localhost:8765/callback")
 
 CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
@@ -326,4 +326,4 @@ def api_stats():
 if __name__ == "__main__":
     init_db()
     start_scheduler()
-    app.run(host="0.0.0.0", port=8765, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False)
