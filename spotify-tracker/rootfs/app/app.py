@@ -353,21 +353,9 @@ def unlike_track(spotify_id):
     if not sp:
         return jsonify({"error": "Not authenticated"}), 401
     try:
-        import requests as req
-        oauth = get_sp_oauth()
-        token_info = oauth.get_cached_token()
-        access_token = token_info["access_token"]
         logger.info("Attempting to unlike track: %s", spotify_id)
-        r = req.delete(
-            "https://api.spotify.com/v1/me/tracks",
-            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
-            json={"ids": [spotify_id]}
-        )
-        logger.info("Spotify DELETE response: %s %s", r.status_code, r.text)
-        if r.status_code in (200, 204):
-            return jsonify({"status": "ok", "spotify_id": spotify_id})
-        else:
-            return jsonify({"error": f"Spotify returned {r.status_code}: {r.text}"}), 500
+        sp.current_user_saved_tracks_delete([spotify_id])
+        return jsonify({"status": "ok", "spotify_id": spotify_id})
     except Exception as e:
         logger.error("Unlike failed: %s", str(e))
         return jsonify({"error": str(e)}), 500
