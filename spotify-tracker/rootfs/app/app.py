@@ -31,7 +31,7 @@ INGRESS_ENTRY = os.environ.get("INGRESS_ENTRY", "")
 AUTH_USER = os.environ.get("AUTH_USER", "")
 AUTH_PASS = os.environ.get("AUTH_PASS", "")
 
-SCOPE = "user-library-read user-library-modify"
+SCOPE = "user-library-read user-library-modify user-read-private"
 
 def auth_required(f):
     @wraps(f)
@@ -98,7 +98,7 @@ def get_sp_oauth():
         redirect_uri=REDIRECT_URI,
         scope=SCOPE,
         cache_path=TOKEN_PATH,
-        show_dialog=True
+        show_dialog=False
     )
 
 def get_spotify_client():
