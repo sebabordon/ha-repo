@@ -67,6 +67,7 @@
       <div class="track-added">{{ t[3][:10] if t[3] else '' }}</div>
       {% if t[4] %}
       <a href="https://open.spotify.com/track/{{ t[4] }}" target="_blank" title="Open in Spotify" style="color:var(--green);text-decoration:none;font-size:1.1rem;flex-shrink:0;">▶</a>
+      <button onclick="unlikeTrack(this, '{{ t[4] }}')" title="Remove from liked songs" style="background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;flex-shrink:0;padding:0 0.25rem;transition:color 0.2s;" onmouseover="this.style.color='#e05252'" onmouseout="this.style.color='var(--muted)'">♡</button>
       {% endif %}
     </div>
     {% endfor %}
@@ -79,6 +80,28 @@ function filterTracks(q) {
     const match = el.dataset.name.includes(q) || el.dataset.artist.includes(q);
     el.style.display = match ? '' : 'none';
   });
+}
+
+async function unlikeTrack(btn, spotifyId) {
+  if (!confirm('Remove this song from your liked songs?')) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const r = await fetch(`/unlike/${spotifyId}`, { method: 'POST' });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      btn.textContent = '✓';
+      btn.style.color = 'var(--green)';
+      btn.closest('.track-row').style.opacity = '0.35';
+    } else {
+      btn.textContent = '♡';
+      btn.disabled = false;
+      alert('Error: ' + d.error);
+    }
+  } catch(e) {
+    btn.textContent = '♡';
+    btn.disabled = false;
+  }
 }
 </script>
 </body>

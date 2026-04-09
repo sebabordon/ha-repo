@@ -1,6 +1,6 @@
 name: "Spotify Liked Songs Tracker"
 description: "Tracks your Spotify liked songs weekly and shows what disappeared"
-version: "1.0.15"
+version: "1.0.16"
 slug: "spotify-tracker"
 init: false
 arch:

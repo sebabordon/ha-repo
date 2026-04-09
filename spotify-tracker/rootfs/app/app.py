@@ -27,7 +27,7 @@ SCAN_DAY = os.environ.get("SCAN_DAY", "sunday")
 SCAN_HOUR = int(os.environ.get("SCAN_HOUR", "0"))
 INGRESS_ENTRY = os.environ.get("INGRESS_ENTRY", "")
 
-SCOPE = "user-library-read"
+SCOPE = "user-library-read user-library-modify"
 
 DAY_MAP = {
     "monday": "mon", "tuesday": "tue", "wednesday": "wed",
@@ -309,6 +309,17 @@ def snapshot_detail(snap_id):
     tracks = c.fetchall()
     conn.close()
     return render_template("snapshot.html", snap=snap, tracks=tracks, snap_id=snap_id, ingress_entry=INGRESS_ENTRY)
+
+@app.route("/unlike/<spotify_id>", methods=["POST"])
+def unlike_track(spotify_id):
+    sp = get_spotify_client()
+    if not sp:
+        return jsonify({"error": "Not authenticated"}), 401
+    try:
+        sp.current_user_saved_tracks_delete(tracks=[spotify_id])
+        return jsonify({"status": "ok", "spotify_id": spotify_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/stats")
 def api_stats():
