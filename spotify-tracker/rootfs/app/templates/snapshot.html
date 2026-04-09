@@ -55,7 +55,11 @@
   <span style="color:var(--muted)">{{ snap[2] }} songs · {{ snap[1] }}</span>
 </header>
 <main>
-  <input class="search-bar" type="text" placeholder="Search tracks…" oninput="filterTracks(this.value)" id="search">
+  <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1.25rem;">
+    <input class="search-bar" style="margin-bottom:0;flex:1;" type="text" placeholder="Search tracks…" oninput="filterTracks(this.value)" id="search">
+    <button id="dupBtn" onclick="toggleDupes(this)" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:0.6rem 1rem;border-radius:8px;font-family:'Space Mono',monospace;font-size:0.72rem;cursor:pointer;white-space:nowrap;transition:all 0.2s;">Show dupes</button>
+  </div>
+  <div id="dupe-count" style="display:none;font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--yellow);margin-bottom:0.75rem;"></div>
   <div class="track-list" id="list">
     {% for t in tracks %}
     <div class="track-row" data-name="{{ t[0]|lower }}" data-artist="{{ t[1]|lower }}">
@@ -76,10 +80,54 @@
 <script>
 function filterTracks(q) {
   q = q.toLowerCase();
+  const showingDupes = document.getElementById('dupBtn').dataset.active === '1';
   document.querySelectorAll('.track-row').forEach(el => {
-    const match = el.dataset.name.includes(q) || el.dataset.artist.includes(q);
-    el.style.display = match ? '' : 'none';
+    const textMatch = el.dataset.name.includes(q) || el.dataset.artist.includes(q);
+    const dupeMatch = !showingDupes || el.dataset.dupe === '1';
+    el.style.display = (textMatch && dupeMatch) ? '' : 'none';
   });
+}
+
+function toggleDupes(btn) {
+  const active = btn.dataset.active === '1';
+  if (!active) {
+    // Build duplicate map: same name+artist
+    const counts = {};
+    document.querySelectorAll('.track-row').forEach(el => {
+      const key = el.dataset.name + '|||' + el.dataset.artist;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    let dupeCount = 0;
+    document.querySelectorAll('.track-row').forEach(el => {
+      const key = el.dataset.name + '|||' + el.dataset.artist;
+      if (counts[key] > 1) {
+        el.dataset.dupe = '1';
+        el.style.outline = '1px solid rgba(240,192,64,0.3)';
+        dupeCount++;
+      } else {
+        el.dataset.dupe = '0';
+        el.style.display = 'none';
+      }
+    });
+    const groups = Object.values(counts).filter(v => v > 1).length;
+    document.getElementById('dupe-count').style.display = 'block';
+    document.getElementById('dupe-count').textContent = `${dupeCount} duplicate entries across ${groups} track${groups !== 1 ? 's' : ''}`;
+    btn.dataset.active = '1';
+    btn.style.color = 'var(--yellow)';
+    btn.style.borderColor = 'rgba(240,192,64,0.4)';
+    btn.textContent = 'Show all';
+  } else {
+    document.querySelectorAll('.track-row').forEach(el => {
+      el.style.display = '';
+      el.style.outline = '';
+      el.dataset.dupe = '0';
+    });
+    document.getElementById('dupe-count').style.display = 'none';
+    btn.dataset.active = '0';
+    btn.style.color = 'var(--muted)';
+    btn.style.borderColor = 'var(--border)';
+    btn.textContent = 'Show dupes';
+  }
 }
 
 async function unlikeTrack(btn, spotifyId) {

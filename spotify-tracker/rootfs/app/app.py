@@ -84,7 +84,7 @@ def get_sp_oauth():
         redirect_uri=REDIRECT_URI,
         scope=SCOPE,
         cache_path=TOKEN_PATH,
-        show_dialog=True
+        show_dialog=False
     )
 
 def get_spotify_client():
@@ -346,7 +346,7 @@ def api_stats():
     conn.close()
     return jsonify({"snapshots": rows, "removed_by_week": removed})
 
-# ─── Main ──2───────────────────────────────────────────────────────────────────
+# ─── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     init_db()
