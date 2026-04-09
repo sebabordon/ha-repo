@@ -446,7 +446,7 @@ def snapshot_detail(snap_id):
     )
 
 
-@app.route("/unlike/<spotify_id>", methods=["POST"])
+@@app.route("/unlike/<spotify_id>", methods=["POST"])
 @auth_required
 def unlike_track(spotify_id):
 
@@ -461,15 +461,20 @@ def unlike_track(spotify_id):
 
     access_token = token_info["access_token"]
 
-    logger.info("Token scopes: %s", token_info.get("scope"))
-    logger.info("Attempting unlike: %s", spotify_id)
-
     import requests
+
+    me = requests.get(
+        "https://api.spotify.com/v1/me",
+        headers={
+            "Authorization": f"Bearer {access_token}"
+        }
+    )
+
+    logger.info("User check: %s %s", me.status_code, me.text)
 
     url = f"https://api.spotify.com/v1/me/tracks?ids={spotify_id}"
 
-    r = requests.request(
-        "DELETE",
+    r = requests.delete(
         url,
         headers={
             "Authorization": f"Bearer {access_token}"
@@ -482,10 +487,9 @@ def unlike_track(spotify_id):
         return jsonify({"status": "ok"})
 
     return jsonify({
-        "error": r.text,
-        "status": r.status_code
+        "status": r.status_code,
+        "error": r.text
     }), 500
-
 
 @app.route("/api/stats")
 @auth_required
