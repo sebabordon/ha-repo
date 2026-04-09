@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snapshot {{ snap[0] }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #1DB954; --bg: #0a0a0a; --surface: #111; --surface2: #1a1a1a;
+    --border: #2a2a2a; --text: #f0f0f0; --muted: #666;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 2rem;
+    display: flex; align-items: center; gap: 1rem;
+    background: rgba(10,10,10,0.95); backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .back { color: var(--muted); text-decoration: none; font-size: 0.85rem; font-family: 'Space Mono', monospace; }
+  .back:hover { color: var(--text); }
+  header h1 { font-size: 1rem; font-weight: 800; }
+  header span { color: var(--green); font-family: 'Space Mono', monospace; font-size: 0.85rem; }
+  main { max-width: 900px; margin: 0 auto; padding: 2rem; }
+  .meta { display: flex; gap: 2rem; margin-bottom: 2rem; color: var(--muted); font-size: 0.85rem; font-family: 'Space Mono', monospace; }
+  .search-bar {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.65rem 1rem; color: var(--text);
+    font-family: 'Space Mono', monospace; font-size: 0.82rem; margin-bottom: 1.25rem;
+    outline: none; transition: border-color 0.2s;
+  }
+  .search-bar:focus { border-color: var(--green); }
+  .track-list { display: flex; flex-direction: column; gap: 0; }
+  .track-row {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--border);
+    border-radius: 6px; transition: background 0.15s;
+  }
+  .track-row:hover { background: var(--surface); }
+  .track-num { font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--muted); width: 2rem; text-align: right; flex-shrink: 0; }
+  .track-info { flex: 1; min-width: 0; }
+  .track-name { font-weight: 600; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-sub { color: var(--muted); font-size: 0.75rem; margin-top: 0.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-added { font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--muted); flex-shrink: 0; }
+</style>
+</head>
+<body>
+<header>
+  <a href="{{ ingress_entry }}/" class="back">← back</a>
+  <h1>Snapshot</h1>
+  <span>{{ snap[0] }}</span>
+  <span style="color:var(--muted)">{{ snap[2] }} songs · {{ snap[1] }}</span>
+</header>
+<main>
+  <input class="search-bar" type="text" placeholder="Search tracks…" oninput="filterTracks(this.value)" id="search">
+  <div class="track-list" id="list">
+    {% for i, t in tracks|enumerate %}
+    <div class="track-row" data-name="{{ t[0]|lower }}" data-artist="{{ t[1]|lower }}">
+      <div class="track-num">{{ i+1 }}</div>
+      <div class="track-info">
+        <div class="track-name">{{ t[0] }}</div>
+        <div class="track-sub">{{ t[1] }} · {{ t[2] }}</div>
+      </div>
+      <div class="track-added">{{ t[3][:10] if t[3] else '' }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</main>
+<script>
+function filterTracks(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.track-row').forEach(el => {
+    const match = el.dataset.name.includes(q) || el.dataset.artist.includes(q);
+    el.style.display = match ? '' : 'none';
+  });
+}
+</script>
+</body>
+</html>
