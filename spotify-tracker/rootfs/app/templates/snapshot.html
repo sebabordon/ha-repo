@@ -57,9 +57,9 @@
 <main>
   <input class="search-bar" type="text" placeholder="Search tracks…" oninput="filterTracks(this.value)" id="search">
   <div class="track-list" id="list">
-    {% for i, t in tracks|enumerate %}
+    {% for t in tracks %}
     <div class="track-row" data-name="{{ t[0]|lower }}" data-artist="{{ t[1]|lower }}">
-      <div class="track-num">{{ i+1 }}</div>
+      <div class="track-num">{{ loop.index }}</div>
       <div class="track-info">
         <div class="track-name">{{ t[0] }}</div>
         <div class="track-sub">{{ t[1] }} · {{ t[2] }}</div>
