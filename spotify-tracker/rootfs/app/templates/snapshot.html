@@ -62,7 +62,7 @@
   <div id="dupe-count" style="display:none;font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--yellow);margin-bottom:0.75rem;"></div>
   <div class="track-list" id="list">
     {% for t in tracks %}
-    <div class="track-row" data-name="{{ t[0]|lower }}" data-artist="{{ t[1]|lower }}">
+    <div class="track-row" data-name="{{ t[0]|lower }}" data-artist="{{ t[1]|lower }}" data-album="{{ t[2]|lower }}">
       <div class="track-num">{{ loop.index }}</div>
       <div class="track-info">
         <div class="track-name">{{ t[0] }}</div>
@@ -91,15 +91,15 @@ function filterTracks(q) {
 function toggleDupes(btn) {
   const active = btn.dataset.active === '1';
   if (!active) {
-    // Build duplicate map: same name+artist
+    // Build duplicate map: exact match on name+artist+album
     const counts = {};
     document.querySelectorAll('.track-row').forEach(el => {
-      const key = el.dataset.name + '|||' + el.dataset.artist;
+      const key = el.dataset.name + '|||' + el.dataset.artist + '|||' + el.dataset.album;
       counts[key] = (counts[key] || 0) + 1;
     });
     let dupeCount = 0;
     document.querySelectorAll('.track-row').forEach(el => {
-      const key = el.dataset.name + '|||' + el.dataset.artist;
+      const key = el.dataset.name + '|||' + el.dataset.artist + '|||' + el.dataset.album;
       if (counts[key] > 1) {
         el.dataset.dupe = '1';
         el.style.outline = '1px solid rgba(240,192,64,0.3)';
