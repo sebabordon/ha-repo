@@ -98,7 +98,7 @@ def get_sp_oauth():
         redirect_uri=REDIRECT_URI,
         scope=SCOPE,
         cache_path=TOKEN_PATH,
-        show_dialog=False
+        show_dialog=True
     )
 
 def get_spotify_client():
