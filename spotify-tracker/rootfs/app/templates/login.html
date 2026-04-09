@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spotify Tracker — Login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #1DB954; --bg: #0a0a0a; --surface: #111;
+    --border: #2a2a2a; --text: #f0f0f0; --muted: #666; --red: #e05252;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem;
+    width: 100%;
+    max-width: 380px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin-bottom: 2rem;
+    justify-content: center;
+  }
+  .logo svg { width: 28px; height: 28px; }
+  .logo-dot { color: var(--green); }
+  label {
+    display: block;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.7rem 1rem;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.2s;
+    margin-bottom: 1.25rem;
+  }
+  input:focus { border-color: var(--green); }
+  .btn {
+    width: 100%;
+    background: var(--green);
+    color: #000;
+    border: none;
+    padding: 0.75rem;
+    border-radius: 100px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 0.5rem;
+  }
+  .btn:hover { background: #1ed760; transform: translateY(-1px); }
+  .error {
+    background: rgba(224,82,82,0.1);
+    border: 1px solid rgba(224,82,82,0.3);
+    color: var(--red);
+    border-radius: 8px;
+    padding: 0.65rem 1rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="12" fill="#1DB954"/>
+      <path d="M17.5 10.5c-2.8-1.7-7.4-1.8-10.1-1a.75.75 0 0 0 .45 1.44c2.4-.74 6.4-.6 8.9.84a.75.75 0 0 0 .76-1.28zm-.2 2.9a.63.63 0 0 1-.87.2c-2.3-1.4-5.9-1.8-8.6-1a.63.63 0 0 1-.37-1.2c3.1-.95 7-.48 9.6 1.13a.63.63 0 0 1 .24.87zm-.8 2.8a.5.5 0 0 1-.69.16c-2-1.2-4.6-1.5-7.6-.82a.5.5 0 1 1-.22-.98c3.3-.73 6.2-.42 8.4.95a.5.5 0 0 1 .11.69z" fill="#000"/>
+    </svg>
+    Liked Songs <span class="logo-dot">Tracker</span>
+  </div>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/login?next={{ next_url }}">
+    <label>Username</label>
+    <input type="text" name="username" autocomplete="username" autofocus>
+    <label>Password</label>
+    <input type="password" name="password" autocomplete="current-password">
+    <button type="submit" class="btn">Sign in</button>
+  </form>
+</div>
+</body>
+</html>

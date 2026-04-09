@@ -33,25 +33,13 @@ AUTH_PASS = os.environ.get("AUTH_PASS", "")
 
 SCOPE = "user-library-read user-library-modify"
 
-def check_auth(username, password):
-    if not AUTH_USER and not AUTH_PASS:
-        return True
-    return username == AUTH_USER and password == AUTH_PASS
-
-def require_auth():
-    return Response(
-        "Authentication required.", 401,
-        {"WWW-Authenticate": 'Basic realm="Spotify Tracker"'}
-    )
-
 def auth_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not AUTH_USER and not AUTH_PASS:
             return f(*args, **kwargs)
-        auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.password):
-            return require_auth()
+        if not session.get("logged_in"):
+            return redirect(url_for("login_page", next=request.path))
         return f(*args, **kwargs)
     return decorated
 
@@ -293,12 +281,30 @@ def index():
         ingress_entry=INGRESS_ENTRY
     )
 
-@app.route("/login")
+@app.route("/spotify-login")
 @auth_required
 def login():
     oauth = get_sp_oauth()
     auth_url = oauth.get_authorize_url()
     return redirect(auth_url)
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if not AUTH_USER and not AUTH_PASS:
+        return redirect(url_for("index"))
+    error = None
+    next_url = request.args.get("next", "/")
+    if request.method == "POST":
+        if request.form.get("username") == AUTH_USER and request.form.get("password") == AUTH_PASS:
+            session["logged_in"] = True
+            return redirect(next_url)
+        error = "Invalid credentials"
+    return render_template("login.html", error=error, next_url=next_url)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
 
 @app.route("/callback")
 def callback():
