@@ -316,9 +316,15 @@ def unlike_track(spotify_id):
     if not sp:
         return jsonify({"error": "Not authenticated"}), 401
     try:
+        # Log token scopes for debugging
+        oauth = get_sp_oauth()
+        token_info = oauth.get_cached_token()
+        logger.info("Token scopes: %s", token_info.get("scope") if token_info else "none")
+        logger.info("Attempting to unlike track: %s", spotify_id)
         sp.current_user_saved_tracks_delete(tracks=[spotify_id])
         return jsonify({"status": "ok", "spotify_id": spotify_id})
     except Exception as e:
+        logger.error("Unlike failed: %s", str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/stats")
