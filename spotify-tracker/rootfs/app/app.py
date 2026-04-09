@@ -412,8 +412,7 @@ def manual_scan():
 
 @app.route("/snapshot/<int:snap_id>")
 @auth_required
-def snapshot_detail():
-    snap_id = request.view_args["snap_id"]
+def snapshot_detail(snap_id):
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -435,6 +434,7 @@ def snapshot_detail():
     )
 
     tracks = c.fetchall()
+
     conn.close()
 
     return render_template(
