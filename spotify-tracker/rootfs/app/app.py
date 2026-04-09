@@ -446,7 +446,7 @@ def snapshot_detail(snap_id):
     )
 
 
-@@app.route("/unlike/<spotify_id>", methods=["POST"])
+@app.route("/unlike/<spotify_id>", methods=["POST"])
 @auth_required
 def unlike_track(spotify_id):
 
@@ -490,6 +490,7 @@ def unlike_track(spotify_id):
         "status": r.status_code,
         "error": r.text
     }), 500
+
 
 @app.route("/api/stats")
 @auth_required
