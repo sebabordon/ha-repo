@@ -459,9 +459,10 @@ def unlike_track(spotify_id):
     if oauth.is_token_expired(token_info):
         token_info = oauth.refresh_access_token(token_info["refresh_token"])
 
-    access_token = token_info["access_token"]
+    if not token_info or "access_token" not in token_info:
+        return jsonify({"error": "Token refresh failed"}), 401
 
-    import requests
+    access_token = token_info["access_token"]
 
     me = requests.get(
         "https://api.spotify.com/v1/me",
@@ -472,12 +473,15 @@ def unlike_track(spotify_id):
 
     logger.info("User check: %s %s", me.status_code, me.text)
 
-    url = f"https://api.spotify.com/v1/me/tracks?ids={spotify_id}"
-
-    r = requests.delete(
-        url,
+    r = requests.request(
+        "DELETE",
+        "https://api.spotify.com/v1/me/tracks",
         headers={
-            "Authorization": f"Bearer {access_token}"
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "ids": [spotify_id]
         }
     )
 
