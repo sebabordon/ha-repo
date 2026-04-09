@@ -1,10 +1,9 @@
 import os
-import json
 import sqlite3
 import logging
-import base64
-from datetime import datetime, date
+from datetime import date
 from functools import wraps
+
 from flask import Flask, render_template, redirect, request, session, url_for, jsonify
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -31,16 +30,21 @@ SCAN_DAY = os.environ.get("SCAN_DAY", "sunday")
 SCAN_HOUR = int(os.environ.get("SCAN_HOUR", "0"))
 
 INGRESS_ENTRY = os.environ.get("INGRESS_ENTRY", "")
-
 AUTH_USER = os.environ.get("AUTH_USER", "")
 AUTH_PASS = os.environ.get("AUTH_PASS", "")
 
 SCOPE = "user-library-read user-library-modify"
 
 DAY_MAP = {
-    "monday": "mon","tuesday": "tue","wednesday": "wed",
-    "thursday": "thu","friday": "fri","saturday": "sat","sunday": "sun"
+    "monday": "mon",
+    "tuesday": "tue",
+    "wednesday": "wed",
+    "thursday": "thu",
+    "friday": "fri",
+    "saturday": "sat",
+    "sunday": "sun"
 }
+
 
 def auth_required(f):
     @wraps(f)
@@ -94,7 +98,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-    logger.info("Database initialized")
+    logger.info("Database initialized at %s", DB_PATH)
 
 
 def get_sp_oauth():
@@ -109,7 +113,6 @@ def get_sp_oauth():
 
 
 def get_valid_token():
-
     oauth = get_sp_oauth()
     token_info = oauth.get_cached_token()
 
@@ -125,23 +128,18 @@ def get_valid_token():
 
 
 def get_spotify_client():
-
     token = get_valid_token()
-
     if not token:
         return None
-
     return spotipy.Spotify(auth=token)
 
 
 def fetch_all_liked_songs(sp):
-
     tracks = []
     limit = 50
     offset = 0
 
     while True:
-
         results = sp.current_user_saved_tracks(limit=limit, offset=offset)
         items = results.get("items", [])
 
@@ -149,16 +147,14 @@ def fetch_all_liked_songs(sp):
             break
 
         for item in items:
-
             t = item.get("track")
-
             if t:
                 tracks.append({
                     "spotify_id": t["id"],
                     "name": t["name"],
                     "artist": ", ".join(a["name"] for a in t["artists"]),
                     "album": t["album"]["name"],
-                    "added_at": item.get("added_at","")
+                    "added_at": item.get("added_at", "")
                 })
 
         offset += limit
@@ -170,100 +166,104 @@ def fetch_all_liked_songs(sp):
 
 
 def get_week_label(dt=None):
-
     if dt is None:
         dt = date.today()
 
     iso = dt.isocalendar()
-
     return f"{iso[0]}-W{iso[1]:02d}"
 
 
 def save_snapshot(tracks):
-
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
     week_label = get_week_label()
     snapshot_date = date.today().isoformat()
 
-    c.execute("SELECT id FROM snapshots WHERE week_label=?", (week_label,))
+    c.execute("SELECT id FROM snapshots WHERE week_label = ?", (week_label,))
     existing = c.fetchone()
 
     if existing:
-        c.execute("DELETE FROM tracks WHERE snapshot_id=?", (existing[0],))
-        c.execute("DELETE FROM snapshots WHERE id=?", (existing[0],))
+        logger.info("Snapshot exists for %s, overwriting", week_label)
+        c.execute("DELETE FROM tracks WHERE snapshot_id = ?", (existing[0],))
+        c.execute("DELETE FROM snapshots WHERE id = ?", (existing[0],))
 
     c.execute(
-        "INSERT INTO snapshots (week_label,snapshot_date,total_tracks) VALUES (?,?,?)",
-        (week_label,snapshot_date,len(tracks))
+        "INSERT INTO snapshots (week_label, snapshot_date, total_tracks) VALUES (?, ?, ?)",
+        (week_label, snapshot_date, len(tracks))
     )
 
-    snap_id = c.lastrowid
+    snapshot_id = c.lastrowid
 
     for t in tracks:
-
         c.execute(
-            "INSERT INTO tracks (snapshot_id,spotify_id,name,artist,album,added_at) VALUES (?,?,?,?,?,?)",
-            (snap_id,t["spotify_id"],t["name"],t["artist"],t["album"],t["added_at"])
+            "INSERT INTO tracks (snapshot_id, spotify_id, name, artist, album, added_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (snapshot_id, t["spotify_id"], t["name"], t["artist"], t["album"], t["added_at"])
         )
 
     conn.commit()
     conn.close()
 
-    return snap_id,week_label
+    logger.info("Saved snapshot %s with %d tracks", week_label, len(tracks))
+
+    return snapshot_id, week_label
 
 
 def detect_removed_tracks():
-
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    c.execute("SELECT id,week_label FROM snapshots ORDER BY snapshot_date DESC LIMIT 2")
+    c.execute("SELECT id, week_label FROM snapshots ORDER BY snapshot_date DESC LIMIT 2")
     rows = c.fetchall()
 
     if len(rows) < 2:
         conn.close()
+        logger.info("Not enough snapshots")
         return []
 
-    current_id,current_week = rows[0]
-    prev_id,prev_week = rows[1]
+    current_snap_id, current_week = rows[0]
+    prev_snap_id, prev_week = rows[1]
 
-    c.execute("SELECT spotify_id,name,artist,album FROM tracks WHERE snapshot_id=?", (current_id,))
-    current_ids = {r[0]:r for r in c.fetchall()}
+    c.execute("SELECT spotify_id, name, artist, album FROM tracks WHERE snapshot_id = ?", (current_snap_id,))
+    current_ids = {row[0]: row for row in c.fetchall()}
 
-    c.execute("SELECT spotify_id,name,artist,album FROM tracks WHERE snapshot_id=?", (prev_id,))
+    c.execute("SELECT spotify_id, name, artist, album FROM tracks WHERE snapshot_id = ?", (prev_snap_id,))
     prev_tracks = c.fetchall()
 
     removed = []
 
     for row in prev_tracks:
-
-        sid=row[0]
+        sid = row[0]
 
         if sid not in current_ids:
-
             c.execute(
-                "SELECT id FROM removed_tracks WHERE spotify_id=? AND detected_week=?",
-                (sid,current_week)
+                "SELECT id FROM removed_tracks WHERE spotify_id = ? AND detected_week = ?",
+                (sid, current_week)
             )
 
             if not c.fetchone():
-
                 c.execute(
-                    "INSERT INTO removed_tracks (spotify_id,name,artist,album,last_seen_week,detected_week,detected_date) VALUES (?,?,?,?,?,?,?)",
-                    (sid,row[1],row[2],row[3],prev_week,current_week,date.today().isoformat())
+                    "INSERT INTO removed_tracks (spotify_id, name, artist, album, last_seen_week, detected_week, detected_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (sid, row[1], row[2], row[3], prev_week, current_week, date.today().isoformat())
                 )
 
-                removed.append(row)
+                removed.append({
+                    "spotify_id": sid,
+                    "name": row[1],
+                    "artist": row[2],
+                    "album": row[3]
+                })
 
     conn.commit()
     conn.close()
+
+    logger.info("Detected %d removed tracks", len(removed))
 
     return removed
 
 
 def run_weekly_scan():
+    logger.info("Running weekly scan")
 
     sp = get_spotify_client()
 
@@ -272,65 +272,64 @@ def run_weekly_scan():
         return
 
     tracks = fetch_all_liked_songs(sp)
-
     save_snapshot(tracks)
-
     detect_removed_tracks()
 
 
 def start_scheduler():
-
     scheduler = BackgroundScheduler()
 
-    cron_day = DAY_MAP.get(SCAN_DAY.lower(),"sun")
+    cron_day = DAY_MAP.get(SCAN_DAY.lower(), "sun")
 
     scheduler.add_job(
         run_weekly_scan,
-        CronTrigger(day_of_week=cron_day,hour=SCAN_HOUR,minute=0),
+        CronTrigger(day_of_week=cron_day, hour=SCAN_HOUR, minute=0),
         id="weekly_scan",
         replace_existing=True
     )
 
     scheduler.start()
 
+    logger.info("Scheduler started: %s %02d:00", SCAN_DAY, SCAN_HOUR)
+
 
 @app.route("/")
 @auth_required
 def index():
-
     sp = get_spotify_client()
     authed = sp is not None
 
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    c.execute("SELECT id,week_label,snapshot_date,total_tracks FROM snapshots ORDER BY snapshot_date DESC")
+    c.execute("SELECT id, week_label, snapshot_date, total_tracks FROM snapshots ORDER BY snapshot_date DESC")
     snapshots = c.fetchall()
 
     c.execute("""
-        SELECT spotify_id,name,artist,album,last_seen_week,detected_week,detected_date
+        SELECT spotify_id, name, artist, album, last_seen_week, detected_week, detected_date
         FROM removed_tracks
         ORDER BY detected_date DESC
     """)
 
     removed_rows = c.fetchall()
-
     conn.close()
 
-    removed_by_week={}
+    removed_by_week = {}
 
-    for r in removed_rows:
+    for row in removed_rows:
+        week = row[5]
 
-        week=r[5]
+        if week not in removed_by_week:
+            removed_by_week[week] = []
 
-        removed_by_week.setdefault(week,[]).append({
-            "spotify_id":r[0],
-            "name":r[1],
-            "artist":r[2],
-            "album":r[3],
-            "last_seen_week":r[4],
-            "detected_week":r[5],
-            "detected_date":r[6]
+        removed_by_week[week].append({
+            "spotify_id": row[0],
+            "name": row[1],
+            "artist": row[2],
+            "album": row[3],
+            "last_seen_week": row[4],
+            "detected_week": row[5],
+            "detected_date": row[6]
         })
 
     return render_template(
@@ -347,24 +346,43 @@ def index():
 @app.route("/spotify-login")
 @auth_required
 def login():
-
     oauth = get_sp_oauth()
-
     auth_url = oauth.get_authorize_url(scope=SCOPE)
-
     return redirect(auth_url)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if not AUTH_USER and not AUTH_PASS:
+        return redirect(url_for("index"))
+
+    error = None
+    next_url = request.args.get("next", "/")
+
+    if request.method == "POST":
+        if request.form.get("username") == AUTH_USER and request.form.get("password") == AUTH_PASS:
+            session["logged_in"] = True
+            return redirect(next_url)
+
+        error = "Invalid credentials"
+
+    return render_template("login.html", error=error, next_url=next_url)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
 
 
 @app.route("/callback")
 def callback():
-
     code = request.args.get("code")
 
     if not code:
-        return "Authorization failed",400
+        return "Authorization failed", 400
 
     oauth = get_sp_oauth()
-
     token_info = oauth.get_access_token(code)
 
     logger.info("Granted scopes: %s", token_info.get("scope"))
@@ -372,14 +390,69 @@ def callback():
     return redirect(url_for("index"))
 
 
-@app.route("/unlike/<spotify_id>",methods=["POST"])
+@app.route("/scan", methods=["POST"])
+@auth_required
+def manual_scan():
+    sp = get_spotify_client()
+
+    if not sp:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    tracks = fetch_all_liked_songs(sp)
+    snap_id, week_label = save_snapshot(tracks)
+    removed = detect_removed_tracks()
+
+    return jsonify({
+        "status": "ok",
+        "week": week_label,
+        "total": len(tracks),
+        "removed": len(removed)
+    })
+
+
+@app.route("/snapshot/<int:snap_id>")
+@auth_required
+def snapshot_detail():
+    snap_id = request.view_args["snap_id"]
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    c.execute(
+        "SELECT week_label, snapshot_date, total_tracks FROM snapshots WHERE id = ?",
+        (snap_id,)
+    )
+
+    snap = c.fetchone()
+
+    if not snap:
+        conn.close()
+        return "Snapshot not found", 404
+
+    c.execute(
+        "SELECT name, artist, album, added_at, spotify_id FROM tracks WHERE snapshot_id = ? ORDER BY name",
+        (snap_id,)
+    )
+
+    tracks = c.fetchall()
+    conn.close()
+
+    return render_template(
+        "snapshot.html",
+        snap=snap,
+        tracks=tracks,
+        snap_id=snap_id,
+        ingress_entry=INGRESS_ENTRY
+    )
+
+
+@app.route("/unlike/<spotify_id>", methods=["POST"])
 @auth_required
 def unlike_track(spotify_id):
-
     token = get_valid_token()
 
     if not token:
-        return jsonify({"error":"Not authenticated"}),401
+        return jsonify({"error": "Not authenticated"}), 401
 
     logger.info("Attempting unlike: %s", spotify_id)
 
@@ -395,16 +468,38 @@ def unlike_track(spotify_id):
 
     logger.info("Spotify DELETE response: %s %s", r.status_code, r.text)
 
-    if r.status_code in (200,204):
-        return jsonify({"status":"ok","spotify_id":spotify_id})
+    if r.status_code in (200, 204):
+        return jsonify({
+            "status": "ok",
+            "spotify_id": spotify_id
+        })
 
-    return jsonify({"error":r.text}),500
+    return jsonify({
+        "error": f"Spotify returned {r.status_code}: {r.text}"
+    }), 500
+
+
+@app.route("/api/stats")
+@auth_required
+def api_stats():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    c.execute("SELECT week_label, total_tracks FROM snapshots ORDER BY snapshot_date ASC")
+    rows = c.fetchall()
+
+    c.execute("SELECT detected_week, COUNT(*) FROM removed_tracks GROUP BY detected_week ORDER BY detected_week ASC")
+    removed = c.fetchall()
+
+    conn.close()
+
+    return jsonify({
+        "snapshots": rows,
+        "removed_by_week": removed
+    })
 
 
 if __name__ == "__main__":
-
     init_db()
-
     start_scheduler()
-
-    app.run(host="0.0.0.0",port=8765,debug=False)
+    app.run(host="0.0.0.0", port=8765, debug=False)
