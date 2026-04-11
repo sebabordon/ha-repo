@@ -331,6 +331,18 @@ def manual_scan():
         "removed": len(removed)
     })
 
+@app.route("/snapshot/<int:snap_id>/delete", methods=["POST"])
+@auth_required
+def delete_snapshot(snap_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM tracks WHERE snapshot_id = ?", (snap_id,))
+    c.execute("DELETE FROM snapshots WHERE id = ?", (snap_id,))
+    conn.commit()
+    conn.close()
+    logger.info("Deleted snapshot %d", snap_id)
+    return jsonify({"status": "ok"})
+
 @app.route("/snapshot/<int:snap_id>")
 @auth_required
 def snapshot_detail(snap_id):
