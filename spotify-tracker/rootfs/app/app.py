@@ -358,6 +358,26 @@ def snapshot_detail(snap_id):
     conn.close()
     return render_template("snapshot.html", snap=snap, tracks=tracks, snap_id=snap_id, ingress_entry=INGRESS_ENTRY)
 
+@app.route("/relike/<spotify_id>", methods=["POST"])
+@auth_required
+def relike_track(spotify_id):
+    try:
+        import requests as req
+        oauth = get_sp_oauth()
+        token_info = oauth.get_cached_token()
+        access_token = token_info["access_token"]
+        r = req.put(
+            f"https://api.spotify.com/v1/me/library?uris=spotify:track:{spotify_id}",
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+        )
+        logger.info("Spotify PUT response: %s %s", r.status_code, r.text)
+        if r.status_code in (200, 204):
+            return jsonify({"status": "ok"})
+        else:
+            return jsonify({"error": f"Spotify returned {r.status_code}: {r.text}"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/unlike/<spotify_id>", methods=["POST"])
 @auth_required
 def unlike_track(spotify_id):
