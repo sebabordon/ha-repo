@@ -359,9 +359,9 @@ def unlike_track(spotify_id):
         access_token = token_info["access_token"]
         logger.info("Attempting to unlike track: %s", spotify_id)
         r = req.delete(
-            "https://api.spotify.com/v1/me/tracks",
+            "https://api.spotify.com/v1/me/library",
             headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
-            json={"ids": [spotify_id]}
+            json={"uris": [f"spotify:track:{spotify_id}"]}
         )
         logger.info("Spotify DELETE response: %s %s", r.status_code, r.text)
         if r.status_code in (200, 204):
