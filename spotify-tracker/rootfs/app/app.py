@@ -276,6 +276,7 @@ def index():
         authed=authed,
         snapshots=snapshots,
         removed_by_week=removed_by_week,
+        total_removed=sum(len(v) for v in removed_by_week.values()),
         scan_day=SCAN_DAY.capitalize(),
         scan_hour=SCAN_HOUR,
         ingress_entry=INGRESS_ENTRY
