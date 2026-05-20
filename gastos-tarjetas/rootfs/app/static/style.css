@@ -574,6 +574,11 @@ tbody tr:hover { background: #fafbff; }
   background: #fafafa;
 }
 
+/* Prevent presupuesto section from stretching the page on wide tables */
+#tab-presupuesto {
+  overflow-x: auto;
+}
+
 /* ── Responsive (mobile) ─────────────────────────────────────────────────────*/
 
 @media (max-width: 640px) {

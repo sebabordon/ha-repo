@@ -1,3 +1,9 @@
+## 0.2.9
+
+- Presupuesto: corregido ancho excesivo — la sección ya no empuja el ancho de la página.
+- Presupuesto: auto-guardado sin botón — se guarda 800ms después del último cambio (editar monto, agregar o eliminar categoría, salir de un campo). Botón "Guardar" eliminado.
+- Presupuesto: Enter en el campo de monto guarda inmediatamente.
+
 ## 0.2.8
 
 - Parser AMEX: detecta automáticamente los cargos de Magdalena Sabina Saenz (secciones "Nuevos Cargos en PESOS/DOLARES para MAGDALENA SABINA SAENZ") y los asigna a usuario="Mada".

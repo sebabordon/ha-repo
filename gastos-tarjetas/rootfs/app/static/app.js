@@ -914,6 +914,7 @@ function updatePresupItem(categoria, rawValue) {
 function removePresupItem(categoria) {
   _presupItems = _presupItems.filter(it => it.categoria !== categoria);
   renderPresupuesto([]);
+  _scheduleSavePresup();
 }
 
 document.getElementById("presup-mes").addEventListener("change", function() {
@@ -921,8 +922,15 @@ document.getElementById("presup-mes").addEventListener("change", function() {
   loadPresupuesto();
 });
 
-document.getElementById("btn-save-presup").addEventListener("click", async () => {
-  // Sync any unsaved inputs
+// Auto-save helpers — same debounce pattern as rules
+let _savePresupTimer = null;
+function _scheduleSavePresup() {
+  clearTimeout(_savePresupTimer);
+  _savePresupTimer = setTimeout(savePresupuesto, 800);
+}
+
+async function savePresupuesto() {
+  // Sync any values still in the DOM inputs
   document.querySelectorAll(".presup-input").forEach(inp => {
     updatePresupItem(inp.dataset.cat, inp.value);
   });
@@ -934,6 +942,18 @@ document.getElementById("btn-save-presup").addEventListener("click", async () =>
   });
   if (res.ok) { showToast("✓ Presupuesto guardado", "ok"); loadPresupuesto(); }
   else showToast("Error al guardar presupuesto", "err", 0);
+}
+
+// Auto-save on focus-out anywhere inside the table
+document.getElementById("presup-table-wrap").addEventListener("focusout", _scheduleSavePresup);
+
+// Save on Enter key inside any presup-input
+document.getElementById("presup-table-wrap").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.classList.contains("presup-input")) {
+    e.preventDefault();
+    e.target.blur();
+    savePresupuesto();
+  }
 });
 
 document.getElementById("btn-add-presup-row").addEventListener("click", () => {
@@ -941,6 +961,7 @@ document.getElementById("btn-add-presup-row").addEventListener("click", () => {
     if (!_presupItems.find(it => it.categoria === name))
       _presupItems.push({categoria: name, monto_mensual: 0, moneda: "ARS"});
     renderPresupuesto([]);
+    _scheduleSavePresup();
   });
 });
 
