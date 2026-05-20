@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request, Query
 from fastapi.responses import StreamingResponse
 
 from auth import require_auth
-from db import list_gastos, list_categorias, monthly_summary, update_categoria, update_usuario
+from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario
 
 router = APIRouter()
 
@@ -92,6 +92,21 @@ def get_gastos(
 ):
     require_auth(request)
     return list_gastos(fuente=fuente, categorias=_parse_categorias(categorias), usuario=usuario, mes=mes)
+
+
+@router.get("/gastos/detect-transfers")
+def get_detect_transfers(request: Request, days: int = Query(3)):
+    require_auth(request)
+    return detect_transfers(days_window=days)
+
+
+@router.post("/gastos/mark-transfers")
+def post_mark_transfers(body: dict, request: Request):
+    require_auth(request)
+    pairs = body.get("pairs", [])
+    id_pairs = [(p[0], p[1]) for p in pairs if len(p) == 2]
+    mark_transfers(id_pairs)
+    return {"ok": True, "marcados": len(id_pairs) * 2}
 
 
 @router.patch("/gastos/{gasto_id}/categoria")

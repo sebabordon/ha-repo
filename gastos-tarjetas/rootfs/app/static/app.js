@@ -208,7 +208,7 @@ async function loadGastos() {
       <td>${g.fecha}</td>
       <td>${escHtml(g.descripcion)}</td>
       <td class="monto ${g.moneda === "USD" ? "usd" : ""} ${isNeg ? "neg" : ""}">${formatMonto(g.monto)}</td>
-      <td>${g.moneda}</td>
+      <td class="col-moneda">${g.moneda}</td>
       <td><span class="badge badge-${g.fuente}">${g.fuente.replace("_", " ")}</span></td>
       <td>
         <select class="usuario-select" onchange="saveUsuario(${g.id}, this)">
@@ -253,6 +253,71 @@ document.getElementById("btn-export").addEventListener("click", () => {
 });
 
 loadGastos();
+
+// ── TRANSFER DETECTION ────────────────────────────────────────────────────────
+
+let _transferPairs = [];
+
+document.getElementById("btn-detect-transfers").addEventListener("click", async () => {
+  const res = await fetch(`${BASE}/api/gastos/detect-transfers`);
+  _transferPairs = await res.json();
+
+  const list = document.getElementById("transfer-list");
+  if (!_transferPairs.length) {
+    list.innerHTML = `<p style="color:#888;padding:.5rem 0">No se encontraron transferencias candidatas sin categorizar.</p>`;
+  } else {
+    list.innerHTML = _transferPairs.map((p, i) => `
+      <div class="transfer-row">
+        <input type="checkbox" id="tp-${i}" checked />
+        <label for="tp-${i}" class="transfer-pair">
+          <div class="transfer-pair-line">
+            <span class="t-date">${p.fecha_out}</span>
+            <span class="badge badge-${p.fuente_out}">${p.fuente_out.replace("_"," ")}</span>
+            ${escHtml(p.desc_out)}
+            <span class="t-amt"> −${formatMonto(Math.abs(p.monto_out))}</span>
+          </div>
+          <div class="transfer-pair-line" style="color:#888;font-size:.8rem;margin-top:.15rem">
+            <span class="transfer-arrow">↕</span>
+            <span class="t-date">${p.fecha_in}</span>
+            <span class="badge badge-${p.fuente_in}">${p.fuente_in.replace("_"," ")}</span>
+            ${escHtml(p.desc_in)}
+            <span class="t-amt"> +${formatMonto(Math.abs(p.monto_in))}</span>
+          </div>
+        </label>
+      </div>
+    `).join("");
+  }
+
+  document.getElementById("transfer-modal").style.display = "flex";
+});
+
+function closeTransferModal() {
+  document.getElementById("transfer-modal").style.display = "none";
+}
+
+async function confirmTransfers() {
+  const selected = _transferPairs
+    .filter((_, i) => document.getElementById(`tp-${i}`)?.checked)
+    .map(p => [p.id_out, p.id_in]);
+
+  if (!selected.length) { closeTransferModal(); return; }
+
+  const res = await fetch(`${BASE}/api/gastos/mark-transfers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pairs: selected }),
+  });
+  const data = await res.json();
+  closeTransferModal();
+  alert(`${data.marcados} movimientos marcados como Transferencia.`);
+  loadGastos();
+  loadChart();
+}
+
+// Close modal on backdrop click
+document.getElementById("transfer-modal").addEventListener("click", function (e) {
+  if (e.target === this) closeTransferModal();
+});
 
 // ── UPLOAD ─────────────────────────────────────────────────────────────────────
 

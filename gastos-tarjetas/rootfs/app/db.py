@@ -84,9 +84,12 @@ def list_gastos(
 
 def monthly_summary() -> list[dict]:
     """
-    Returns month-by-month ARS totals with correct sign interpretation:
+    Returns month-by-month ARS totals with correct sign interpretation.
+    Transactions with categoria = 'Transferencia' are excluded from both
+    egresos and ingresos so inter-account transfers don't inflate totals.
+
     - Credit cards (amex, bbva_mc, bbva_visa, galicia_mc): positive = egreso
-    - Savings accounts (bbva_cuenta, mercadopago): positive = ingreso, negative = egreso
+    - Savings/wallet (bbva_cuenta, mercadopago): positive = ingreso, negative = egreso
     """
     query = f"""
         SELECT substr(fecha, 1, 7) AS mes,
@@ -98,12 +101,76 @@ def monthly_summary() -> list[dict]:
             WHEN fuente NOT IN ('{_cc_list}') AND CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL)
             WHEN fuente IN ('{_cc_list}') AND CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL)
             ELSE 0 END), 2) AS ingresos
-        FROM gastos WHERE moneda = 'ARS'
+        FROM gastos
+        WHERE moneda = 'ARS'
+          AND (categoria IS NULL OR categoria != 'Transferencia')
         GROUP BY mes ORDER BY mes
     """
     with _conn() as conn:
         rows = conn.execute(query).fetchall()
     return [{"mes": r["mes"], "ingresos": float(r["ingresos"]), "egresos": float(r["egresos"])} for r in rows]
+
+
+def detect_transfers(days_window: int = 3) -> list[dict]:
+    """
+    Find candidate inter-account transfer pairs:
+    a BBVA Cuenta egreso matched to a MercadoPago ingreso (or vice versa)
+    with the same absolute ARS amount within `days_window` days.
+    Returns only pairs where neither transaction is already categorized
+    as 'Transferencia'.
+    """
+    query = f"""
+        SELECT
+            a.id        AS id_out,
+            a.fecha     AS fecha_out,
+            a.descripcion AS desc_out,
+            a.monto     AS monto_out,
+            a.fuente    AS fuente_out,
+            b.id        AS id_in,
+            b.fecha     AS fecha_in,
+            b.descripcion AS desc_in,
+            b.monto     AS monto_in,
+            b.fuente    AS fuente_in
+        FROM gastos a
+        JOIN gastos b ON
+            ABS(CAST(a.monto AS REAL)) = ABS(CAST(b.monto AS REAL))
+            AND ABS(julianday(a.fecha) - julianday(b.fecha)) <= {days_window}
+            AND a.moneda = 'ARS' AND b.moneda = 'ARS'
+            AND (
+                (a.fuente = 'bbva_cuenta' AND CAST(a.monto AS REAL) < 0
+                 AND b.fuente = 'mercadopago' AND CAST(b.monto AS REAL) > 0)
+                OR
+                (a.fuente = 'mercadopago' AND CAST(a.monto AS REAL) < 0
+                 AND b.fuente = 'bbva_cuenta' AND CAST(b.monto AS REAL) > 0)
+            )
+            AND (a.categoria IS NULL OR a.categoria != 'Transferencia')
+            AND (b.categoria IS NULL OR b.categoria != 'Transferencia')
+        ORDER BY a.fecha DESC
+    """
+    with _conn() as conn:
+        rows = conn.execute(query).fetchall()
+    seen = set()
+    result = []
+    for r in rows:
+        key = tuple(sorted([r["id_out"], r["id_in"]]))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(dict(r))
+    return result
+
+
+def mark_transfers(id_pairs: list[tuple[int, int]]):
+    """Mark both sides of each transfer pair as categoria='Transferencia'."""
+    ids = list({i for pair in id_pairs for i in pair})
+    if not ids:
+        return
+    placeholders = ",".join("?" * len(ids))
+    with _conn() as conn:
+        conn.execute(
+            f"UPDATE gastos SET categoria='Transferencia', categoria_fuente='auto' WHERE id IN ({placeholders})",
+            ids,
+        )
 
 
 def list_categorias() -> list[str]:

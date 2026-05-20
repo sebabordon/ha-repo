@@ -36,7 +36,10 @@
 
       <div class="filter-bar">
         <div id="gastos-summary"></div>
-        <button id="btn-toggle-filters" class="btn btn-sm" aria-expanded="true">Filtros ▴</button>
+        <div style="display:flex;gap:.5rem">
+          <button id="btn-detect-transfers" class="btn btn-sm">🔁 Transferencias</button>
+          <button id="btn-toggle-filters" class="btn btn-sm" aria-expanded="true">Filtros ▴</button>
+        </div>
       </div>
 
       <div id="filter-panel">
@@ -76,7 +79,7 @@
               <th>Fecha</th>
               <th>Descripción</th>
               <th>Monto</th>
-              <th>Mon.</th>
+              <th class="col-moneda">Mon.</th>
               <th>Fuente</th>
               <th>Usuario</th>
               <th>Categoría</th>
@@ -124,6 +127,19 @@
     </section>
 
   </main>
+
+  <!-- Transfer detection modal (hidden by default) -->
+  <div id="transfer-modal" class="modal-backdrop" style="display:none">
+    <div class="modal">
+      <h3>Transferencias detectadas</h3>
+      <p class="modal-hint">Marcá los pares que son transferencias entre cuentas. Se excluirán del gráfico mensual.</p>
+      <div id="transfer-list"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeTransferModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmTransfers()">Marcar seleccionados</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>
