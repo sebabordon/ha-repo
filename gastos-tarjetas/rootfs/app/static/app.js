@@ -337,6 +337,9 @@ async function loadGastos() {
       catInput.classList.toggle("dirty", changed);
       saveBtn.classList.toggle("btn-dirty", changed);
     });
+    catInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); saveCategoria(g.id, saveBtn); }
+    });
     tbody.appendChild(tr);
   });
 }
