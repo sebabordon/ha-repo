@@ -222,10 +222,12 @@ def list_categorias() -> list[str]:
 
 
 def update_categoria(gasto_id: int, categoria: str):
+    # Empty category → clear categoria_fuente so rules can re-apply
+    cf = "manual" if categoria and categoria.strip() else None
     with _conn() as conn:
         conn.execute(
-            "UPDATE gastos SET categoria = ?, categoria_fuente = 'manual' WHERE id = ?",
-            (categoria, gasto_id),
+            "UPDATE gastos SET categoria = ?, categoria_fuente = ? WHERE id = ?",
+            (categoria or None, cf, gasto_id),
         )
 
 
