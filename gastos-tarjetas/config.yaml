@@ -11,13 +11,9 @@ ingress: true
 ingress_port: 8000
 panel_icon: mdi:credit-card-multiple
 options:
-  google_client_id: ""
-  google_client_secret: ""
   claude_api_key: ""
   allowed_domain: "sbsoft.com.ar"
 schema:
-  google_client_id: str
-  google_client_secret: str
   claude_api_key: str?
   allowed_domain: str
 map:
