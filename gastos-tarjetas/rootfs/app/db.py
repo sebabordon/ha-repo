@@ -4,6 +4,15 @@ from typing import Optional
 
 from config import DB_PATH
 
+# SQL expression that normalises monto to a positive ARS egreso value.
+# Returns 0 for ingresos / non-expense rows — useful in SUM().
+_EGRESO_EXPR = f"""CASE
+  WHEN fuente IN ('{("','".join(("amex","bbva_mc","bbva_visa","galicia_mc")))}')
+       AND CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL)
+  WHEN fuente NOT IN ('{("','".join(("amex","bbva_mc","bbva_visa","galicia_mc")))}')
+       AND CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL)
+  ELSE 0 END"""
+
 # Fuentes that are credit cards: positive monto = expense
 _CC_FUENTES = ("amex", "bbva_mc", "bbva_visa", "galicia_mc")
 _cc_list = "','".join(_CC_FUENTES)
@@ -197,6 +206,152 @@ def update_usuario(gasto_id: int, usuario: str):
 def delete_gastos_by_archivo(archivo: str):
     with _conn() as conn:
         conn.execute("DELETE FROM gastos WHERE archivo_origen = ?", (archivo,))
+
+
+# ── Stats ──────────────────────────────────────────────────────────────────────
+
+def _base_where(fuente=None, usuario=None, mes=None, meses=None, extra=""):
+    """Build WHERE clause + params for stats queries."""
+    conds = ["moneda = 'ARS'", "(categoria IS NULL OR categoria != 'Transferencia')"]
+    params = []
+    if fuente:
+        conds.append("fuente = ?"); params.append(fuente)
+    if usuario:
+        conds.append("usuario = ?"); params.append(usuario)
+    if mes:
+        conds.append("fecha LIKE ?"); params.append(f"{mes}-%")
+    elif meses:
+        conds.append(f"fecha >= date('now', '-{int(meses)} months')")
+    if extra:
+        conds.append(extra)
+    return "WHERE " + " AND ".join(conds), params
+
+
+def stats_by_category(fuente=None, usuario=None, mes=None, meses=6):
+    where, params = _base_where(fuente, usuario, mes, meses if not mes else None)
+    q = f"""SELECT COALESCE(categoria,'Sin categoría') AS cat,
+              ROUND(SUM({_EGRESO_EXPR}),2) AS total,
+              COUNT(*) AS cnt
+            FROM gastos {where}
+            GROUP BY cat HAVING total > 0 ORDER BY total DESC"""
+    with _conn() as conn:
+        rows = conn.execute(q, params).fetchall()
+    return [{"categoria": r["cat"], "total": float(r["total"]), "count": r["cnt"]} for r in rows]
+
+
+def stats_by_fuente(usuario=None, mes=None, meses=6):
+    where, params = _base_where(None, usuario, mes, meses if not mes else None)
+    q = f"""SELECT fuente,
+              ROUND(SUM({_EGRESO_EXPR}),2) AS egreso
+            FROM gastos {where}
+            GROUP BY fuente HAVING egreso > 0 ORDER BY egreso DESC"""
+    with _conn() as conn:
+        rows = conn.execute(q, params).fetchall()
+    return [{"fuente": r["fuente"], "total": float(r["egreso"])} for r in rows]
+
+
+def stats_by_usuario(fuente=None, mes=None, meses=6):
+    where, params = _base_where(fuente, None, mes, meses if not mes else None)
+    q = f"""SELECT COALESCE(usuario,'Sin asignar') AS usr,
+              ROUND(SUM({_EGRESO_EXPR}),2) AS egreso
+            FROM gastos {where}
+            GROUP BY usr HAVING egreso > 0 ORDER BY egreso DESC"""
+    with _conn() as conn:
+        rows = conn.execute(q, params).fetchall()
+    return [{"usuario": r["usr"], "total": float(r["egreso"])} for r in rows]
+
+
+def stats_top_descriptions(fuente=None, usuario=None, mes=None, meses=6, limit=15):
+    where, params = _base_where(fuente, usuario, mes, meses if not mes else None)
+    q = f"""SELECT descripcion,
+              ROUND(SUM({_EGRESO_EXPR}),2) AS total,
+              COUNT(*) AS cnt
+            FROM gastos {where}
+            GROUP BY descripcion HAVING total > 0
+            ORDER BY total DESC LIMIT {int(limit)}"""
+    with _conn() as conn:
+        rows = conn.execute(q, params).fetchall()
+    return [{"descripcion": r["descripcion"], "total": float(r["total"]), "count": r["cnt"]} for r in rows]
+
+
+def stats_monthly_by_category(fuente=None, usuario=None, meses=6):
+    where, params = _base_where(fuente, usuario, meses=meses)
+    q = f"""SELECT substr(fecha,1,7) AS mes,
+              COALESCE(categoria,'Sin categoría') AS cat,
+              ROUND(SUM({_EGRESO_EXPR}),2) AS total
+            FROM gastos {where}
+            GROUP BY mes, cat HAVING total > 0
+            ORDER BY mes, total DESC"""
+    with _conn() as conn:
+        rows = conn.execute(q, params).fetchall()
+    return [{"mes": r["mes"], "categoria": r["cat"], "total": float(r["total"])} for r in rows]
+
+
+# ── Match rules ─────────────────────────────────────────────────────────────────
+
+def apply_match_rules(rules: list[dict]) -> int:
+    """
+    For each match rule, find transactions matching Lado A (and optionally
+    paired with Lado B within the time window) and tag them with the
+    specified category.  Manually-categorized rows are never touched.
+    Returns the total number of rows updated.
+    """
+    total = 0
+    for rule in rules:
+        patron_a  = rule.get("patron_a", "").strip()
+        fuente_a  = rule.get("fuente_a", "").strip()
+        patron_b  = rule.get("patron_b", "").strip()
+        fuente_b  = rule.get("fuente_b", "").strip()
+        ventana   = max(0, int(rule.get("ventana_dias", 3)))
+        categoria = rule.get("categoria", "Transferencia").strip() or "Transferencia"
+
+        if not patron_a and not fuente_a:
+            continue
+
+        # ── Build Side-A query ──────────────────────────────────────────
+        q_a = ("SELECT id, fecha FROM gastos "
+               "WHERE (categoria_fuente IS NULL OR categoria_fuente != 'manual')")
+        p_a: list = []
+        if patron_a:
+            q_a += " AND UPPER(descripcion) LIKE UPPER(?)"; p_a.append(f"%{patron_a}%")
+        if fuente_a:
+            q_a += " AND fuente = ?"; p_a.append(fuente_a)
+
+        with _conn() as conn:
+            rows_a = conn.execute(q_a, p_a).fetchall()
+
+        ids_to_mark: set[int] = set()
+
+        if patron_b or fuente_b:
+            # ── Two-sided: find matching partner in Lado B ──────────────
+            q_b = ("SELECT id FROM gastos "
+                   "WHERE (categoria_fuente IS NULL OR categoria_fuente != 'manual') "
+                   f"AND ABS(julianday(fecha) - julianday(?)) <= {ventana}")
+            p_b_base: list = []
+            if patron_b:
+                q_b += " AND UPPER(descripcion) LIKE UPPER(?)"; p_b_base.append(f"%{patron_b}%")
+            if fuente_b:
+                q_b += " AND fuente = ?"; p_b_base.append(fuente_b)
+
+            with _conn() as conn:
+                for row_a in rows_a:
+                    ids_to_mark.add(row_a["id"])
+                    p_b = [row_a["fecha"]] + p_b_base
+                    for rb in conn.execute(q_b, p_b).fetchall():
+                        ids_to_mark.add(rb["id"])
+        else:
+            ids_to_mark = {r["id"] for r in rows_a}
+
+        if ids_to_mark:
+            ph = ",".join("?" * len(ids_to_mark))
+            with _conn() as conn:
+                conn.execute(
+                    f"UPDATE gastos SET categoria=?, categoria_fuente='auto' WHERE id IN ({ph})",
+                    [categoria, *ids_to_mark],
+                )
+            total += len(ids_to_mark)
+
+    return total
 
 
 def apply_rules_to_all(categorize_fn) -> int:

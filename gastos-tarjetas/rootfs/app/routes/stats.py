@@ -1,0 +1,28 @@
+from typing import Optional
+from fastapi import APIRouter, Request, Query
+from auth import require_auth
+from db import (
+    stats_by_category, stats_by_fuente, stats_by_usuario,
+    stats_top_descriptions, stats_monthly_by_category,
+)
+
+router = APIRouter()
+
+
+@router.get("/stats")
+def get_stats(
+    request: Request,
+    fuente:  Optional[str] = Query(None),
+    usuario: Optional[str] = Query(None),
+    mes:     Optional[str] = Query(None),
+    meses:   int = Query(6),
+):
+    require_auth(request)
+    kw = dict(fuente=fuente, usuario=usuario, mes=mes, meses=meses)
+    return {
+        "by_category":         stats_by_category(**kw),
+        "by_fuente":           stats_by_fuente(usuario=usuario, mes=mes, meses=meses),
+        "by_usuario":          stats_by_usuario(fuente=fuente, mes=mes, meses=meses),
+        "top_descriptions":    stats_top_descriptions(**kw),
+        "monthly_by_category": stats_monthly_by_category(fuente=fuente, usuario=usuario, meses=meses),
+    }

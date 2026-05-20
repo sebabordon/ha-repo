@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from routes import upload, gastos, rules, auth
+from routes import upload, gastos, rules, stats, auth
 from db import init_db
 
 app = FastAPI(title="Gastos Tarjetas", docs_url=None, redoc_url=None)
@@ -30,7 +30,8 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(gastos.router, prefix="/api", tags=["gastos"])
-app.include_router(rules.router, prefix="/api", tags=["rules"])
+app.include_router(rules.router,  prefix="/api", tags=["rules"])
+app.include_router(stats.router,  prefix="/api", tags=["stats"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

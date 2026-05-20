@@ -43,3 +43,17 @@ class ReglaCategoria(BaseModel):
 
 class ReglasCategorias(BaseModel):
     reglas: list[ReglaCategoria] = []
+
+
+class ReglaEmparejado(BaseModel):
+    nombre: str = ""
+    patron_a: str = ""
+    fuente_a: str = ""   # empty = any fuente
+    patron_b: str = ""   # empty = skip side B
+    fuente_b: str = ""   # empty = skip side B
+    ventana_dias: int = 3
+    categoria: str = "Transferencia"
+
+
+class ReglasEmparejado(BaseModel):
+    reglas: list[ReglaEmparejado] = []

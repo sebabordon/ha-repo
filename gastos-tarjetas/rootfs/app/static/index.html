@@ -18,7 +18,7 @@
 
   <main class="container">
 
-    <!-- Monthly chart -->
+    <!-- Monthly overview chart (always visible) -->
     <div class="chart-card">
       <div class="chart-title">Movimientos ARS — mes a mes</div>
       <canvas id="monthly-chart"></canvas>
@@ -26,13 +26,72 @@
 
     <!-- Tabs -->
     <div class="tabs">
-      <button class="tab active" data-tab="gastos">Gastos</button>
+      <button class="tab active" data-tab="graficos">Gráficos</button>
+      <button class="tab" data-tab="gastos">Gastos</button>
       <button class="tab" data-tab="upload">Importar</button>
       <button class="tab" data-tab="rules">Reglas</button>
     </div>
 
-    <!-- Tab: Gastos -->
-    <section id="tab-gastos" class="tab-content active">
+    <!-- ── Tab: Gráficos ──────────────────────────────────────────────── -->
+    <section id="tab-graficos" class="tab-content active">
+      <div class="chart-filters">
+        <select id="cf-fuente">
+          <option value="">Todas las fuentes</option>
+          <option value="amex">AMEX</option>
+          <option value="bbva_mc">BBVA Mastercard</option>
+          <option value="bbva_visa">BBVA Visa</option>
+          <option value="bbva_cuenta">BBVA Cuenta</option>
+          <option value="galicia_mc">Galicia Mastercard</option>
+          <option value="mercadopago">MercadoPago</option>
+        </select>
+        <select id="cf-usuario">
+          <option value="">Todos</option>
+          <option value="Seba">Seba</option>
+          <option value="Mada">Mada</option>
+        </select>
+        <select id="cf-mes">
+          <option value="">Últimos</option>
+        </select>
+        <select id="cf-meses">
+          <option value="3">3 meses</option>
+          <option value="6" selected>6 meses</option>
+          <option value="12">12 meses</option>
+          <option value="24">24 meses</option>
+        </select>
+        <button id="btn-refresh-charts" class="btn btn-sm">↺ Actualizar</button>
+      </div>
+
+      <div class="charts-grid">
+        <!-- Row 1: donut + top descriptions -->
+        <div class="chart-box">
+          <div class="chart-box-title">Egresos por categoría</div>
+          <canvas id="chart-by-category"></canvas>
+        </div>
+        <div class="chart-box">
+          <div class="chart-box-title">Top 15 descripciones</div>
+          <canvas id="chart-top-desc"></canvas>
+        </div>
+
+        <!-- Row 2: stacked monthly full width -->
+        <div class="chart-box chart-box-full">
+          <div class="chart-box-title">Egresos por categoría — mes a mes</div>
+          <canvas id="chart-monthly-cat"></canvas>
+        </div>
+
+        <!-- Row 3: by fuente + by usuario -->
+        <div class="chart-box">
+          <div class="chart-box-title">Egresos por fuente</div>
+          <canvas id="chart-by-fuente"></canvas>
+        </div>
+        <div class="chart-box">
+          <div class="chart-box-title">Egresos por usuario</div>
+          <canvas id="chart-by-usuario"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Tab: Gastos ────────────────────────────────────────────────── -->
+    <section id="tab-gastos" class="tab-content">
 
       <div class="filter-bar">
         <div id="gastos-summary"></div>
@@ -61,7 +120,7 @@
           <select id="filter-mes">
             <option value="">Todos los meses</option>
           </select>
-          <button id="btn-load" class="btn">Cargar</button>
+          <button id="btn-load" class="btn">↺</button>
           <button id="btn-export" class="btn">Exportar Excel</button>
         </div>
         <div class="cat-slicer">
@@ -91,7 +150,7 @@
       </div>
     </section>
 
-    <!-- Tab: Upload -->
+    <!-- ── Tab: Upload ────────────────────────────────────────────────── -->
     <section id="tab-upload" class="tab-content">
       <div class="upload-card">
         <h2>Importar archivo</h2>
@@ -128,8 +187,10 @@
       </div>
     </section>
 
-    <!-- Tab: Rules -->
+    <!-- ── Tab: Rules ─────────────────────────────────────────────────── -->
     <section id="tab-rules" class="tab-content">
+
+      <!-- Categorization rules -->
       <div class="rules-header">
         <h2>Reglas de categorización</h2>
         <button id="btn-add-rule" class="btn">+ Nueva regla</button>
@@ -138,11 +199,27 @@
       </div>
       <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto. "Reaplicar a todos" categoriza los movimientos ya importados (respeta los que editaste a mano).</p>
       <div id="rules-list"></div>
+
+      <!-- Match / netting rules -->
+      <div class="match-rules-block">
+        <div class="rules-header">
+          <h2>Reglas de emparejado</h2>
+          <button id="btn-add-match-rule" class="btn">+ Nueva regla</button>
+          <button id="btn-save-match-rules" class="btn btn-primary">Guardar</button>
+          <button id="btn-apply-match-rules" class="btn">Aplicar todas</button>
+        </div>
+        <p class="rules-hint">
+          Cada regla busca movimientos que coincidan con el <strong>Lado A</strong> y, opcionalmente,
+          los empareja con el <strong>Lado B</strong> (misma ventana de días) para marcarlos con
+          una categoría — ideal para excluir pagos de tarjeta, transferencias entre cuentas, etc.
+        </p>
+        <div id="match-rules-list"></div>
+      </div>
     </section>
 
   </main>
 
-  <!-- Transfer detection modal (hidden by default) -->
+  <!-- Transfer detection modal -->
   <div id="transfer-modal" class="modal-backdrop" style="display:none">
     <div class="modal">
       <h3>Transferencias detectadas</h3>
