@@ -1,3 +1,7 @@
+## 0.2.10
+
+- Presupuesto: tabla ya no se estira al 100% del contenedor — las columnas se dimensionan por su contenido (width: auto), quedando mucho más compacta.
+
 ## 0.2.9
 
 - Presupuesto: corregido ancho excesivo — la sección ya no empuja el ancho de la página.
