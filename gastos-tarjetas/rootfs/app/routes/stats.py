@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request, Query
 from auth import require_auth
 from db import (
     stats_by_category, stats_by_fuente, stats_by_usuario,
-    stats_top_descriptions, stats_monthly_by_category,
+    stats_top_descriptions, stats_monthly_by_category, stats_forecast,
 )
 
 router = APIRouter()
@@ -26,3 +26,13 @@ def get_stats(
         "top_descriptions":    stats_top_descriptions(**kw),
         "monthly_by_category": stats_monthly_by_category(fuente=fuente, usuario=usuario, meses=meses),
     }
+
+
+@router.get("/stats/forecast")
+def get_forecast(
+    request: Request,
+    meses:     int = Query(6),
+    historico: int = Query(3),
+):
+    require_auth(request)
+    return stats_forecast(meses_futuro=meses, meses_historico=historico)

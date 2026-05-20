@@ -7,6 +7,7 @@ from models import Gasto, Fuente, Moneda
 
 class BaseParser(ABC):
     fuente: Fuente
+    saldo_final = None  # parsers that can detect a balance set this after parse()
 
     @abstractmethod
     def parse(self, file: BinaryIO, filename: str) -> list[Gasto]:

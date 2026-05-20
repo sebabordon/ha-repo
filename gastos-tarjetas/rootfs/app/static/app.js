@@ -14,7 +14,8 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.querySelectorAll(".tab-content").forEach(s => s.classList.remove("active"));
     tab.classList.add("active");
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
-    if (tab.dataset.tab === "graficos") loadCharts();
+    if (tab.dataset.tab === "graficos")    loadCharts();
+    if (tab.dataset.tab === "presupuesto") loadPresupuesto();
   });
 });
 
@@ -68,7 +69,7 @@ function _fmtNum2(n) {
 }
 
 function _populateMonthFilter(meses) {
-  ["filter-mes","cf-mes"].forEach(id => {
+  ["filter-mes","cf-mes","presup-mes"].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     const current = sel.value;
@@ -108,6 +109,7 @@ async function loadCharts() {
   _drawMonthlyCat(data.monthly_by_category);
   _drawByFuente(data.by_fuente);
   _drawByUsuario(data.by_usuario);
+  loadForecast();
 }
 
 function _destroyAndCreate(id, config) {
@@ -230,6 +232,7 @@ document.getElementById("btn-refresh-charts").addEventListener("click", loadChar
 
 // ── Category slicer ───────────────────────────────────────────────────────────
 let _selectedCats = new Set();
+let _sinCat = false;
 
 async function loadCategorias() {
   const res = await fetch(`${BASE}/api/categorias`);
@@ -239,24 +242,44 @@ async function loadCategorias() {
 
 function renderCatChips(cats) {
   const container = document.getElementById("cat-chips");
-  container.innerHTML = `<span class="cat-chip cat-todos ${_selectedCats.size===0?"active":""}" onclick="toggleAllCats()">Todas</span>`;
+  const allActive = !_sinCat && _selectedCats.size === 0;
+  container.innerHTML = `<span class="cat-chip cat-todos ${allActive?"active":""}" onclick="toggleAllCats()">Todas</span>`;
+  // "Sin categoría" special chip
+  const sinChip = document.createElement("span");
+  sinChip.className = `cat-chip cat-sincat${_sinCat?" active":""}`;
+  sinChip.textContent = "Sin categoría";
+  sinChip.onclick = () => toggleSinCat();
+  container.appendChild(sinChip);
+  // Regular chips
   cats.forEach(cat => {
     const chip = document.createElement("span");
-    chip.className = `cat-chip ${_selectedCats.has(cat)?"active":""}`;
+    chip.className = `cat-chip${_selectedCats.has(cat)?" active":""}`;
     chip.textContent = cat;
     chip.onclick = () => toggleCat(cat);
     container.appendChild(chip);
   });
 }
 
+function toggleSinCat() {
+  _sinCat = !_sinCat;
+  if (_sinCat) _selectedCats.clear();
+  document.querySelectorAll(".cat-chip:not(.cat-todos):not(.cat-sincat)").forEach(c => c.classList.remove("active"));
+  document.querySelector(".cat-sincat")?.classList.toggle("active", _sinCat);
+  document.querySelector(".cat-todos")?.classList.toggle("active", !_sinCat && _selectedCats.size === 0);
+  loadGastos();
+}
+
 function toggleCat(cat) {
+  _sinCat = false;
   if (_selectedCats.has(cat)) _selectedCats.delete(cat); else _selectedCats.add(cat);
-  document.querySelectorAll(".cat-chip:not(.cat-todos)").forEach(c =>
+  document.querySelectorAll(".cat-chip:not(.cat-todos):not(.cat-sincat)").forEach(c =>
     c.classList.toggle("active", _selectedCats.has(c.textContent)));
-  document.querySelector(".cat-todos")?.classList.toggle("active", _selectedCats.size===0);
+  document.querySelector(".cat-sincat")?.classList.remove("active");
+  document.querySelector(".cat-todos")?.classList.toggle("active", _selectedCats.size === 0);
   loadGastos();
 }
 function toggleAllCats() {
+  _sinCat = false;
   _selectedCats.clear();
   document.querySelectorAll(".cat-chip").forEach(c => c.classList.remove("active"));
   document.querySelector(".cat-todos")?.classList.add("active");
@@ -283,7 +306,11 @@ function _gastosParams() {
   if (fuente)  p.set("fuente",  fuente);
   if (usuario) p.set("usuario", usuario);
   if (mes)     p.set("mes",     mes);
-  if (_selectedCats.size > 0) p.set("categorias", [..._selectedCats].join(","));
+  if (_sinCat) {
+    p.set("sin_categoria", "true");
+  } else if (_selectedCats.size > 0) {
+    p.set("categorias", [..._selectedCats].join(","));
+  }
   return p;
 }
 
@@ -452,7 +479,7 @@ document.getElementById("btn-upload").addEventListener("click", async () => {
     const data = await res.json();
     if (res.ok) {
       showResult(result, `✅ ${data.importados} movimientos importados (${data.total_parseados} parseados).`, true);
-      loadGastos(); loadMonthlyChart(); loadCategorias();
+      loadGastos(); loadMonthlyChart(); loadCategorias(); loadSaldos();
     } else { showResult(result, `❌ ${data.detail||JSON.stringify(data)}`, false); }
   } catch(e) { showResult(result, `❌ Error de red: ${e}`, false); }
 });
@@ -658,6 +685,216 @@ async function applyOneMatchRule(i) {
 }
 
 loadMatchRules();
+
+// ── Saldos widget ─────────────────────────────────────────────────────────────
+async function loadSaldos() {
+  const res     = await fetch(`${BASE}/api/cuentas`);
+  const cuentas = await res.json();
+  renderSaldos(cuentas.filter(c => c.activa));
+}
+
+function renderSaldos(cuentas) {
+  const widget = document.getElementById("saldos-widget");
+  if (!cuentas.length) { widget.style.display = "none"; return; }
+  widget.style.display = "flex";
+  widget.innerHTML = cuentas.map(c => {
+    const monto = c.saldo || 0;
+    const cls   = monto > 0 ? "positivo" : monto < 0 ? "negativo" : "";
+    return `
+      <div class="saldo-card" id="saldo-card-${c.fuente}">
+        <button class="saldo-edit-btn" title="Editar saldo" onclick="toggleSaldoEdit('${c.fuente}')">✏</button>
+        <div class="saldo-nombre">${escHtml(c.nombre)}</div>
+        <div class="saldo-monto ${cls}">${_fmtNum2(monto)}</div>
+        <div class="saldo-fecha">${c.fecha_actualizacion ? `Actualizado ${c.fecha_actualizacion}` : 'Sin datos'}</div>
+        <div class="saldo-edit-row" id="saldo-edit-${c.fuente}" style="display:none">
+          <input type="text" id="saldo-input-${c.fuente}" value="${monto}"
+                 onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')" />
+          <button class="btn btn-sm btn-primary" onclick="saveSaldo('${c.fuente}')">✓</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function toggleSaldoEdit(fuente) {
+  const row = document.getElementById(`saldo-edit-${fuente}`);
+  const open = row.style.display === "none";
+  row.style.display = open ? "flex" : "none";
+  if (open) document.getElementById(`saldo-input-${fuente}`)?.select();
+}
+
+async function saveSaldo(fuente) {
+  const raw = document.getElementById(`saldo-input-${fuente}`).value;
+  const val = parseFloat(raw.replace(/\./g,"").replace(",","."));
+  if (isNaN(val)) return;
+  await fetch(`${BASE}/api/cuentas/${fuente}`, {
+    method: "PUT",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({saldo: val}),
+  });
+  loadSaldos();
+}
+
+loadSaldos();
+
+// ── Presupuesto tab ───────────────────────────────────────────────────────────
+let _presupItems = [];  // [{categoria, monto_mensual, moneda}]
+
+async function loadPresupuesto() {
+  const mes = document.getElementById("presup-mes").value;
+  const url = mes ? `${BASE}/api/presupuesto?mes=${mes}` : `${BASE}/api/presupuesto`;
+  const res  = await fetch(url);
+  const data = await res.json();
+  _presupItems = data.items || [];
+  renderPresupuesto(data.vs_actual || []);
+}
+
+function renderPresupuesto(vsActual) {
+  const wrap = document.getElementById("presup-table-wrap");
+  if (!vsActual.length && !_presupItems.length) {
+    wrap.innerHTML = `<p style="color:#aaa;padding:1rem 0">No hay categorías con gastos ni presupuesto definido. Importá movimientos primero.</p>`;
+    return;
+  }
+
+  // Build display rows: prefer vs_actual (has both real + budget) else use presup items
+  const budgetMap = {};
+  _presupItems.forEach(it => { budgetMap[it.categoria] = it.monto_mensual; });
+
+  const rows = vsActual.length ? vsActual : _presupItems.map(it => ({
+    categoria: it.categoria, presupuesto: it.monto_mensual, gastado: 0, diferencia: it.monto_mensual, pct: null,
+  }));
+
+  wrap.innerHTML = `
+    <table class="presup-table">
+      <thead>
+        <tr>
+          <th>Categoría</th>
+          <th>Presupuesto</th>
+          <th>Gastado</th>
+          <th>Diferencia</th>
+          <th>Progreso</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => {
+          const budget  = r.presupuesto > 0 ? r.presupuesto : (budgetMap[r.categoria] || 0);
+          const pct     = budget > 0 ? Math.round(r.gastado / budget * 100) : 0;
+          const barW    = Math.min(pct, 100);
+          const barCls  = pct >= 100 ? "over" : pct >= 80 ? "warn" : "";
+          const diffCls = r.diferencia >= 0 ? "presup-diff-pos" : "presup-diff-neg";
+          return `<tr>
+            <td>${escHtml(r.categoria)}</td>
+            <td>
+              <input type="text" class="presup-input" data-cat="${escHtml(r.categoria)}"
+                     value="${_fmtNum2(budget)}"
+                     onfocus="this.select()"
+                     onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />
+            </td>
+            <td style="font-variant-numeric:tabular-nums">${_fmtNum2(r.gastado)}</td>
+            <td class="${budget>0?diffCls:""}">
+              ${budget > 0 ? (r.diferencia >= 0 ? "+" : "") + _fmtNum2(r.diferencia) : "—"}
+            </td>
+            <td>
+              ${budget > 0 ? `
+                <div class="progress-bar-wrap"><div class="progress-bar ${barCls}" style="width:${barW}%"></div></div>
+                <span class="presup-pct">${pct}%</span>
+              ` : "—"}
+            </td>
+            <td>
+              <button class="btn btn-sm btn-danger"
+                      onclick="removePresupItem('${escHtml(r.categoria)}')">✕</button>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+}
+
+function updatePresupItem(categoria, rawValue) {
+  const val = parseFloat(rawValue.replace(/\./g,"").replace(",",".")) || 0;
+  const existing = _presupItems.find(it => it.categoria === categoria);
+  if (existing) existing.monto_mensual = val;
+  else _presupItems.push({categoria, monto_mensual: val, moneda: "ARS"});
+}
+
+function removePresupItem(categoria) {
+  _presupItems = _presupItems.filter(it => it.categoria !== categoria);
+  renderPresupuesto([]);
+}
+
+document.getElementById("presup-mes").addEventListener("change", loadPresupuesto);
+
+document.getElementById("btn-save-presup").addEventListener("click", async () => {
+  // Sync any unsaved inputs
+  document.querySelectorAll(".presup-input").forEach(inp => {
+    updatePresupItem(inp.dataset.cat, inp.value);
+  });
+  const items = _presupItems.filter(it => it.monto_mensual > 0);
+  const res = await fetch(`${BASE}/api/presupuesto`, {
+    method: "PUT",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({items}),
+  });
+  if (res.ok) { alert("Presupuesto guardado."); loadPresupuesto(); }
+  else alert("Error al guardar presupuesto.");
+});
+
+document.getElementById("btn-add-presup-row").addEventListener("click", () => {
+  const cat = prompt("Nombre de la categoría:");
+  if (!cat || !cat.trim()) return;
+  const name = cat.trim();
+  if (!_presupItems.find(it => it.categoria === name))
+    _presupItems.push({categoria: name, monto_mensual: 0, moneda: "ARS"});
+  renderPresupuesto([]);
+});
+
+// ── Forecast chart ─────────────────────────────────────────────────────────────
+async function loadForecast() {
+  const meses     = document.getElementById("cf-forecast-meses")?.value || "6";
+  const historico = document.getElementById("cf-forecast-historico")?.value || "3";
+  const res  = await fetch(`${BASE}/api/stats/forecast?meses=${meses}&historico=${historico}`);
+  const data = await res.json();
+  _drawForecast(data);
+}
+
+function _drawForecast(data) {
+  const historical = data.historical || [];
+  const forecast   = data.forecast   || [];
+  if (!historical.length) return;
+
+  const allMonths = [...historical.map(d => d.mes), ...forecast.map(d => d.mes)];
+  const labels    = allMonths.map(_fmtMes);
+  const nH        = historical.length;
+
+  // Extend historical data with nulls for forecast slots
+  const egH  = [...historical.map(d => d.egresos),  ...Array(forecast.length).fill(null)];
+  const inH  = [...historical.map(d => d.ingresos), ...Array(forecast.length).fill(null)];
+  // Forecast starts at last historical point for visual continuity
+  const egF  = [...Array(nH - 1).fill(null), historical.at(-1).egresos,  ...forecast.map(d => d.egresos)];
+  const inF  = [...Array(nH - 1).fill(null), historical.at(-1).ingresos, ...forecast.map(d => d.ingresos)];
+
+  _destroyAndCreate("chart-forecast", {
+    type: "line",
+    data: { labels, datasets: [
+      { label:"Egresos",          data:egH, borderColor:"rgba(220,80,60,1)",   backgroundColor:"rgba(220,80,60,.08)",  borderWidth:2, pointRadius:3, tension:.3, fill:false },
+      { label:"Ingresos",         data:inH, borderColor:"rgba(34,180,120,1)",  backgroundColor:"rgba(34,180,120,.08)", borderWidth:2, pointRadius:3, tension:.3, fill:false },
+      { label:"Egresos (proy.)",  data:egF, borderColor:"rgba(220,80,60,.55)", backgroundColor:"transparent",           borderWidth:2, pointRadius:3, tension:.3, fill:false, borderDash:[6,4] },
+      { label:"Ingresos (proy.)", data:inF, borderColor:"rgba(34,180,120,.55)",backgroundColor:"transparent",           borderWidth:2, pointRadius:3, tension:.3, fill:false, borderDash:[6,4] },
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:true,
+      spanGaps: false,
+      plugins:{
+        legend:{ position:"top", labels:{ boxWidth:12, font:{size:11} } },
+        tooltip:{ callbacks:{ label: c => c.raw!=null ? ` ${c.dataset.label}: ${_fmtNum(c.raw)}` : null } },
+      },
+      scales:{ y:{ ticks:{ callback: v => v>=1000?`${(v/1000).toFixed(0)}k`:v } } },
+    },
+  });
+}
+
+["cf-forecast-meses","cf-forecast-historico"].forEach(id =>
+  document.getElementById(id)?.addEventListener("change", loadForecast));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {

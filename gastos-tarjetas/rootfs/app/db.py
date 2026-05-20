@@ -38,6 +38,38 @@ def init_db():
         if "usuario" not in cols:
             conn.execute("ALTER TABLE gastos ADD COLUMN usuario TEXT")
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cuentas (
+                fuente TEXT PRIMARY KEY,
+                nombre TEXT,
+                saldo REAL DEFAULT 0,
+                moneda TEXT DEFAULT 'ARS',
+                fecha_actualizacion TEXT,
+                activa INTEGER DEFAULT 1,
+                auto_saldo INTEGER DEFAULT 1
+            )
+        """)
+        _defaults = [
+            ("bbva_cuenta", "BBVA Cuenta",       0, "ARS", None, 1, 1),
+            ("mercadopago", "MercadoPago",        0, "ARS", None, 1, 1),
+            ("amex",        "AMEX",               0, "ARS", None, 0, 0),
+            ("bbva_mc",     "BBVA Mastercard",    0, "ARS", None, 0, 0),
+            ("bbva_visa",   "BBVA Visa",          0, "ARS", None, 0, 0),
+            ("galicia_mc",  "Galicia Mastercard", 0, "ARS", None, 0, 0),
+        ]
+        conn.executemany(
+            "INSERT OR IGNORE INTO cuentas (fuente,nombre,saldo,moneda,fecha_actualizacion,activa,auto_saldo) VALUES (?,?,?,?,?,?,?)",
+            _defaults,
+        )
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS presupuestos (
+                categoria TEXT PRIMARY KEY,
+                monto_mensual REAL DEFAULT 0,
+                moneda TEXT DEFAULT 'ARS'
+            )
+        """)
+
 
 @contextmanager
 def _conn():
@@ -69,22 +101,21 @@ def list_gastos(
     categorias: Optional[list] = None,
     usuario: Optional[str] = None,
     mes: Optional[str] = None,
+    sin_categoria: bool = False,
 ) -> list[dict]:
     query = "SELECT * FROM gastos WHERE 1=1"
     params: list = []
     if fuente:
-        query += " AND fuente = ?"
-        params.append(fuente)
-    if categorias:
+        query += " AND fuente = ?"; params.append(fuente)
+    if sin_categoria:
+        query += " AND (categoria IS NULL OR categoria = '')"
+    elif categorias:
         placeholders = ",".join("?" * len(categorias))
-        query += f" AND categoria IN ({placeholders})"
-        params.extend(categorias)
+        query += f" AND categoria IN ({placeholders})"; params.extend(categorias)
     if usuario:
-        query += " AND usuario = ?"
-        params.append(usuario)
+        query += " AND usuario = ?"; params.append(usuario)
     if mes:
-        query += " AND fecha LIKE ?"
-        params.append(f"{mes}-%")
+        query += " AND fecha LIKE ?"; params.append(f"{mes}-%")
     query += " ORDER BY fecha DESC"
     with _conn() as conn:
         rows = conn.execute(query, params).fetchall()
@@ -383,6 +414,129 @@ def apply_rules_to_all(categorize_fn) -> int:
                 updates,
             )
     return matched
+
+
+# ── Cuentas ────────────────────────────────────────────────────────────────────
+
+def get_cuentas() -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute("SELECT * FROM cuentas ORDER BY activa DESC, fuente").fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_cuenta_saldo(fuente: str, saldo: float, moneda: str = "ARS", fecha: str = None):
+    from datetime import date
+    fecha = fecha or str(date.today())
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE cuentas SET saldo=?, moneda=?, fecha_actualizacion=? WHERE fuente=? AND auto_saldo=1",
+            (saldo, moneda, fecha, fuente),
+        )
+
+
+def update_cuenta(fuente: str, saldo: float, moneda: str, activa: int, auto_saldo: int):
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE cuentas SET saldo=?, moneda=?, activa=?, auto_saldo=? WHERE fuente=?",
+            (saldo, moneda, activa, auto_saldo, fuente),
+        )
+
+
+# ── Presupuestos ───────────────────────────────────────────────────────────────
+
+def get_presupuestos() -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute("SELECT * FROM presupuestos ORDER BY categoria").fetchall()
+    return [dict(r) for r in rows]
+
+
+def save_presupuestos(items: list[dict]):
+    with _conn() as conn:
+        conn.execute("DELETE FROM presupuestos")
+        conn.executemany(
+            "INSERT INTO presupuestos (categoria, monto_mensual, moneda) VALUES (?,?,?)",
+            [(it["categoria"], it["monto_mensual"], it.get("moneda","ARS")) for it in items if it.get("categoria")],
+        )
+
+
+def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
+    """
+    Returns all categories that have a budget OR actual spending in `mes`,
+    comparing budget (monto_mensual) vs actual egreso for the month.
+    """
+    where, params = _base_where(mes=mes)
+    q_actual = f"""
+        SELECT COALESCE(categoria,'Sin categoría') AS cat,
+               ROUND(SUM({_EGRESO_EXPR}), 2) AS gastado
+        FROM gastos {where}
+        GROUP BY cat
+    """
+    with _conn() as conn:
+        actual_rows = conn.execute(q_actual, params).fetchall()
+        budget_rows = conn.execute("SELECT categoria, monto_mensual FROM presupuestos").fetchall()
+
+    actual = {r["cat"]: float(r["gastado"]) for r in actual_rows if float(r["gastado"]) > 0}
+    budget = {r["categoria"]: float(r["monto_mensual"]) for r in budget_rows}
+
+    cats = sorted(set(list(actual) + list(budget)))
+    result = []
+    for cat in cats:
+        g = actual.get(cat, 0.0)
+        b = budget.get(cat, 0.0)
+        result.append({
+            "categoria":  cat,
+            "presupuesto": b,
+            "gastado":     g,
+            "diferencia":  round(b - g, 2),
+            "pct":         round(g / b * 100, 1) if b > 0 else None,
+        })
+    result.sort(key=lambda r: (-r["gastado"]))
+    return result
+
+
+# ── Forecast ───────────────────────────────────────────────────────────────────
+
+def _add_months(ym: str, n: int) -> str:
+    y, m = map(int, ym.split("-"))
+    m += n
+    while m > 12: m -= 12; y += 1
+    return f"{y:04d}-{m:02d}"
+
+
+def stats_forecast(meses_futuro: int = 6, meses_historico: int = 3) -> dict:
+    """
+    Linear-regression forecast on the last `meses_historico` months.
+    Returns historical monthly data + projected future months.
+    """
+    historical = monthly_summary()
+    if len(historical) < 2:
+        return {"historical": historical, "forecast": []}
+
+    recent = historical[-max(2, meses_historico):]
+    n = len(recent)
+
+    def _linreg(vals):
+        mx = (n - 1) / 2
+        my = sum(vals) / n
+        num = sum((i - mx) * (vals[i] - my) for i in range(n))
+        den = sum((i - mx) ** 2 for i in range(n))
+        m_slope = num / den if den else 0
+        return my - m_slope * mx, m_slope   # intercept, slope
+
+    eg_b,  eg_m  = _linreg([r["egresos"]  for r in recent])
+    ing_b, ing_m = _linreg([r["ingresos"] for r in recent])
+
+    last_mes = historical[-1]["mes"]
+    forecast = []
+    for k in range(1, meses_futuro + 1):
+        x = n - 1 + k
+        forecast.append({
+            "mes":      _add_months(last_mes, k),
+            "egresos":  round(max(0, eg_b  + eg_m  * x), 2),
+            "ingresos": round(max(0, ing_b + ing_m * x), 2),
+        })
+
+    return {"historical": historical, "forecast": forecast}
 
 
 def delete_all_gastos(fuente: str = None) -> int:

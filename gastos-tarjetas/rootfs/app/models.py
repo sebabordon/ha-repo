@@ -57,3 +57,19 @@ class ReglaEmparejado(BaseModel):
 
 class ReglasEmparejado(BaseModel):
     reglas: list[ReglaEmparejado] = []
+
+
+class Cuenta(BaseModel):
+    fuente: str
+    nombre: str
+    saldo: float = 0
+    moneda: str = "ARS"
+    fecha_actualizacion: Optional[str] = None
+    activa: int = 1
+    auto_saldo: int = 1
+
+
+class Presupuesto(BaseModel):
+    categoria: str
+    monto_mensual: float = 0
+    moneda: str = "ARS"

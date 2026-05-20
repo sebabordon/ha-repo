@@ -24,12 +24,16 @@
       <canvas id="monthly-chart"></canvas>
     </div>
 
+    <!-- Account balances widget -->
+    <div id="saldos-widget" class="saldos-widget"></div>
+
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="graficos">Gráficos</button>
       <button class="tab" data-tab="gastos">Gastos</button>
       <button class="tab" data-tab="upload">Importar</button>
       <button class="tab" data-tab="rules">Reglas</button>
+      <button class="tab" data-tab="presupuesto">Presupuesto</button>
     </div>
 
     <!-- ── Tab: Gráficos ──────────────────────────────────────────────── -->
@@ -88,6 +92,26 @@
         <div class="chart-box">
           <div class="chart-box-title">Egresos por usuario</div>
           <canvas id="chart-by-usuario"></canvas>
+        </div>
+
+        <!-- Row 4: forecast full width -->
+        <div class="chart-box chart-box-full">
+          <div class="chart-box-title" style="margin-bottom:.4rem">Forecast — próximos meses</div>
+          <div style="display:flex;gap:1rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;font-size:.85rem;color:#666">
+            <label>Proyección:
+              <select id="cf-forecast-meses">
+                <option value="6" selected>6 meses</option>
+                <option value="12">12 meses</option>
+              </select>
+            </label>
+            <label>Basado en:
+              <select id="cf-forecast-historico">
+                <option value="3" selected>Últimos 3 meses</option>
+                <option value="6">Últimos 6 meses</option>
+              </select>
+            </label>
+          </div>
+          <canvas id="chart-forecast"></canvas>
         </div>
       </div>
     </section>
@@ -220,6 +244,23 @@
     </section>
 
   </main>
+
+    <!-- ── Tab: Presupuesto ─────────────────────────────────────────────────── -->
+    <section id="tab-presupuesto" class="tab-content">
+      <div class="presup-header">
+        <h2>Presupuesto mensual</h2>
+        <select id="presup-mes">
+          <option value="">Seleccioná un mes</option>
+        </select>
+        <button id="btn-add-presup-row" class="btn">+ Categoría</button>
+        <button id="btn-save-presup" class="btn btn-primary">Guardar</button>
+      </div>
+      <p class="rules-hint">
+        Editá el presupuesto por categoría y compará con el gasto real del mes seleccionado.
+        Las barras se vuelven amarillas al 80% y rojas al superar el 100%.
+      </p>
+      <div id="presup-table-wrap"></div>
+    </section>
 
   <!-- Transfer detection modal -->
   <div id="transfer-modal" class="modal-backdrop" style="display:none">

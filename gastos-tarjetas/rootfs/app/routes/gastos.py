@@ -89,9 +89,16 @@ def get_gastos(
     categorias: Optional[str] = Query(None),
     usuario: Optional[str] = Query(None),
     mes: Optional[str] = Query(None),
+    sin_categoria: bool = Query(False),
 ):
     require_auth(request)
-    return list_gastos(fuente=fuente, categorias=_parse_categorias(categorias), usuario=usuario, mes=mes)
+    return list_gastos(
+        fuente=fuente,
+        categorias=_parse_categorias(categorias),
+        usuario=usuario,
+        mes=mes,
+        sin_categoria=sin_categoria,
+    )
 
 
 @router.get("/gastos/detect-transfers")

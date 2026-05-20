@@ -390,6 +390,141 @@ tbody tr:hover { background: #fafbff; }
 .transfer-pair-line .t-amt { font-variant-numeric: tabular-nums; font-weight: 600; }
 .transfer-arrow { color: #aaa; font-size: 1.1rem; margin: 0 .25rem; }
 
+/* ── Saldos widget ───────────────────────────────────────────────────────────*/
+
+.saldos-widget {
+  display: flex;
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.saldo-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: .65rem .9rem .65rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+  min-width: 150px;
+  position: relative;
+}
+.saldo-nombre {
+  font-size: .75rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.saldo-monto {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #1a1a2e;
+}
+.saldo-monto.positivo { color: #16a34a; }
+.saldo-monto.negativo { color: #dc2626; }
+.saldo-fecha {
+  font-size: .72rem;
+  color: #bbb;
+}
+.saldo-edit-btn {
+  position: absolute;
+  top: .4rem;
+  right: .4rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #ddd;
+  font-size: .8rem;
+  padding: .1rem .2rem;
+  line-height: 1;
+}
+.saldo-edit-btn:hover { color: #666; }
+.saldo-edit-row {
+  display: flex;
+  gap: .3rem;
+  align-items: center;
+  margin-top: .25rem;
+}
+.saldo-edit-row input {
+  width: 90px;
+  padding: .22rem .4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: .85rem;
+}
+
+/* ── Presupuesto tab ─────────────────────────────────────────────────────────*/
+
+.presup-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .5rem;
+  flex-wrap: wrap;
+}
+.presup-header h2 { flex: 1; }
+.presup-header select {
+  padding: .38rem .6rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: .88rem;
+}
+.presup-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: .5rem;
+}
+.presup-table thead th {
+  background: #f7f8fa;
+  padding: .5rem .75rem;
+  text-align: left;
+  border-bottom: 2px solid #e0e0e0;
+  font-size: .82rem;
+  white-space: nowrap;
+}
+.presup-table tbody td {
+  padding: .45rem .75rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.presup-input {
+  width: 120px;
+  padding: .25rem .4rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: right;
+  font-size: .9rem;
+  font-variant-numeric: tabular-nums;
+}
+.progress-bar-wrap {
+  width: 100px;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+}
+.progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: #22c55e;
+  transition: width .2s;
+}
+.progress-bar.warn { background: #f59e0b; }
+.progress-bar.over { background: #ef4444; }
+.presup-pct {
+  font-size: .8rem;
+  color: #888;
+  margin-left: .35rem;
+  min-width: 2.5rem;
+  display: inline-block;
+}
+.presup-diff-pos { color: #16a34a; font-variant-numeric: tabular-nums; }
+.presup-diff-neg { color: #dc2626; font-variant-numeric: tabular-nums; }
+
 /* ── Responsive (mobile) ─────────────────────────────────────────────────────*/
 
 @media (max-width: 640px) {
@@ -437,4 +572,13 @@ tbody tr:hover { background: #fafbff; }
 
   .modal { padding: 1rem; }
   .modal h3 { font-size: 1rem; }
+
+  .saldos-widget { gap: .5rem; }
+  .saldo-card { min-width: 130px; }
+  .saldo-monto { font-size: 1.05rem; }
+
+  .presup-header { gap: .4rem; }
+  .presup-table thead th, .presup-table tbody td { padding: .35rem .4rem; font-size: .8rem; }
+  .presup-input { width: 90px; }
+  .progress-bar-wrap { width: 60px; }
 }

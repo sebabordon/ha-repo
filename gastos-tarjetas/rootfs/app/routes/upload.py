@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, Form, UploadFile, Request, HTTPException
 
 from auth import require_auth
 from categorizer import categorize
-from db import insert_gastos
+from db import insert_gastos, upsert_cuenta_saldo
 from parsers import PARSERS
 
 router = APIRouter()
@@ -50,4 +50,10 @@ async def upload_file(
         records.append(d)
 
     count = insert_gastos(records)
+
+    # Auto-update balance if the parser detected one
+    saldo = getattr(PARSERS[fuente], "saldo_final", None)
+    if saldo is not None:
+        upsert_cuenta_saldo(fuente, float(saldo))
+
     return {"importados": count, "total_parseados": len(gastos)}

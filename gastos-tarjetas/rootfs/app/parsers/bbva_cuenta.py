@@ -65,6 +65,7 @@ class BBVACuentaParser(BaseParser):
 
     def parse(self, file: BinaryIO, filename: str):
         gastos = []
+        last_saldo = None
 
         with pdfplumber.open(file) as pdf:
             year = _detect_year(pdf)
@@ -110,7 +111,10 @@ class BBVACuentaParser(BaseParser):
                     if len(amount_candidates) < 2:
                         continue
 
-                    # Rightmost value is always the running SALDO — discard it.
+                    # Rightmost value is always the running SALDO — track it.
+                    last_saldo = amount_candidates[-1][1]
+
+                    # Movement amount(s) are everything except the rightmost.
                     movement_amounts = [v for _, v in amount_candidates[:-1]]
                     monto = sum(movement_amounts)
 
@@ -119,5 +123,9 @@ class BBVACuentaParser(BaseParser):
                     elif monto < 0:
                         gastos.append(self._gasto(fecha, description, monto, Moneda.ARS, filename))
                     # monto == 0 → skip (zero-value or offsetting entries)
+
+        # Expose the final running balance so upload.py can persist it.
+        if last_saldo is not None:
+            self.saldo_final = float(last_saldo)
 
         return gastos

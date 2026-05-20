@@ -20,10 +20,11 @@ from models import Fuente, Moneda
 from parsers.base import BaseParser
 from parsers.utils import parse_ar_amount
 
-_HEADER_ROW = 3  # 0-based index of the header row
-_COL_DATE   = 0
-_COL_TYPE   = 1
-_COL_AMOUNT = 3
+_HEADER_ROW  = 3  # 0-based index of the header row
+_COL_DATE    = 0
+_COL_TYPE    = 1
+_COL_AMOUNT  = 3
+_COL_BALANCE = 4  # PARTIAL_BALANCE column
 
 
 class MercadoPagoParser(BaseParser):
@@ -31,6 +32,7 @@ class MercadoPagoParser(BaseParser):
 
     def parse(self, file: BinaryIO, filename: str):
         gastos = []
+        last_balance = None
 
         wb = openpyxl.load_workbook(file, read_only=True, data_only=True)
         ws = wb.active
@@ -39,9 +41,10 @@ class MercadoPagoParser(BaseParser):
             if i <= _HEADER_ROW:
                 continue
 
-            raw_date   = row[_COL_DATE]
-            raw_type   = str(row[_COL_TYPE] or "").strip()
-            raw_amount = str(row[_COL_AMOUNT] or "").strip()
+            raw_date    = row[_COL_DATE]
+            raw_type    = str(row[_COL_TYPE] or "").strip()
+            raw_amount  = str(row[_COL_AMOUNT] or "").strip()
+            raw_balance = str(row[_COL_BALANCE] or "").strip() if len(row) > _COL_BALANCE else ""
 
             if not raw_date or not raw_type or not raw_amount:
                 continue
@@ -49,6 +52,12 @@ class MercadoPagoParser(BaseParser):
             amount = parse_ar_amount(raw_amount)
             if amount is None or amount == 0:
                 continue
+
+            # Track the last non-empty PARTIAL_BALANCE value
+            if raw_balance:
+                bal = parse_ar_amount(raw_balance)
+                if bal is not None:
+                    last_balance = bal
 
             try:
                 if isinstance(raw_date, datetime):
@@ -63,5 +72,9 @@ class MercadoPagoParser(BaseParser):
                 continue
 
             gastos.append(self._gasto(fecha, raw_type, amount, Moneda.ARS, filename))
+
+        # Expose the final account balance so upload.py can persist it.
+        if last_balance is not None:
+            self.saldo_final = float(last_balance)
 
         return gastos
