@@ -211,6 +211,14 @@ tbody tr:hover { background: #fafbff; }
   background: #fff8f8;
   border: 1px dashed #fca5a5;
   border-radius: 6px;
+  flex-wrap: wrap;
+}
+.danger-zone select {
+  padding: .35rem .6rem;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font-size: .88rem;
+  background: #fff;
 }
 .danger-hint { color: #b91c1c; font-size: .82rem; }
 

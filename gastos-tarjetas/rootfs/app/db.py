@@ -230,7 +230,10 @@ def apply_rules_to_all(categorize_fn) -> int:
     return matched
 
 
-def delete_all_gastos() -> int:
+def delete_all_gastos(fuente: str = None) -> int:
     with _conn() as conn:
-        conn.execute("DELETE FROM gastos")
+        if fuente:
+            conn.execute("DELETE FROM gastos WHERE fuente = ?", (fuente,))
+        else:
+            conn.execute("DELETE FROM gastos")
         return conn.execute("SELECT changes()").fetchone()[0]

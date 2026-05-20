@@ -110,10 +110,10 @@ def post_mark_transfers(body: dict, request: Request):
 
 
 @router.delete("/gastos")
-def delete_all(request: Request):
+def delete_all(request: Request, fuente: Optional[str] = Query(None)):
     require_auth(request)
-    deleted = delete_all_gastos()
-    return {"ok": True, "eliminados": deleted}
+    deleted = delete_all_gastos(fuente=fuente)
+    return {"ok": True, "eliminados": deleted, "fuente": fuente}
 
 
 @router.patch("/gastos/{gasto_id}/categoria")

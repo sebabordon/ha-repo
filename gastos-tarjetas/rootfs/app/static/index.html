@@ -96,8 +96,17 @@
       <div class="upload-card">
         <h2>Importar archivo</h2>
         <div class="danger-zone">
-          <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar toda la base</button>
-          <span class="danger-hint">Elimina todos los movimientos. Útil para reimportar desde cero.</span>
+          <select id="delete-fuente">
+            <option value="">Todas las fuentes</option>
+            <option value="amex">AMEX</option>
+            <option value="bbva_mc">BBVA Mastercard</option>
+            <option value="bbva_visa">BBVA Visa</option>
+            <option value="bbva_cuenta">BBVA Cuenta</option>
+            <option value="galicia_mc">Galicia Mastercard</option>
+            <option value="mercadopago">MercadoPago</option>
+          </select>
+          <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
+          <span class="danger-hint">Elimina los movimientos de la fuente seleccionada (o todos). Útil para reimportar.</span>
         </div>
         <div class="form-group">
           <label>Fuente</label>

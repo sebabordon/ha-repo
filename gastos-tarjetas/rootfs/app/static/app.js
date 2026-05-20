@@ -343,8 +343,13 @@ document.getElementById("transfer-modal").addEventListener("click", function (e)
 // ── DELETE ALL ────────────────────────────────────────────────────────────────
 
 document.getElementById("btn-delete-all").addEventListener("click", async () => {
-  if (!confirm("⚠️ Esto elimina TODOS los movimientos de la base.\n\n¿Estás seguro?")) return;
-  const res = await fetch(`${BASE}/api/gastos`, { method: "DELETE" });
+  const fuente = document.getElementById("delete-fuente").value;
+  const label = fuente
+    ? document.querySelector(`#delete-fuente option[value="${fuente}"]`).textContent
+    : "TODAS las fuentes";
+  if (!confirm(`⚠️ Esto elimina los movimientos de: ${label}.\n\n¿Estás seguro?`)) return;
+  const url = fuente ? `${BASE}/api/gastos?fuente=${fuente}` : `${BASE}/api/gastos`;
+  const res = await fetch(url, { method: "DELETE" });
   const data = await res.json();
   if (res.ok) {
     alert(`Se eliminaron ${data.eliminados} movimientos.`);
@@ -352,7 +357,7 @@ document.getElementById("btn-delete-all").addEventListener("click", async () => 
     loadChart();
     loadCategorias();
   } else {
-    alert("Error al borrar la base.");
+    alert("Error al borrar.");
   }
 });
 
