@@ -15,6 +15,8 @@ def get_rules(request: Request):
             return yaml.safe_load(f) or {"reglas": []}
     except FileNotFoundError:
         return {"reglas": []}
+    except yaml.YAMLError:
+        return {"reglas": [], "error": "rules.yaml tiene un error de sintaxis — guardá las reglas para reemplazarlo."}
 
 
 @router.put("/rules")

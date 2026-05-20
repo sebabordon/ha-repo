@@ -1,44 +1,44 @@
 reglas:
   # Supermercados
-  - patron: "(?i)(carrefour|dia|coto|jumbo|disco|vea|walmart|maxiconsumo|makro|vital)"
+  - patron: '(?i)(carrefour|dia|coto|jumbo|disco|vea|walmart|maxiconsumo|makro|vital)'
     categoria: Supermercado
 
   # Combustible
-  - patron: "(?i)(ypf|shell|axion|puma|nafta|combustible)"
+  - patron: '(?i)(ypf|shell|axion|puma|nafta|combustible)'
     categoria: Combustible
 
   # Restaurantes y delivery
-  - patron: "(?i)(pedidosya|rappi|mcdonalds|mc donald|burger king|kentucky|kfc|subway|pizza|mostaza)"
+  - patron: '(?i)(pedidosya|rappi|mcdonalds|mc donald|burger king|kentucky|kfc|subway|pizza|mostaza)'
     categoria: Restaurante
 
   # Farmacia
-  - patron: "(?i)(farmacity|dr ahorro|farma|farmacia|drogueria)"
+  - patron: '(?i)(farmacity|dr ahorro|farma|farmacia|drogueria)'
     categoria: Farmacia
 
   # Entretenimiento
-  - patron: "(?i)(netflix|disney|hbo|spotify|youtube|amazon prime|apple tv|star\+|flow|telefe|la liga)"
+  - patron: '(?i)(netflix|disney|hbo|spotify|youtube|amazon prime|apple tv|star\+|flow|telefe|la liga)'
     categoria: Entretenimiento
 
   # Viajes y transporte
-  - patron: "(?i)(uber|cabify|aerol[ií]neas|lan|flybondi|jetsmart|booking|airbnb|hotel|peaje|autopista)"
+  - patron: '(?i)(uber|cabify|aerol[ií]neas|lan|flybondi|jetsmart|booking|airbnb|hotel|peaje|autopista)'
     categoria: Viajes
 
   # Tecnología
-  - patron: "(?i)(apple|google|microsoft|amazon|mercado libre|mercadolibre|garbarino|fravega|musimundo)"
+  - patron: '(?i)(apple|google|microsoft|amazon|mercado libre|mercadolibre|garbarino|fravega|musimundo)'
     categoria: Tecnología
 
   # Ropa
-  - patron: "(?i)(zara|h&m|adidas|nike|puma|falabella|paris|forever|gap)"
+  - patron: '(?i)(zara|h&m|adidas|nike|puma|falabella|paris|forever|gap)'
     categoria: Ropa
 
   # Servicios públicos
-  - patron: "(?i)(edesur|edenor|metrogas|aguas|telecom|personal|movistar|claro|fibertel|cablevision|directv)"
+  - patron: '(?i)(edesur|edenor|metrogas|aguas|telecom|personal|movistar|claro|fibertel|cablevision|directv)'
     categoria: Servicios
 
   # Educación
-  - patron: "(?i)(udemy|coursera|platzi|colegio|universidad|escuela|academia)"
+  - patron: '(?i)(udemy|coursera|platzi|colegio|universidad|escuela|academia)'
     categoria: Educación
 
   # Salud
-  - patron: "(?i)(osde|swiss medical|galeno|medicus|laboratorio|clinica|hospital|medico|doctor)"
+  - patron: '(?i)(osde|swiss medical|galeno|medicus|laboratorio|clinica|hospital|medico|doctor)'
     categoria: Salud

@@ -10,7 +10,7 @@ def load_rules() -> list[dict]:
         with open(RULES_FILE) as f:
             data = yaml.safe_load(f) or {}
         return data.get("reglas", [])
-    except FileNotFoundError:
+    except (FileNotFoundError, yaml.YAMLError):
         return []
 
 

@@ -9,6 +9,9 @@ mkdir -p "${DATA_DIR}"
 
 if [ ! -f "${RULES_FILE}" ]; then
     cp /app/default_rules.yaml "${RULES_FILE}"
+elif ! python3 -c "import yaml; yaml.safe_load(open('${RULES_FILE}'))" 2>/dev/null; then
+    bashio::log.warning "rules.yaml tiene errores de sintaxis, reemplazando con valores por defecto..."
+    cp /app/default_rules.yaml "${RULES_FILE}"
 fi
 
 bashio::log.info "Starting Gastos Tarjetas on port 8000..."
