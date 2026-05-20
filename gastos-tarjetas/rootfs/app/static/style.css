@@ -178,6 +178,9 @@ tbody tr:hover { background: #fafbff; }
 .monto.neg { color: #16a34a; }
 
 .cat-input { border: 1px solid #ddd; border-radius: 4px; padding: .2rem .5rem; width: 130px; font-size: .85rem; }
+.cat-input.dirty { border-color: #f59e0b; }
+.btn-dirty { background: #f59e0b; color: #fff; border-color: #d97706; }
+.btn-dirty:hover { background: #d97706; }
 
 .usuario-select {
   border: 1px solid #ddd;

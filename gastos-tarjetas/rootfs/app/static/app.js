@@ -224,6 +224,16 @@ async function loadGastos() {
       </td>
       <td><button class="btn btn-sm" onclick="saveCategoria(${g.id}, this)">✓</button></td>
     `;
+    // Mark button dirty when input changes
+    const catInput = tr.querySelector(".cat-input");
+    const saveBtn  = tr.querySelector("td:last-child .btn");
+    const originalVal = catInput.value;
+    catInput.addEventListener("input", () => {
+      const changed = catInput.value !== originalVal;
+      catInput.classList.toggle("dirty", changed);
+      saveBtn.classList.toggle("btn-dirty", changed);
+    });
+
     tbody.appendChild(tr);
   });
 }
@@ -235,6 +245,10 @@ async function saveCategoria(id, btn) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ categoria: input.value }),
   });
+  if (res.ok) {
+    input.classList.remove("dirty");
+    btn.classList.remove("btn-dirty");
+  }
   btn.textContent = res.ok ? "✓" : "✗";
   setTimeout(() => btn.textContent = "✓", 1500);
 }
