@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gastos Tarjetas</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <span class="brand">💳 Gastos Tarjetas</span>
+    <div class="nav-right">
+      <span id="user-email"></span>
+      <a href="/auth/logout">Salir</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="gastos">Gastos</button>
+      <button class="tab" data-tab="upload">Importar</button>
+      <button class="tab" data-tab="rules">Reglas</button>
+    </div>
+
+    <!-- Tab: Gastos -->
+    <section id="tab-gastos" class="tab-content active">
+      <div class="filters">
+        <select id="filter-fuente">
+          <option value="">Todas las fuentes</option>
+          <option value="amex">AMEX</option>
+          <option value="bbva_mc">BBVA Mastercard</option>
+          <option value="bbva_visa">BBVA Visa</option>
+          <option value="galicia_mc">Galicia Mastercard</option>
+          <option value="mercadopago">MercadoPago</option>
+        </select>
+        <input type="text" id="filter-categoria" placeholder="Filtrar por categoría..." />
+        <button id="btn-load" class="btn">Cargar</button>
+      </div>
+      <div id="gastos-summary"></div>
+      <div class="table-wrap">
+        <table id="gastos-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Descripción</th>
+              <th>Monto</th>
+              <th>Moneda</th>
+              <th>Fuente</th>
+              <th>Categoría</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="gastos-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tab: Upload -->
+    <section id="tab-upload" class="tab-content">
+      <div class="upload-card">
+        <h2>Importar archivo</h2>
+        <div class="form-group">
+          <label>Fuente</label>
+          <select id="upload-fuente">
+            <option value="amex">AMEX Platinum (PDF)</option>
+            <option value="bbva_mc">BBVA Mastercard (PDF)</option>
+            <option value="bbva_visa">BBVA Visa (PDF)</option>
+            <option value="galicia_mc">Galicia Mastercard (PDF)</option>
+            <option value="mercadopago">MercadoPago (XLSX)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Archivo</label>
+          <input type="file" id="upload-file" accept=".pdf,.xls,.xlsx" />
+        </div>
+        <button id="btn-upload" class="btn btn-primary">Importar</button>
+        <div id="upload-result"></div>
+      </div>
+    </section>
+
+    <!-- Tab: Rules -->
+    <section id="tab-rules" class="tab-content">
+      <div class="rules-header">
+        <h2>Reglas de categorización</h2>
+        <button id="btn-add-rule" class="btn">+ Agregar</button>
+        <button id="btn-save-rules" class="btn btn-primary">Guardar</button>
+      </div>
+      <p class="rules-hint">Cada regla es un patrón regex que se aplica a la descripción del gasto.</p>
+      <div id="rules-list"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
