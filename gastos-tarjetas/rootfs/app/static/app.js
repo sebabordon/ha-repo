@@ -1,3 +1,5 @@
+const BASE = window.INGRESS_PREFIX || "";
+
 // Tab switching
 document.querySelectorAll(".tab").forEach(tab => {
   tab.addEventListener("click", () => {
@@ -9,7 +11,7 @@ document.querySelectorAll(".tab").forEach(tab => {
 });
 
 // Load user info
-fetch("/auth/me").then(r => r.json()).then(u => {
+fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {
   if (u.email) document.getElementById("user-email").textContent = u.email;
 });
 
@@ -22,7 +24,7 @@ async function loadGastos() {
   if (fuente) params.set("fuente", fuente);
   if (cat) params.set("categoria", cat);
 
-  const res = await fetch(`/api/gastos?${params}`);
+  const res = await fetch(`${BASE}/api/gastos?${params}`);
   const gastos = await res.json();
 
   const tbody = document.getElementById("gastos-body");
@@ -61,7 +63,7 @@ async function loadGastos() {
 
 async function saveCategoria(id, btn) {
   const input = document.querySelector(`.cat-input[data-id="${id}"]`);
-  const res = await fetch(`/api/gastos/${id}/categoria`, {
+  const res = await fetch(`${BASE}/api/gastos/${id}/categoria`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ categoria: input.value }),
@@ -90,7 +92,7 @@ document.getElementById("btn-upload").addEventListener("click", async () => {
   result.textContent = "Procesando…";
 
   try {
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const res = await fetch(`${BASE}/api/upload`, { method: "POST", body: fd });
     const data = await res.json();
     if (res.ok) {
       showResult(result, `✅ ${data.importados} movimientos importados (${data.total_parseados} parseados).`, true);
@@ -106,7 +108,7 @@ document.getElementById("btn-upload").addEventListener("click", async () => {
 // ── RULES ────────────────────────────────────────────────────────────────────
 
 async function loadRules() {
-  const res = await fetch("/api/rules");
+  const res = await fetch(`${BASE}/api/rules`);
   const data = await res.json();
   renderRules(data.reglas || []);
 }
@@ -152,7 +154,7 @@ document.getElementById("btn-save-rules").addEventListener("click", async () => 
     if (patron && categoria) reglas.push({ patron, categoria });
   });
 
-  const res = await fetch("/api/rules", {
+  const res = await fetch(`${BASE}/api/rules`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reglas }),

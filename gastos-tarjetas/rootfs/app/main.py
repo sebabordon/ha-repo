@@ -35,9 +35,21 @@ app.include_router(rules.router, prefix="/api", tags=["rules"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectResponse:
+    prefix = request.headers.get("X-Ingress-Path", "")
+    return RedirectResponse(f"{prefix}{path}", status_code=status_code)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     if not request.session.get("user"):
-        return RedirectResponse("/auth/login")
-    from fastapi.responses import FileResponse
-    return FileResponse("static/index.html")
+        return _redirect(request, "/auth/login")
+    prefix = request.headers.get("X-Ingress-Path", "")
+    with open("static/index.html") as f:
+        html = f.read()
+    html = html.replace('href="/static/', f'href="{prefix}/static/')
+    html = html.replace('src="/static/', f'src="{prefix}/static/')
+    html = html.replace('href="/auth/', f'href="{prefix}/auth/')
+    inject = f'<script>window.INGRESS_PREFIX="{prefix}";</script>'
+    html = html.replace("</head>", inject + "</head>")
+    return HTMLResponse(html)

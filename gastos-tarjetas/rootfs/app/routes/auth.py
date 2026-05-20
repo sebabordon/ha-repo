@@ -29,14 +29,14 @@ _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gastos Tarjetas</title>{style}</head><body>
 <div class="card">
-  <h2>💳 Gastos Tarjetas</h2>
+  <h2>Gastos Tarjetas</h2>
   {error}
-  <form method="post">
+  <form method="post" action="{prefix}/auth/login">
     <div class="field"><input type="email" name="email" placeholder="Email (@{domain})" required autofocus></div>
     <div class="field"><input type="password" name="password" placeholder="Contraseña" required></div>
     <button class="btn" type="submit">Ingresar</button>
   </form>
-  <div class="link"><a href="/auth/register">Crear cuenta</a></div>
+  <div class="link"><a href="{prefix}/auth/register">Crear cuenta</a></div>
 </div></body></html>"""
 
 _REGISTER_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
@@ -45,26 +45,32 @@ _REGISTER_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <div class="card">
   <h2>Crear cuenta</h2>
   {error}
-  <form method="post">
+  <form method="post" action="{prefix}/auth/register">
     <div class="field"><input type="email" name="email" placeholder="Email (@{domain})" required autofocus></div>
     <div class="field"><input type="password" name="password" placeholder="Contraseña" required minlength="8"></div>
     <div class="field"><input type="password" name="password2" placeholder="Repetir contraseña" required></div>
     <button class="btn" type="submit">Registrarme</button>
   </form>
-  <div class="link"><a href="/auth/login">Ya tengo cuenta</a></div>
+  <div class="link"><a href="{prefix}/auth/login">Ya tengo cuenta</a></div>
 </div></body></html>"""
 
 
-def _render(template: str, error: str = "") -> HTMLResponse:
+def _render(template: str, error: str = "", ingress_prefix: str = "") -> HTMLResponse:
     err_html = f'<div class="err">{error}</div>' if error else ""
-    return HTMLResponse(template.format(style=_STYLE, error=err_html, domain=ALLOWED_DOMAIN))
+    return HTMLResponse(template.format(style=_STYLE, error=err_html, domain=ALLOWED_DOMAIN, prefix=ingress_prefix))
+
+
+def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectResponse:
+    prefix = request.headers.get("X-Ingress-Path", "")
+    return RedirectResponse(f"{prefix}{path}", status_code=status_code)
 
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
     if request.session.get("user"):
-        return RedirectResponse("/")
-    return _render(_LOGIN_HTML)
+        return _redirect(request, "/")
+    prefix = request.headers.get("X-Ingress-Path", "")
+    return _render(_LOGIN_HTML, ingress_prefix=prefix)
 
 
 @router.post("/login", response_class=HTMLResponse)
@@ -75,13 +81,15 @@ async def login_post(
 ):
     if verify_password(email.lower(), password):
         request.session["user"] = {"email": email.lower()}
-        return RedirectResponse("/", status_code=303)
-    return _render(_LOGIN_HTML, "Email o contraseña incorrectos.")
+        return _redirect(request, "/", status_code=303)
+    prefix = request.headers.get("X-Ingress-Path", "")
+    return _render(_LOGIN_HTML, "Email o contraseña incorrectos.", ingress_prefix=prefix)
 
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_get(request: Request):
-    return _render(_REGISTER_HTML)
+    prefix = request.headers.get("X-Ingress-Path", "")
+    return _render(_REGISTER_HTML, ingress_prefix=prefix)
 
 
 @router.post("/register", response_class=HTMLResponse)
@@ -91,21 +99,22 @@ async def register_post(
     password: str = Form(...),
     password2: str = Form(...),
 ):
+    prefix = request.headers.get("X-Ingress-Path", "")
     if password != password2:
-        return _render(_REGISTER_HTML, "Las contraseñas no coinciden.")
+        return _render(_REGISTER_HTML, "Las contraseñas no coinciden.", ingress_prefix=prefix)
     if len(password) < 8:
-        return _render(_REGISTER_HTML, "La contraseña debe tener al menos 8 caracteres.")
+        return _render(_REGISTER_HTML, "La contraseña debe tener al menos 8 caracteres.", ingress_prefix=prefix)
     ok, err = create_user(email.lower(), password)
     if not ok:
-        return _render(_REGISTER_HTML, err)
+        return _render(_REGISTER_HTML, err, ingress_prefix=prefix)
     request.session["user"] = {"email": email.lower()}
-    return RedirectResponse("/", status_code=303)
+    return _redirect(request, "/", status_code=303)
 
 
 @router.get("/logout")
 async def logout(request: Request):
     request.session.clear()
-    return RedirectResponse("/auth/login")
+    return _redirect(request, "/auth/login")
 
 
 @router.get("/me")

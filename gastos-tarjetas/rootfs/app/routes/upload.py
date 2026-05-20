@@ -19,16 +19,15 @@ async def upload_file(
     if fuente not in PARSERS:
         raise HTTPException(400, f"Fuente desconocida: {fuente}. Opciones: {list(PARSERS)}")
 
-    parser = PARSERS[fuente]()
     content = await file.read()
 
     try:
-        gastos = parser.parse(io.BytesIO(content), file.filename)
+        gastos = PARSERS[fuente].parse(io.BytesIO(content), file.filename)
     except Exception as e:
         raise HTTPException(422, f"Error al parsear archivo: {e}")
 
     if not gastos:
-        return {"importados": 0, "mensaje": "No se encontraron movimientos en el archivo."}
+        return {"importados": 0, "total_parseados": 0, "mensaje": "No se encontraron movimientos en el archivo."}
 
     # Categorize all gastos
     records = []
