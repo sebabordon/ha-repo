@@ -755,7 +755,6 @@ function renderPresupuesto(vsActual) {
     return;
   }
 
-  // Build display rows: prefer vs_actual (has both real + budget) else use presup items
   const budgetMap = {};
   _presupItems.forEach(it => { budgetMap[it.categoria] = it.monto_mensual; });
 
@@ -763,7 +762,29 @@ function renderPresupuesto(vsActual) {
     categoria: it.categoria, presupuesto: it.monto_mensual, gastado: 0, diferencia: it.monto_mensual, pct: null,
   }));
 
-  wrap.innerHTML = `
+  // Totals
+  let totalPresup = 0, totalGastado = 0;
+  rows.forEach(r => {
+    totalPresup  += r.presupuesto > 0 ? r.presupuesto : (budgetMap[r.categoria] || 0);
+    totalGastado += r.gastado || 0;
+  });
+  const totalDiff = totalPresup - totalGastado;
+  const totalPct  = totalPresup > 0 ? Math.round(totalGastado / totalPresup * 100) : 0;
+  const totalBarCls = totalPct >= 100 ? "over" : totalPct >= 80 ? "warn" : "";
+
+  // Summary bar (only when month is selected and there's real spending data)
+  const summaryHtml = vsActual.length ? `
+    <div class="presup-summary">
+      <span>Presupuestado: <strong>${_fmtNum2(totalPresup)}</strong></span>
+      <span>Gastado: <strong>${_fmtNum2(totalGastado)}</strong></span>
+      <span class="${totalDiff >= 0 ? "presup-diff-pos" : "presup-diff-neg"}">
+        Diferencia: <strong>${totalDiff >= 0 ? "+" : ""}${_fmtNum2(totalDiff)}</strong>
+      </span>
+      ${totalPresup > 0 ? `<span style="color:#888">${totalPct}% utilizado</span>` : ""}
+    </div>` : "";
+
+  wrap.innerHTML = summaryHtml + `
+    <div style="overflow-x:auto">
     <table class="presup-table">
       <thead>
         <tr>
@@ -791,7 +812,7 @@ function renderPresupuesto(vsActual) {
                      onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />
             </td>
             <td style="font-variant-numeric:tabular-nums">${_fmtNum2(r.gastado)}</td>
-            <td class="${budget>0?diffCls:""}">
+            <td class="${budget > 0 ? diffCls : ""}">
               ${budget > 0 ? (r.diferencia >= 0 ? "+" : "") + _fmtNum2(r.diferencia) : "—"}
             </td>
             <td>
@@ -807,7 +828,25 @@ function renderPresupuesto(vsActual) {
           </tr>`;
         }).join("")}
       </tbody>
-    </table>`;
+      <tfoot>
+        <tr class="presup-total-row">
+          <td><strong>Total</strong></td>
+          <td><strong style="font-variant-numeric:tabular-nums">${_fmtNum2(totalPresup)}</strong></td>
+          <td><strong style="font-variant-numeric:tabular-nums">${_fmtNum2(totalGastado)}</strong></td>
+          <td class="${totalPresup > 0 ? (totalDiff >= 0 ? "presup-diff-pos" : "presup-diff-neg") : ""}">
+            <strong>${totalPresup > 0 ? (totalDiff >= 0 ? "+" : "") + _fmtNum2(totalDiff) : "—"}</strong>
+          </td>
+          <td>
+            ${totalPresup > 0 ? `
+              <div class="progress-bar-wrap"><div class="progress-bar ${totalBarCls}" style="width:${Math.min(totalPct,100)}%"></div></div>
+              <span class="presup-pct">${totalPct}%</span>
+            ` : "—"}
+          </td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+    </div>`;
 }
 
 function updatePresupItem(categoria, rawValue) {
@@ -822,7 +861,10 @@ function removePresupItem(categoria) {
   renderPresupuesto([]);
 }
 
-document.getElementById("presup-mes").addEventListener("change", loadPresupuesto);
+document.getElementById("presup-mes").addEventListener("change", function() {
+  this.blur();
+  loadPresupuesto();
+});
 
 document.getElementById("btn-save-presup").addEventListener("click", async () => {
   // Sync any unsaved inputs

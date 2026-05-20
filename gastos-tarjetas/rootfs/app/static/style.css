@@ -525,6 +525,24 @@ tbody tr:hover { background: #fafbff; }
 .presup-diff-pos { color: #16a34a; font-variant-numeric: tabular-nums; }
 .presup-diff-neg { color: #dc2626; font-variant-numeric: tabular-nums; }
 
+.presup-summary {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: .55rem .9rem;
+  background: #f7f8fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: .75rem;
+  font-size: .9rem;
+}
+.presup-total-row td {
+  border-top: 2px solid #e0e0e0;
+  padding-top: .55rem;
+  background: #fafafa;
+}
+
 /* ── Responsive (mobile) ─────────────────────────────────────────────────────*/
 
 @media (max-width: 640px) {
