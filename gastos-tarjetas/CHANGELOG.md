@@ -1,3 +1,7 @@
+## 0.2.2
+
+- Enter en el campo de categoría graba inmediatamente (igual que el botón ✓)
+
 ## 0.2.1
 
 - Fix gráfico Top 15 descripciones: crecía infinitamente por loop entre Chart.js y el contenedor. Ahora usa un wrapper con height fijo antes de crear el chart.
