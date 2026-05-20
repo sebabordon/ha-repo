@@ -29,15 +29,15 @@ class Gasto(BaseModel):
     categoria: Optional[str] = None
     categoria_fuente: Optional[str] = None  # "regla", "claude", "manual"
     archivo_origen: Optional[str] = None
+    usuario: Optional[str] = None
 
     class Config:
         json_encoders = {Decimal: str}
 
 
 class ReglaCategoria(BaseModel):
-    patron: str
+    palabras: list[str]
     categoria: str
-    descripcion: Optional[str] = None
 
 
 class ReglasCategorias(BaseModel):

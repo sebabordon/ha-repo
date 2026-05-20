@@ -1,9 +1,65 @@
-from fastapi import APIRouter, Request, Query
+import io
+from datetime import date
 from typing import Optional
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+from fastapi import APIRouter, Request, Query
+from fastapi.responses import StreamingResponse
+
 from auth import require_auth
-from db import list_gastos, update_categoria
+from db import list_gastos, update_categoria, update_usuario
 
 router = APIRouter()
+
+
+@router.get("/gastos/export")
+def export_gastos(
+    request: Request,
+    fuente: Optional[str] = Query(None),
+    categoria: Optional[str] = Query(None),
+    usuario: Optional[str] = Query(None),
+):
+    require_auth(request)
+    gastos = list_gastos(fuente=fuente, categoria=categoria, usuario=usuario)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Gastos"
+
+    headers = ["Fecha", "Descripción", "Monto", "Moneda", "Fuente", "Categoría", "Usuario"]
+    header_fill = PatternFill("solid", fgColor="16213E")
+    header_font = Font(color="FFFFFF", bold=True)
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for row_i, g in enumerate(gastos, 2):
+        ws.cell(row=row_i, column=1, value=g["fecha"])
+        ws.cell(row=row_i, column=2, value=g["descripcion"])
+        monto_cell = ws.cell(row=row_i, column=3, value=float(g["monto"]))
+        monto_cell.number_format = '#,##0.00'
+        ws.cell(row=row_i, column=4, value=g["moneda"])
+        ws.cell(row=row_i, column=5, value=g["fuente"])
+        ws.cell(row=row_i, column=6, value=g.get("categoria") or "")
+        ws.cell(row=row_i, column=7, value=g.get("usuario") or "")
+
+    col_widths = [12, 45, 14, 8, 14, 18, 10]
+    for col, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"gastos_{date.today()}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.get("/gastos")
@@ -11,14 +67,21 @@ def get_gastos(
     request: Request,
     fuente: Optional[str] = Query(None),
     categoria: Optional[str] = Query(None),
+    usuario: Optional[str] = Query(None),
 ):
     require_auth(request)
-    return list_gastos(fuente=fuente, categoria=categoria)
+    return list_gastos(fuente=fuente, categoria=categoria, usuario=usuario)
 
 
 @router.patch("/gastos/{gasto_id}/categoria")
 def patch_categoria(gasto_id: int, body: dict, request: Request):
     require_auth(request)
-    categoria = body.get("categoria", "")
-    update_categoria(gasto_id, categoria)
+    update_categoria(gasto_id, body.get("categoria", ""))
+    return {"ok": True}
+
+
+@router.patch("/gastos/{gasto_id}/usuario")
+def patch_usuario(gasto_id: int, body: dict, request: Request):
+    require_auth(request)
+    update_usuario(gasto_id, body.get("usuario", ""))
     return {"ok": True}

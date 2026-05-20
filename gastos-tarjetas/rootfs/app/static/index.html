@@ -8,7 +8,7 @@
 </head>
 <body>
   <nav class="navbar">
-    <span class="brand">💳 Gastos Tarjetas</span>
+    <span class="brand">Gastos Tarjetas</span>
     <div class="nav-right">
       <span id="user-email"></span>
       <a href="/auth/logout">Salir</a>
@@ -16,7 +16,6 @@
   </nav>
 
   <main class="container">
-    <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="gastos">Gastos</button>
       <button class="tab" data-tab="upload">Importar</button>
@@ -34,8 +33,14 @@
           <option value="galicia_mc">Galicia Mastercard</option>
           <option value="mercadopago">MercadoPago</option>
         </select>
+        <select id="filter-usuario">
+          <option value="">Todos</option>
+          <option value="Seba">Seba</option>
+          <option value="Mada">Mada</option>
+        </select>
         <input type="text" id="filter-categoria" placeholder="Filtrar por categoría..." />
         <button id="btn-load" class="btn">Cargar</button>
+        <button id="btn-export" class="btn">Exportar Excel</button>
       </div>
       <div id="gastos-summary"></div>
       <div class="table-wrap">
@@ -47,6 +52,7 @@
               <th>Monto</th>
               <th>Moneda</th>
               <th>Fuente</th>
+              <th>Usuario</th>
               <th>Categoría</th>
               <th></th>
             </tr>
@@ -83,10 +89,10 @@
     <section id="tab-rules" class="tab-content">
       <div class="rules-header">
         <h2>Reglas de categorización</h2>
-        <button id="btn-add-rule" class="btn">+ Agregar</button>
+        <button id="btn-add-rule" class="btn">+ Nueva regla</button>
         <button id="btn-save-rules" class="btn btn-primary">Guardar</button>
       </div>
-      <p class="rules-hint">Cada regla es un patrón regex que se aplica a la descripción del gasto.</p>
+      <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto.</p>
       <div id="rules-list"></div>
     </section>
   </main>

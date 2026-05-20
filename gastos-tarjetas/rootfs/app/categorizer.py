@@ -16,8 +16,18 @@ def load_rules() -> list[dict]:
 
 def categorize_by_rules(descripcion: str) -> Optional[str]:
     for regla in load_rules():
-        if re.search(regla["patron"], descripcion, re.IGNORECASE):
-            return regla["categoria"]
+        palabras = regla.get("palabras", [])
+        if palabras:
+            pattern = "(?i)(" + "|".join(re.escape(str(p)) for p in palabras) + ")"
+        elif "patron" in regla:
+            pattern = regla["patron"]  # backward compat with old regex format
+        else:
+            continue
+        try:
+            if re.search(pattern, descripcion):
+                return regla["categoria"]
+        except re.error:
+            continue
     return None
 
 
