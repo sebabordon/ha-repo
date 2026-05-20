@@ -1,3 +1,8 @@
+## 0.1.8
+
+- Botón ✓ de categoría se pone naranja (junto al borde del input) cuando hay cambios sin guardar
+- Botón borrar ahora tiene un selector de fuente: podés borrar solo una fuente (ej: BBVA Cuenta) en lugar de toda la base
+
 ## 0.1.7
 
 - Botón "Reaplicar a todos" en tab Reglas: aplica todas las reglas a los movimientos ya importados; respeta los que tienen categoria_fuente='manual' (editados a mano); limpia la categoría de los que dejaron de coincidir con alguna regla
