@@ -199,6 +199,37 @@ def delete_gastos_by_archivo(archivo: str):
         conn.execute("DELETE FROM gastos WHERE archivo_origen = ?", (archivo,))
 
 
+def apply_rules_to_all(categorize_fn) -> int:
+    """
+    Apply rule-based categorization to every gasto that was NOT manually
+    categorized (categoria_fuente != 'manual').  Rows that match a rule
+    get categoria + categoria_fuente='regla'; rows that no longer match
+    any rule get both fields cleared (so they don't keep a stale category).
+    Returns the number of rows where a rule matched.
+    """
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, descripcion FROM gastos "
+            "WHERE categoria_fuente IS NULL OR categoria_fuente != 'manual'"
+        ).fetchall()
+
+    updates = []
+    matched = 0
+    for row in rows:
+        cat = categorize_fn(row["descripcion"])
+        updates.append((cat, "regla" if cat else None, row["id"]))
+        if cat:
+            matched += 1
+
+    if updates:
+        with _conn() as conn:
+            conn.executemany(
+                "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE id=?",
+                updates,
+            )
+    return matched
+
+
 def delete_all_gastos() -> int:
     with _conn() as conn:
         conn.execute("DELETE FROM gastos")

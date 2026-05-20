@@ -467,6 +467,26 @@ document.getElementById("btn-save-rules").addEventListener("click", async () => 
   alert(res.ok ? "Reglas guardadas." : "Error al guardar.");
 });
 
+document.getElementById("btn-apply-rules").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-apply-rules");
+  btn.disabled = true;
+  btn.textContent = "Aplicando…";
+  try {
+    const res = await fetch(`${BASE}/api/rules/apply`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      alert(`Reglas aplicadas: ${data.categorizados} movimientos categorizados.`);
+      loadGastos();
+      loadCategorias();
+    } else {
+      alert("Error al aplicar reglas.");
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Reaplicar a todos";
+  }
+});
+
 loadRules();
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

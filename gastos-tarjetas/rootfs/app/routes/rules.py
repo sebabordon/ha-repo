@@ -1,7 +1,9 @@
 import yaml
 from fastapi import APIRouter, Request, HTTPException
 from auth import require_auth
+from categorizer import categorize_by_rules
 from config import RULES_FILE
+from db import apply_rules_to_all
 from models import ReglasCategorias
 
 router = APIRouter()
@@ -28,3 +30,11 @@ def put_rules(body: ReglasCategorias, request: Request):
     except Exception as e:
         raise HTTPException(500, f"Error al guardar reglas: {e}")
     return {"ok": True}
+
+
+@router.post("/rules/apply")
+def post_apply_rules(request: Request):
+    """Re-apply all rules to every non-manually-categorized gasto."""
+    require_auth(request)
+    matched = apply_rules_to_all(categorize_by_rules)
+    return {"ok": True, "categorizados": matched}
