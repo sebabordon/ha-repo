@@ -137,6 +137,11 @@ function _drawDonut(data) {
 
 function _drawTopDesc(data) {
   const d = data.slice(0, 15);
+  // Fix height on the wrapper BEFORE creating the chart so Chart.js reads
+  // a stable size and doesn't enter a grow loop.
+  const wrap = document.getElementById("top-desc-wrap");
+  wrap.style.height = Math.max(240, d.length * 26 + 40) + "px";
+
   _destroyAndCreate("chart-top-desc", {
     type: "bar",
     data: {
@@ -153,8 +158,6 @@ function _drawTopDesc(data) {
                 y:{ ticks:{ font:{ size:10 } }} },
     },
   });
-  document.getElementById("chart-top-desc").parentElement.style.minHeight =
-    Math.max(260, d.length * 26 + 40) + "px";
 }
 
 function _drawMonthlyCat(rows) {
