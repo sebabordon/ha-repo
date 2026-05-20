@@ -396,7 +396,7 @@ def apply_rules_to_all(categorize_fn) -> int:
     with _conn() as conn:
         rows = conn.execute(
             "SELECT id, descripcion FROM gastos "
-            "WHERE categoria_fuente IS NULL OR categoria_fuente != 'manual'"
+            "WHERE categoria_fuente IS NULL OR categoria_fuente NOT IN ('manual', 'auto')"
         ).fetchall()
 
     updates = []
