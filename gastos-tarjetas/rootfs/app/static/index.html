@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gastos Tarjetas</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <nav class="navbar">
@@ -16,6 +17,14 @@
   </nav>
 
   <main class="container">
+
+    <!-- Monthly chart -->
+    <div class="chart-card">
+      <div class="chart-title">Movimientos ARS — mes a mes</div>
+      <canvas id="monthly-chart"></canvas>
+    </div>
+
+    <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="gastos">Gastos</button>
       <button class="tab" data-tab="upload">Importar</button>
@@ -24,25 +33,42 @@
 
     <!-- Tab: Gastos -->
     <section id="tab-gastos" class="tab-content active">
-      <div class="filters">
-        <select id="filter-fuente">
-          <option value="">Todas las fuentes</option>
-          <option value="amex">AMEX</option>
-          <option value="bbva_mc">BBVA Mastercard</option>
-          <option value="bbva_visa">BBVA Visa</option>
-          <option value="galicia_mc">Galicia Mastercard</option>
-          <option value="mercadopago">MercadoPago</option>
-        </select>
-        <select id="filter-usuario">
-          <option value="">Todos</option>
-          <option value="Seba">Seba</option>
-          <option value="Mada">Mada</option>
-        </select>
-        <input type="text" id="filter-categoria" placeholder="Filtrar por categoría..." />
-        <button id="btn-load" class="btn">Cargar</button>
-        <button id="btn-export" class="btn">Exportar Excel</button>
+
+      <div class="filter-bar">
+        <div id="gastos-summary"></div>
+        <button id="btn-toggle-filters" class="btn btn-sm" aria-expanded="true">Filtros ▴</button>
       </div>
-      <div id="gastos-summary"></div>
+
+      <div id="filter-panel">
+        <div class="filters">
+          <select id="filter-fuente">
+            <option value="">Todas las fuentes</option>
+            <option value="amex">AMEX</option>
+            <option value="bbva_mc">BBVA Mastercard</option>
+            <option value="bbva_visa">BBVA Visa</option>
+            <option value="bbva_cuenta">BBVA Cuenta</option>
+            <option value="galicia_mc">Galicia Mastercard</option>
+            <option value="mercadopago">MercadoPago</option>
+          </select>
+          <select id="filter-usuario">
+            <option value="">Todos</option>
+            <option value="Seba">Seba</option>
+            <option value="Mada">Mada</option>
+          </select>
+          <select id="filter-mes">
+            <option value="">Todos los meses</option>
+          </select>
+          <button id="btn-load" class="btn">Cargar</button>
+          <button id="btn-export" class="btn">Exportar Excel</button>
+        </div>
+        <div class="cat-slicer">
+          <span class="cat-label">Categorías:</span>
+          <div id="cat-chips">
+            <span class="cat-chip cat-todos active" onclick="toggleAllCats()">Todas</span>
+          </div>
+        </div>
+      </div>
+
       <div class="table-wrap">
         <table id="gastos-table">
           <thead>
@@ -50,7 +76,7 @@
               <th>Fecha</th>
               <th>Descripción</th>
               <th>Monto</th>
-              <th>Moneda</th>
+              <th>Mon.</th>
               <th>Fuente</th>
               <th>Usuario</th>
               <th>Categoría</th>
@@ -72,6 +98,7 @@
             <option value="amex">AMEX Platinum (PDF)</option>
             <option value="bbva_mc">BBVA Mastercard (PDF)</option>
             <option value="bbva_visa">BBVA Visa (PDF)</option>
+            <option value="bbva_cuenta">BBVA Cuenta (PDF)</option>
             <option value="galicia_mc">Galicia Mastercard (PDF)</option>
             <option value="mercadopago">MercadoPago (XLSX)</option>
           </select>
@@ -95,6 +122,7 @@
       <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto.</p>
       <div id="rules-list"></div>
     </section>
+
   </main>
 
   <script src="/static/app.js"></script>

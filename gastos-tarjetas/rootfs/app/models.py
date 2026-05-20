@@ -15,6 +15,7 @@ class Fuente(str, Enum):
     AMEX = "amex"
     BBVA_MC = "bbva_mc"
     BBVA_VISA = "bbva_visa"
+    BBVA_CUENTA = "bbva_cuenta"
     GALICIA_MC = "galicia_mc"
     MERCADOPAGO = "mercadopago"
 

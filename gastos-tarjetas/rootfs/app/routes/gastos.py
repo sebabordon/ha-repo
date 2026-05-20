@@ -8,20 +8,40 @@ from fastapi import APIRouter, Request, Query
 from fastapi.responses import StreamingResponse
 
 from auth import require_auth
-from db import list_gastos, update_categoria, update_usuario
+from db import list_gastos, list_categorias, monthly_summary, update_categoria, update_usuario
 
 router = APIRouter()
+
+
+def _parse_categorias(categorias: Optional[str]) -> Optional[list]:
+    if not categorias:
+        return None
+    parts = [c.strip() for c in categorias.split(",") if c.strip()]
+    return parts or None
+
+
+@router.get("/gastos/monthly")
+def get_monthly(request: Request):
+    require_auth(request)
+    return monthly_summary()
+
+
+@router.get("/categorias")
+def get_categorias(request: Request):
+    require_auth(request)
+    return list_categorias()
 
 
 @router.get("/gastos/export")
 def export_gastos(
     request: Request,
     fuente: Optional[str] = Query(None),
-    categoria: Optional[str] = Query(None),
+    categorias: Optional[str] = Query(None),
     usuario: Optional[str] = Query(None),
+    mes: Optional[str] = Query(None),
 ):
     require_auth(request)
-    gastos = list_gastos(fuente=fuente, categoria=categoria, usuario=usuario)
+    gastos = list_gastos(fuente=fuente, categorias=_parse_categorias(categorias), usuario=usuario, mes=mes)
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -66,11 +86,12 @@ def export_gastos(
 def get_gastos(
     request: Request,
     fuente: Optional[str] = Query(None),
-    categoria: Optional[str] = Query(None),
+    categorias: Optional[str] = Query(None),
     usuario: Optional[str] = Query(None),
+    mes: Optional[str] = Query(None),
 ):
     require_auth(request)
-    return list_gastos(fuente=fuente, categoria=categoria, usuario=usuario)
+    return list_gastos(fuente=fuente, categorias=_parse_categorias(categorias), usuario=usuario, mes=mes)
 
 
 @router.patch("/gastos/{gasto_id}/categoria")

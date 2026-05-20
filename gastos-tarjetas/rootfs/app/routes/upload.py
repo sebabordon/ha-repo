@@ -13,6 +13,7 @@ router = APIRouter()
 _USUARIO_FUENTE = {
     "bbva_mc": "Seba",
     "bbva_visa": "Seba",
+    "bbva_cuenta": "Seba",
     "mercadopago": "Seba",
 }
 

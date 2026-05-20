@@ -4,6 +4,10 @@ from typing import Optional
 
 from config import DB_PATH
 
+# Fuentes that are credit cards: positive monto = expense
+_CC_FUENTES = ("amex", "bbva_mc", "bbva_visa", "galicia_mc")
+_cc_list = "','".join(_CC_FUENTES)
+
 
 def init_db():
     with _conn() as conn:
@@ -21,7 +25,6 @@ def init_db():
                 usuario TEXT
             )
         """)
-        # Migration: add usuario column to existing databases
         cols = {r[1] for r in conn.execute("PRAGMA table_info(gastos)").fetchall()}
         if "usuario" not in cols:
             conn.execute("ALTER TABLE gastos ADD COLUMN usuario TEXT")
@@ -54,24 +57,61 @@ def insert_gastos(gastos: list[dict]) -> int:
 
 def list_gastos(
     fuente: Optional[str] = None,
-    categoria: Optional[str] = None,
+    categorias: Optional[list] = None,
     usuario: Optional[str] = None,
+    mes: Optional[str] = None,
 ) -> list[dict]:
     query = "SELECT * FROM gastos WHERE 1=1"
     params: list = []
     if fuente:
         query += " AND fuente = ?"
         params.append(fuente)
-    if categoria:
-        query += " AND categoria = ?"
-        params.append(categoria)
+    if categorias:
+        placeholders = ",".join("?" * len(categorias))
+        query += f" AND categoria IN ({placeholders})"
+        params.extend(categorias)
     if usuario:
         query += " AND usuario = ?"
         params.append(usuario)
+    if mes:
+        query += " AND fecha LIKE ?"
+        params.append(f"{mes}-%")
     query += " ORDER BY fecha DESC"
     with _conn() as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in rows]
+
+
+def monthly_summary() -> list[dict]:
+    """
+    Returns month-by-month ARS totals with correct sign interpretation:
+    - Credit cards (amex, bbva_mc, bbva_visa, galicia_mc): positive = egreso
+    - Savings accounts (bbva_cuenta, mercadopago): positive = ingreso, negative = egreso
+    """
+    query = f"""
+        SELECT substr(fecha, 1, 7) AS mes,
+          ROUND(SUM(CASE
+            WHEN fuente IN ('{_cc_list}') AND CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL)
+            WHEN fuente NOT IN ('{_cc_list}') AND CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL)
+            ELSE 0 END), 2) AS egresos,
+          ROUND(SUM(CASE
+            WHEN fuente NOT IN ('{_cc_list}') AND CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL)
+            WHEN fuente IN ('{_cc_list}') AND CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL)
+            ELSE 0 END), 2) AS ingresos
+        FROM gastos WHERE moneda = 'ARS'
+        GROUP BY mes ORDER BY mes
+    """
+    with _conn() as conn:
+        rows = conn.execute(query).fetchall()
+    return [{"mes": r["mes"], "ingresos": float(r["ingresos"]), "egresos": float(r["egresos"])} for r in rows]
+
+
+def list_categorias() -> list[str]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT categoria FROM gastos WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria"
+        ).fetchall()
+    return [r[0] for r in rows]
 
 
 def update_categoria(gasto_id: int, categoria: str):
