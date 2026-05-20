@@ -1,3 +1,7 @@
+## 0.1.9
+
+- Fix definitivo parser BBVA Cuenta: los montos son right-aligned y no coinciden con las bandas de los encabezados de columna. Nueva heurística: el número con mayor x0 de cada fila = SALDO (se descarta), el resto = movimiento. Débito negativo = egreso, positivo = ingreso. Verificado contra PDF real: 32 movimientos con signos correctos.
+
 ## 0.1.8
 
 - Botón ✓ de categoría se pone naranja (junto al borde del input) cuando hay cambios sin guardar
