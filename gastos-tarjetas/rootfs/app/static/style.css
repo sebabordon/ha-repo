@@ -199,6 +199,18 @@ tbody tr:hover { background: #fafbff; }
 #upload-result.ok { background: #d1fae5; color: #065f46; }
 #upload-result.err { background: #fee2e2; color: #b91c1c; }
 
+.danger-zone {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1.5rem;
+  padding: .75rem 1rem;
+  background: #fff8f8;
+  border: 1px dashed #fca5a5;
+  border-radius: 6px;
+}
+.danger-hint { color: #b91c1c; font-size: .82rem; }
+
 /* ── Rules ───────────────────────────────────────────────────────────────────*/
 
 .rules-header { display: flex; gap: .75rem; align-items: center; margin-bottom: .5rem; }

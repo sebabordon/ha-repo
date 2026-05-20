@@ -197,3 +197,9 @@ def update_usuario(gasto_id: int, usuario: str):
 def delete_gastos_by_archivo(archivo: str):
     with _conn() as conn:
         conn.execute("DELETE FROM gastos WHERE archivo_origen = ?", (archivo,))
+
+
+def delete_all_gastos() -> int:
+    with _conn() as conn:
+        conn.execute("DELETE FROM gastos")
+        return conn.execute("SELECT changes()").fetchone()[0]

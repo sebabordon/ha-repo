@@ -138,12 +138,12 @@ function toggleCat(cat) {
   } else {
     _selectedCats.add(cat);
   }
-  // Update chip appearance without full re-fetch
   document.querySelectorAll(".cat-chip:not(.cat-todos)").forEach(chip => {
     chip.classList.toggle("active", _selectedCats.has(chip.textContent));
   });
   const todosChip = document.querySelector(".cat-todos");
   if (todosChip) todosChip.classList.toggle("active", _selectedCats.size === 0);
+  loadGastos();
 }
 
 function toggleAllCats() {
@@ -151,6 +151,7 @@ function toggleAllCats() {
   document.querySelectorAll(".cat-chip").forEach(c => c.classList.remove("active"));
   const todosChip = document.querySelector(".cat-todos");
   if (todosChip) todosChip.classList.add("active");
+  loadGastos();
 }
 
 loadCategorias();
@@ -246,6 +247,12 @@ async function saveUsuario(id, sel) {
   });
 }
 
+// Live filter updates — every select reloads automatically
+["filter-fuente", "filter-usuario", "filter-mes"].forEach(id => {
+  document.getElementById(id).addEventListener("change", loadGastos);
+});
+
+// Keep the explicit button as a fallback / manual refresh
 document.getElementById("btn-load").addEventListener("click", loadGastos);
 
 document.getElementById("btn-export").addEventListener("click", () => {
@@ -317,6 +324,22 @@ async function confirmTransfers() {
 // Close modal on backdrop click
 document.getElementById("transfer-modal").addEventListener("click", function (e) {
   if (e.target === this) closeTransferModal();
+});
+
+// ── DELETE ALL ────────────────────────────────────────────────────────────────
+
+document.getElementById("btn-delete-all").addEventListener("click", async () => {
+  if (!confirm("⚠️ Esto elimina TODOS los movimientos de la base.\n\n¿Estás seguro?")) return;
+  const res = await fetch(`${BASE}/api/gastos`, { method: "DELETE" });
+  const data = await res.json();
+  if (res.ok) {
+    alert(`Se eliminaron ${data.eliminados} movimientos.`);
+    loadGastos();
+    loadChart();
+    loadCategorias();
+  } else {
+    alert("Error al borrar la base.");
+  }
 });
 
 // ── UPLOAD ─────────────────────────────────────────────────────────────────────
