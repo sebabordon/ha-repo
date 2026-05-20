@@ -7,6 +7,42 @@ const PALETTE = [
   "#06b6d4","#a855f7","#eab308","#10b981","#f43f5e",
 ];
 
+// ── Toast / notifications ─────────────────────────────────────────────────────
+function showToast(msg, type = "ok", duration = 3500) {
+  const el = document.getElementById("toast");
+  el.innerHTML = `<span class="toast-msg">${escHtml(msg)}</span>
+    <button class="toast-close" onclick="this.closest('.toast').classList.remove('show')">✕</button>`;
+  el.className = `toast toast-${type} show`;
+  clearTimeout(el._t);
+  if (duration > 0) el._t = setTimeout(() => el.classList.remove("show"), duration);
+}
+
+function showConfirm(msg, onConfirm) {
+  const el = document.getElementById("toast");
+  el.innerHTML = `<span class="toast-msg">${escHtml(msg)}</span>
+    <button class="btn btn-sm btn-danger" id="t-ok">Confirmar</button>
+    <button class="btn btn-sm" onclick="document.getElementById('toast').classList.remove('show')">Cancelar</button>`;
+  el.className = "toast toast-warn show";
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove("show"), 8000);
+  document.getElementById("t-ok").onclick = () => { el.classList.remove("show"); onConfirm(); };
+}
+
+function showPrompt(msg, placeholder, onConfirm) {
+  const el = document.getElementById("toast");
+  el.innerHTML = `<span class="toast-msg">${escHtml(msg)}</span>
+    <input id="t-inp" type="text" placeholder="${escHtml(placeholder)}">
+    <button class="btn btn-sm btn-primary" id="t-ok">OK</button>
+    <button class="btn btn-sm" onclick="document.getElementById('toast').classList.remove('show')">✕</button>`;
+  el.className = "toast toast-info show";
+  clearTimeout(el._t);
+  const inp = document.getElementById("t-inp");
+  const ok  = () => { const v = inp.value.trim(); el.classList.remove("show"); if (v) onConfirm(v); };
+  document.getElementById("t-ok").onclick = ok;
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") ok(); if (e.key === "Escape") el.classList.remove("show"); });
+  setTimeout(() => inp.focus(), 30);
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll(".tab").forEach(tab => {
   tab.addEventListener("click", () => {
@@ -443,7 +479,7 @@ async function confirmTransfers() {
   });
   const data = await res.json();
   closeTransferModal();
-  alert(`${data.marcados} movimientos marcados como Transferencia.`);
+  showToast(`✓ ${data.marcados} movimientos marcados como Transferencia`, "ok");
   loadGastos(); loadMonthlyChart();
 }
 document.getElementById("transfer-modal").addEventListener("click", function(e) {
@@ -451,19 +487,20 @@ document.getElementById("transfer-modal").addEventListener("click", function(e) 
 });
 
 // ── Delete all ────────────────────────────────────────────────────────────────
-document.getElementById("btn-delete-all").addEventListener("click", async () => {
+document.getElementById("btn-delete-all").addEventListener("click", () => {
   const fuente = document.getElementById("delete-fuente").value;
   const label  = fuente
     ? document.querySelector(`#delete-fuente option[value="${fuente}"]`).textContent
     : "TODAS las fuentes";
-  if (!confirm(`⚠️ Esto elimina los movimientos de: ${label}.\n\n¿Estás seguro?`)) return;
-  const url = fuente ? `${BASE}/api/gastos?fuente=${fuente}` : `${BASE}/api/gastos`;
-  const res  = await fetch(url, {method:"DELETE"});
-  const data = await res.json();
-  if (res.ok) {
-    alert(`Se eliminaron ${data.eliminados} movimientos.`);
-    loadGastos(); loadMonthlyChart(); loadCategorias();
-  } else { alert("Error al borrar."); }
+  showConfirm(`⚠️ Eliminar movimientos de: ${label}`, async () => {
+    const url = fuente ? `${BASE}/api/gastos?fuente=${fuente}` : `${BASE}/api/gastos`;
+    const res  = await fetch(url, {method:"DELETE"});
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`✓ ${data.eliminados} movimientos eliminados`, "ok");
+      loadGastos(); loadMonthlyChart(); loadCategorias();
+    } else { showToast("Error al borrar", "err", 0); }
+  });
 });
 
 // ── Upload ────────────────────────────────────────────────────────────────────
@@ -528,9 +565,27 @@ function renderRules() {
 function _syncRules() {
   document.querySelectorAll(".rule-cat").forEach((inp,i) => { if (_rules[i]) _rules[i].categoria = inp.value; });
 }
-function removeRule(i)    { _syncRules(); _rules.splice(i,1); renderRules(); }
-function removeTag(i,j)   { _syncRules(); _rules[i].palabras.splice(j,1); renderRules(); }
-function addTag(event,i)  {
+
+// Auto-save with debounce
+let _saveRulesTimer = null;
+function _scheduleSaveRules() {
+  clearTimeout(_saveRulesTimer);
+  _saveRulesTimer = setTimeout(async () => {
+    _syncRules();
+    const reglas = _rules.filter(r => r.palabras.length > 0 && r.categoria.trim());
+    const res = await fetch(`${BASE}/api/rules`, {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({reglas}),
+    });
+    showToast(res.ok ? "✓ Reglas guardadas" : "❌ Error al guardar reglas", res.ok ? "ok" : "err", res.ok ? 2000 : 0);
+  }, 800);
+}
+// Save on any focusout inside the rules list
+document.getElementById("rules-list").addEventListener("focusout", _scheduleSaveRules);
+
+function removeRule(i)  { _syncRules(); _rules.splice(i,1); renderRules(); _scheduleSaveRules(); }
+function removeTag(i,j) { _syncRules(); _rules[i].palabras.splice(j,1); renderRules(); _scheduleSaveRules(); }
+function addTag(event,i) {
   if (event.key !== "Enter") return;
   event.preventDefault();
   const word = event.target.value.trim();
@@ -539,21 +594,14 @@ function addTag(event,i)  {
   if (!_rules[i].palabras.includes(word)) _rules[i].palabras.push(word);
   renderRules();
   document.querySelectorAll(".tag-input")[i]?.focus();
+  _scheduleSaveRules();
 }
 
 document.getElementById("btn-add-rule").addEventListener("click", () => {
   _syncRules(); _rules.push({palabras:[],categoria:""}); renderRules();
-  document.querySelectorAll(".rule-cat").at(-1)?.focus();
-});
-
-document.getElementById("btn-save-rules").addEventListener("click", async () => {
-  _syncRules();
-  const reglas = _rules.filter(r => r.palabras.length > 0 && r.categoria.trim());
-  const res = await fetch(`${BASE}/api/rules`, {
-    method:"PUT", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({reglas}),
-  });
-  alert(res.ok ? "Reglas guardadas." : "Error al guardar.");
+  const el = document.querySelectorAll(".rule-cat").at(-1);
+  el?.focus();
+  el?.scrollIntoView({behavior:"smooth", block:"nearest"});
 });
 
 document.getElementById("btn-apply-rules").addEventListener("click", async () => {
@@ -562,8 +610,8 @@ document.getElementById("btn-apply-rules").addEventListener("click", async () =>
   try {
     const res  = await fetch(`${BASE}/api/rules/apply`, {method:"POST"});
     const data = await res.json();
-    if (res.ok) { alert(`Reglas aplicadas: ${data.categorizados} movimientos categorizados.`); loadGastos(); loadCategorias(); }
-    else alert("Error al aplicar reglas.");
+    if (res.ok) { showToast(`✓ ${data.categorizados} movimientos categorizados`, "ok"); loadGastos(); loadCategorias(); }
+    else showToast("Error al aplicar reglas", "err", 0);
   } finally { btn.disabled = false; btn.textContent = "Reaplicar a todos"; }
 });
 
@@ -639,22 +687,29 @@ function _syncMatchRules() {
   }));
 }
 
-function removeMatchRule(i) { _syncMatchRules(); _matchRules.splice(i,1); renderMatchRules(); }
+let _saveMatchTimer = null;
+function _scheduleSaveMatchRules() {
+  clearTimeout(_saveMatchTimer);
+  _saveMatchTimer = setTimeout(async () => {
+    _syncMatchRules();
+    const res = await fetch(`${BASE}/api/rules/match`, {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({reglas: _matchRules}),
+    });
+    showToast(res.ok ? "✓ Reglas de emparejado guardadas" : "❌ Error al guardar", res.ok ? "ok" : "err", res.ok ? 2000 : 0);
+  }, 800);
+}
+document.getElementById("match-rules-list").addEventListener("focusout", _scheduleSaveMatchRules);
+
+function removeMatchRule(i) { _syncMatchRules(); _matchRules.splice(i,1); renderMatchRules(); _scheduleSaveMatchRules(); }
 
 document.getElementById("btn-add-match-rule").addEventListener("click", () => {
   _syncMatchRules();
   _matchRules.push({nombre:"",patron_a:"",fuente_a:"",patron_b:"",fuente_b:"",ventana_dias:3,categoria:"Transferencia"});
   renderMatchRules();
-  document.querySelectorAll(".match-nombre").at(-1)?.focus();
-});
-
-document.getElementById("btn-save-match-rules").addEventListener("click", async () => {
-  _syncMatchRules();
-  const res = await fetch(`${BASE}/api/rules/match`, {
-    method:"PUT", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({reglas: _matchRules}),
-  });
-  alert(res.ok ? "Reglas de emparejado guardadas." : "Error al guardar.");
+  const el = document.querySelectorAll(".match-nombre").at(-1);
+  el?.focus();
+  el?.scrollIntoView({behavior:"smooth", block:"nearest"});
 });
 
 document.getElementById("btn-apply-match-rules").addEventListener("click", async () => {
@@ -663,8 +718,8 @@ document.getElementById("btn-apply-match-rules").addEventListener("click", async
   try {
     const res  = await fetch(`${BASE}/api/rules/match/apply`, {method:"POST"});
     const data = await res.json();
-    if (res.ok) { alert(`${data.marcados} movimientos marcados.`); loadGastos(); loadCategorias(); }
-    else alert("Error al aplicar.");
+    if (res.ok) { showToast(`✓ ${data.marcados} movimientos marcados`, "ok"); loadGastos(); loadCategorias(); }
+    else showToast("Error al aplicar", "err", 0);
   } finally { btn.disabled = false; btn.textContent = "Aplicar todas"; }
 });
 
@@ -679,7 +734,7 @@ async function applyOneMatchRule(i) {
       body: JSON.stringify(rule),
     });
     const data = await res.json();
-    alert(`${data.marcados} movimientos marcados.`);
+    showToast(`✓ ${data.marcados} movimientos marcados`, "ok");
     loadGastos(); loadCategorias();
   } finally { if (btn) { btn.disabled = false; btn.textContent = "Aplicar"; } }
 }
@@ -877,17 +932,16 @@ document.getElementById("btn-save-presup").addEventListener("click", async () =>
     headers: {"Content-Type":"application/json"},
     body: JSON.stringify({items}),
   });
-  if (res.ok) { alert("Presupuesto guardado."); loadPresupuesto(); }
-  else alert("Error al guardar presupuesto.");
+  if (res.ok) { showToast("✓ Presupuesto guardado", "ok"); loadPresupuesto(); }
+  else showToast("Error al guardar presupuesto", "err", 0);
 });
 
 document.getElementById("btn-add-presup-row").addEventListener("click", () => {
-  const cat = prompt("Nombre de la categoría:");
-  if (!cat || !cat.trim()) return;
-  const name = cat.trim();
-  if (!_presupItems.find(it => it.categoria === name))
-    _presupItems.push({categoria: name, monto_mensual: 0, moneda: "ARS"});
-  renderPresupuesto([]);
+  showPrompt("Nueva categoría de presupuesto:", "ej: Supermercado", name => {
+    if (!_presupItems.find(it => it.categoria === name))
+      _presupItems.push({categoria: name, monto_mensual: 0, moneda: "ARS"});
+    renderPresupuesto([]);
+  });
 });
 
 // ── Forecast chart ─────────────────────────────────────────────────────────────
