@@ -82,6 +82,7 @@ class BBVAParser(BaseParser):
 
     def parse(self, file: BinaryIO, filename: str):
         gastos = []
+        current_usuario: Optional[str] = None
 
         with pdfplumber.open(file) as pdf:
             stmt_date = _detect_statement_date(pdf)
@@ -94,6 +95,17 @@ class BBVAParser(BaseParser):
                     if not row:
                         continue
                     first = row[0]["text"]
+                    rtext = row_text(row)
+
+                    # Section header detection ("Consumos <Name>")
+                    if re.match(r"^Consumos\s+\S", rtext, re.IGNORECASE) and not _DATE_RE.match(first):
+                        current_usuario = "Mada" if re.search(r"Consumos\s+Magdalena", rtext, re.IGNORECASE) else None
+                        continue
+
+                    # End of named section ("TOTAL CONSUMOS DE …")
+                    if re.match(r"TOTAL CONSUMOS DE\b", rtext, re.IGNORECASE):
+                        current_usuario = None
+                        continue
 
                     if not _DATE_RE.match(first):
                         continue
@@ -130,8 +142,8 @@ class BBVAParser(BaseParser):
                     usd = parse_ar_amount("".join(w["text"] for w in usd_words))
 
                     if usd and usd > 0:
-                        gastos.append(self._gasto(fecha, description, usd, Moneda.USD, filename))
+                        gastos.append(self._gasto(fecha, description, usd, Moneda.USD, filename, usuario=current_usuario))
                     elif ars and ars > 0:
-                        gastos.append(self._gasto(fecha, description, ars, Moneda.ARS, filename))
+                        gastos.append(self._gasto(fecha, description, ars, Moneda.ARS, filename, usuario=current_usuario))
 
         return gastos

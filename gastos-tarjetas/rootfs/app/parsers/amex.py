@@ -35,6 +35,7 @@ class AmexParser(BaseParser):
     def parse(self, file: BinaryIO, filename: str):
         gastos = []
         current_moneda: Optional[Moneda] = None
+        current_usuario: str = "Seba"
         facturacion_year: int = 2026
 
         with pdfplumber.open(file) as pdf:
@@ -51,12 +52,14 @@ class AmexParser(BaseParser):
                         y = int(m.group(1))
                         facturacion_year = y + 2000 if y < 100 else y
 
-                    # Section detection
+                    # Section detection — also detects card holder name
                     if "Nuevos Cargos en PESOS" in rtext:
                         current_moneda = Moneda.ARS
+                        current_usuario = "Mada" if "MAGDALENA" in rtext.upper() else "Seba"
                         continue
                     if "Nuevos Cargos en DOLARES" in rtext or "Nuevos Cargos en DÓLARES" in rtext:
                         current_moneda = Moneda.USD
+                        current_usuario = "Mada" if "MAGDALENA" in rtext.upper() else "Seba"
                         continue
                     if "Total de Cargos en" in rtext or "Fecha y detalle" in rtext:
                         current_moneda = None
@@ -101,6 +104,6 @@ class AmexParser(BaseParser):
                     if fecha is None:
                         continue
 
-                    gastos.append(self._gasto(fecha, description, amount, current_moneda, filename))
+                    gastos.append(self._gasto(fecha, description, amount, current_moneda, filename, usuario=current_usuario))
 
         return gastos

@@ -1,3 +1,9 @@
+## 0.2.8
+
+- Parser AMEX: detecta automáticamente los cargos de Magdalena Sabina Saenz (secciones "Nuevos Cargos en PESOS/DOLARES para MAGDALENA SABINA SAENZ") y los asigna a usuario="Mada".
+- Parser BBVA Visa: detecta la sección "Consumos Magdalena Saenz" y asigna usuario="Mada" a sus movimientos; cierra la sección en "TOTAL CONSUMOS DE MAGDALENA SAENZ".
+- Los movimientos de titulares no identificados (Seba) siguen asignándose por el default de fuente en upload.py.
+
 ## 0.2.7
 
 - Reglas: auto-guardado sin botón — se guarda 800ms después del último cambio (agregar/eliminar regla, agregar/eliminar palabra, salir de un campo de texto). Los botones "Guardar" fueron eliminados.

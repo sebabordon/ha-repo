@@ -9,8 +9,9 @@ from parsers import PARSERS
 
 router = APIRouter()
 
-# Default user assignment by source
+# Default user assignment by source (used when parser doesn't set usuario)
 _USUARIO_FUENTE = {
+    "amex": "Seba",
     "bbva_mc": "Seba",
     "bbva_visa": "Seba",
     "bbva_cuenta": "Seba",
@@ -46,7 +47,7 @@ async def upload_file(
         d = g.model_dump()
         d["categoria"] = cat
         d["categoria_fuente"] = fuente_cat
-        d["usuario"] = usuario_default
+        d["usuario"] = g.usuario if g.usuario is not None else usuario_default
         records.append(d)
 
     count = insert_gastos(records)

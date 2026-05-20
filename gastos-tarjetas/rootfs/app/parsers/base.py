@@ -14,7 +14,7 @@ class BaseParser(ABC):
         """Parse file and return list of Gasto objects (without categoria)."""
         ...
 
-    def _gasto(self, fecha, descripcion: str, monto: Decimal, moneda: Moneda, archivo: str) -> Gasto:
+    def _gasto(self, fecha, descripcion: str, monto: Decimal, moneda: Moneda, archivo: str, usuario: str = None) -> Gasto:
         return Gasto(
             fecha=fecha,
             descripcion=descripcion.strip(),
@@ -22,4 +22,5 @@ class BaseParser(ABC):
             moneda=moneda,
             fuente=self.fuente,
             archivo_origen=archivo,
+            usuario=usuario,
         )
