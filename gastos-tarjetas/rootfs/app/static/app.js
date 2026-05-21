@@ -52,6 +52,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    loadCharts();
     if (tab.dataset.tab === "presupuesto") loadPresupuesto();
+    if (tab.dataset.tab === "cuentas")     loadCuentas();
   });
 });
 
@@ -1021,6 +1022,209 @@ function _drawForecast(data) {
 
 ["cf-forecast-meses","cf-forecast-historico"].forEach(id =>
   document.getElementById(id)?.addEventListener("change", function() { this.blur(); loadForecast(); }));
+
+// ── Cuentas tab ───────────────────────────────────────────────────────────────
+let _cuentasData = [];
+
+async function loadCuentas() {
+  const res = await fetch(`${BASE}/api/cuentas`);
+  _cuentasData = await res.json();
+  renderCuentas();
+}
+
+function renderCuentas() {
+  const list = document.getElementById("cuentas-list");
+  if (!_cuentasData.length) {
+    list.innerHTML = `<p style="color:#aaa;padding:1rem 0">Sin cuentas.</p>`;
+    return;
+  }
+  list.innerHTML = _cuentasData.map(c => _renderCuentaCard(c)).join("");
+}
+
+function _renderCuentaCard(c) {
+  const tipo    = c.tipo || "auto";
+  const badge   = tipo === "manual"
+    ? `<span class="cuenta-badge cuenta-badge-manual">Manual</span>`
+    : `<span class="cuenta-badge cuenta-badge-auto">Auto</span>`;
+  const saldo   = c.saldo || 0;
+  const saldoCls = saldo > 0 ? "positivo" : saldo < 0 ? "negativo" : "";
+  const activa  = c.activa ? "✓ Activa" : "✗ Inactiva";
+
+  // Edit saldo row (auto accounts only, since manual is computed automatically)
+  const editSaldo = tipo === "auto" ? `
+    <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none">
+      <input id="ce-inp-${c.fuente}" type="text" value="${saldo}"
+             style="width:100px"
+             onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
+      <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
+    </div>` : "";
+
+  // Actions
+  const actionsAuto = `
+    <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">✏ Saldo</button>
+    <button class="btn btn-sm" onclick="toggleCuentaActiva('${c.fuente}',${c.activa ? 0 : 1})">${c.activa ? "Desactivar" : "Activar"}</button>`;
+
+  const actionsManual = `
+    <button class="btn btn-sm" onclick="toggleMovForm('${c.fuente}')">+ Movimiento</button>
+    <button class="btn btn-sm" onclick="toggleCuentaActiva('${c.fuente}',${c.activa ? 0 : 1})">${c.activa ? "Desactivar" : "Activar"}</button>
+    <button class="btn btn-sm btn-danger" onclick="deleteCuenta('${c.fuente}')">Eliminar</button>`;
+
+  // Movement form (manual only, hidden by default)
+  const movForm = tipo === "manual" ? `
+    <div id="mov-form-${c.fuente}" style="display:none">
+      <div class="mov-add-form">
+        <input class="f-fecha" type="date" id="mf-fecha-${c.fuente}"
+               value="${new Date().toISOString().slice(0,10)}">
+        <input class="f-desc" type="text" id="mf-desc-${c.fuente}" placeholder="Descripción">
+        <select class="f-tipo" id="mf-tipo-${c.fuente}">
+          <option value="egreso">Egreso (−)</option>
+          <option value="ingreso">Ingreso (+)</option>
+        </select>
+        <input class="f-monto" type="number" id="mf-monto-${c.fuente}" placeholder="Monto" min="0" step="0.01">
+        <input class="f-cat" type="text" id="mf-cat-${c.fuente}" placeholder="Categoría (opc.)">
+        <select id="mf-mon-${c.fuente}">
+          <option value="ARS" ${c.moneda==="ARS"?"selected":""}>ARS</option>
+          <option value="USD" ${c.moneda==="USD"?"selected":""}>USD</option>
+        </select>
+        <button class="btn btn-sm btn-primary" onclick="addMovimiento('${c.fuente}')">Agregar</button>
+      </div>
+    </div>` : "";
+
+  // Movements list (manual only, loaded on demand)
+  const movsList = tipo === "manual"
+    ? `<div id="movs-list-${c.fuente}"></div>`
+    : "";
+
+  return `
+  <div class="cuenta-card" id="cuenta-card-${c.fuente}">
+    <div class="cuenta-header">
+      <span class="cuenta-nombre">${escHtml(c.nombre)}</span>
+      ${badge}
+      <span class="cuenta-saldo ${saldoCls}">${_fmtNum2(saldo)} ${escHtml(c.moneda)}</span>
+      <span style="font-size:.75rem;color:#aaa">${activa}</span>
+    </div>
+    <div class="cuenta-meta">
+      ${c.fecha_actualizacion ? `Actualizado: ${c.fecha_actualizacion}` : "Sin datos"}
+      ${tipo === "auto" ? ` · Fuente: <code>${c.fuente}</code>` : ""}
+    </div>
+    <div class="cuenta-actions">
+      ${tipo === "manual" ? actionsManual : actionsAuto}
+    </div>
+    ${editSaldo}
+    ${movForm}
+    ${tipo === "manual" ? `<div class="cuenta-movs"><div class="cuenta-movs-title">Movimientos</div>${movsList}</div>` : ""}
+  </div>`;
+}
+
+function toggleCuentaEdit(fuente) {
+  const row = document.getElementById(`ce-edit-${fuente}`);
+  const open = row.style.display === "none";
+  row.style.display = open ? "flex" : "none";
+  if (open) document.getElementById(`ce-inp-${fuente}`)?.select();
+}
+
+async function saveCuentaSaldo(fuente) {
+  const raw = document.getElementById(`ce-inp-${fuente}`).value;
+  const val = parseFloat(raw.replace(/\./g,"").replace(",","."));
+  if (isNaN(val)) return;
+  await fetch(`${BASE}/api/cuentas/${fuente}`, {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({saldo: val}),
+  });
+  loadCuentas(); loadSaldos();
+}
+
+async function toggleCuentaActiva(fuente, activa) {
+  await fetch(`${BASE}/api/cuentas/${fuente}`, {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({activa}),
+  });
+  loadCuentas(); loadSaldos();
+}
+
+async function deleteCuenta(fuente) {
+  showConfirm("¿Eliminar esta cuenta y todos sus movimientos?", async () => {
+    await fetch(`${BASE}/api/cuentas/${fuente}`, {method:"DELETE"});
+    loadCuentas(); loadSaldos();
+  });
+}
+
+function toggleMovForm(fuente) {
+  const f = document.getElementById(`mov-form-${fuente}`);
+  f.style.display = f.style.display === "none" ? "block" : "none";
+  if (f.style.display === "block") loadMovimientos(fuente);
+}
+
+async function loadMovimientos(fuente) {
+  const res  = await fetch(`${BASE}/api/cuentas/${fuente}/movimientos`);
+  const movs = await res.json();
+  const wrap = document.getElementById(`movs-list-${fuente}`);
+  if (!movs.length) {
+    wrap.innerHTML = `<p style="color:#aaa;font-size:.82rem;padding:.25rem 0">Sin movimientos.</p>`;
+    return;
+  }
+  wrap.innerHTML = `<table class="cuenta-movs-table">
+    <thead><tr><th>Fecha</th><th>Descripción</th><th>Monto</th><th>Cat.</th><th></th></tr></thead>
+    <tbody>
+      ${movs.map(m => {
+        const v = parseFloat(m.monto);
+        const cls = v >= 0 ? "mov-monto-pos" : "mov-monto-neg";
+        const sign = v >= 0 ? "+" : "";
+        return `<tr>
+          <td>${m.fecha}</td>
+          <td>${escHtml(m.descripcion)}</td>
+          <td class="${cls}">${sign}${_fmtNum2(v)} ${escHtml(m.moneda)}</td>
+          <td>${escHtml(m.categoria||"")}</td>
+          <td><button class="btn btn-sm btn-danger" style="padding:.15rem .4rem"
+              onclick="deleteMovimiento('${fuente}',${m.id})">✕</button></td>
+        </tr>`;
+      }).join("")}
+    </tbody>
+  </table>`;
+}
+
+async function addMovimiento(fuente) {
+  const fecha = document.getElementById(`mf-fecha-${fuente}`).value;
+  const desc  = document.getElementById(`mf-desc-${fuente}`).value.trim();
+  const tipo  = document.getElementById(`mf-tipo-${fuente}`).value;
+  const raw   = parseFloat(document.getElementById(`mf-monto-${fuente}`).value);
+  const cat   = document.getElementById(`mf-cat-${fuente}`).value.trim();
+  const mon   = document.getElementById(`mf-mon-${fuente}`).value;
+  if (!fecha || !desc || isNaN(raw) || raw <= 0) {
+    showToast("Completá fecha, descripción y monto.", "err"); return;
+  }
+  const monto = tipo === "egreso" ? -raw : raw;
+  const res = await fetch(`${BASE}/api/cuentas/${fuente}/movimientos`, {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({fecha, descripcion: desc, monto, moneda: mon, categoria: cat||null}),
+  });
+  if (res.ok) {
+    document.getElementById(`mf-desc-${fuente}`).value  = "";
+    document.getElementById(`mf-monto-${fuente}`).value = "";
+    document.getElementById(`mf-cat-${fuente}`).value   = "";
+    loadMovimientos(fuente);
+    loadCuentas(); loadSaldos();
+  } else {
+    showToast("Error al agregar movimiento.", "err");
+  }
+}
+
+async function deleteMovimiento(fuente, id) {
+  await fetch(`${BASE}/api/cuentas/${fuente}/movimientos/${id}`, {method:"DELETE"});
+  loadMovimientos(fuente);
+  loadCuentas(); loadSaldos();
+}
+
+document.getElementById("btn-add-cuenta").addEventListener("click", () => {
+  showPrompt("Nombre de la nueva cuenta:", "ej: Efectivo, Cuenta Nación", async nombre => {
+    const res = await fetch(`${BASE}/api/cuentas`, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({nombre}),
+    });
+    if (res.ok) { showToast(`Cuenta "${nombre}" creada.`, "ok"); loadCuentas(); loadSaldos(); }
+    else showToast("Error al crear la cuenta.", "err");
+  });
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {

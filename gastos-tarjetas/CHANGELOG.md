@@ -1,3 +1,11 @@
+## 0.2.18
+
+- **Tab Cuentas** (nuevo, entre Gastos e Importar): gestión completa de cuentas automáticas y manuales.
+- Cuentas **automáticas**: saldo actualizado al importar PDF (si el parser lo detecta) o editable con ✏. Pueden activarse/desactivarse.
+- Cuentas **manuales**: se crean desde el tab con nombre libre. Permiten agregar/eliminar movimientos (fecha, descripción, tipo Egreso/Ingreso, monto, categoría, moneda). El saldo se recalcula automáticamente al agregar o borrar movimientos. Los movimientos aparecen también en el tab Gastos.
+- Migración automática de la tabla `cuentas`: agrega columna `tipo` ('auto'/'manual').
+- Nuevos endpoints: `POST /api/cuentas`, `DELETE /api/cuentas/{fuente}`, `GET/POST/DELETE /api/cuentas/{fuente}/movimientos`.
+
 ## 0.2.17
 
 - **Gemini como categorizador IA gratuito**: configurar `gemini_api_key` activa Google Gemini 2.0 Flash (~1.500 req/día gratis, solo requiere cuenta Google). Usa el endpoint OpenAI-compatible de Google AI Studio.

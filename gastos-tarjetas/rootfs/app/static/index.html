@@ -34,6 +34,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="graficos">Gráficos</button>
       <button class="tab" data-tab="gastos">Gastos</button>
+      <button class="tab" data-tab="cuentas">Cuentas</button>
       <button class="tab" data-tab="upload">Importar</button>
       <button class="tab" data-tab="rules">Reglas</button>
       <button class="tab" data-tab="presupuesto">Presupuesto</button>
@@ -186,6 +187,19 @@
           <tbody id="gastos-body"></tbody>
         </table>
       </div>
+    </section>
+
+    <!-- ── Tab: Cuentas ──────────────────────────────────────────────── -->
+    <section id="tab-cuentas" class="tab-content">
+      <div class="rules-header">
+        <h2>Cuentas</h2>
+        <button id="btn-add-cuenta" class="btn">+ Nueva cuenta manual</button>
+      </div>
+      <p class="rules-hint">
+        Las cuentas <strong>automáticas</strong> se actualizan al importar un archivo.
+        Las <strong>manuales</strong> permiten cargar movimientos a mano.
+      </p>
+      <div id="cuentas-list"></div>
     </section>
 
     <!-- ── Tab: Upload ────────────────────────────────────────────────── -->

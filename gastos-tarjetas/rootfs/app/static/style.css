@@ -487,6 +487,114 @@ tbody tr:hover { background: #fafbff; }
   font-size: .85rem;
 }
 
+/* ── Cuentas tab ─────────────────────────────────────────────────────────────*/
+
+.cuenta-card {
+  background: #fff;
+  border: 1px solid #dde1e7;
+  border-radius: 8px;
+  margin-bottom: .75rem;
+  overflow: hidden;
+}
+.cuenta-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1rem;
+  flex-wrap: wrap;
+}
+.cuenta-nombre {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #1a1a2e;
+  flex: 1;
+}
+.cuenta-badge {
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  padding: .2rem .55rem;
+  border-radius: 10px;
+  text-transform: uppercase;
+}
+.cuenta-badge-auto   { background: #dbeafe; color: #1d4ed8; }
+.cuenta-badge-manual { background: #fef3c7; color: #92400e; }
+.cuenta-saldo {
+  font-size: .95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cuenta-saldo.positivo { color: #16a34a; }
+.cuenta-saldo.negativo { color: #dc2626; }
+.cuenta-meta {
+  font-size: .75rem;
+  color: #aaa;
+  padding: 0 1rem .6rem;
+}
+.cuenta-actions {
+  display: flex;
+  gap: .4rem;
+  padding: 0 1rem .75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.cuenta-movs {
+  border-top: 1px solid #f0f0f0;
+  padding: .5rem 1rem .75rem;
+}
+.cuenta-movs-title {
+  font-size: .78rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: .5rem;
+}
+.mov-add-form {
+  display: flex;
+  gap: .4rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-bottom: .75rem;
+  padding: .6rem .75rem;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e8ecf0;
+}
+.mov-add-form input,
+.mov-add-form select {
+  padding: .3rem .5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: .83rem;
+}
+.mov-add-form .f-desc  { flex: 1; min-width: 140px; }
+.mov-add-form .f-monto { width: 100px; }
+.mov-add-form .f-fecha { width: 120px; }
+.mov-add-form .f-cat   { width: 130px; }
+.mov-add-form .f-tipo  { width: 90px; }
+.cuenta-movs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .83rem;
+}
+.cuenta-movs-table th {
+  text-align: left;
+  font-size: .72rem;
+  font-weight: 600;
+  color: #888;
+  padding: .25rem .4rem;
+  border-bottom: 1px solid #eee;
+}
+.cuenta-movs-table td {
+  padding: .3rem .4rem;
+  border-bottom: 1px solid #f5f5f5;
+  vertical-align: middle;
+}
+.cuenta-movs-table tr:last-child td { border-bottom: none; }
+.mov-monto-pos { color: #16a34a; font-weight: 600; }
+.mov-monto-neg { color: #dc2626; font-weight: 600; }
+
 /* ── Presupuesto tab ─────────────────────────────────────────────────────────*/
 
 .presup-header {

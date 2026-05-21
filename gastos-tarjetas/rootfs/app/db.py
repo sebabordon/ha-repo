@@ -1,3 +1,4 @@
+import re
 import sqlite3
 from contextlib import contextmanager
 from typing import Optional
@@ -34,8 +35,8 @@ def init_db():
                 usuario TEXT
             )
         """)
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(gastos)").fetchall()}
-        if "usuario" not in cols:
+        gcols = {r[1] for r in conn.execute("PRAGMA table_info(gastos)").fetchall()}
+        if "usuario" not in gcols:
             conn.execute("ALTER TABLE gastos ADD COLUMN usuario TEXT")
 
         conn.execute("""
@@ -61,6 +62,10 @@ def init_db():
             "INSERT OR IGNORE INTO cuentas (fuente,nombre,saldo,moneda,fecha_actualizacion,activa,auto_saldo) VALUES (?,?,?,?,?,?,?)",
             _defaults,
         )
+
+        ccols = {r[1] for r in conn.execute("PRAGMA table_info(cuentas)").fetchall()}
+        if "tipo" not in ccols:
+            conn.execute("ALTER TABLE cuentas ADD COLUMN tipo TEXT DEFAULT 'auto'")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS presupuestos (
@@ -447,6 +452,89 @@ def update_cuenta(fuente: str, saldo: float, moneda: str, activa: int, auto_sald
             "UPDATE cuentas SET saldo=?, moneda=?, activa=?, auto_saldo=? WHERE fuente=?",
             (saldo, moneda, activa, auto_saldo, fuente),
         )
+
+
+def _slugify(text: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", text.lower().strip()).strip("_")
+    return f"manual_{slug}" if slug else "manual_cuenta"
+
+
+def create_cuenta_manual(nombre: str, moneda: str = "ARS") -> dict:
+    """Create a new manual account. Returns the created row as dict."""
+    base = _slugify(nombre)
+    with _conn() as conn:
+        fuente = base
+        i = 2
+        while conn.execute("SELECT 1 FROM cuentas WHERE fuente=?", (fuente,)).fetchone():
+            fuente = f"{base}_{i}"; i += 1
+        conn.execute(
+            "INSERT INTO cuentas (fuente,nombre,saldo,moneda,activa,auto_saldo,tipo) "
+            "VALUES (?,?,0,?,1,0,'manual')",
+            (fuente, nombre, moneda),
+        )
+    return {"fuente": fuente, "nombre": nombre, "saldo": 0.0,
+            "moneda": moneda, "activa": 1, "auto_saldo": 0, "tipo": "manual",
+            "fecha_actualizacion": None}
+
+
+def delete_cuenta_manual(fuente: str) -> bool:
+    with _conn() as conn:
+        row = conn.execute("SELECT tipo FROM cuentas WHERE fuente=?", (fuente,)).fetchone()
+        if not row or row["tipo"] != "manual":
+            return False
+        conn.execute("DELETE FROM gastos  WHERE fuente=?", (fuente,))
+        conn.execute("DELETE FROM cuentas WHERE fuente=?", (fuente,))
+    return True
+
+
+def recalc_cuenta_saldo(fuente: str):
+    """Recompute saldo for a manual account from the sum of its movements."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT ROUND(SUM(CAST(monto AS REAL)),2) AS t FROM gastos WHERE fuente=?",
+            (fuente,),
+        ).fetchone()
+        total = float(row["t"] or 0)
+        conn.execute(
+            "UPDATE cuentas SET saldo=?, fecha_actualizacion=date('now') "
+            "WHERE fuente=? AND tipo='manual'",
+            (total, fuente),
+        )
+
+
+def get_movimientos_cuenta(fuente: str) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM gastos WHERE fuente=? ORDER BY fecha DESC, id DESC",
+            (fuente,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def insert_movimiento_manual(
+    fuente: str, fecha: str, descripcion: str,
+    monto: float, moneda: str, categoria: str = None,
+) -> int:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO gastos "
+            "(fecha,descripcion,monto,moneda,fuente,categoria,categoria_fuente,archivo_origen,usuario) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (fecha, descripcion.strip(), str(monto), moneda, fuente,
+             categoria or None, "manual" if categoria else None, "manual", None),
+        )
+        new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    recalc_cuenta_saldo(fuente)
+    return new_id
+
+
+def delete_movimiento_manual(gasto_id: int, fuente: str) -> bool:
+    with _conn() as conn:
+        conn.execute("DELETE FROM gastos WHERE id=? AND fuente=?", (gasto_id, fuente))
+        changed = bool(conn.execute("SELECT changes()").fetchone()[0])
+    if changed:
+        recalc_cuenta_saldo(fuente)
+    return changed
 
 
 # ── Presupuestos ───────────────────────────────────────────────────────────────
