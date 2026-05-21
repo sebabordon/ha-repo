@@ -16,15 +16,18 @@ def get_stats(
     usuario: Optional[str] = Query(None),
     mes:     Optional[str] = Query(None),
     meses:   int = Query(6),
+    moneda:  str = Query('ARS'),
 ):
     require_auth(request)
-    kw = dict(fuente=fuente, usuario=usuario, mes=mes, meses=meses)
+    if moneda not in ('ARS', 'USD'):
+        moneda = 'ARS'
+    kw = dict(fuente=fuente, usuario=usuario, mes=mes, meses=meses, moneda=moneda)
     return {
         "by_category":         stats_by_category(**kw),
-        "by_fuente":           stats_by_fuente(usuario=usuario, mes=mes, meses=meses),
-        "by_usuario":          stats_by_usuario(fuente=fuente, mes=mes, meses=meses),
+        "by_fuente":           stats_by_fuente(usuario=usuario, mes=mes, meses=meses, moneda=moneda),
+        "by_usuario":          stats_by_usuario(fuente=fuente, mes=mes, meses=meses, moneda=moneda),
         "top_descriptions":    stats_top_descriptions(**kw),
-        "monthly_by_category": stats_monthly_by_category(fuente=fuente, usuario=usuario, meses=meses),
+        "monthly_by_category": stats_monthly_by_category(fuente=fuente, usuario=usuario, meses=meses, moneda=moneda),
     }
 
 

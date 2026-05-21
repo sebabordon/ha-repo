@@ -64,6 +64,10 @@
           <option value="12">12 meses</option>
           <option value="24">24 meses</option>
         </select>
+        <select id="cf-moneda">
+          <option value="ARS" selected>ARS $</option>
+          <option value="USD">USD $</option>
+        </select>
         <button id="btn-refresh-charts" class="btn btn-sm">↺ Actualizar</button>
       </div>
 
@@ -147,6 +151,11 @@
           </select>
           <select id="filter-mes">
             <option value="">Todos los meses</option>
+          </select>
+          <select id="filter-moneda">
+            <option value="">Todas</option>
+            <option value="ARS">ARS $</option>
+            <option value="USD">USD $</option>
           </select>
           <button id="btn-load" class="btn">↺</button>
           <button id="btn-export" class="btn">Exportar Excel</button>

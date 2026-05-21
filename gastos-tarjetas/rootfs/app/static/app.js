@@ -130,10 +130,12 @@ function _chartParams() {
   const usuario = document.getElementById("cf-usuario").value;
   const mes     = document.getElementById("cf-mes").value;
   const meses   = document.getElementById("cf-meses").value;
+  const moneda  = document.getElementById("cf-moneda").value;
   if (fuente)  p.set("fuente",  fuente);
   if (usuario) p.set("usuario", usuario);
   if (mes)     p.set("mes", mes);
   else         p.set("meses", meses);
+  if (moneda)  p.set("moneda", moneda);
   return p;
 }
 
@@ -262,7 +264,7 @@ function _drawByUsuario(data) {
   });
 }
 
-["cf-fuente","cf-usuario","cf-mes","cf-meses"].forEach(id =>
+["cf-fuente","cf-usuario","cf-mes","cf-meses","cf-moneda"].forEach(id =>
   document.getElementById(id).addEventListener("change", function() { this.blur(); loadCharts(); }));
 document.getElementById("btn-refresh-charts").addEventListener("click", loadCharts);
 
@@ -339,9 +341,11 @@ function _gastosParams() {
   const fuente  = document.getElementById("filter-fuente").value;
   const usuario = document.getElementById("filter-usuario").value;
   const mes     = document.getElementById("filter-mes").value;
+  const moneda  = document.getElementById("filter-moneda").value;
   if (fuente)  p.set("fuente",  fuente);
   if (usuario) p.set("usuario", usuario);
   if (mes)     p.set("mes",     mes);
+  if (moneda)  p.set("moneda",  moneda);
   if (_sinCat) {
     p.set("sin_categoria", "true");
   } else if (_selectedCats.size > 0) {
@@ -425,7 +429,7 @@ async function saveUsuario(id, sel) {
   });
 }
 
-["filter-fuente","filter-usuario","filter-mes"].forEach(id =>
+["filter-fuente","filter-usuario","filter-mes","filter-moneda"].forEach(id =>
   document.getElementById(id).addEventListener("change", function() { this.blur(); loadGastos(); }));
 document.getElementById("btn-load").addEventListener("click", loadGastos);
 document.getElementById("btn-export").addEventListener("click", () =>

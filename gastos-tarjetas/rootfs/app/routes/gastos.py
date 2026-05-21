@@ -39,9 +39,10 @@ def export_gastos(
     categorias: Optional[str] = Query(None),
     usuario: Optional[str] = Query(None),
     mes: Optional[str] = Query(None),
+    moneda: Optional[str] = Query(None),
 ):
     require_auth(request)
-    gastos = list_gastos(fuente=fuente, categorias=_parse_categorias(categorias), usuario=usuario, mes=mes)
+    gastos = list_gastos(fuente=fuente, categorias=_parse_categorias(categorias), usuario=usuario, mes=mes, moneda=moneda)
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -90,6 +91,7 @@ def get_gastos(
     usuario: Optional[str] = Query(None),
     mes: Optional[str] = Query(None),
     sin_categoria: bool = Query(False),
+    moneda: Optional[str] = Query(None),
 ):
     require_auth(request)
     return list_gastos(
@@ -98,6 +100,7 @@ def get_gastos(
         usuario=usuario,
         mes=mes,
         sin_categoria=sin_categoria,
+        moneda=moneda,
     )
 
 
