@@ -1,3 +1,7 @@
+## 0.2.24
+
+- Documentación (`DOCS.md`) agregada al add-on: opciones de configuración, usuario admin, fuentes soportadas, cuentas, usuarios Titular/Adicional, reglas, presupuesto y FAQ.
+
 ## 0.2.23
 
 - **Purga de datos personales** — apto para compartir públicamente:
