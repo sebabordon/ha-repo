@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from auth import (
     get_registration_enabled, set_registration_enabled,
-    list_users, delete_user,
+    list_users, delete_user, reset_password,
 )
 
 router = APIRouter()
@@ -69,11 +69,21 @@ def _render_panel(request: Request, msg: str = "") -> HTMLResponse:
             rows += f"""
             <div class="row">
               <span>{email}</span>
-              <form method="post" action="{prefix}/admin/users/delete" style="display:inline">
-                <input type="hidden" name="email" value="{email}">
-                <button class="btn btn-danger btn-sm" type="submit"
-                  onclick="return confirm('¿Eliminar {email}?')">Eliminar</button>
-              </form>
+              <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+                <form method="post" action="{prefix}/admin/users/reset-password"
+                      style="display:flex;gap:.3rem;align-items:center">
+                  <input type="hidden" name="email" value="{email}">
+                  <input type="password" name="new_password" placeholder="Nueva contraseña"
+                         minlength="8" required
+                         style="padding:.25rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.8rem;width:150px">
+                  <button class="btn btn-primary btn-sm" type="submit">Resetear</button>
+                </form>
+                <form method="post" action="{prefix}/admin/users/delete" style="display:inline">
+                  <input type="hidden" name="email" value="{email}">
+                  <button class="btn btn-danger btn-sm" type="submit"
+                    onclick="return confirm('¿Eliminar {email}?')">Eliminar</button>
+                </form>
+              </div>
             </div>"""
         users_html = rows
     else:
@@ -125,3 +135,17 @@ async def admin_delete_user(request: Request, email: str = Form(...)):
         return _redirect(request, "/")
     delete_user(email.lower())
     return _render_panel(request, f"Usuario {email} eliminado.")
+
+
+@router.post("/users/reset-password", response_class=HTMLResponse)
+async def admin_reset_password(
+    request: Request,
+    email: str = Form(...),
+    new_password: str = Form(...),
+):
+    if not _require_admin(request):
+        return _redirect(request, "/")
+    ok, err = reset_password(email.lower(), new_password)
+    if not ok:
+        return _render_panel(request, f"Error: {err}")
+    return _render_panel(request, f"Contraseña de {email} actualizada.")

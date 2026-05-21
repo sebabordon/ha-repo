@@ -104,6 +104,18 @@ def delete_user(email: str) -> bool:
     return True
 
 
+def reset_password(email: str, new_password: str) -> tuple[bool, str]:
+    if len(new_password) < 8:
+        return False, "La contraseña debe tener al menos 8 caracteres."
+    users = _load_users()
+    if email not in users:
+        return False, "Usuario no encontrado."
+    salt = os.urandom(16).hex()
+    users[email] = {"hash": _hash(new_password, salt), "salt": salt}
+    _save_users(users)
+    return True, ""
+
+
 def require_auth(request: Request) -> dict:
     user = request.session.get("user")
     if not user:

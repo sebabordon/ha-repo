@@ -1,3 +1,8 @@
+## 0.2.16
+
+- **Groq como categorizador IA gratuito**: configurar `groq_api_key` en el add-on activa la categorización automática vía Llama 3.1 8B Instant (gratis, ~14.000 req/día). Si hay clave Groq, se usa en lugar de Claude; Claude sigue funcionando como fallback si no hay clave Groq. Orden: reglas → Groq → Claude.
+- **Reset de contraseña desde admin**: cada usuario en el panel `/admin` tiene un campo para establecer nueva contraseña directamente, sin necesidad de que el usuario lo solicite.
+
 ## 0.2.15
 
 - **Registro deshabilitado por defecto**: `registration_enabled: false` en config. Para habilitar, cambiar a `true` y reiniciar el add-on.
