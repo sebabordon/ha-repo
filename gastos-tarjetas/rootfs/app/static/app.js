@@ -416,9 +416,9 @@ async function loadGastos() {
         <input class="cat-input" data-id="${g.id}" value="${escHtml(g.categoria||"")}"
           title="${g.categoria_fuente?"Fuente: "+g.categoria_fuente:""}" />
       </td>
-      <td>
-        <button class="btn btn-sm" onclick="saveCategoria(${g.id},this)">✓</button>
-        ${g.tipo==="manual"?`<button class="btn btn-sm btn-danger" style="padding:.15rem .35rem;margin-left:.2rem" title="Eliminar movimiento manual" onclick="deleteGasto(${g.id})">✕</button>`:""}
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-action" onclick="saveCategoria(${g.id},this)">✓</button>
+        ${g.tipo==="manual"?`<button class="btn btn-sm btn-action btn-danger" title="Eliminar movimiento manual" onclick="deleteGasto(${g.id})">✕</button>`:`<button class="btn btn-sm btn-action" style="visibility:hidden">✕</button>`}
       </td>`;
 
     const catInput = tr.querySelector(".cat-input");
