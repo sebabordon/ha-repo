@@ -130,8 +130,30 @@
       <div class="filter-bar">
         <div id="gastos-summary"></div>
         <div style="display:flex;gap:.5rem">
+          <button id="btn-new-mov" class="btn btn-sm">+ Movimiento</button>
           <button id="btn-detect-transfers" class="btn btn-sm">🔁 Transferencias</button>
           <button id="btn-toggle-filters" class="btn btn-sm" aria-expanded="true">Filtros ▴</button>
+        </div>
+      </div>
+
+      <div id="new-mov-panel" style="display:none">
+        <div class="mov-add-form" style="margin-bottom:.75rem">
+          <select id="nm-cuenta" style="min-width:130px">
+            <option value="">— Cuenta manual —</option>
+          </select>
+          <input id="nm-fecha" class="f-fecha" type="date">
+          <input id="nm-desc"  class="f-desc"  type="text" placeholder="Descripción">
+          <select id="nm-tipo" class="f-tipo">
+            <option value="egreso">Egreso (−)</option>
+            <option value="ingreso">Ingreso (+)</option>
+          </select>
+          <input id="nm-monto" class="f-monto" type="number" placeholder="Monto" min="0" step="0.01">
+          <input id="nm-cat"   class="f-cat"   type="text"   placeholder="Categoría">
+          <select id="nm-mon">
+            <option value="ARS">ARS</option>
+            <option value="USD">USD</option>
+          </select>
+          <button id="btn-save-new-mov" class="btn btn-sm btn-primary">Guardar</button>
         </div>
       </div>
 

@@ -97,6 +97,39 @@ async def categorize_by_claude(descripcion: str) -> Optional[str]:
         return None
 
 
+def auto_add_keyword_to_rule(descripcion: str, categoria: str) -> bool:
+    """
+    Add `descripcion` as a keyword to the rule for `categoria`.
+    Creates the rule if it doesn't exist yet.
+    Returns True if rules were modified.
+    """
+    if not descripcion or not categoria:
+        return False
+    try:
+        with open(RULES_FILE) as f:
+            data = yaml.safe_load(f) or {}
+    except (FileNotFoundError, yaml.YAMLError):
+        data = {}
+
+    reglas = data.get("reglas", [])
+
+    # Find rule for this category
+    target = next((r for r in reglas if r.get("categoria") == categoria), None)
+    if target is None:
+        target = {"categoria": categoria, "palabras": []}
+        reglas.append(target)
+
+    palabras = target.setdefault("palabras", [])
+    if descripcion in palabras:
+        return False   # already there
+
+    palabras.append(descripcion)
+    data["reglas"] = reglas
+    with open(RULES_FILE, "w") as f:
+        yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+    return True
+
+
 async def categorize(descripcion: str) -> tuple[Optional[str], Optional[str]]:
     """Returns (categoria, fuente). Tries: reglas → Groq → Gemini → Claude."""
     cat = categorize_by_rules(descripcion)

@@ -8,7 +8,8 @@ from fastapi import APIRouter, Request, Query
 from fastapi.responses import StreamingResponse
 
 from auth import require_auth
-from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, delete_all_gastos
+from categorizer import auto_add_keyword_to_rule
+from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, delete_all_gastos, get_gasto
 
 router = APIRouter()
 
@@ -129,7 +130,13 @@ def delete_all(request: Request, fuente: Optional[str] = Query(None)):
 @router.patch("/gastos/{gasto_id}/categoria")
 def patch_categoria(gasto_id: int, body: dict, request: Request):
     require_auth(request)
-    update_categoria(gasto_id, body.get("categoria", ""))
+    categoria = body.get("categoria", "")
+    # Fetch BEFORE updating so we know the prior fuente
+    gasto = get_gasto(gasto_id)
+    update_categoria(gasto_id, categoria)
+    # Auto-learn: only when setting a non-empty category on a non-rule-matched row
+    if categoria and gasto and gasto.get("categoria_fuente") != "regla":
+        auto_add_keyword_to_rule(gasto["descripcion"], categoria)
     return {"ok": True}
 
 

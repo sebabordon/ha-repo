@@ -443,6 +443,54 @@ document.getElementById("btn-export").addEventListener("click", () =>
 
 loadGastos();
 
+// ── Nuevo movimiento manual (desde Gastos) ────────────────────────────────────
+async function _populateNmCuentas() {
+  const res     = await fetch(`${BASE}/api/cuentas`);
+  const cuentas = await res.json();
+  const sel     = document.getElementById("nm-cuenta");
+  const manual  = cuentas.filter(c => c.tipo === "manual");
+  sel.innerHTML = `<option value="">— Cuenta manual —</option>` +
+    manual.map(c => `<option value="${c.fuente}">${escHtml(c.nombre)}</option>`).join("");
+}
+
+document.getElementById("nm-fecha").value = new Date().toISOString().slice(0, 10);
+
+document.getElementById("btn-new-mov").addEventListener("click", async () => {
+  const panel = document.getElementById("new-mov-panel");
+  const open  = panel.style.display === "none";
+  panel.style.display = open ? "block" : "none";
+  if (open) { await _populateNmCuentas(); document.getElementById("nm-desc").focus(); }
+});
+
+document.getElementById("btn-save-new-mov").addEventListener("click", async () => {
+  const fuente = document.getElementById("nm-cuenta").value;
+  const fecha  = document.getElementById("nm-fecha").value;
+  const desc   = document.getElementById("nm-desc").value.trim();
+  const tipo   = document.getElementById("nm-tipo").value;
+  const raw    = parseFloat(document.getElementById("nm-monto").value);
+  const cat    = document.getElementById("nm-cat").value.trim();
+  const mon    = document.getElementById("nm-mon").value;
+
+  if (!fuente) { showToast("Seleccioná una cuenta.", "err"); return; }
+  if (!fecha || !desc || isNaN(raw) || raw <= 0) {
+    showToast("Completá fecha, descripción y monto.", "err"); return;
+  }
+  const monto = tipo === "egreso" ? -raw : raw;
+  const res = await fetch(`${BASE}/api/cuentas/${fuente}/movimientos`, {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({fecha, descripcion: desc, monto, moneda: mon, categoria: cat||null}),
+  });
+  if (res.ok) {
+    document.getElementById("nm-desc").value  = "";
+    document.getElementById("nm-monto").value = "";
+    document.getElementById("nm-cat").value   = "";
+    showToast("Movimiento guardado.", "ok");
+    loadGastos(); loadSaldos();
+  } else {
+    showToast("Error al guardar.", "err");
+  }
+});
+
 // ── Transfer detection modal ──────────────────────────────────────────────────
 let _transferPairs = [];
 
@@ -1039,61 +1087,45 @@ function renderCuentas() {
     return;
   }
   list.innerHTML = _cuentasData.map(c => _renderCuentaCard(c)).join("");
+  // Auto-load movements for manual accounts
+  _cuentasData.filter(c => c.tipo === "manual").forEach(c => loadMovimientos(c.fuente));
 }
 
 function _renderCuentaCard(c) {
-  const tipo    = c.tipo || "auto";
-  const badge   = tipo === "manual"
+  const tipo     = c.tipo || "auto";
+  const isManual = tipo === "manual";
+  const badge    = isManual
     ? `<span class="cuenta-badge cuenta-badge-manual">Manual</span>`
     : `<span class="cuenta-badge cuenta-badge-auto">Auto</span>`;
-  const saldo   = c.saldo || 0;
+  const saldo    = c.saldo || 0;
   const saldoCls = saldo > 0 ? "positivo" : saldo < 0 ? "negativo" : "";
-  const activa  = c.activa ? "✓ Activa" : "✗ Inactiva";
+  // "activa" controls visibility in the saldos widget at the top
+  const widgetBtn = c.activa
+    ? `<button class="btn btn-sm" title="Ocultar del widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',0)">Widget ✓</button>`
+    : `<button class="btn btn-sm" title="Mostrar en el widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',1)">Widget ✗</button>`;
 
-  // Edit saldo row (auto accounts only, since manual is computed automatically)
-  const editSaldo = tipo === "auto" ? `
-    <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none">
-      <input id="ce-inp-${c.fuente}" type="text" value="${saldo}"
-             style="width:100px"
+  // Saldo override (auto only — manual is always recalculated from movements)
+  const editSaldoRow = !isManual ? `
+    <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none;padding:0 1rem .75rem">
+      <input id="ce-inp-${c.fuente}" type="text" value="${saldo}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
+      <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">Cancelar</button>
+    </div>` : `<p class="cuenta-meta" style="padding:.1rem 1rem .5rem;color:#aaa;font-size:.75rem">
+      Saldo calculado automáticamente de los movimientos.</p>`;
+
+  const actions = isManual
+    ? `${widgetBtn}
+       <button class="btn btn-sm btn-danger" onclick="deleteCuenta('${c.fuente}')">Eliminar cuenta</button>`
+    : `<button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">✏ Editar saldo</button>
+       ${widgetBtn}`;
+
+  // Movements section (manual accounts only)
+  const movsSection = isManual ? `
+    <div class="cuenta-movs">
+      <div class="cuenta-movs-title">Movimientos</div>
+      <div id="movs-list-${c.fuente}"></div>
     </div>` : "";
-
-  // Actions
-  const actionsAuto = `
-    <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">✏ Saldo</button>
-    <button class="btn btn-sm" onclick="toggleCuentaActiva('${c.fuente}',${c.activa ? 0 : 1})">${c.activa ? "Desactivar" : "Activar"}</button>`;
-
-  const actionsManual = `
-    <button class="btn btn-sm" onclick="toggleMovForm('${c.fuente}')">+ Movimiento</button>
-    <button class="btn btn-sm" onclick="toggleCuentaActiva('${c.fuente}',${c.activa ? 0 : 1})">${c.activa ? "Desactivar" : "Activar"}</button>
-    <button class="btn btn-sm btn-danger" onclick="deleteCuenta('${c.fuente}')">Eliminar</button>`;
-
-  // Movement form (manual only, hidden by default)
-  const movForm = tipo === "manual" ? `
-    <div id="mov-form-${c.fuente}" style="display:none">
-      <div class="mov-add-form">
-        <input class="f-fecha" type="date" id="mf-fecha-${c.fuente}"
-               value="${new Date().toISOString().slice(0,10)}">
-        <input class="f-desc" type="text" id="mf-desc-${c.fuente}" placeholder="Descripción">
-        <select class="f-tipo" id="mf-tipo-${c.fuente}">
-          <option value="egreso">Egreso (−)</option>
-          <option value="ingreso">Ingreso (+)</option>
-        </select>
-        <input class="f-monto" type="number" id="mf-monto-${c.fuente}" placeholder="Monto" min="0" step="0.01">
-        <input class="f-cat" type="text" id="mf-cat-${c.fuente}" placeholder="Categoría (opc.)">
-        <select id="mf-mon-${c.fuente}">
-          <option value="ARS" ${c.moneda==="ARS"?"selected":""}>ARS</option>
-          <option value="USD" ${c.moneda==="USD"?"selected":""}>USD</option>
-        </select>
-        <button class="btn btn-sm btn-primary" onclick="addMovimiento('${c.fuente}')">Agregar</button>
-      </div>
-    </div>` : "";
-
-  // Movements list (manual only, loaded on demand)
-  const movsList = tipo === "manual"
-    ? `<div id="movs-list-${c.fuente}"></div>`
-    : "";
 
   return `
   <div class="cuenta-card" id="cuenta-card-${c.fuente}">
@@ -1101,18 +1133,13 @@ function _renderCuentaCard(c) {
       <span class="cuenta-nombre">${escHtml(c.nombre)}</span>
       ${badge}
       <span class="cuenta-saldo ${saldoCls}">${_fmtNum2(saldo)} ${escHtml(c.moneda)}</span>
-      <span style="font-size:.75rem;color:#aaa">${activa}</span>
     </div>
     <div class="cuenta-meta">
-      ${c.fecha_actualizacion ? `Actualizado: ${c.fecha_actualizacion}` : "Sin datos"}
-      ${tipo === "auto" ? ` · Fuente: <code>${c.fuente}</code>` : ""}
+      ${c.fecha_actualizacion ? `Actualizado: ${c.fecha_actualizacion}` : "Sin datos"}${!isManual ? ` · <code style="font-size:.75rem">${c.fuente}</code>` : ""}
     </div>
-    <div class="cuenta-actions">
-      ${tipo === "manual" ? actionsManual : actionsAuto}
-    </div>
-    ${editSaldo}
-    ${movForm}
-    ${tipo === "manual" ? `<div class="cuenta-movs"><div class="cuenta-movs-title">Movimientos</div>${movsList}</div>` : ""}
+    <div class="cuenta-actions">${actions}</div>
+    ${editSaldoRow}
+    ${movsSection}
   </div>`;
 }
 
@@ -1149,12 +1176,6 @@ async function deleteCuenta(fuente) {
   });
 }
 
-function toggleMovForm(fuente) {
-  const f = document.getElementById(`mov-form-${fuente}`);
-  f.style.display = f.style.display === "none" ? "block" : "none";
-  if (f.style.display === "block") loadMovimientos(fuente);
-}
-
 async function loadMovimientos(fuente) {
   const res  = await fetch(`${BASE}/api/cuentas/${fuente}/movimientos`);
   const movs = await res.json();
@@ -1181,32 +1202,6 @@ async function loadMovimientos(fuente) {
       }).join("")}
     </tbody>
   </table>`;
-}
-
-async function addMovimiento(fuente) {
-  const fecha = document.getElementById(`mf-fecha-${fuente}`).value;
-  const desc  = document.getElementById(`mf-desc-${fuente}`).value.trim();
-  const tipo  = document.getElementById(`mf-tipo-${fuente}`).value;
-  const raw   = parseFloat(document.getElementById(`mf-monto-${fuente}`).value);
-  const cat   = document.getElementById(`mf-cat-${fuente}`).value.trim();
-  const mon   = document.getElementById(`mf-mon-${fuente}`).value;
-  if (!fecha || !desc || isNaN(raw) || raw <= 0) {
-    showToast("Completá fecha, descripción y monto.", "err"); return;
-  }
-  const monto = tipo === "egreso" ? -raw : raw;
-  const res = await fetch(`${BASE}/api/cuentas/${fuente}/movimientos`, {
-    method: "POST", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({fecha, descripcion: desc, monto, moneda: mon, categoria: cat||null}),
-  });
-  if (res.ok) {
-    document.getElementById(`mf-desc-${fuente}`).value  = "";
-    document.getElementById(`mf-monto-${fuente}`).value = "";
-    document.getElementById(`mf-cat-${fuente}`).value   = "";
-    loadMovimientos(fuente);
-    loadCuentas(); loadSaldos();
-  } else {
-    showToast("Error al agregar movimiento.", "err");
-  }
 }
 
 async function deleteMovimiento(fuente, id) {

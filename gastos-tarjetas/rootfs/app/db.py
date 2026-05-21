@@ -221,6 +221,12 @@ def mark_transfers(id_pairs: list[tuple[int, int]]):
         )
 
 
+def get_gasto(gasto_id: int) -> Optional[dict]:
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM gastos WHERE id=?", (gasto_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def list_categorias() -> list[str]:
     with _conn() as conn:
         rows = conn.execute(

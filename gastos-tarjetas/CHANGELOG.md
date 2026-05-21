@@ -1,3 +1,10 @@
+## 0.2.19
+
+- **Auto-aprendizaje de reglas**: al categorizar manualmente un movimiento, su descripción se agrega automáticamente como keyword a la regla de esa categoría (creando la regla si no existía). Solo aplica cuando la categoría anterior no era ya 'regla'. Los imports futuros con la misma descripción quedan automáticamente categorizados.
+- **Formulario "+ Movimiento"** en tab Gastos: botón junto a Filtros que despliega un panel con selector de cuenta manual, fecha, descripción, tipo (Egreso/Ingreso), monto, categoría y moneda. Los movimientos quedan visibles en Gastos y actualizan el saldo de la cuenta.
+- **Tab Cuentas UI mejorado**: "Desactivar" renombrado a "Widget ✓/✗" con tooltip explicativo (controla si la cuenta aparece en el widget de saldos del top). Para cuentas manuales se muestra texto "Saldo calculado de movimientos" en lugar del botón de edición. Los movimientos de cuentas manuales se cargan automáticamente al abrir el tab.
+- Eliminado el form de nuevo movimiento del tab Cuentas (consolidado en Gastos).
+
 ## 0.2.18
 
 - **Tab Cuentas** (nuevo, entre Gastos e Importar): gestión completa de cuentas automáticas y manuales.
