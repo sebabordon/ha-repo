@@ -1,3 +1,8 @@
+## 0.2.22
+
+- Renombrado el add-on a **"Gastos"** (era "Gastos Tarjetas") en título, navbar, login, admin y panel de HA.
+- Fix visual: botones ✓ y ✕ en tabla Gastos del mismo tamaño y alineados; filas no manuales reservan el espacio del ✕ para mantener la columna uniforme.
+
 ## 0.2.21
 
 - **Eliminar movimientos manuales desde Gastos**: filas de cuentas manuales muestran un botón ✕ para eliminarlas; actualiza el saldo de la cuenta automáticamente.
