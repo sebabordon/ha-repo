@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from auth import create_user, verify_password
+from auth import create_user, verify_password, verify_admin, get_registration_enabled, ADMIN_EMAIL
 from config import ALLOWED_DOMAIN
 
 router = APIRouter()
@@ -36,7 +36,7 @@ _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
     <div class="field"><input type="password" name="password" placeholder="Contraseña" required></div>
     <button class="btn" type="submit">Ingresar</button>
   </form>
-  <div class="link"><a href="{prefix}/auth/register">Crear cuenta</a></div>
+  {register_link}
 </div></body></html>"""
 
 _REGISTER_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
@@ -55,9 +55,16 @@ _REGISTER_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 </div></body></html>"""
 
 
-def _render(template: str, error: str = "", ingress_prefix: str = "") -> HTMLResponse:
+def _render(template: str, error: str = "", ingress_prefix: str = "", **kwargs) -> HTMLResponse:
     err_html = f'<div class="err">{error}</div>' if error else ""
-    return HTMLResponse(template.format(style=_STYLE, error=err_html, domain=ALLOWED_DOMAIN, prefix=ingress_prefix))
+    register_link = (
+        f'<div class="link"><a href="{ingress_prefix}/auth/register">Crear cuenta</a></div>'
+        if get_registration_enabled() else ""
+    )
+    return HTMLResponse(template.format(
+        style=_STYLE, error=err_html, domain=ALLOWED_DOMAIN,
+        prefix=ingress_prefix, register_link=register_link, **kwargs
+    ))
 
 
 def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectResponse:
@@ -79,8 +86,10 @@ async def login_post(
     email: str = Form(...),
     password: str = Form(...),
 ):
-    if verify_password(email.lower(), password):
-        request.session["user"] = {"email": email.lower()}
+    email = email.lower()
+    is_admin = verify_admin(email, password)
+    if is_admin or verify_password(email, password):
+        request.session["user"] = {"email": email, "is_admin": is_admin}
         return _redirect(request, "/", status_code=303)
     prefix = request.headers.get("X-Ingress-Path", "")
     return _render(_LOGIN_HTML, "Email o contraseña incorrectos.", ingress_prefix=prefix)
@@ -89,6 +98,8 @@ async def login_post(
 @router.get("/register", response_class=HTMLResponse)
 async def register_get(request: Request):
     prefix = request.headers.get("X-Ingress-Path", "")
+    if not get_registration_enabled():
+        return _render(_LOGIN_HTML, "El registro de nuevos usuarios está deshabilitado.", ingress_prefix=prefix)
     return _render(_REGISTER_HTML, ingress_prefix=prefix)
 
 
@@ -100,6 +111,8 @@ async def register_post(
     password2: str = Form(...),
 ):
     prefix = request.headers.get("X-Ingress-Path", "")
+    if not get_registration_enabled():
+        return _render(_LOGIN_HTML, "El registro de nuevos usuarios está deshabilitado.", ingress_prefix=prefix)
     if password != password2:
         return _render(_REGISTER_HTML, "Las contraseñas no coinciden.", ingress_prefix=prefix)
     if len(password) < 8:
@@ -107,7 +120,7 @@ async def register_post(
     ok, err = create_user(email.lower(), password)
     if not ok:
         return _render(_REGISTER_HTML, err, ingress_prefix=prefix)
-    request.session["user"] = {"email": email.lower()}
+    request.session["user"] = {"email": email.lower(), "is_admin": False}
     return _redirect(request, "/", status_code=303)
 
 
@@ -119,4 +132,7 @@ async def logout(request: Request):
 
 @router.get("/me")
 async def me(request: Request):
-    return request.session.get("user") or {}
+    user = request.session.get("user")
+    if not user:
+        return {}
+    return {"email": user.get("email", ""), "is_admin": user.get("is_admin", False)}

@@ -58,6 +58,11 @@ document.querySelectorAll(".tab").forEach(tab => {
 // ── User info ─────────────────────────────────────────────────────────────────
 fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {
   if (u.email) document.getElementById("user-email").textContent = u.email;
+  if (u.is_admin) {
+    const link = document.getElementById("admin-link");
+    link.href = `${BASE}/admin`;
+    link.style.display = "";
+  }
 });
 
 // ── Monthly overview chart ────────────────────────────────────────────────────

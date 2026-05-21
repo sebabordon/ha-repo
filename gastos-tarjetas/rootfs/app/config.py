@@ -8,3 +8,8 @@ DATA_DIR = os.environ.get("DATA_DIR", "/data")
 RULES_FILE       = os.environ.get("RULES_FILE",       "/data/rules.yaml")
 MATCH_RULES_FILE = os.environ.get("MATCH_RULES_FILE", "/data/match_rules.yaml")
 DB_PATH = os.path.join(DATA_DIR, "gastos.db")
+
+# Registration & admin
+_reg_env = os.environ.get("REGISTRATION_ENABLED", "false").lower()
+REGISTRATION_ENABLED_DEFAULT = _reg_env in ("1", "true", "yes")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()

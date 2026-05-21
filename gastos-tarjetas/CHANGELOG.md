@@ -1,3 +1,10 @@
+## 0.2.15
+
+- **Registro deshabilitado por defecto**: `registration_enabled: false` en config. Para habilitar, cambiar a `true` y reiniciar el add-on.
+- **Usuario administrador**: configurar `admin_password` en config para activar el usuario `admin@{dominio}`. Al loguearse como admin aparece el link ⚙ Admin en el navbar.
+- **Panel de administración** (`/admin`): toggle de registro on/off en tiempo real (sin reiniciar), lista de usuarios registrados con opción de eliminar. Solo accesible con sesión de admin.
+- El estado de registro se guarda en `/data/settings.json` (override del config, persiste entre reinicios).
+
 ## 0.2.14
 
 - **Filtro por Moneda**: selector ARS / USD en Gráficos y selector Todas / ARS / USD en Gastos. Los gráficos siempre muestran una sola moneda (sin mezclar); el filtro de Gastos es independiente. Los USD nunca se convierten ni suman con ARS — se analizan separados. El gráfico de Forecast y el monthly overview superior siempre muestran ARS.
