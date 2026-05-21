@@ -6,6 +6,7 @@ export GEMINI_API_KEY=$(bashio::config 'gemini_api_key')
 export ALLOWED_DOMAIN=$(bashio::config 'allowed_domain')
 export REGISTRATION_ENABLED=$(bashio::config 'registration_enabled')
 export ADMIN_PASSWORD=$(bashio::config 'admin_password')
+export TITULAR2_NAME=$(bashio::config 'titular2_name')
 export DATA_DIR="/data"
 export RULES_FILE="/data/rules.yaml"
 

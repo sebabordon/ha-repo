@@ -26,11 +26,14 @@ from typing import BinaryIO, Optional
 
 import pdfplumber
 
+from config import TITULAR2_NAME
 from models import Fuente, Moneda
 from parsers.base import BaseParser
 from parsers.utils import (
     collect_amount, group_by_y, parse_ar_amount, parse_date_dmy, row_text, words_in_band
 )
+
+_TITULAR2_RE = re.compile(rf"Consumos\s+{re.escape(TITULAR2_NAME)}", re.IGNORECASE) if TITULAR2_NAME else None
 
 _DATE_RE = re.compile(r"^\d{2}-[A-Za-z]{3}-\d{2}$")
 _INSTALL_RE = re.compile(r"\s+C\.(\d+)/(\d+)$")
@@ -99,7 +102,7 @@ class BBVAParser(BaseParser):
 
                     # Section header detection ("Consumos <Name>")
                     if re.match(r"^Consumos\s+\S", rtext, re.IGNORECASE) and not _DATE_RE.match(first):
-                        current_usuario = "Mada" if re.search(r"Consumos\s+Magdalena", rtext, re.IGNORECASE) else None
+                        current_usuario = "Adicional" if (_TITULAR2_RE and _TITULAR2_RE.search(rtext)) else None
                         continue
 
                     # End of named section ("TOTAL CONSUMOS DE …")

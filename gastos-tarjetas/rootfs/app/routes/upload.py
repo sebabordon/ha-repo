@@ -11,11 +11,11 @@ router = APIRouter()
 
 # Default user assignment by source (used when parser doesn't set usuario)
 _USUARIO_FUENTE = {
-    "amex": "Seba",
-    "bbva_mc": "Seba",
-    "bbva_visa": "Seba",
-    "bbva_cuenta": "Seba",
-    "mercadopago": "Seba",
+    "amex": "Titular",
+    "bbva_mc": "Titular",
+    "bbva_visa": "Titular",
+    "bbva_cuenta": "Titular",
+    "mercadopago": "Titular",
 }
 
 

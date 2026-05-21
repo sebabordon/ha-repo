@@ -408,8 +408,8 @@ async function loadGastos() {
       <td>
         <select class="usuario-select" onchange="saveUsuario(${g.id},this)">
           <option value="" ${!u?"selected":""}>—</option>
-          <option value="Seba" ${u==="Seba"?"selected":""}>Seba</option>
-          <option value="Mada" ${u==="Mada"?"selected":""}>Mada</option>
+          <option value="Titular" ${u==="Titular"?"selected":""}>Titular</option>
+          <option value="Adicional" ${u==="Adicional"?"selected":""}>Adicional</option>
         </select>
       </td>
       <td>

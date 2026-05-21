@@ -1,3 +1,12 @@
+## 0.2.23
+
+- **Purga de datos personales** — apto para compartir públicamente:
+  - `allowed_domain` por defecto cambiado a `example.com` (era un dominio personal).
+  - Usuarios `Seba`/`Mada` reemplazados por **`Titular`/`Adicional`** en toda la UI, parsers y valores por defecto de fuente.
+  - Nueva opción `titular2_name` (opcional): nombre o fragmento que aparece en los headers del PDF de AMEX/BBVA para identificar al titular adicional. Si no se configura, todos los movimientos se asignan al Titular.
+  - Eliminadas variables muertas `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` de `config.py`.
+  - CHANGELOG anonimizado.
+
 ## 0.2.22
 
 - Renombrado el add-on a **"Gastos"** (era "Gastos Tarjetas") en título, navbar, login, admin y panel de HA.
@@ -80,9 +89,9 @@
 
 ## 0.2.8
 
-- Parser AMEX: detecta automáticamente los cargos de Magdalena Sabina Saenz (secciones "Nuevos Cargos en PESOS/DOLARES para MAGDALENA SABINA SAENZ") y los asigna a usuario="Mada".
-- Parser BBVA Visa: detecta la sección "Consumos Magdalena Saenz" y asigna usuario="Mada" a sus movimientos; cierra la sección en "TOTAL CONSUMOS DE MAGDALENA SAENZ".
-- Los movimientos de titulares no identificados (Seba) siguen asignándose por el default de fuente en upload.py.
+- Parser AMEX: detecta automáticamente las secciones por titular ("Nuevos Cargos en PESOS/DOLARES para <NOMBRE>") y asigna usuario="Adicional" al titular secundario según la opción `titular2_name`.
+- Parser BBVA Visa: detecta la sección "Consumos <Nombre>" y asigna usuario="Adicional" al titular adicional; cierra en "TOTAL CONSUMOS DE <NOMBRE>".
+- Los movimientos sin sección identificada se asignan al usuario por defecto de la fuente ("Titular") definido en upload.py.
 
 ## 0.2.7
 
@@ -162,7 +171,7 @@
 ## 0.1.3
 
 - Reglas de categorización ahora usan palabras clave en lugar de regex — interfaz de etiquetas, escribís y Enter para agregar
-- Nueva columna "Usuario" en gastos (Seba / Mada), auto-asignado por fuente (BBVA y MercadoPago → Seba)
+- Nueva columna "Usuario" en gastos (Titular / Adicional), auto-asignado por fuente (BBVA y MercadoPago → Titular)
 - Exportar gastos a Excel con filtros aplicados
 - Corregido crash al cargar rules.yaml con escape inválido (`\+` en string YAML con comillas dobles)
 
@@ -183,6 +192,6 @@
 - Parser de extractos PDF: AMEX, BBVA Mastercard, BBVA Visa, Galicia Mastercard
 - Parser de exportación XLSX: MercadoPago
 - Categorización automática por reglas YAML con fallback opcional a Claude API
-- Autenticación local con usuarios `@sbsoft.com.ar`
+- Autenticación local con usuarios `@<allowed_domain>`
 - Interfaz web con tabs: Gastos / Importar / Reglas
 - Compatibilidad aarch64 (Raspberry Pi 5) y amd64

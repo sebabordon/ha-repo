@@ -12,11 +12,14 @@ from typing import BinaryIO, Optional
 
 import pdfplumber
 
+from config import TITULAR2_NAME
 from models import Fuente, Moneda
 from parsers.base import BaseParser
 from parsers.utils import (
     group_by_y, collect_amount, parse_date_dmy_long, row_text, words_in_band
 )
+
+_TITULAR2_UPPER = TITULAR2_NAME.upper() if TITULAR2_NAME else ""
 
 _DATE_RE = re.compile(r"^(\d{1,2})$")
 _SKIP_DESC = re.compile(
@@ -35,7 +38,7 @@ class AmexParser(BaseParser):
     def parse(self, file: BinaryIO, filename: str):
         gastos = []
         current_moneda: Optional[Moneda] = None
-        current_usuario: str = "Seba"
+        current_usuario: Optional[str] = None  # None → upload default ("Titular")
         facturacion_year: int = 2026
 
         with pdfplumber.open(file) as pdf:
@@ -52,14 +55,14 @@ class AmexParser(BaseParser):
                         y = int(m.group(1))
                         facturacion_year = y + 2000 if y < 100 else y
 
-                    # Section detection — also detects card holder name
+                    # Section detection — also detects secondary cardholder name
                     if "Nuevos Cargos en PESOS" in rtext:
                         current_moneda = Moneda.ARS
-                        current_usuario = "Mada" if "MAGDALENA" in rtext.upper() else "Seba"
+                        current_usuario = "Adicional" if (_TITULAR2_UPPER and _TITULAR2_UPPER in rtext.upper()) else None
                         continue
                     if "Nuevos Cargos en DOLARES" in rtext or "Nuevos Cargos en DÓLARES" in rtext:
                         current_moneda = Moneda.USD
-                        current_usuario = "Mada" if "MAGDALENA" in rtext.upper() else "Seba"
+                        current_usuario = "Adicional" if (_TITULAR2_UPPER and _TITULAR2_UPPER in rtext.upper()) else None
                         continue
                     if "Total de Cargos en" in rtext or "Fecha y detalle" in rtext:
                         current_moneda = None
