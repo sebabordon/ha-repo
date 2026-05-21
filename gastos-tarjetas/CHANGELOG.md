@@ -1,3 +1,9 @@
+## 0.2.21
+
+- **Eliminar movimientos manuales desde Gastos**: filas de cuentas manuales muestran un botón ✕ para eliminarlas; actualiza el saldo de la cuenta automáticamente.
+- **Fix decimales en inputs de saldo**: los campos de edición de saldo (widget y tab Cuentas) ahora muestran el valor en formato argentino (`18.388,62`) para que `_parseNum` lo parsee correctamente; antes se perdían los decimales.
+- **Moneda automática en "+ Movimiento"**: al seleccionar una cuenta USD el selector de moneda cambia automáticamente a USD (ídem ARS); para cuentas MULTI se deja libre.
+
 ## 0.2.20
 
 - **Multi-moneda en cuentas**: cada cuenta tiene selector de moneda (ARS / USD / MULTI). Las tarjetas de crédito (AMEX, BBVA Visa, BBVA MC, Galicia MC) se migran automáticamente a MULTI y muestran dos saldos: ARS + USD. Cuentas ARS o USD muestran su saldo en la moneda correspondiente.

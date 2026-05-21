@@ -115,25 +115,39 @@ def list_gastos(
     sin_categoria: bool = False,
     moneda: Optional[str] = None,
 ) -> list[dict]:
-    query = "SELECT * FROM gastos WHERE 1=1"
+    query = """SELECT g.*, COALESCE(c.tipo,'auto') AS tipo
+               FROM gastos g LEFT JOIN cuentas c ON g.fuente = c.fuente
+               WHERE 1=1"""
     params: list = []
     if fuente:
-        query += " AND fuente = ?"; params.append(fuente)
+        query += " AND g.fuente = ?"; params.append(fuente)
     if moneda:
-        query += " AND moneda = ?"; params.append(moneda)
+        query += " AND g.moneda = ?"; params.append(moneda)
     if sin_categoria:
-        query += " AND (categoria IS NULL OR categoria = '')"
+        query += " AND (g.categoria IS NULL OR g.categoria = '')"
     elif categorias:
         placeholders = ",".join("?" * len(categorias))
-        query += f" AND categoria IN ({placeholders})"; params.extend(categorias)
+        query += f" AND g.categoria IN ({placeholders})"; params.extend(categorias)
     if usuario:
-        query += " AND usuario = ?"; params.append(usuario)
+        query += " AND g.usuario = ?"; params.append(usuario)
     if mes:
-        query += " AND fecha LIKE ?"; params.append(f"{mes}-%")
-    query += " ORDER BY fecha DESC"
+        query += " AND g.fecha LIKE ?"; params.append(f"{mes}-%")
+    query += " ORDER BY g.fecha DESC"
     with _conn() as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in rows]
+
+
+def delete_gasto_manual(gasto_id: int) -> bool:
+    """Delete a gasto only if it belongs to a manual cuenta."""
+    gasto = get_gasto(gasto_id)
+    if not gasto:
+        return False
+    with _conn() as conn:
+        row = conn.execute("SELECT tipo FROM cuentas WHERE fuente=?", (gasto["fuente"],)).fetchone()
+    if not row or row[0] != "manual":
+        return False
+    return delete_movimiento_manual(gasto_id, gasto["fuente"])
 
 
 def monthly_summary() -> list[dict]:

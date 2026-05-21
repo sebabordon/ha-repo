@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from auth import require_auth
 from categorizer import auto_add_keyword_to_rule
-from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, delete_all_gastos, get_gasto
+from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, delete_all_gastos, get_gasto, delete_gasto_manual
 
 router = APIRouter()
 
@@ -125,6 +125,15 @@ def delete_all(request: Request, fuente: Optional[str] = Query(None)):
     require_auth(request)
     deleted = delete_all_gastos(fuente=fuente)
     return {"ok": True, "eliminados": deleted, "fuente": fuente}
+
+
+@router.delete("/gastos/{gasto_id}")
+def delete_gasto(gasto_id: int, request: Request):
+    require_auth(request)
+    from fastapi import HTTPException
+    if not delete_gasto_manual(gasto_id):
+        raise HTTPException(403, "Solo se pueden eliminar movimientos de cuentas manuales")
+    return {"ok": True}
 
 
 @router.patch("/gastos/{gasto_id}/categoria")

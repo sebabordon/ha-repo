@@ -416,7 +416,10 @@ async function loadGastos() {
         <input class="cat-input" data-id="${g.id}" value="${escHtml(g.categoria||"")}"
           title="${g.categoria_fuente?"Fuente: "+g.categoria_fuente:""}" />
       </td>
-      <td><button class="btn btn-sm" onclick="saveCategoria(${g.id},this)">✓</button></td>`;
+      <td>
+        <button class="btn btn-sm" onclick="saveCategoria(${g.id},this)">✓</button>
+        ${g.tipo==="manual"?`<button class="btn btn-sm btn-danger" style="padding:.15rem .35rem;margin-left:.2rem" title="Eliminar movimiento manual" onclick="deleteGasto(${g.id})">✕</button>`:""}
+      </td>`;
 
     const catInput = tr.querySelector(".cat-input");
     const saveBtn  = tr.querySelector("td:last-child .btn");
@@ -465,9 +468,17 @@ async function _populateNmCuentas() {
   const cuentas = await res.json();
   const sel     = document.getElementById("nm-cuenta");
   const manual  = cuentas.filter(c => c.tipo === "manual");
-  sel.innerHTML = `<option value="">— Cuenta manual —</option>` +
-    manual.map(c => `<option value="${c.fuente}">${escHtml(c.nombre)}</option>`).join("");
+  sel.innerHTML = `<option value="" data-moneda="">— Cuenta manual —</option>` +
+    manual.map(c => `<option value="${c.fuente}" data-moneda="${c.moneda}">${escHtml(c.nombre)}</option>`).join("");
 }
+
+document.getElementById("nm-cuenta").addEventListener("change", function() {
+  const opt    = this.options[this.selectedIndex];
+  const moneda = opt?.dataset?.moneda || "";
+  if (moneda && moneda !== "MULTI") {
+    document.getElementById("nm-mon").value = moneda;
+  }
+});
 
 document.getElementById("nm-fecha").value = new Date().toISOString().slice(0, 10);
 
@@ -848,16 +859,16 @@ function renderSaldos(cuentas) {
       <div style="display:flex;flex-direction:column;gap:.2rem">
         <div style="display:flex;gap:.3rem;align-items:center">
           <span style="font-size:.72rem;color:#999;width:26px">ARS</span>
-          <input type="text" id="saldo-input-ars-${c.fuente}" value="${sArs}" style="width:80px"
+          <input type="text" id="saldo-input-ars-${c.fuente}" value="${_fmtNum2(sArs)}" style="width:80px"
                  onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')">
         </div>
         <div style="display:flex;gap:.3rem;align-items:center">
           <span style="font-size:.72rem;color:#999;width:26px">USD</span>
-          <input type="text" id="saldo-input-usd-${c.fuente}" value="${sUsd}" style="width:80px"
+          <input type="text" id="saldo-input-usd-${c.fuente}" value="${_fmtNum2(sUsd)}" style="width:80px"
                  onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')">
         </div>
       </div>` : `
-      <input type="text" id="saldo-input-${c.fuente}" value="${isUsd ? sUsd : sArs}"
+      <input type="text" id="saldo-input-${c.fuente}" value="${_fmtNum2(isUsd ? sUsd : sArs)}"
              onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')" style="width:90px">`;
 
     return `
@@ -1198,10 +1209,10 @@ function _renderCuentaCard(c) {
     editSaldoRow = `
     <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none;padding:0 1rem .75rem;flex-wrap:wrap">
       <label style="font-size:.8rem;align-self:center">ARS</label>
-      <input id="ce-inp-ars-${c.fuente}" type="text" value="${c.saldo||0}" style="width:110px"
+      <input id="ce-inp-ars-${c.fuente}" type="text" value="${_fmtNum2(c.saldo||0)}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <label style="font-size:.8rem;align-self:center">USD</label>
-      <input id="ce-inp-usd-${c.fuente}" type="text" value="${c.saldo_usd||0}" style="width:110px"
+      <input id="ce-inp-usd-${c.fuente}" type="text" value="${_fmtNum2(c.saldo_usd||0)}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
       <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">Cancelar</button>
@@ -1210,7 +1221,7 @@ function _renderCuentaCard(c) {
     const curVal = isUsd ? (c.saldo_usd||0) : (c.saldo||0);
     editSaldoRow = `
     <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none;padding:0 1rem .75rem">
-      <input id="ce-inp-${c.fuente}" type="text" value="${curVal}" style="width:110px"
+      <input id="ce-inp-${c.fuente}" type="text" value="${_fmtNum2(curVal)}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
       <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">Cancelar</button>
@@ -1328,6 +1339,14 @@ async function deleteMovimiento(fuente, id) {
   await fetch(`${BASE}/api/cuentas/${fuente}/movimientos/${id}`, {method:"DELETE"});
   loadMovimientos(fuente);
   loadCuentas(); loadSaldos();
+}
+
+async function deleteGasto(id) {
+  showConfirm("¿Eliminar este movimiento manual?", async () => {
+    const res = await fetch(`${BASE}/api/gastos/${id}`, {method:"DELETE"});
+    if (res.ok) { loadGastos(); loadSaldos(); }
+    else showToast("No se puede eliminar (solo manuales).", "err");
+  });
 }
 
 document.getElementById("btn-add-cuenta").addEventListener("click", () => {
