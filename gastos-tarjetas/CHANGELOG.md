@@ -1,3 +1,11 @@
+## 0.2.20
+
+- **Multi-moneda en cuentas**: cada cuenta tiene selector de moneda (ARS / USD / MULTI). Las tarjetas de crédito (AMEX, BBVA Visa, BBVA MC, Galicia MC) se migran automáticamente a MULTI y muestran dos saldos: ARS + USD. Cuentas ARS o USD muestran su saldo en la moneda correspondiente.
+- **Selector de moneda en tab Cuentas**: dropdown compacto por cuenta; cambiar la moneda llama a `PUT /api/cuentas/{fuente}` y actualiza el widget de saldos.
+- **Edición de saldo para MULTI**: al editar el saldo de una cuenta MULTI se despliegan dos inputs (ARS y USD).
+- **Nueva cuenta manual con moneda**: el botón "+ Cuenta" pregunta primero el nombre y luego la moneda (ARS o USD); MULTI solo aplica a cuentas automáticas.
+- **`saldo_usd` en `cuentas`**: columna nueva; `recalc_cuenta_saldo()` actualiza `saldo` o `saldo_usd` según la moneda de la cuenta; cuentas manuales USD acumulan sus movimientos en `saldo_usd`.
+
 ## 0.2.19
 
 - **Auto-aprendizaje de reglas**: al categorizar manualmente un movimiento, su descripción se agrega automáticamente como keyword a la regla de esa categoría (creando la regla si no existía). Solo aplica cuando la categoría anterior no era ya 'regla'. Los imports futuros con la misma descripción quedan automáticamente categorizados.

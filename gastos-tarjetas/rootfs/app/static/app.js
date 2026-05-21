@@ -43,6 +43,22 @@ function showPrompt(msg, placeholder, onConfirm) {
   setTimeout(() => inp.focus(), 30);
 }
 
+function showSelectPrompt(msg, options, onConfirm) {
+  const el = document.getElementById("toast");
+  const opts = options.map(o => `<option value="${o.value}">${escHtml(o.label)}</option>`).join("");
+  el.innerHTML = `<span class="toast-msg">${escHtml(msg)}</span>
+    <select id="t-sel" style="padding:.25rem .4rem;border:1px solid #93c5fd;border-radius:4px;font-size:.88rem">${opts}</select>
+    <button class="btn btn-sm btn-primary" id="t-ok">OK</button>
+    <button class="btn btn-sm" onclick="document.getElementById('toast').classList.remove('show')">✕</button>`;
+  el.className = "toast toast-info show";
+  clearTimeout(el._t);
+  const sel = document.getElementById("t-sel");
+  const ok  = () => { const v = sel.value; el.classList.remove("show"); onConfirm(v); };
+  document.getElementById("t-ok").onclick = ok;
+  sel.addEventListener("keydown", e => { if (e.key === "Enter") ok(); if (e.key === "Escape") el.classList.remove("show"); });
+  setTimeout(() => sel.focus(), 30);
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll(".tab").forEach(tab => {
   tab.addEventListener("click", () => {
@@ -800,10 +816,17 @@ async function applyOneMatchRule(i) {
 loadMatchRules();
 
 // ── Saldos widget ─────────────────────────────────────────────────────────────
+let _widgetCuentas = [];
+
 async function loadSaldos() {
-  const res     = await fetch(`${BASE}/api/cuentas`);
-  const cuentas = await res.json();
-  renderSaldos(cuentas.filter(c => c.activa));
+  const res    = await fetch(`${BASE}/api/cuentas`);
+  _widgetCuentas = await res.json();
+  renderSaldos(_widgetCuentas.filter(c => c.activa));
+}
+
+function _saldoMonto(saldo, moneda) {
+  const cls = saldo > 0 ? "positivo" : saldo < 0 ? "negativo" : "";
+  return `<div class="saldo-monto ${cls}">${_fmtNum2(saldo)} ${moneda}</div>`;
 }
 
 function renderSaldos(cuentas) {
@@ -811,17 +834,40 @@ function renderSaldos(cuentas) {
   if (!cuentas.length) { widget.style.display = "none"; return; }
   widget.style.display = "flex";
   widget.innerHTML = cuentas.map(c => {
-    const monto = c.saldo || 0;
-    const cls   = monto > 0 ? "positivo" : monto < 0 ? "negativo" : "";
+    const moneda  = c.moneda || "ARS";
+    const isMulti = moneda === "MULTI";
+    const isUsd   = moneda === "USD";
+    const sArs    = c.saldo     || 0;
+    const sUsd    = c.saldo_usd || 0;
+
+    const montoHtml = isMulti
+      ? _saldoMonto(sArs, "ARS") + _saldoMonto(sUsd, "USD")
+      : isUsd ? _saldoMonto(sUsd, "USD") : _saldoMonto(sArs, "ARS");
+
+    const editInputs = isMulti ? `
+      <div style="display:flex;flex-direction:column;gap:.2rem">
+        <div style="display:flex;gap:.3rem;align-items:center">
+          <span style="font-size:.72rem;color:#999;width:26px">ARS</span>
+          <input type="text" id="saldo-input-ars-${c.fuente}" value="${sArs}" style="width:80px"
+                 onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')">
+        </div>
+        <div style="display:flex;gap:.3rem;align-items:center">
+          <span style="font-size:.72rem;color:#999;width:26px">USD</span>
+          <input type="text" id="saldo-input-usd-${c.fuente}" value="${sUsd}" style="width:80px"
+                 onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')">
+        </div>
+      </div>` : `
+      <input type="text" id="saldo-input-${c.fuente}" value="${isUsd ? sUsd : sArs}"
+             onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')" style="width:90px">`;
+
     return `
       <div class="saldo-card" id="saldo-card-${c.fuente}">
         <button class="saldo-edit-btn" title="Editar saldo" onclick="toggleSaldoEdit('${c.fuente}')">✏</button>
         <div class="saldo-nombre">${escHtml(c.nombre)}</div>
-        <div class="saldo-monto ${cls}">${_fmtNum2(monto)}</div>
-        <div class="saldo-fecha">${c.fecha_actualizacion ? `Actualizado ${c.fecha_actualizacion}` : 'Sin datos'}</div>
+        ${montoHtml}
+        <div class="saldo-fecha">${c.fecha_actualizacion ? `Actualizado ${c.fecha_actualizacion}` : "Sin datos"}</div>
         <div class="saldo-edit-row" id="saldo-edit-${c.fuente}" style="display:none">
-          <input type="text" id="saldo-input-${c.fuente}" value="${monto}"
-                 onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')" />
+          ${editInputs}
           <button class="btn btn-sm btn-primary" onclick="saveSaldo('${c.fuente}')">✓</button>
         </div>
       </div>`;
@@ -829,20 +875,32 @@ function renderSaldos(cuentas) {
 }
 
 function toggleSaldoEdit(fuente) {
-  const row = document.getElementById(`saldo-edit-${fuente}`);
+  const row  = document.getElementById(`saldo-edit-${fuente}`);
   const open = row.style.display === "none";
   row.style.display = open ? "flex" : "none";
-  if (open) document.getElementById(`saldo-input-${fuente}`)?.select();
+  if (open) {
+    (document.getElementById(`saldo-input-ars-${fuente}`) ||
+     document.getElementById(`saldo-input-${fuente}`))?.select();
+  }
 }
 
+function _parseNum(s) { return parseFloat(String(s).replace(/\./g,"").replace(",",".")) || 0; }
+
 async function saveSaldo(fuente) {
-  const raw = document.getElementById(`saldo-input-${fuente}`).value;
-  const val = parseFloat(raw.replace(/\./g,"").replace(",","."));
-  if (isNaN(val)) return;
+  const cuenta  = _widgetCuentas.find(c => c.fuente === fuente);
+  const moneda  = cuenta?.moneda || "ARS";
+  let body = {};
+  if (moneda === "MULTI") {
+    body.saldo     = _parseNum(document.getElementById(`saldo-input-ars-${fuente}`)?.value);
+    body.saldo_usd = _parseNum(document.getElementById(`saldo-input-usd-${fuente}`)?.value);
+  } else if (moneda === "USD") {
+    body.saldo_usd = _parseNum(document.getElementById(`saldo-input-${fuente}`)?.value);
+  } else {
+    body.saldo = _parseNum(document.getElementById(`saldo-input-${fuente}`)?.value);
+  }
   await fetch(`${BASE}/api/cuentas/${fuente}`, {
-    method: "PUT",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({saldo: val}),
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(body),
   });
   loadSaldos();
 }
@@ -1094,25 +1152,70 @@ function renderCuentas() {
 function _renderCuentaCard(c) {
   const tipo     = c.tipo || "auto";
   const isManual = tipo === "manual";
-  const badge    = isManual
+  const isMulti  = c.moneda === "MULTI";
+  const isUsd    = c.moneda === "USD";
+
+  const badge = isManual
     ? `<span class="cuenta-badge cuenta-badge-manual">Manual</span>`
     : `<span class="cuenta-badge cuenta-badge-auto">Auto</span>`;
-  const saldo    = c.saldo || 0;
-  const saldoCls = saldo > 0 ? "positivo" : saldo < 0 ? "negativo" : "";
+
+  // Saldo display
+  let saldoDisplay;
+  if (isMulti) {
+    const ars = c.saldo     || 0;
+    const usd = c.saldo_usd || 0;
+    const aC  = ars < 0 ? "negativo" : ars > 0 ? "positivo" : "";
+    const uC  = usd < 0 ? "negativo" : usd > 0 ? "positivo" : "";
+    saldoDisplay = `<span class="cuenta-saldo ${aC}">${_fmtNum2(ars)} ARS</span>
+                    <span class="cuenta-saldo ${uC}" style="margin-left:.4rem">${_fmtNum2(usd)} USD</span>`;
+  } else if (isUsd) {
+    const usd = c.saldo_usd || 0;
+    const cls = usd < 0 ? "negativo" : usd > 0 ? "positivo" : "";
+    saldoDisplay = `<span class="cuenta-saldo ${cls}">${_fmtNum2(usd)} USD</span>`;
+  } else {
+    const ars = c.saldo || 0;
+    const cls = ars < 0 ? "negativo" : ars > 0 ? "positivo" : "";
+    saldoDisplay = `<span class="cuenta-saldo ${cls}">${_fmtNum2(ars)} ARS</span>`;
+  }
+
+  // Moneda selector (manual: ARS|USD; auto: ARS|USD|MULTI)
+  const monedaOpts = (isManual ? ["ARS","USD"] : ["ARS","USD","MULTI"])
+    .map(m => `<option value="${m}"${c.moneda===m?" selected":""}>${m}</option>`).join("");
+  const monedaSel = `<select class="moneda-sel" title="Moneda de la cuenta"
+    onchange="saveCuentaMoneda('${c.fuente}',this.value);this.blur()">${monedaOpts}</select>`;
+
   // "activa" controls visibility in the saldos widget at the top
   const widgetBtn = c.activa
     ? `<button class="btn btn-sm" title="Ocultar del widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',0)">Widget ✓</button>`
     : `<button class="btn btn-sm" title="Mostrar en el widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',1)">Widget ✗</button>`;
 
-  // Saldo override (auto only — manual is always recalculated from movements)
-  const editSaldoRow = !isManual ? `
-    <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none;padding:0 1rem .75rem">
-      <input id="ce-inp-${c.fuente}" type="text" value="${saldo}" style="width:110px"
+  // Saldo edit row (auto only — manual recalculated from movements)
+  let editSaldoRow;
+  if (isManual) {
+    editSaldoRow = `<p class="cuenta-meta" style="padding:.1rem 1rem .5rem;color:#aaa;font-size:.75rem">
+      Saldo calculado automáticamente de los movimientos.</p>`;
+  } else if (isMulti) {
+    editSaldoRow = `
+    <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none;padding:0 1rem .75rem;flex-wrap:wrap">
+      <label style="font-size:.8rem;align-self:center">ARS</label>
+      <input id="ce-inp-ars-${c.fuente}" type="text" value="${c.saldo||0}" style="width:110px"
+             onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
+      <label style="font-size:.8rem;align-self:center">USD</label>
+      <input id="ce-inp-usd-${c.fuente}" type="text" value="${c.saldo_usd||0}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
       <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">Cancelar</button>
-    </div>` : `<p class="cuenta-meta" style="padding:.1rem 1rem .5rem;color:#aaa;font-size:.75rem">
-      Saldo calculado automáticamente de los movimientos.</p>`;
+    </div>`;
+  } else {
+    const curVal = isUsd ? (c.saldo_usd||0) : (c.saldo||0);
+    editSaldoRow = `
+    <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none;padding:0 1rem .75rem">
+      <input id="ce-inp-${c.fuente}" type="text" value="${curVal}" style="width:110px"
+             onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
+      <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
+      <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">Cancelar</button>
+    </div>`;
+  }
 
   const actions = isManual
     ? `${widgetBtn}
@@ -1132,7 +1235,8 @@ function _renderCuentaCard(c) {
     <div class="cuenta-header">
       <span class="cuenta-nombre">${escHtml(c.nombre)}</span>
       ${badge}
-      <span class="cuenta-saldo ${saldoCls}">${_fmtNum2(saldo)} ${escHtml(c.moneda)}</span>
+      ${monedaSel}
+      ${saldoDisplay}
     </div>
     <div class="cuenta-meta">
       ${c.fecha_actualizacion ? `Actualizado: ${c.fecha_actualizacion}` : "Sin datos"}${!isManual ? ` · <code style="font-size:.75rem">${c.fuente}</code>` : ""}
@@ -1151,12 +1255,28 @@ function toggleCuentaEdit(fuente) {
 }
 
 async function saveCuentaSaldo(fuente) {
-  const raw = document.getElementById(`ce-inp-${fuente}`).value;
-  const val = parseFloat(raw.replace(/\./g,"").replace(",","."));
-  if (isNaN(val)) return;
+  const cuenta = _cuentasData.find(c => c.fuente === fuente);
+  const moneda = cuenta?.moneda || "ARS";
+  let body = {};
+  if (moneda === "MULTI") {
+    body.saldo     = _parseNum(document.getElementById(`ce-inp-ars-${fuente}`)?.value || "0");
+    body.saldo_usd = _parseNum(document.getElementById(`ce-inp-usd-${fuente}`)?.value || "0");
+  } else if (moneda === "USD") {
+    body.saldo_usd = _parseNum(document.getElementById(`ce-inp-${fuente}`)?.value || "0");
+  } else {
+    body.saldo = _parseNum(document.getElementById(`ce-inp-${fuente}`)?.value || "0");
+  }
   await fetch(`${BASE}/api/cuentas/${fuente}`, {
     method: "PUT", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({saldo: val}),
+    body: JSON.stringify(body),
+  });
+  loadCuentas(); loadSaldos();
+}
+
+async function saveCuentaMoneda(fuente, moneda) {
+  await fetch(`${BASE}/api/cuentas/${fuente}`, {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({moneda}),
   });
   loadCuentas(); loadSaldos();
 }
@@ -1211,13 +1331,18 @@ async function deleteMovimiento(fuente, id) {
 }
 
 document.getElementById("btn-add-cuenta").addEventListener("click", () => {
-  showPrompt("Nombre de la nueva cuenta:", "ej: Efectivo, Cuenta Nación", async nombre => {
-    const res = await fetch(`${BASE}/api/cuentas`, {
-      method: "POST", headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({nombre}),
+  showPrompt("Nombre de la nueva cuenta:", "ej: Efectivo, Cuenta Nación", nombre => {
+    showSelectPrompt("Moneda de la cuenta:", [
+      {value:"ARS", label:"ARS – pesos"},
+      {value:"USD", label:"USD – dólares"},
+    ], async moneda => {
+      const res = await fetch(`${BASE}/api/cuentas`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({nombre, moneda}),
+      });
+      if (res.ok) { showToast(`Cuenta "${nombre}" (${moneda}) creada.`, "ok"); loadCuentas(); loadSaldos(); }
+      else showToast("Error al crear la cuenta.", "err");
     });
-    if (res.ok) { showToast(`Cuenta "${nombre}" creada.`, "ok"); loadCuentas(); loadSaldos(); }
-    else showToast("Error al crear la cuenta.", "err");
   });
 });
 

@@ -23,6 +23,8 @@ def post_cuenta(body: dict, request: Request):
     if not nombre:
         raise HTTPException(400, "nombre requerido")
     moneda = body.get("moneda", "ARS")
+    if moneda not in ("ARS", "USD"):
+        moneda = "ARS"
     return create_cuenta_manual(nombre, moneda)
 
 
@@ -32,10 +34,14 @@ def put_cuenta(fuente: str, body: dict, request: Request):
     current = next((c for c in get_cuentas() if c["fuente"] == fuente), None)
     if not current:
         raise HTTPException(404, f"Cuenta {fuente} no encontrada")
+    moneda = body.get("moneda", current["moneda"])
+    if moneda not in ("ARS", "USD", "MULTI"):
+        moneda = current["moneda"]
     update_cuenta(
         fuente=fuente,
         saldo=float(body.get("saldo", current["saldo"])),
-        moneda=body.get("moneda", current["moneda"]),
+        saldo_usd=float(body.get("saldo_usd", current.get("saldo_usd", 0))),
+        moneda=moneda,
         activa=int(body.get("activa", current["activa"])),
         auto_saldo=int(body.get("auto_saldo", current["auto_saldo"])),
     )

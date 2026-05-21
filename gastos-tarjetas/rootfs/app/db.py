@@ -66,6 +66,12 @@ def init_db():
         ccols = {r[1] for r in conn.execute("PRAGMA table_info(cuentas)").fetchall()}
         if "tipo" not in ccols:
             conn.execute("ALTER TABLE cuentas ADD COLUMN tipo TEXT DEFAULT 'auto'")
+        if "saldo_usd" not in ccols:
+            conn.execute("ALTER TABLE cuentas ADD COLUMN saldo_usd REAL DEFAULT 0")
+            # Credit cards can have both ARS and USD charges
+            conn.execute(
+                "UPDATE cuentas SET moneda='MULTI' WHERE fuente IN ('amex','bbva_mc','bbva_visa','galicia_mc')"
+            )
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS presupuestos (
@@ -445,18 +451,20 @@ def get_cuentas() -> list[dict]:
 def upsert_cuenta_saldo(fuente: str, saldo: float, moneda: str = "ARS", fecha: str = None):
     from datetime import date
     fecha = fecha or str(date.today())
+    # Update the right field based on the currency of this balance reading
+    field = "saldo_usd" if moneda == "USD" else "saldo"
     with _conn() as conn:
         conn.execute(
-            "UPDATE cuentas SET saldo=?, moneda=?, fecha_actualizacion=? WHERE fuente=? AND auto_saldo=1",
-            (saldo, moneda, fecha, fuente),
+            f"UPDATE cuentas SET {field}=?, fecha_actualizacion=? WHERE fuente=? AND auto_saldo=1",
+            (saldo, fecha, fuente),
         )
 
 
-def update_cuenta(fuente: str, saldo: float, moneda: str, activa: int, auto_saldo: int):
+def update_cuenta(fuente: str, saldo: float, saldo_usd: float, moneda: str, activa: int, auto_saldo: int):
     with _conn() as conn:
         conn.execute(
-            "UPDATE cuentas SET saldo=?, moneda=?, activa=?, auto_saldo=? WHERE fuente=?",
-            (saldo, moneda, activa, auto_saldo, fuente),
+            "UPDATE cuentas SET saldo=?, saldo_usd=?, moneda=?, activa=?, auto_saldo=? WHERE fuente=?",
+            (saldo, saldo_usd, moneda, activa, auto_saldo, fuente),
         )
 
 
@@ -474,11 +482,11 @@ def create_cuenta_manual(nombre: str, moneda: str = "ARS") -> dict:
         while conn.execute("SELECT 1 FROM cuentas WHERE fuente=?", (fuente,)).fetchone():
             fuente = f"{base}_{i}"; i += 1
         conn.execute(
-            "INSERT INTO cuentas (fuente,nombre,saldo,moneda,activa,auto_saldo,tipo) "
-            "VALUES (?,?,0,?,1,0,'manual')",
+            "INSERT INTO cuentas (fuente,nombre,saldo,saldo_usd,moneda,activa,auto_saldo,tipo) "
+            "VALUES (?,?,0,0,?,1,0,'manual')",
             (fuente, nombre, moneda),
         )
-    return {"fuente": fuente, "nombre": nombre, "saldo": 0.0,
+    return {"fuente": fuente, "nombre": nombre, "saldo": 0.0, "saldo_usd": 0.0,
             "moneda": moneda, "activa": 1, "auto_saldo": 0, "tipo": "manual",
             "fecha_actualizacion": None}
 
@@ -496,13 +504,18 @@ def delete_cuenta_manual(fuente: str) -> bool:
 def recalc_cuenta_saldo(fuente: str):
     """Recompute saldo for a manual account from the sum of its movements."""
     with _conn() as conn:
+        cuenta = conn.execute("SELECT moneda FROM cuentas WHERE fuente=?", (fuente,)).fetchone()
+        if not cuenta:
+            return
+        moneda = cuenta["moneda"] or "ARS"
         row = conn.execute(
             "SELECT ROUND(SUM(CAST(monto AS REAL)),2) AS t FROM gastos WHERE fuente=?",
             (fuente,),
         ).fetchone()
         total = float(row["t"] or 0)
+        field = "saldo_usd" if moneda == "USD" else "saldo"
         conn.execute(
-            "UPDATE cuentas SET saldo=?, fecha_actualizacion=date('now') "
+            f"UPDATE cuentas SET {field}=?, fecha_actualizacion=date('now') "
             "WHERE fuente=? AND tipo='manual'",
             (total, fuente),
         )

@@ -519,6 +519,17 @@ tbody tr:hover { background: #fafbff; }
 }
 .cuenta-badge-auto   { background: #dbeafe; color: #1d4ed8; }
 .cuenta-badge-manual { background: #fef3c7; color: #92400e; }
+.moneda-sel {
+  font-size: .72rem;
+  font-weight: 700;
+  padding: .15rem .3rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #374151;
+  cursor: pointer;
+  line-height: 1.2;
+}
 .cuenta-saldo {
   font-size: .95rem;
   font-weight: 700;
