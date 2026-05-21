@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from auth import require_auth
 from categorizer import auto_add_keyword_to_rule
-from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, delete_all_gastos, get_gasto, delete_gasto_manual
+from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, update_gasto_fecha, delete_all_gastos, get_gasto, delete_gasto_manual
 
 router = APIRouter()
 
@@ -140,12 +140,22 @@ def delete_gasto(gasto_id: int, request: Request):
 def patch_categoria(gasto_id: int, body: dict, request: Request):
     require_auth(request)
     categoria = body.get("categoria", "")
-    # Fetch BEFORE updating so we know the prior fuente
     gasto = get_gasto(gasto_id)
     update_categoria(gasto_id, categoria)
-    # Auto-learn: only when setting a non-empty category on a non-rule-matched row
-    if categoria and gasto and gasto.get("categoria_fuente") != "regla":
+    # Auto-learn: add description as keyword whenever the user sets a category manually
+    if categoria and gasto:
         auto_add_keyword_to_rule(gasto["descripcion"], categoria)
+    return {"ok": True}
+
+
+@router.patch("/gastos/{gasto_id}/fecha")
+def patch_fecha(gasto_id: int, body: dict, request: Request):
+    require_auth(request)
+    from fastapi import HTTPException
+    fecha = (body.get("fecha") or "").strip()
+    if not fecha:
+        raise HTTPException(400, "fecha requerida")
+    update_gasto_fecha(gasto_id, fecha)
     return {"ok": True}
 
 

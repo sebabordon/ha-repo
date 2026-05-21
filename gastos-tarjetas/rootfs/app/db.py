@@ -265,6 +265,11 @@ def update_categoria(gasto_id: int, categoria: str):
         )
 
 
+def update_gasto_fecha(gasto_id: int, fecha: str):
+    with _conn() as conn:
+        conn.execute("UPDATE gastos SET fecha = ? WHERE id = ?", (fecha, gasto_id))
+
+
 def update_usuario(gasto_id: int, usuario: str):
     with _conn() as conn:
         conn.execute("UPDATE gastos SET usuario = ? WHERE id = ?", (usuario or None, gasto_id))

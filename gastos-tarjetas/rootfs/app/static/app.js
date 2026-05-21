@@ -400,7 +400,7 @@ async function loadGastos() {
     const u = g.usuario || "";
     const isNeg = parseFloat(g.monto) < 0;
     tr.innerHTML = `
-      <td>${g.fecha}</td>
+      <td><input class="fecha-input" data-id="${g.id}" type="date" value="${g.fecha}"></td>
       <td>${escHtml(g.descripcion)}</td>
       <td class="monto ${g.moneda==="USD"?"usd":""} ${isNeg?"neg":""}">${_fmtNum2(g.monto)}</td>
       <td class="col-moneda">${g.moneda}</td>
@@ -421,17 +421,25 @@ async function loadGastos() {
         ${g.tipo==="manual"?`<button class="btn btn-sm btn-action btn-danger" title="Eliminar movimiento manual" onclick="deleteGasto(${g.id})">✕</button>`:`<button class="btn btn-sm btn-action" style="visibility:hidden">✕</button>`}
       </td>`;
 
-    const catInput = tr.querySelector(".cat-input");
-    const saveBtn  = tr.querySelector("td:last-child .btn");
-    const orig     = catInput.value;
+    const catInput   = tr.querySelector(".cat-input");
+    const saveBtn    = tr.querySelector("td:last-child .btn");
+    const fechaInput = tr.querySelector(".fecha-input");
+    const origCat    = catInput.value;
+    const origFecha  = fechaInput.value;
+
     catInput.addEventListener("input", () => {
-      const changed = catInput.value !== orig;
+      const changed = catInput.value !== origCat;
       catInput.classList.toggle("dirty", changed);
       saveBtn.classList.toggle("btn-dirty", changed);
     });
     catInput.addEventListener("keydown", e => {
       if (e.key === "Enter") { e.preventDefault(); saveCategoria(g.id, saveBtn); }
     });
+
+    fechaInput.addEventListener("change", () => {
+      if (fechaInput.value !== origFecha) saveFecha(g.id, fechaInput);
+    });
+
     tbody.appendChild(tr);
   });
 }
@@ -445,6 +453,19 @@ async function saveCategoria(id, btn) {
   if (res.ok) { input.classList.remove("dirty"); btn.classList.remove("btn-dirty"); }
   btn.textContent = res.ok ? "✓" : "✗";
   setTimeout(() => btn.textContent = "✓", 1500);
+}
+
+async function saveFecha(id, input) {
+  const res = await fetch(`${BASE}/api/gastos/${id}/fecha`, {
+    method:"PATCH", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({fecha: input.value}),
+  });
+  if (res.ok) {
+    input.classList.remove("dirty");
+    showToast("Fecha actualizada.", "ok", 1500);
+  } else {
+    showToast("Error al guardar fecha.", "err");
+  }
 }
 
 async function saveUsuario(id, sel) {

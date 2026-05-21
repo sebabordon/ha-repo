@@ -1,3 +1,8 @@
+## 0.2.25
+
+- **Edición de fecha en Gastos**: la columna Fecha es ahora un `<input type="date">` editable. Al cambiar la fecha se guarda automáticamente vía `PATCH /api/gastos/{id}/fecha`. Útil para corregir fechas de cuotas mal asignadas por el parser.
+- **Fix auto-aprendizaje de reglas**: se eliminó la condición que bloqueaba el aprendizaje cuando el movimiento ya tenía categoría por regla. Ahora cualquier edición manual de categoría agrega la descripción a las reglas, independientemente del origen anterior.
+
 ## 0.2.24
 
 - Documentación (`DOCS.md`) agregada al add-on: opciones de configuración, usuario admin, fuentes soportadas, cuentas, usuarios Titular/Adicional, reglas, presupuesto y FAQ.
