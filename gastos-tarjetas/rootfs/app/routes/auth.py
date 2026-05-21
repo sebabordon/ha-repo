@@ -27,9 +27,9 @@ _STYLE = """
 
 _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gastos Tarjetas</title>{style}</head><body>
+<title>Gastos</title>{style}</head><body>
 <div class="card">
-  <h2>Gastos Tarjetas</h2>
+  <h2>Gastos</h2>
   {error}
   <form method="post" action="{prefix}/auth/login">
     <div class="field"><input type="email" name="email" placeholder="Email (@{domain})" required autofocus></div>
@@ -41,7 +41,7 @@ _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 
 _REGISTER_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gastos Tarjetas — Registro</title>{style}</head><body>
+<title>Gastos — Registro</title>{style}</head><body>
 <div class="card">
   <h2>Crear cuenta</h2>
   {error}

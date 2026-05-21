@@ -93,7 +93,7 @@ def _render_panel(request: Request, msg: str = "") -> HTMLResponse:
 
     html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Admin — Gastos Tarjetas</title>{_STYLE}</head><body>
+<title>Admin — Gastos</title>{_STYLE}</head><body>
 <div class="card">
   <a class="back" href="{prefix}/">← Volver a la app</a>
   <h2>Panel de Administración</h2>

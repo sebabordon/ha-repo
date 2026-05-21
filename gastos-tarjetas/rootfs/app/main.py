@@ -8,7 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, admin
 from db import init_db
 
-app = FastAPI(title="Gastos Tarjetas", docs_url=None, redoc_url=None)
+app = FastAPI(title="Gastos", docs_url=None, redoc_url=None)
 
 
 @app.on_event("startup")
