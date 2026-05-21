@@ -263,7 +263,7 @@ function _drawByUsuario(data) {
 }
 
 ["cf-fuente","cf-usuario","cf-mes","cf-meses"].forEach(id =>
-  document.getElementById(id).addEventListener("change", loadCharts));
+  document.getElementById(id).addEventListener("change", function() { this.blur(); loadCharts(); }));
 document.getElementById("btn-refresh-charts").addEventListener("click", loadCharts);
 
 // ── Category slicer ───────────────────────────────────────────────────────────
@@ -426,7 +426,7 @@ async function saveUsuario(id, sel) {
 }
 
 ["filter-fuente","filter-usuario","filter-mes"].forEach(id =>
-  document.getElementById(id).addEventListener("change", loadGastos));
+  document.getElementById(id).addEventListener("change", function() { this.blur(); loadGastos(); }));
 document.getElementById("btn-load").addEventListener("click", loadGastos);
 document.getElementById("btn-export").addEventListener("click", () =>
   window.open(`${BASE}/api/gastos/export?${_gastosParams()}`, "_blank"));
@@ -1011,7 +1011,7 @@ function _drawForecast(data) {
 }
 
 ["cf-forecast-meses","cf-forecast-historico"].forEach(id =>
-  document.getElementById(id)?.addEventListener("change", loadForecast));
+  document.getElementById(id)?.addEventListener("change", function() { this.blur(); loadForecast(); }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {
