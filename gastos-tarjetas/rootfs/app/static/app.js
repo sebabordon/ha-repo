@@ -839,7 +839,7 @@ function renderPresupuesto(vsActual) {
     </div>` : "";
 
   wrap.innerHTML = summaryHtml + `
-    <div style="overflow-x:auto">
+    <div class="table-wrap">
     <table class="presup-table">
       <thead>
         <tr>
