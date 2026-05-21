@@ -2,7 +2,7 @@ import re
 import yaml
 from typing import Optional
 
-from config import RULES_FILE, CLAUDE_API_KEY, GROQ_API_KEY
+from config import RULES_FILE, CLAUDE_API_KEY, GROQ_API_KEY, GEMINI_API_KEY
 
 _PROMPT = (
     "Categoriza este gasto de tarjeta de crédito argentina en una sola palabra o frase corta "
@@ -39,26 +39,46 @@ def categorize_by_rules(descripcion: str) -> Optional[str]:
     return None
 
 
-async def categorize_by_groq(descripcion: str) -> Optional[str]:
-    """Uses Groq's free API (llama-3.1-8b-instant). ~14k req/day free."""
-    if not GROQ_API_KEY:
-        return None
+async def _openai_compat_call(url: str, key: str, model: str, content: str) -> Optional[str]:
+    """Generic helper for any OpenAI-compatible chat completions endpoint."""
     try:
         import httpx
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                url,
+                headers={"Authorization": f"Bearer {key}"},
                 json={
-                    "model": "llama-3.1-8b-instant",
+                    "model": model,
                     "max_tokens": 50,
-                    "messages": [{"role": "user", "content": _PROMPT.format(desc=descripcion)}],
+                    "messages": [{"role": "user", "content": content}],
                 },
             )
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception:
         return None
+
+
+async def categorize_by_groq(descripcion: str) -> Optional[str]:
+    """Groq free API — llama-3.1-8b-instant, ~14k req/day."""
+    if not GROQ_API_KEY:
+        return None
+    return await _openai_compat_call(
+        "https://api.groq.com/openai/v1/chat/completions",
+        GROQ_API_KEY, "llama-3.1-8b-instant",
+        _PROMPT.format(desc=descripcion),
+    )
+
+
+async def categorize_by_gemini(descripcion: str) -> Optional[str]:
+    """Google Gemini free API — gemini-2.0-flash, ~1500 req/day."""
+    if not GEMINI_API_KEY:
+        return None
+    return await _openai_compat_call(
+        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        GEMINI_API_KEY, "gemini-2.0-flash",
+        _PROMPT.format(desc=descripcion),
+    )
 
 
 async def categorize_by_claude(descripcion: str) -> Optional[str]:
@@ -78,15 +98,18 @@ async def categorize_by_claude(descripcion: str) -> Optional[str]:
 
 
 async def categorize(descripcion: str) -> tuple[Optional[str], Optional[str]]:
-    """Returns (categoria, fuente). Tries: reglas → Groq → Claude."""
+    """Returns (categoria, fuente). Tries: reglas → Groq → Gemini → Claude."""
     cat = categorize_by_rules(descripcion)
     if cat:
         return cat, "regla"
-    # Prefer Groq (free) over Claude (paid) — use whichever key is set
     if GROQ_API_KEY:
         cat = await categorize_by_groq(descripcion)
         if cat:
             return cat, "groq"
+    if GEMINI_API_KEY:
+        cat = await categorize_by_gemini(descripcion)
+        if cat:
+            return cat, "gemini"
     if CLAUDE_API_KEY:
         cat = await categorize_by_claude(descripcion)
         if cat:

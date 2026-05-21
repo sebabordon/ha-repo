@@ -2,6 +2,7 @@
 
 export CLAUDE_API_KEY=$(bashio::config 'claude_api_key')
 export GROQ_API_KEY=$(bashio::config 'groq_api_key')
+export GEMINI_API_KEY=$(bashio::config 'gemini_api_key')
 export ALLOWED_DOMAIN=$(bashio::config 'allowed_domain')
 export REGISTRATION_ENABLED=$(bashio::config 'registration_enabled')
 export ADMIN_PASSWORD=$(bashio::config 'admin_password')
