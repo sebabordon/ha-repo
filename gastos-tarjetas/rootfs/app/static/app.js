@@ -125,6 +125,11 @@ function _fmtNum(n) {
 function _fmtNum2(n) {
   return (+n||0).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
+function _fmtSaldo(n) {
+  const v = +n || 0;
+  const dec = Math.abs(v) >= 100000 ? 0 : 2;
+  return v.toLocaleString("es-AR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
+}
 
 function _populateMonthFilter(meses) {
   ["filter-mes","cf-mes","presup-mes"].forEach(id => {
@@ -858,7 +863,7 @@ async function loadSaldos() {
 
 function _saldoMonto(saldo, moneda) {
   const cls = saldo > 0 ? "positivo" : saldo < 0 ? "negativo" : "";
-  return `<div class="saldo-monto ${cls}">${_fmtNum2(saldo)} ${moneda}</div>`;
+  return `<div class="saldo-monto ${cls}">${_fmtSaldo(saldo)} ${moneda}</div>`;
 }
 
 function renderSaldos(cuentas) {
@@ -1198,16 +1203,16 @@ function _renderCuentaCard(c) {
     const usd = c.saldo_usd || 0;
     const aC  = ars < 0 ? "negativo" : ars > 0 ? "positivo" : "";
     const uC  = usd < 0 ? "negativo" : usd > 0 ? "positivo" : "";
-    saldoDisplay = `<span class="cuenta-saldo ${aC}">${_fmtNum2(ars)} ARS</span>
-                    <span class="cuenta-saldo ${uC}" style="margin-left:.4rem">${_fmtNum2(usd)} USD</span>`;
+    saldoDisplay = `<span class="cuenta-saldo ${aC}">${_fmtSaldo(ars)} ARS</span>
+                    <span class="cuenta-saldo ${uC}" style="margin-left:.4rem">${_fmtSaldo(usd)} USD</span>`;
   } else if (isUsd) {
     const usd = c.saldo_usd || 0;
     const cls = usd < 0 ? "negativo" : usd > 0 ? "positivo" : "";
-    saldoDisplay = `<span class="cuenta-saldo ${cls}">${_fmtNum2(usd)} USD</span>`;
+    saldoDisplay = `<span class="cuenta-saldo ${cls}">${_fmtSaldo(usd)} USD</span>`;
   } else {
     const ars = c.saldo || 0;
     const cls = ars < 0 ? "negativo" : ars > 0 ? "positivo" : "";
-    saldoDisplay = `<span class="cuenta-saldo ${cls}">${_fmtNum2(ars)} ARS</span>`;
+    saldoDisplay = `<span class="cuenta-saldo ${cls}">${_fmtSaldo(ars)} ARS</span>`;
   }
 
   // Moneda selector (manual: ARS|USD; auto: ARS|USD|MULTI)
