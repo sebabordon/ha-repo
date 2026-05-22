@@ -6,17 +6,9 @@ from auth import require_auth
 from categorizer import categorize
 from db import insert_gastos, upsert_cuenta_saldo
 from parsers import PARSERS
+from user_config import read_user_config
 
 router = APIRouter()
-
-# Default user assignment by source (used when parser doesn't set usuario)
-_USUARIO_FUENTE = {
-    "amex": "Titular",
-    "bbva_mc": "Titular",
-    "bbva_visa": "Titular",
-    "bbva_cuenta": "Titular",
-    "mercadopago": "Titular",
-}
 
 
 @router.post("/upload")
@@ -40,7 +32,7 @@ async def upload_file(
     if not gastos:
         return {"importados": 0, "total_parseados": 0, "mensaje": "No se encontraron movimientos en el archivo."}
 
-    usuario_default = _USUARIO_FUENTE.get(fuente)
+    usuario_default = read_user_config()["fuente_usuario"].get(fuente)
     records = []
     for g in gastos:
         cat, fuente_cat = await categorize(g.descripcion)

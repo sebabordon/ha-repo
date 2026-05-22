@@ -35,9 +35,8 @@
       <button class="tab active" data-tab="graficos">Gráficos</button>
       <button class="tab" data-tab="gastos">Gastos</button>
       <button class="tab" data-tab="cuentas">Cuentas</button>
-      <button class="tab" data-tab="upload">Importar</button>
-      <button class="tab" data-tab="rules">Reglas</button>
       <button class="tab" data-tab="presupuesto">Presupuesto</button>
+      <button class="tab" data-tab="config">⚙ Config</button>
     </div>
 
     <!-- ── Tab: Gráficos ──────────────────────────────────────────────── -->
@@ -54,8 +53,6 @@
         </select>
         <select id="cf-usuario">
           <option value="">Todos</option>
-          <option value="Titular">Titular</option>
-          <option value="Adicional">Adicional</option>
         </select>
         <select id="cf-mes">
           <option value="">Últimos</option>
@@ -118,6 +115,11 @@
                 <option value="6">Últimos 6 meses</option>
               </select>
             </label>
+            <div id="forecast-exclude-wrap" style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">
+              <span>Excluir de ingresos:</span>
+              <span id="forecast-exclude-chips" style="display:inline-flex;flex-wrap:wrap;gap:.25rem"></span>
+              <button id="btn-forecast-exclude-add" class="btn btn-sm" style="padding:.15rem .5rem;font-size:.82rem">+</button>
+            </div>
           </div>
           <canvas id="chart-forecast"></canvas>
         </div>
@@ -170,8 +172,6 @@
           </select>
           <select id="filter-usuario">
             <option value="">Todos</option>
-            <option value="Titular">Titular</option>
-            <option value="Adicional">Adicional</option>
           </select>
           <select id="filter-mes">
             <option value="">Todos los meses</option>
@@ -224,71 +224,6 @@
       <div id="cuentas-list"></div>
     </section>
 
-    <!-- ── Tab: Upload ────────────────────────────────────────────────── -->
-    <section id="tab-upload" class="tab-content">
-      <div class="upload-card">
-        <h2>Importar archivo</h2>
-        <div class="danger-zone">
-          <select id="delete-fuente">
-            <option value="">Todas las fuentes</option>
-            <option value="amex">AMEX</option>
-            <option value="bbva_mc">BBVA Mastercard</option>
-            <option value="bbva_visa">BBVA Visa</option>
-            <option value="bbva_cuenta">BBVA Cuenta</option>
-            <option value="galicia_mc">Galicia Mastercard</option>
-            <option value="mercadopago">MercadoPago</option>
-          </select>
-          <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
-          <span class="danger-hint">Elimina los movimientos de la fuente seleccionada (o todos). Útil para reimportar.</span>
-        </div>
-        <div class="form-group">
-          <label>Fuente</label>
-          <select id="upload-fuente">
-            <option value="amex">AMEX Platinum (PDF)</option>
-            <option value="bbva_mc">BBVA Mastercard (PDF)</option>
-            <option value="bbva_visa">BBVA Visa (PDF)</option>
-            <option value="bbva_cuenta">BBVA Cuenta (PDF)</option>
-            <option value="galicia_mc">Galicia Mastercard (PDF)</option>
-            <option value="mercadopago">MercadoPago (XLSX)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Archivo</label>
-          <input type="file" id="upload-file" accept=".pdf,.xls,.xlsx" />
-        </div>
-        <button id="btn-upload" class="btn btn-primary">Importar</button>
-        <div id="upload-result"></div>
-      </div>
-    </section>
-
-    <!-- ── Tab: Rules ─────────────────────────────────────────────────── -->
-    <section id="tab-rules" class="tab-content">
-
-      <!-- Categorization rules -->
-      <div class="rules-header">
-        <h2>Reglas de categorización</h2>
-        <button id="btn-add-rule" class="btn">+ Nueva regla</button>
-        <button id="btn-apply-rules" class="btn">Reaplicar a todos</button>
-      </div>
-      <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto. "Reaplicar a todos" categoriza los movimientos ya importados (respeta los que editaste a mano).</p>
-      <div id="rules-list"></div>
-
-      <!-- Match / netting rules -->
-      <div class="match-rules-block">
-        <div class="rules-header">
-          <h2>Reglas de emparejado</h2>
-          <button id="btn-add-match-rule" class="btn">+ Nueva regla</button>
-          <button id="btn-apply-match-rules" class="btn">Aplicar todas</button>
-        </div>
-        <p class="rules-hint">
-          Cada regla busca movimientos que coincidan con el <strong>Lado A</strong> y, opcionalmente,
-          los empareja con el <strong>Lado B</strong> (misma ventana de días) para marcarlos con
-          una categoría — ideal para excluir pagos de tarjeta, transferencias entre cuentas, etc.
-        </p>
-        <div id="match-rules-list"></div>
-      </div>
-    </section>
-
     <!-- ── Tab: Presupuesto ─────────────────────────────────────────────────── -->
     <section id="tab-presupuesto" class="tab-content">
       <div class="presup-header">
@@ -303,6 +238,98 @@
         Las barras se vuelven amarillas al 80% y rojas al superar el 100%.
       </p>
       <div id="presup-table-wrap"></div>
+    </section>
+
+    <!-- ── Tab: Config ──────────────────────────────────────────────────────── -->
+    <section id="tab-config" class="tab-content">
+      <div class="subtabs">
+        <button class="subtab active" data-subtab="cfg-importar">Importar</button>
+        <button class="subtab" data-subtab="cfg-reglas">Reglas</button>
+        <button class="subtab" data-subtab="cfg-usuarios">Usuarios</button>
+      </div>
+
+      <!-- ── Sub-tab: Importar ────────────────────────────────────── -->
+      <div id="subtab-cfg-importar" class="subtab-content active">
+        <div class="upload-card">
+          <h2>Importar archivo</h2>
+          <div class="danger-zone">
+            <select id="delete-fuente">
+              <option value="">Todas las fuentes</option>
+              <option value="amex">AMEX</option>
+              <option value="bbva_mc">BBVA Mastercard</option>
+              <option value="bbva_visa">BBVA Visa</option>
+              <option value="bbva_cuenta">BBVA Cuenta</option>
+              <option value="galicia_mc">Galicia Mastercard</option>
+              <option value="mercadopago">MercadoPago</option>
+            </select>
+            <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
+            <span class="danger-hint">Elimina los movimientos de la fuente seleccionada (o todos). Útil para reimportar.</span>
+          </div>
+          <div class="form-group">
+            <label>Fuente</label>
+            <select id="upload-fuente">
+              <option value="amex">AMEX Platinum (PDF)</option>
+              <option value="bbva_mc">BBVA Mastercard (PDF)</option>
+              <option value="bbva_visa">BBVA Visa (PDF)</option>
+              <option value="bbva_cuenta">BBVA Cuenta (PDF)</option>
+              <option value="galicia_mc">Galicia Mastercard (PDF)</option>
+              <option value="mercadopago">MercadoPago (XLSX)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Archivo</label>
+            <input type="file" id="upload-file" accept=".pdf,.xls,.xlsx" />
+          </div>
+          <button id="btn-upload" class="btn btn-primary">Importar</button>
+          <div id="upload-result"></div>
+        </div>
+      </div>
+
+      <!-- ── Sub-tab: Reglas ──────────────────────────────────────── -->
+      <div id="subtab-cfg-reglas" class="subtab-content">
+
+        <!-- Categorization rules -->
+        <div class="rules-header">
+          <h2>Reglas de categorización</h2>
+          <button id="btn-add-rule" class="btn">+ Nueva regla</button>
+          <button id="btn-apply-rules" class="btn">Reaplicar a todos</button>
+        </div>
+        <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto. "Reaplicar a todos" categoriza los movimientos ya importados (respeta los que editaste a mano).</p>
+        <div id="rules-list"></div>
+
+        <!-- Match / netting rules -->
+        <div class="match-rules-block">
+          <div class="rules-header">
+            <h2>Reglas de emparejado</h2>
+            <button id="btn-add-match-rule" class="btn">+ Nueva regla</button>
+            <button id="btn-apply-match-rules" class="btn">Aplicar todas</button>
+          </div>
+          <p class="rules-hint">
+            Cada regla busca movimientos que coincidan con el <strong>Lado A</strong> y, opcionalmente,
+            los empareja con el <strong>Lado B</strong> (misma ventana de días) para marcarlos con
+            una categoría — ideal para excluir pagos de tarjeta, transferencias entre cuentas, etc.
+          </p>
+          <div id="match-rules-list"></div>
+        </div>
+      </div>
+
+      <!-- ── Sub-tab: Usuarios ────────────────────────────────────── -->
+      <div id="subtab-cfg-usuarios" class="subtab-content">
+        <div class="rules-header">
+          <h2>Usuarios</h2>
+          <button id="btn-add-usuario" class="btn">+ Agregar usuario</button>
+        </div>
+        <p class="rules-hint">
+          Gestioná los usuarios asociados a los movimientos. Los dos primeros no se pueden eliminar.
+          El <strong>usuario por defecto</strong> se asigna automáticamente al importar según la fuente.
+        </p>
+
+        <h3 style="font-size:.95rem;margin:.5rem 0 .6rem">Usuarios configurados</h3>
+        <div id="usuarios-list" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.75rem"></div>
+
+        <h3 style="font-size:.95rem;margin:0 0 .6rem">Usuario por defecto según fuente</h3>
+        <div id="fuente-usuario-map"></div>
+      </div>
     </section>
 
   </main>

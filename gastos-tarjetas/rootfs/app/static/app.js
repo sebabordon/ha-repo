@@ -69,6 +69,18 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.tab === "graficos")    loadCharts();
     if (tab.dataset.tab === "presupuesto") loadPresupuesto();
     if (tab.dataset.tab === "cuentas")     loadCuentas();
+    if (tab.dataset.tab === "config")      renderUsuarios();
+  });
+});
+
+// ── Sub-tabs (inside ⚙ Config) ───────────────────────────────────────────────
+document.querySelectorAll(".subtab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const target = btn.dataset.subtab;
+    document.querySelectorAll(".subtab").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".subtab-content").forEach(s => s.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(`subtab-${target}`).classList.add("active");
   });
 });
 
@@ -131,7 +143,13 @@ function _fmtSaldo(n) {
   return v.toLocaleString("es-AR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
 }
 
+let _monthFilterReady = false;
+
 function _populateMonthFilter(meses) {
+  // Auto-select the most recent month ≤ today when there is no prior selection
+  const today = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+  const defaultMes = meses.filter(m => m <= today).at(-1) || meses.at(-1) || "";
+
   ["filter-mes","cf-mes","presup-mes"].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -143,7 +161,14 @@ function _populateMonthFilter(meses) {
       sel.appendChild(opt);
     });
     if (current) sel.value = current;
+    else if (defaultMes) sel.value = defaultMes;
   });
+
+  // Trigger initial gastos load now that the month filter is set
+  if (!_monthFilterReady) {
+    _monthFilterReady = true;
+    loadGastos();
+  }
 }
 
 loadMonthlyChart();
@@ -413,8 +438,7 @@ async function loadGastos() {
       <td>
         <select class="usuario-select" onchange="saveUsuario(${g.id},this)">
           <option value="" ${!u?"selected":""}>—</option>
-          <option value="Titular" ${u==="Titular"?"selected":""}>Titular</option>
-          <option value="Adicional" ${u==="Adicional"?"selected":""}>Adicional</option>
+          ${(_usuariosConfig.usuarios||["Titular","Adicional"]).map(usr=>`<option value="${escHtml(usr)}" ${u===usr?"selected":""}>${escHtml(usr)}</option>`).join("")}
         </select>
       </td>
       <td>
@@ -486,7 +510,8 @@ document.getElementById("btn-load").addEventListener("click", loadGastos);
 document.getElementById("btn-export").addEventListener("click", () =>
   window.open(`${BASE}/api/gastos/export?${_gastosParams()}`, "_blank"));
 
-loadGastos();
+// Initial loadGastos() is triggered by _populateMonthFilter (called from loadMonthlyChart)
+// so it runs with the auto-selected month filter already set.
 
 // ── Nuevo movimiento manual (desde Gastos) ────────────────────────────────────
 async function _populateNmCuentas() {
@@ -1119,10 +1144,56 @@ document.getElementById("btn-add-presup-row").addEventListener("click", () => {
 });
 
 // ── Forecast chart ─────────────────────────────────────────────────────────────
+
+// Categories excluded from income trend (persisted in localStorage)
+let _forecastExcludes = [];
+(function _initForecastExcludes() {
+  try { _forecastExcludes = JSON.parse(localStorage.getItem("forecastExcludeCategories") || "[]"); }
+  catch { _forecastExcludes = []; }
+})();
+
+function _renderForecastExcludes() {
+  const wrap = document.getElementById("forecast-exclude-chips");
+  if (!wrap) return;
+  wrap.innerHTML = _forecastExcludes.map((c, i) =>
+    `<span class="cat-chip active" style="font-size:.78rem;padding:.18rem .55rem">${escHtml(c)
+    }<button class="tag-x" type="button" onclick="removeForecastExclude(${i})">×</button></span>`
+  ).join("");
+}
+
+function removeForecastExclude(i) {
+  _forecastExcludes.splice(i, 1);
+  localStorage.setItem("forecastExcludeCategories", JSON.stringify(_forecastExcludes));
+  _renderForecastExcludes();
+  loadForecast();
+}
+
+document.getElementById("btn-forecast-exclude-add")?.addEventListener("click", async () => {
+  const cats = await fetch(`${BASE}/api/categorias`).then(r => r.json());
+  const available = cats.filter(c => !_forecastExcludes.includes(c));
+  if (!available.length) { showToast("No hay más categorías para excluir.", "ok"); return; }
+  showSelectPrompt(
+    "Excluir categoría de ingresos:",
+    available.map(c => ({value: c, label: c})),
+    cat => {
+      if (!_forecastExcludes.includes(cat)) {
+        _forecastExcludes.push(cat);
+        localStorage.setItem("forecastExcludeCategories", JSON.stringify(_forecastExcludes));
+        _renderForecastExcludes();
+        loadForecast();
+      }
+    }
+  );
+});
+
+_renderForecastExcludes();
+
 async function loadForecast() {
   const meses     = document.getElementById("cf-forecast-meses")?.value || "6";
   const historico = document.getElementById("cf-forecast-historico")?.value || "3";
-  const res  = await fetch(`${BASE}/api/stats/forecast?meses=${meses}&historico=${historico}`);
+  const params    = new URLSearchParams({meses, historico});
+  if (_forecastExcludes.length > 0) params.set("exclude_cats", _forecastExcludes.join(","));
+  const res  = await fetch(`${BASE}/api/stats/forecast?${params}`);
   const data = await res.json();
   _drawForecast(data);
 }
@@ -1390,6 +1461,109 @@ document.getElementById("btn-add-cuenta").addEventListener("click", () => {
     });
   });
 });
+
+// ── Usuarios (Config tab) ──────────────────────────────────────────────────────
+let _usuariosConfig = {usuarios: ["Titular","Adicional"], fuente_usuario: {}};
+
+async function loadUsuarios() {
+  const res = await fetch(`${BASE}/api/config/usuarios`);
+  _usuariosConfig = await res.json();
+  _populateUsuarioDropdowns();
+  renderUsuarios();
+}
+
+function _populateUsuarioDropdowns() {
+  ["filter-usuario","cf-usuario"].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">Todos</option>` +
+      (_usuariosConfig.usuarios || []).map(u =>
+        `<option value="${escHtml(u)}">${escHtml(u)}</option>`
+      ).join("");
+    if (cur) sel.value = cur;
+  });
+}
+
+function renderUsuarios() {
+  const list = document.getElementById("usuarios-list");
+  if (!list) return;
+  const users = _usuariosConfig.usuarios || [];
+  list.innerHTML = users.map((u, i) => `
+    <div class="usuario-chip">
+      <span>${escHtml(u)}</span>
+      ${i >= 2 ? `<button class="tag-x" type="button" onclick="removeUsuario(${i})">×</button>` : ""}
+    </div>`).join("");
+
+  const _FUENTES = [
+    {id:"amex",        label:"AMEX"},
+    {id:"bbva_mc",     label:"BBVA Mastercard"},
+    {id:"bbva_visa",   label:"BBVA Visa"},
+    {id:"bbva_cuenta", label:"BBVA Cuenta"},
+    {id:"galicia_mc",  label:"Galicia MC"},
+    {id:"mercadopago", label:"MercadoPago"},
+  ];
+  const map = document.getElementById("fuente-usuario-map");
+  if (!map) return;
+  const fuMap = _usuariosConfig.fuente_usuario || {};
+  map.innerHTML = `
+    <table class="presup-table" style="max-width:500px">
+      <thead><tr><th>Fuente</th><th>Usuario por defecto</th></tr></thead>
+      <tbody>
+        ${_FUENTES.map(f => `<tr>
+          <td>${f.label}</td>
+          <td>
+            <select class="fuente-usuario-sel" data-fuente="${f.id}"
+                    onchange="saveFuenteUsuario('${f.id}',this.value)">
+              <option value="">— Sin asignar —</option>
+              ${users.map(u =>
+                `<option value="${escHtml(u)}" ${fuMap[f.id]===u?"selected":""}>${escHtml(u)}</option>`
+              ).join("")}
+            </select>
+          </td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function removeUsuario(i) {
+  if (i < 2) return;
+  _usuariosConfig.usuarios.splice(i, 1);
+  await _saveUsuariosConfig();
+  _populateUsuarioDropdowns();
+  renderUsuarios();
+}
+
+async function saveFuenteUsuario(fuente, usuario) {
+  _usuariosConfig.fuente_usuario = _usuariosConfig.fuente_usuario || {};
+  _usuariosConfig.fuente_usuario[fuente] = usuario;
+  await _saveUsuariosConfig();
+  showToast("✓ Guardado", "ok", 1500);
+}
+
+async function _saveUsuariosConfig() {
+  await fetch(`${BASE}/api/config/usuarios`, {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(_usuariosConfig),
+  });
+}
+
+document.getElementById("btn-add-usuario")?.addEventListener("click", () => {
+  showPrompt("Nombre del nuevo usuario:", "ej: Empresa, Hijo", async nombre => {
+    const n = nombre.trim();
+    if (!n) return;
+    if ((_usuariosConfig.usuarios || []).includes(n)) {
+      showToast("Ya existe ese usuario.", "err"); return;
+    }
+    _usuariosConfig.usuarios = [...(_usuariosConfig.usuarios || []), n];
+    await _saveUsuariosConfig();
+    _populateUsuarioDropdowns();
+    renderUsuarios();
+    showToast(`✓ Usuario "${n}" agregado`, "ok");
+  });
+});
+
+loadUsuarios();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {

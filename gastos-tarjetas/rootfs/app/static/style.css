@@ -102,6 +102,32 @@ body {
 }
 .tab-content.active { display: block; }
 
+/* ── Sub-tabs (inside ⚙ Config tab) ─────────────────────────────────────────*/
+.subtabs { display: flex; gap: 0; margin-bottom: 1.25rem; border-bottom: 2px solid #ddd; }
+.subtab {
+  padding: .45rem 1.2rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: .88rem;
+  color: #555;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  border-radius: 4px 4px 0 0;
+}
+.subtab:hover { background: #f0f2f8; color: #333; }
+.subtab.active { color: #16213e; font-weight: 600; border-bottom-color: #16213e; }
+.subtab-content { display: none; }
+.subtab-content.active { display: block; }
+
+/* ── Usuarios config ────────────────────────────────────────────────────────*/
+.usuario-chip {
+  display: inline-flex; align-items: center; gap: .3rem;
+  background: #e8eaf0; padding: .3rem .75rem;
+  border-radius: 20px; font-size: .88rem;
+}
+.fuente-usuario-sel { font-size: .85rem; padding: .2rem .4rem; }
+
 /* ── Buttons ─────────────────────────────────────────────────────────────────*/
 
 .btn {

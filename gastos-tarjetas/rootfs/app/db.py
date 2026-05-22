@@ -636,12 +636,42 @@ def _add_months(ym: str, n: int) -> str:
     return f"{y:04d}-{m:02d}"
 
 
-def stats_forecast(meses_futuro: int = 6, meses_historico: int = 3) -> dict:
+def stats_forecast(
+    meses_futuro: int = 6,
+    meses_historico: int = 3,
+    exclude_income_cats: list = None,
+) -> dict:
     """
     Linear-regression forecast on the last `meses_historico` months.
     Returns historical monthly data + projected future months.
+
+    If ``exclude_income_cats`` is provided, those categories are subtracted
+    from each month's income total before fitting the trend line (useful to
+    ignore one-off windfalls like bonuses when projecting).
     """
     historical = monthly_summary()
+
+    if exclude_income_cats:
+        placeholders = ",".join("?" * len(exclude_income_cats))
+        excl_q = f"""
+            SELECT substr(fecha, 1, 7) AS mes,
+              ROUND(SUM(CASE
+                WHEN fuente NOT IN ('{_cc_list}') AND CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL)
+                WHEN fuente IN ('{_cc_list}') AND CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL)
+                ELSE 0 END), 2) AS ingreso_excl
+            FROM gastos
+            WHERE moneda = 'ARS'
+              AND categoria IN ({placeholders})
+            GROUP BY mes
+        """
+        with _conn() as conn:
+            rows = conn.execute(excl_q, list(exclude_income_cats)).fetchall()
+        excl_map = {r["mes"]: float(r["ingreso_excl"]) for r in rows}
+        historical = [
+            {**h, "ingresos": max(0.0, h["ingresos"] - excl_map.get(h["mes"], 0.0))}
+            for h in historical
+        ]
+
     if len(historical) < 2:
         return {"historical": historical, "forecast": []}
 

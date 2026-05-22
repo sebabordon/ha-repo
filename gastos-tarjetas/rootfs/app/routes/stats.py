@@ -34,8 +34,10 @@ def get_stats(
 @router.get("/stats/forecast")
 def get_forecast(
     request: Request,
-    meses:     int = Query(6),
-    historico: int = Query(3),
+    meses:        int = Query(6),
+    historico:    int = Query(3),
+    exclude_cats: Optional[str] = Query(None),
 ):
     require_auth(request)
-    return stats_forecast(meses_futuro=meses, meses_historico=historico)
+    excl = [c.strip() for c in exclude_cats.split(",") if c.strip()] if exclude_cats else None
+    return stats_forecast(meses_futuro=meses, meses_historico=historico, exclude_income_cats=excl)

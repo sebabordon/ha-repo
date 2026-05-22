@@ -1,3 +1,13 @@
+## 0.2.28
+
+- **Mes por defecto en Gastos**: la tabla de gastos ahora carga automáticamente el mes más reciente ≤ hoy en lugar de cargar todos los movimientos. Mejora el rendimiento en la carga inicial.
+- **Forecast — excluir ingresos excepcionales**: nuevo control "+ Excluir de ingresos" en el gráfico de Forecast. Permite excluir categorías específicas (ej. bonos) del cálculo de la línea de tendencia de ingresos. La selección se persiste en `localStorage`.
+- **Tab ⚙ Config**: Importar y Reglas se movieron a un único tab "Config" con sub-tabs. Se agrega nuevo sub-tab **Usuarios** para:
+  - Gestionar la lista de usuarios (Titular, Adicional y cualquier usuario adicional).
+  - Configurar el usuario asignado por defecto al importar cada fuente.
+  - Los dropdowns de usuario en Gastos y Gráficos se actualizan dinámicamente.
+- **Backend — configuración de usuarios**: nuevo endpoint `GET/PUT /api/config/usuarios` con persistencia en `/data/user_config.json`. `upload.py` lee el mapeo fuente→usuario dinámicamente en lugar de usar valores fijos.
+
 ## 0.2.25
 
 - **Edición de fecha en Gastos**: la columna Fecha es ahora un `<input type="date">` editable. Al cambiar la fecha se guarda automáticamente vía `PATCH /api/gastos/{id}/fecha`. Útil para corregir fechas de cuotas mal asignadas por el parser.
