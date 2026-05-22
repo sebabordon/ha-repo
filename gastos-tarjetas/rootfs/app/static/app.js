@@ -127,7 +127,7 @@ function _fmtNum2(n) {
 }
 function _fmtSaldo(n) {
   const v = +n || 0;
-  const dec = Math.abs(v) >= 100000 ? 0 : 2;
+  const dec = Math.abs(v) >= 10000 ? 0 : 2;
   return v.toLocaleString("es-AR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
 }
 
