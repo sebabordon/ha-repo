@@ -1,0 +1,22 @@
+{
+  "name": "Gastos",
+  "short_name": "Gastos",
+  "description": "Gestor de gastos de tarjetas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#16213e",
+  "theme_color": "#16213e",
+  "icons": [
+    {
+      "src": "/static/icono-sb.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icono-sb.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

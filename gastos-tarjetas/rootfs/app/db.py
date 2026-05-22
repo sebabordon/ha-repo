@@ -468,6 +468,36 @@ def apply_match_rules(rules: list[dict]) -> int:
     return total
 
 
+def apply_user_rules(reglas: list[dict]) -> int:
+    """
+    Apply keyword→person rules to all gastos.
+    Rules are evaluated in order; the first matching rule wins.
+    Returns the number of rows updated.
+    """
+    if not reglas:
+        return 0
+    with _conn() as conn:
+        rows = conn.execute("SELECT id, descripcion FROM gastos").fetchall()
+
+    updates = []
+    for row in rows:
+        desc_upper = row["descripcion"].upper()
+        for rule in reglas:
+            palabras = rule.get("palabras", [])
+            if not palabras:
+                continue
+            if any(p.upper() in desc_upper for p in palabras):
+                usuario = rule.get("usuario", "")
+                if usuario:
+                    updates.append((usuario, row["id"]))
+                break
+
+    if updates:
+        with _conn() as conn:
+            conn.executemany("UPDATE gastos SET usuario=? WHERE id=?", updates)
+    return len(updates)
+
+
 def apply_rules_to_all(categorize_fn) -> int:
     """
     Apply rule-based categorization to every gasto that was NOT manually

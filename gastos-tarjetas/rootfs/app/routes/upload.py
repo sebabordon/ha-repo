@@ -33,14 +33,30 @@ async def upload_file(
     if not gastos:
         return {"importados": 0, "total_parseados": 0, "mensaje": "No se encontraron movimientos en el archivo."}
 
-    usuario_default = read_user_config()["fuente_usuario"].get(fuente)
+    user_cfg       = read_user_config()
+    usuario_default = user_cfg["fuente_usuario"].get(fuente)
+    reglas_usuario  = user_cfg.get("reglas_usuario", [])
+
     records = []
     for g in gastos:
         cat, fuente_cat = await categorize(g.descripcion)
         d = g.model_dump()
         d["categoria"] = cat
         d["categoria_fuente"] = fuente_cat
-        d["usuario"] = g.usuario if g.usuario is not None else usuario_default
+        if g.usuario is not None:
+            # Parser detected a specific person (e.g. additional cardholder)
+            d["usuario"] = g.usuario
+        else:
+            # Try user classification rules first, then fall back to source default
+            assigned = None
+            if reglas_usuario:
+                desc_upper = g.descripcion.upper()
+                for rule in reglas_usuario:
+                    palabras = rule.get("palabras", [])
+                    if palabras and any(p.upper() in desc_upper for p in palabras):
+                        assigned = rule.get("usuario") or None
+                        break
+            d["usuario"] = assigned if assigned else usuario_default
         records.append(d)
 
     # Detect the most common month in the imported records (statement month)

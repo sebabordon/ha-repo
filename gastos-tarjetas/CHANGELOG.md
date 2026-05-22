@@ -1,3 +1,10 @@
+## 0.2.31
+
+- **Renombrar "Usuario" → "Persona"** en toda la UI (columna de tabla, gráfico, acordeón Config, encabezados, mensajes). Los campos internos de API/DB (`usuario`) no cambiaron.
+- **Reglas de asignación de persona**: nueva sección en Config → Personas con el mismo patrón de tags que las reglas de categoría. Cada regla define palabras clave + persona destino. La primera regla que coincida con la descripción del gasto gana. Se aplican al importar y con el botón "Reaplicar a todos".
+- **Backend**: `apply_user_rules()` en `db.py`, `POST /api/config/usuarios/apply`, soporte de `reglas_usuario` en `PUT /api/config/usuarios` y en `upload.py` (prioridad: parser > reglas > fuente por defecto).
+- **PWA (acceso directo)**: favicon (`icono-sb.ico/png/svg`), `manifest.json` y service worker (`sw.js`) con caching de assets estáticos. El SW sólo se registra cuando no se usa ingress (`!INGRESS_PREFIX`). Rutas `/manifest.json` y `/sw.js` servidas desde la raíz sin autenticación.
+
 ## 0.2.30
 
 - **Tracking de importaciones**: cada importación queda registrada con fecha, fuente, nombre de archivo y mes del resumen detectado automáticamente (por mes más frecuente en los movimientos). Columna `import_id` agregada a `gastos`.

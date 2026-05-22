@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gastos</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <!-- Favicon & PWA -->
+  <link rel="icon" type="image/x-icon" href="/static/icono-sb.ico">
+  <link rel="icon" type="image/png" sizes="1024x1024" href="/static/icono-sb.png">
+  <link rel="apple-touch-icon" href="/static/icono-sb.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#16213e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gastos">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -95,7 +105,7 @@
           <canvas id="chart-by-fuente"></canvas>
         </div>
         <div class="chart-box">
-          <div class="chart-box-title">Egresos por usuario</div>
+          <div class="chart-box-title">Egresos por persona</div>
           <canvas id="chart-by-usuario"></canvas>
         </div>
 
@@ -201,7 +211,7 @@
               <th>Monto</th>
               <th class="col-moneda">Mon.</th>
               <th>Fuente</th>
-              <th>Usuario</th>
+              <th>Persona</th>
               <th>Categoría</th>
               <th></th>
             </tr>
@@ -324,20 +334,34 @@
       <div class="cfg-section">
         <div class="cfg-section-header" onclick="toggleCfgSection('usuarios')">
           <span class="cfg-arr" id="cfg-arr-usuarios">+</span>
-          Usuarios
+          Personas
         </div>
         <div class="cfg-section-body" id="cfg-body-usuarios" style="display:none">
           <p class="rules-hint">
-            Gestioná los usuarios asociados a los movimientos. Los dos primeros no se pueden eliminar.
-            El <strong>usuario por defecto</strong> se asigna automáticamente al importar según la fuente.
-            Hacé click en <strong>+</strong> al final de la lista para agregar uno nuevo.
+            Gestioná las personas asociadas a los movimientos. Las dos primeras no se pueden eliminar.
+            La <strong>persona por defecto</strong> se asigna automáticamente al importar según la fuente.
+            Hacé click en <strong>+</strong> al final de la lista para agregar una nueva.
           </p>
 
-          <h3 style="font-size:.95rem;margin:.5rem 0 .6rem">Usuarios configurados</h3>
+          <h3 style="font-size:.95rem;margin:.5rem 0 .6rem">Personas configuradas</h3>
           <div id="usuarios-list" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.75rem"></div>
 
-          <h3 style="font-size:.95rem;margin:0 0 .6rem">Usuario por defecto según fuente</h3>
+          <h3 style="font-size:.95rem;margin:0 0 .6rem">Persona por defecto según fuente</h3>
           <div id="fuente-usuario-map"></div>
+
+          <div style="margin-top:1.75rem">
+            <div class="rules-header">
+              <h2>Reglas de asignación de persona</h2>
+              <button id="btn-add-user-rule" class="btn">+ Nueva regla</button>
+              <button id="btn-apply-user-rules" class="btn">Reaplicar a todos</button>
+            </div>
+            <p class="rules-hint">
+              Definí palabras clave para asignar automáticamente una persona al importar.
+              La primera regla que coincida con la descripción del gasto gana.
+              "Reaplicar a todos" reasigna los movimientos ya importados.
+            </p>
+            <div id="user-rules-list"></div>
+          </div>
         </div>
       </div>
 

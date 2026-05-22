@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -38,6 +38,22 @@ app.include_router(config_route.router, prefix="/api",   tags=["config"])
 app.include_router(admin.router,        prefix="/admin", tags=["admin"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/manifest.json")
+async def serve_manifest():
+    """PWA manifest — served from root so scope covers the whole app."""
+    return FileResponse("static/manifest.json", media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+async def serve_sw():
+    """Service worker — must be served from root; header grants scope /."""
+    return FileResponse(
+        "static/sw.js",
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"},
+    )
 
 
 def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectResponse:

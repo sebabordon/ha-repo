@@ -69,7 +69,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.tab === "graficos")    loadCharts();
     if (tab.dataset.tab === "presupuesto") loadPresupuesto();
     if (tab.dataset.tab === "cuentas")     loadCuentas();
-    if (tab.dataset.tab === "config")      renderUsuarios();
+    if (tab.dataset.tab === "config")      { renderUsuarios(); renderUserRules(); }
   });
 });
 
@@ -81,6 +81,14 @@ function toggleCfgSection(id) {
   const open = body.style.display !== "none";
   body.style.display = open ? "none" : "";
   if (arrow) arrow.textContent = open ? "+" : "−";
+}
+
+// ── PWA service worker ────────────────────────────────────────────────────────
+if (!window.INGRESS_PREFIX && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js")
+      .catch(err => console.warn("SW registration failed:", err));
+  });
 }
 
 // ── User info ─────────────────────────────────────────────────────────────────
@@ -1494,14 +1502,20 @@ document.getElementById("btn-add-cuenta").addEventListener("click", () => {
   });
 });
 
-// ── Usuarios (Config tab) ──────────────────────────────────────────────────────
-let _usuariosConfig = {usuarios: ["Titular","Adicional"], fuente_usuario: {}};
+// ── Personas (Config tab) ─────────────────────────────────────────────────────
+let _usuariosConfig = {usuarios: ["Titular","Adicional"], fuente_usuario: {}, reglas_usuario: []};
+let _userRules = [];
 
 async function loadUsuarios() {
   const res = await fetch(`${BASE}/api/config/usuarios`);
   _usuariosConfig = await res.json();
+  _userRules = (_usuariosConfig.reglas_usuario || []).map(r => ({
+    palabras: Array.isArray(r.palabras) ? r.palabras.map(String) : [],
+    usuario:  r.usuario || "",
+  }));
   _populateUsuarioDropdowns();
   renderUsuarios();
+  renderUserRules();
 }
 
 function _populateUsuarioDropdowns() {
@@ -1544,7 +1558,7 @@ function renderUsuarios() {
   const fuMap = _usuariosConfig.fuente_usuario || {};
   map.innerHTML = `
     <table class="presup-table" style="max-width:500px">
-      <thead><tr><th>Fuente</th><th>Usuario por defecto</th></tr></thead>
+      <thead><tr><th>Fuente</th><th>Persona por defecto</th></tr></thead>
       <tbody>
         ${_FUENTES.map(f => `<tr>
           <td>${f.label}</td>
@@ -1578,9 +1592,10 @@ async function saveFuenteUsuario(fuente, usuario) {
 }
 
 async function _saveUsuariosConfig() {
+  _syncUserRules();
   await fetch(`${BASE}/api/config/usuarios`, {
     method: "PUT", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify(_usuariosConfig),
+    body: JSON.stringify({..._usuariosConfig, reglas_usuario: _userRules}),
   });
 }
 
@@ -1601,13 +1616,13 @@ async function saveNewUsuario() {
   const n = (document.getElementById("nuevo-usuario-input")?.value || "").trim();
   if (!n) { renderUsuarios(); return; }
   if ((_usuariosConfig.usuarios || []).includes(n)) {
-    showToast("Ya existe ese usuario.", "err"); return;
+    showToast("Ya existe esa persona.", "err"); return;
   }
   _usuariosConfig.usuarios = [...(_usuariosConfig.usuarios || []), n];
   await _saveUsuariosConfig();
   _populateUsuarioDropdowns();
   renderUsuarios();
-  showToast(`✓ Usuario "${n}" agregado`, "ok");
+  showToast(`✓ Persona "${n}" agregada`, "ok");
 }
 
 function handleAddUsuarioKey(e) {
@@ -1617,6 +1632,100 @@ function handleAddUsuarioKey(e) {
 
 loadUsuarios();
 loadImportaciones();
+
+// ── Reglas de asignación de persona ──────────────────────────────────────────
+
+function renderUserRules() {
+  const list = document.getElementById("user-rules-list");
+  if (!list) return;
+  const users = _usuariosConfig.usuarios || ["Titular", "Adicional"];
+  list.innerHTML = "";
+  _userRules.forEach((rule, i) => {
+    const card = document.createElement("div");
+    card.className = "rule-card";
+    const tagsHtml = rule.palabras.map((w, j) =>
+      `<span class="tag">${escHtml(w)}<button class="tag-x" type="button" onclick="removeUserTag(${i},${j})">×</button></span>`
+    ).join("");
+    const userOpts = users.map(u =>
+      `<option value="${escHtml(u)}" ${rule.usuario === u ? "selected" : ""}>${escHtml(u)}</option>`
+    ).join("");
+    card.innerHTML = `
+      <div class="rule-header">
+        <select class="user-rule-sel" data-i="${i}" style="min-width:140px">
+          <option value="">— Persona —</option>
+          ${userOpts}
+        </select>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeUserRule(${i})">Eliminar</button>
+      </div>
+      <div class="rule-tags" id="user-tags-${i}">${tagsHtml}</div>
+      <div class="rule-add">
+        <input class="tag-input user-tag-input" data-i="${i}"
+               placeholder="Escribí una palabra y presioná Enter…"
+               onkeydown="addUserTag(event,${i})">
+      </div>`;
+    list.appendChild(card);
+  });
+}
+
+function _syncUserRules() {
+  document.querySelectorAll(".user-rule-sel").forEach((sel, i) => {
+    if (_userRules[i]) _userRules[i].usuario = sel.value;
+  });
+}
+
+let _saveUserRulesTimer = null;
+function _scheduleSaveUserRules() {
+  clearTimeout(_saveUserRulesTimer);
+  _saveUserRulesTimer = setTimeout(async () => {
+    _syncUserRules();
+    const reglas = _userRules.filter(r => r.palabras.length > 0 && r.usuario);
+    const res = await fetch(`${BASE}/api/config/usuarios`, {
+      method: "PUT", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({..._usuariosConfig, reglas_usuario: reglas}),
+    });
+    showToast(res.ok ? "✓ Reglas guardadas" : "❌ Error al guardar", res.ok ? "ok" : "err", res.ok ? 2000 : 0);
+  }, 800);
+}
+
+document.getElementById("user-rules-list")?.addEventListener("focusout", _scheduleSaveUserRules);
+
+function removeUserRule(i)   { _syncUserRules(); _userRules.splice(i, 1); renderUserRules(); _scheduleSaveUserRules(); }
+function removeUserTag(i, j) { _syncUserRules(); _userRules[i].palabras.splice(j, 1); renderUserRules(); _scheduleSaveUserRules(); }
+function addUserTag(event, i) {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  const word = event.target.value.trim();
+  if (!word) return;
+  _syncUserRules();
+  if (!_userRules[i].palabras.includes(word)) _userRules[i].palabras.push(word);
+  renderUserRules();
+  document.querySelectorAll(".user-tag-input")[i]?.focus();
+  _scheduleSaveUserRules();
+}
+
+document.getElementById("btn-add-user-rule")?.addEventListener("click", () => {
+  _syncUserRules();
+  _userRules.push({palabras: [], usuario: ""});
+  renderUserRules();
+  const el = document.querySelectorAll(".user-rule-sel").at(-1);
+  el?.focus();
+  el?.scrollIntoView({behavior: "smooth", block: "nearest"});
+});
+
+document.getElementById("btn-apply-user-rules")?.addEventListener("click", async () => {
+  const btn = document.getElementById("btn-apply-user-rules");
+  btn.disabled = true; btn.textContent = "Aplicando…";
+  try {
+    const res  = await fetch(`${BASE}/api/config/usuarios/apply`, {method: "POST"});
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`✓ ${data.asignados} movimientos asignados`, "ok");
+      loadGastos();
+    } else {
+      showToast("Error al aplicar reglas", "err", 0);
+    }
+  } finally { btn.disabled = false; btn.textContent = "Reaplicar a todos"; }
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {

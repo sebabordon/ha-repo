@@ -17,6 +17,7 @@ _DEFAULT_CONFIG: dict = {
         "galicia_mc":  "Titular",
         "mercadopago": "Titular",
     },
+    "reglas_usuario": [],
 }
 
 
@@ -30,12 +31,15 @@ def read_user_config() -> dict:
                 data["usuarios"] = list(_DEFAULT_CONFIG["usuarios"])
             if "fuente_usuario" not in data:
                 data["fuente_usuario"] = dict(_DEFAULT_CONFIG["fuente_usuario"])
+            if "reglas_usuario" not in data:
+                data["reglas_usuario"] = []
             return data
         except Exception:
             pass
     return {
         "usuarios":       list(_DEFAULT_CONFIG["usuarios"]),
         "fuente_usuario": dict(_DEFAULT_CONFIG["fuente_usuario"]),
+        "reglas_usuario": [],
     }
 
 
