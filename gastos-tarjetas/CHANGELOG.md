@@ -1,3 +1,9 @@
+## 0.2.29
+
+- **Fix: gráficos no cargaban al inicio** — `loadCharts()` se llama ahora en el startup junto con `loadMonthlyChart()`.
+- **Config: acordeón en lugar de sub-tabs** — Importar, Reglas y Usuarios son secciones colapsables con botón "+" para expandir; están colapsadas por defecto.
+- **Fix: agregar usuario inline** — El botón "+" al final de la lista de usuarios despliega un input inline (igual que las reglas), sin diálogo modal. Enter guarda, Escape cancela.
+
 ## 0.2.28
 
 - **Mes por defecto en Gastos**: la tabla de gastos ahora carga automáticamente el mes más reciente ≤ hoy en lugar de cargar todos los movimientos. Mejora el rendimiento en la carga inicial.

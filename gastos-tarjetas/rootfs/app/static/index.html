@@ -242,94 +242,102 @@
 
     <!-- ── Tab: Config ──────────────────────────────────────────────────────── -->
     <section id="tab-config" class="tab-content">
-      <div class="subtabs">
-        <button class="subtab active" data-subtab="cfg-importar">Importar</button>
-        <button class="subtab" data-subtab="cfg-reglas">Reglas</button>
-        <button class="subtab" data-subtab="cfg-usuarios">Usuarios</button>
-      </div>
 
-      <!-- ── Sub-tab: Importar ────────────────────────────────────── -->
-      <div id="subtab-cfg-importar" class="subtab-content active">
-        <div class="upload-card">
-          <h2>Importar archivo</h2>
-          <div class="danger-zone">
-            <select id="delete-fuente">
-              <option value="">Todas las fuentes</option>
-              <option value="amex">AMEX</option>
-              <option value="bbva_mc">BBVA Mastercard</option>
-              <option value="bbva_visa">BBVA Visa</option>
-              <option value="bbva_cuenta">BBVA Cuenta</option>
-              <option value="galicia_mc">Galicia Mastercard</option>
-              <option value="mercadopago">MercadoPago</option>
-            </select>
-            <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
-            <span class="danger-hint">Elimina los movimientos de la fuente seleccionada (o todos). Útil para reimportar.</span>
+      <!-- ── Accordion: Importar ──────────────────────────────────── -->
+      <div class="cfg-section">
+        <div class="cfg-section-header" onclick="toggleCfgSection('importar')">
+          <span class="cfg-arr" id="cfg-arr-importar">+</span>
+          Importar
+        </div>
+        <div class="cfg-section-body" id="cfg-body-importar" style="display:none">
+          <div class="upload-card">
+            <div class="danger-zone">
+              <select id="delete-fuente">
+                <option value="">Todas las fuentes</option>
+                <option value="amex">AMEX</option>
+                <option value="bbva_mc">BBVA Mastercard</option>
+                <option value="bbva_visa">BBVA Visa</option>
+                <option value="bbva_cuenta">BBVA Cuenta</option>
+                <option value="galicia_mc">Galicia Mastercard</option>
+                <option value="mercadopago">MercadoPago</option>
+              </select>
+              <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
+              <span class="danger-hint">Elimina los movimientos de la fuente seleccionada (o todos). Útil para reimportar.</span>
+            </div>
+            <div class="form-group">
+              <label>Fuente</label>
+              <select id="upload-fuente">
+                <option value="amex">AMEX Platinum (PDF)</option>
+                <option value="bbva_mc">BBVA Mastercard (PDF)</option>
+                <option value="bbva_visa">BBVA Visa (PDF)</option>
+                <option value="bbva_cuenta">BBVA Cuenta (PDF)</option>
+                <option value="galicia_mc">Galicia Mastercard (PDF)</option>
+                <option value="mercadopago">MercadoPago (XLSX)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Archivo</label>
+              <input type="file" id="upload-file" accept=".pdf,.xls,.xlsx" />
+            </div>
+            <button id="btn-upload" class="btn btn-primary">Importar</button>
+            <div id="upload-result"></div>
           </div>
-          <div class="form-group">
-            <label>Fuente</label>
-            <select id="upload-fuente">
-              <option value="amex">AMEX Platinum (PDF)</option>
-              <option value="bbva_mc">BBVA Mastercard (PDF)</option>
-              <option value="bbva_visa">BBVA Visa (PDF)</option>
-              <option value="bbva_cuenta">BBVA Cuenta (PDF)</option>
-              <option value="galicia_mc">Galicia Mastercard (PDF)</option>
-              <option value="mercadopago">MercadoPago (XLSX)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Archivo</label>
-            <input type="file" id="upload-file" accept=".pdf,.xls,.xlsx" />
-          </div>
-          <button id="btn-upload" class="btn btn-primary">Importar</button>
-          <div id="upload-result"></div>
         </div>
       </div>
 
-      <!-- ── Sub-tab: Reglas ──────────────────────────────────────── -->
-      <div id="subtab-cfg-reglas" class="subtab-content">
-
-        <!-- Categorization rules -->
-        <div class="rules-header">
-          <h2>Reglas de categorización</h2>
-          <button id="btn-add-rule" class="btn">+ Nueva regla</button>
-          <button id="btn-apply-rules" class="btn">Reaplicar a todos</button>
+      <!-- ── Accordion: Reglas ────────────────────────────────────── -->
+      <div class="cfg-section">
+        <div class="cfg-section-header" onclick="toggleCfgSection('reglas')">
+          <span class="cfg-arr" id="cfg-arr-reglas">+</span>
+          Reglas
         </div>
-        <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto. "Reaplicar a todos" categoriza los movimientos ya importados (respeta los que editaste a mano).</p>
-        <div id="rules-list"></div>
+        <div class="cfg-section-body" id="cfg-body-reglas" style="display:none">
 
-        <!-- Match / netting rules -->
-        <div class="match-rules-block">
           <div class="rules-header">
-            <h2>Reglas de emparejado</h2>
-            <button id="btn-add-match-rule" class="btn">+ Nueva regla</button>
-            <button id="btn-apply-match-rules" class="btn">Aplicar todas</button>
+            <h2>Reglas de categorización</h2>
+            <button id="btn-add-rule" class="btn">+ Nueva regla</button>
+            <button id="btn-apply-rules" class="btn">Reaplicar a todos</button>
           </div>
+          <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto. "Reaplicar a todos" categoriza los movimientos ya importados (respeta los que editaste a mano).</p>
+          <div id="rules-list"></div>
+
+          <div class="match-rules-block">
+            <div class="rules-header">
+              <h2>Reglas de emparejado</h2>
+              <button id="btn-add-match-rule" class="btn">+ Nueva regla</button>
+              <button id="btn-apply-match-rules" class="btn">Aplicar todas</button>
+            </div>
+            <p class="rules-hint">
+              Cada regla busca movimientos que coincidan con el <strong>Lado A</strong> y, opcionalmente,
+              los empareja con el <strong>Lado B</strong> (misma ventana de días) para marcarlos con
+              una categoría — ideal para excluir pagos de tarjeta, transferencias entre cuentas, etc.
+            </p>
+            <div id="match-rules-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Accordion: Usuarios ──────────────────────────────────── -->
+      <div class="cfg-section">
+        <div class="cfg-section-header" onclick="toggleCfgSection('usuarios')">
+          <span class="cfg-arr" id="cfg-arr-usuarios">+</span>
+          Usuarios
+        </div>
+        <div class="cfg-section-body" id="cfg-body-usuarios" style="display:none">
           <p class="rules-hint">
-            Cada regla busca movimientos que coincidan con el <strong>Lado A</strong> y, opcionalmente,
-            los empareja con el <strong>Lado B</strong> (misma ventana de días) para marcarlos con
-            una categoría — ideal para excluir pagos de tarjeta, transferencias entre cuentas, etc.
+            Gestioná los usuarios asociados a los movimientos. Los dos primeros no se pueden eliminar.
+            El <strong>usuario por defecto</strong> se asigna automáticamente al importar según la fuente.
+            Hacé click en <strong>+</strong> al final de la lista para agregar uno nuevo.
           </p>
-          <div id="match-rules-list"></div>
+
+          <h3 style="font-size:.95rem;margin:.5rem 0 .6rem">Usuarios configurados</h3>
+          <div id="usuarios-list" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.75rem"></div>
+
+          <h3 style="font-size:.95rem;margin:0 0 .6rem">Usuario por defecto según fuente</h3>
+          <div id="fuente-usuario-map"></div>
         </div>
       </div>
 
-      <!-- ── Sub-tab: Usuarios ────────────────────────────────────── -->
-      <div id="subtab-cfg-usuarios" class="subtab-content">
-        <div class="rules-header">
-          <h2>Usuarios</h2>
-          <button id="btn-add-usuario" class="btn">+ Agregar usuario</button>
-        </div>
-        <p class="rules-hint">
-          Gestioná los usuarios asociados a los movimientos. Los dos primeros no se pueden eliminar.
-          El <strong>usuario por defecto</strong> se asigna automáticamente al importar según la fuente.
-        </p>
-
-        <h3 style="font-size:.95rem;margin:.5rem 0 .6rem">Usuarios configurados</h3>
-        <div id="usuarios-list" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.75rem"></div>
-
-        <h3 style="font-size:.95rem;margin:0 0 .6rem">Usuario por defecto según fuente</h3>
-        <div id="fuente-usuario-map"></div>
-      </div>
     </section>
 
   </main>

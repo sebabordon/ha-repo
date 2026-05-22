@@ -102,23 +102,29 @@ body {
 }
 .tab-content.active { display: block; }
 
-/* ── Sub-tabs (inside ⚙ Config tab) ─────────────────────────────────────────*/
-.subtabs { display: flex; gap: 0; margin-bottom: 1.25rem; border-bottom: 2px solid #ddd; }
-.subtab {
-  padding: .45rem 1.2rem;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: .88rem;
-  color: #555;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  border-radius: 4px 4px 0 0;
+/* ── Config accordion (⚙ tab) ───────────────────────────────────────────────*/
+.cfg-section {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  margin-bottom: .6rem;
+  overflow: hidden;
 }
-.subtab:hover { background: #f0f2f8; color: #333; }
-.subtab.active { color: #16213e; font-weight: 600; border-bottom-color: #16213e; }
-.subtab-content { display: none; }
-.subtab-content.active { display: block; }
+.cfg-section-header {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .7rem 1.1rem;
+  cursor: pointer;
+  background: #f5f6fa;
+  font-weight: 600; font-size: .95rem;
+  user-select: none;
+}
+.cfg-section-header:hover { background: #ebedf5; }
+.cfg-arr {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px;
+  background: #16213e; color: #fff;
+  border-radius: 50%; font-size: .75rem; font-weight: 700; flex-shrink: 0;
+}
+.cfg-section-body { padding: 1rem 1.5rem; }
 
 /* ── Usuarios config ────────────────────────────────────────────────────────*/
 .usuario-chip {
@@ -126,6 +132,11 @@ body {
   background: #e8eaf0; padding: .3rem .75rem;
   border-radius: 20px; font-size: .88rem;
 }
+.usuario-add-chip {
+  cursor: pointer; background: #f0f4ff; border: 1px dashed #8fa8e0;
+  color: #4a6fa5; font-weight: 700; font-size: 1rem; padding: .2rem .65rem;
+}
+.usuario-add-chip:hover { background: #e0e8ff; }
 .fuente-usuario-sel { font-size: .85rem; padding: .2rem .4rem; }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────────*/

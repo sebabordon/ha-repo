@@ -73,16 +73,15 @@ document.querySelectorAll(".tab").forEach(tab => {
   });
 });
 
-// ── Sub-tabs (inside ⚙ Config) ───────────────────────────────────────────────
-document.querySelectorAll(".subtab").forEach(btn => {
-  btn.addEventListener("click", () => {
-    const target = btn.dataset.subtab;
-    document.querySelectorAll(".subtab").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".subtab-content").forEach(s => s.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById(`subtab-${target}`).classList.add("active");
-  });
-});
+// ── Config accordion (⚙ tab) ─────────────────────────────────────────────────
+function toggleCfgSection(id) {
+  const body  = document.getElementById(`cfg-body-${id}`);
+  const arrow = document.getElementById(`cfg-arr-${id}`);
+  if (!body) return;
+  const open = body.style.display !== "none";
+  body.style.display = open ? "none" : "";
+  if (arrow) arrow.textContent = open ? "+" : "−";
+}
 
 // ── User info ─────────────────────────────────────────────────────────────────
 fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {
@@ -172,6 +171,7 @@ function _populateMonthFilter(meses) {
 }
 
 loadMonthlyChart();
+loadCharts();
 
 // ── Charts tab ────────────────────────────────────────────────────────────────
 const _charts = {};
@@ -1489,11 +1489,15 @@ function renderUsuarios() {
   const list = document.getElementById("usuarios-list");
   if (!list) return;
   const users = _usuariosConfig.usuarios || [];
+  // Chips for existing users + an inline "+" chip at the end
   list.innerHTML = users.map((u, i) => `
     <div class="usuario-chip">
       <span>${escHtml(u)}</span>
       ${i >= 2 ? `<button class="tag-x" type="button" onclick="removeUsuario(${i})">×</button>` : ""}
-    </div>`).join("");
+    </div>`).join("") +
+    `<div class="usuario-chip usuario-add-chip" id="usuario-add-chip" onclick="startAddUsuario()" title="Agregar usuario">
+      <span>+</span>
+    </div>`;
 
   const _FUENTES = [
     {id:"amex",        label:"AMEX"},
@@ -1548,20 +1552,36 @@ async function _saveUsuariosConfig() {
   });
 }
 
-document.getElementById("btn-add-usuario")?.addEventListener("click", () => {
-  showPrompt("Nombre del nuevo usuario:", "ej: Empresa, Hijo", async nombre => {
-    const n = nombre.trim();
-    if (!n) return;
-    if ((_usuariosConfig.usuarios || []).includes(n)) {
-      showToast("Ya existe ese usuario.", "err"); return;
-    }
-    _usuariosConfig.usuarios = [...(_usuariosConfig.usuarios || []), n];
-    await _saveUsuariosConfig();
-    _populateUsuarioDropdowns();
-    renderUsuarios();
-    showToast(`✓ Usuario "${n}" agregado`, "ok");
-  });
-});
+function startAddUsuario() {
+  const chip = document.getElementById("usuario-add-chip");
+  if (!chip) return;
+  chip.onclick = null;
+  chip.innerHTML = `
+    <input id="nuevo-usuario-input" type="text" placeholder="Nombre…"
+           style="border:none;background:transparent;outline:none;font-size:.85rem;width:110px"
+           onkeydown="handleAddUsuarioKey(event)">
+    <button class="tag-x" type="button" onclick="saveNewUsuario()">✓</button>
+    <button class="tag-x" type="button" onclick="renderUsuarios()">×</button>`;
+  document.getElementById("nuevo-usuario-input")?.focus();
+}
+
+async function saveNewUsuario() {
+  const n = (document.getElementById("nuevo-usuario-input")?.value || "").trim();
+  if (!n) { renderUsuarios(); return; }
+  if ((_usuariosConfig.usuarios || []).includes(n)) {
+    showToast("Ya existe ese usuario.", "err"); return;
+  }
+  _usuariosConfig.usuarios = [...(_usuariosConfig.usuarios || []), n];
+  await _saveUsuariosConfig();
+  _populateUsuarioDropdowns();
+  renderUsuarios();
+  showToast(`✓ Usuario "${n}" agregado`, "ok");
+}
+
+function handleAddUsuarioKey(e) {
+  if (e.key === "Enter")  { e.preventDefault(); saveNewUsuario(); }
+  if (e.key === "Escape") renderUsuarios();
+}
 
 loadUsuarios();
 
