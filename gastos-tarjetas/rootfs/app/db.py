@@ -32,12 +32,27 @@ def init_db():
                 categoria TEXT,
                 categoria_fuente TEXT,
                 archivo_origen TEXT,
-                usuario TEXT
+                usuario TEXT,
+                import_id INTEGER
             )
         """)
         gcols = {r[1] for r in conn.execute("PRAGMA table_info(gastos)").fetchall()}
         if "usuario" not in gcols:
             conn.execute("ALTER TABLE gastos ADD COLUMN usuario TEXT")
+        if "import_id" not in gcols:
+            conn.execute("ALTER TABLE gastos ADD COLUMN import_id INTEGER")
+
+        # Import batches tracking table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS importaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fuente TEXT NOT NULL,
+                archivo TEXT,
+                mes_resumen TEXT,
+                fecha_import TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now')),
+                cantidad INTEGER DEFAULT 0
+            )
+        """)
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS cuentas (
@@ -93,18 +108,43 @@ def _conn():
         conn.close()
 
 
-def insert_gastos(gastos: list[dict]) -> int:
+def insert_gastos(gastos: list[dict], import_info: dict = None) -> int:
     with _conn() as conn:
+        import_id = None
+        if import_info:
+            cur = conn.execute(
+                "INSERT INTO importaciones (fuente, archivo, mes_resumen) VALUES (?,?,?)",
+                (import_info.get("fuente"), import_info.get("archivo"), import_info.get("mes_resumen")),
+            )
+            import_id = cur.lastrowid
+
         conn.executemany(
             """INSERT INTO gastos
-               (fecha, descripcion, monto, moneda, fuente, categoria, categoria_fuente, archivo_origen, usuario)
-               VALUES (:fecha, :descripcion, :monto, :moneda, :fuente, :categoria, :categoria_fuente, :archivo_origen, :usuario)""",
+               (fecha, descripcion, monto, moneda, fuente, categoria, categoria_fuente, archivo_origen, usuario, import_id)
+               VALUES (:fecha, :descripcion, :monto, :moneda, :fuente, :categoria, :categoria_fuente, :archivo_origen, :usuario, :import_id)""",
             [
-                {**g, "fecha": str(g["fecha"]), "monto": str(g["monto"]), "usuario": g.get("usuario")}
+                {
+                    **g,
+                    "fecha":    str(g["fecha"]),
+                    "monto":    str(g["monto"]),
+                    "usuario":  g.get("usuario"),
+                    "import_id": import_id,
+                }
                 for g in gastos
             ],
         )
-        return conn.execute("SELECT changes()").fetchone()[0]
+        count = conn.execute("SELECT changes()").fetchone()[0]
+        if import_id:
+            conn.execute("UPDATE importaciones SET cantidad = ? WHERE id = ?", (count, import_id))
+        return count
+
+
+def list_importaciones() -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, fuente, archivo, mes_resumen, fecha_import, cantidad FROM importaciones ORDER BY id DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def list_gastos(
@@ -702,10 +742,18 @@ def stats_forecast(
     return {"historical": historical, "forecast": forecast}
 
 
-def delete_all_gastos(fuente: str = None) -> int:
+def delete_all_gastos(fuente: str = None, import_id: int = None) -> int:
     with _conn() as conn:
-        if fuente:
+        if import_id:
+            conn.execute("DELETE FROM gastos WHERE import_id = ?", (import_id,))
+        elif fuente:
             conn.execute("DELETE FROM gastos WHERE fuente = ?", (fuente,))
         else:
             conn.execute("DELETE FROM gastos")
-        return conn.execute("SELECT changes()").fetchone()[0]
+        deleted = conn.execute("SELECT changes()").fetchone()[0]
+        # Remove import batch records that no longer have any gastos
+        conn.execute("""
+            DELETE FROM importaciones
+            WHERE id NOT IN (SELECT DISTINCT import_id FROM gastos WHERE import_id IS NOT NULL)
+        """)
+        return deleted

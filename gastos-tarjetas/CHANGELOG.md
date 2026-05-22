@@ -1,3 +1,9 @@
+## 0.2.30
+
+- **Tracking de importaciones**: cada importación queda registrada con fecha, fuente, nombre de archivo y mes del resumen detectado automáticamente (por mes más frecuente en los movimientos). Columna `import_id` agregada a `gastos`.
+- **Borrar por importación**: el selector de borrado tiene optgroups — "Por fuente" (comportamiento anterior) y "Por importación" (nueva, muestra cada batch con fecha/fuente/mes/archivo/cantidad). Así se puede reimportar un resumen sin tocar el resto.
+- **Backend**: nueva tabla `importaciones`, nueva función `list_importaciones()`, endpoint `GET /api/importaciones`, y `DELETE /api/gastos?import_id=N`.
+
 ## 0.2.29
 
 - **Fix: gráficos no cargaban al inicio** — `loadCharts()` se llama ahora en el startup junto con `loadMonthlyChart()`.

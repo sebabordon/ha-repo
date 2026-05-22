@@ -1,4 +1,5 @@
 import io
+from collections import Counter
 
 from fastapi import APIRouter, File, Form, UploadFile, Request, HTTPException
 
@@ -42,7 +43,16 @@ async def upload_file(
         d["usuario"] = g.usuario if g.usuario is not None else usuario_default
         records.append(d)
 
-    count = insert_gastos(records)
+    # Detect the most common month in the imported records (statement month)
+    fechas = [str(r.get("fecha", ""))[:7] for r in records if r.get("fecha")]
+    mes_resumen = Counter(fechas).most_common(1)[0][0] if fechas else None
+
+    import_info = {
+        "fuente":       fuente,
+        "archivo":      file.filename or fuente,
+        "mes_resumen":  mes_resumen,
+    }
+    count = insert_gastos(records, import_info=import_info)
 
     # Auto-update balance if the parser detected one
     saldo = getattr(PARSERS[fuente], "saldo_final", None)

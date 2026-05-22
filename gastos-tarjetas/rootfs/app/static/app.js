@@ -622,19 +622,51 @@ document.getElementById("transfer-modal").addEventListener("click", function(e) 
   if (e.target === this) closeTransferModal();
 });
 
+// ── Import batches ────────────────────────────────────────────────────────────
+async function loadImportaciones() {
+  const res  = await fetch(`${BASE}/api/importaciones`);
+  const data = await res.json();
+  const grp  = document.getElementById("delete-import-optgroup");
+  if (!grp) return;
+  if (!data.length) {
+    grp.innerHTML = "<option disabled>Sin importaciones registradas</option>";
+    return;
+  }
+  const _FUENTE_LABEL = {
+    amex:"AMEX", bbva_mc:"BBVA MC", bbva_visa:"BBVA Visa",
+    bbva_cuenta:"BBVA Cuenta", galicia_mc:"Galicia MC", mercadopago:"MercadoPago",
+  };
+  grp.innerHTML = data.map(imp => {
+    const fLabel = _FUENTE_LABEL[imp.fuente] || imp.fuente;
+    const mes    = imp.mes_resumen ? ` (${_fmtMes(imp.mes_resumen)})` : "";
+    const arch   = imp.archivo && imp.archivo !== imp.fuente ? ` — ${imp.archivo}` : "";
+    const fecha  = (imp.fecha_import || "").slice(0, 10);
+    const label  = `[${fecha}] ${fLabel}${mes}${arch} · ${imp.cantidad} mov.`;
+    return `<option value="import:${imp.id}">${label}</option>`;
+  }).join("");
+}
+
 // ── Delete all ────────────────────────────────────────────────────────────────
 document.getElementById("btn-delete-all").addEventListener("click", () => {
-  const fuente = document.getElementById("delete-fuente").value;
-  const label  = fuente
-    ? document.querySelector(`#delete-fuente option[value="${fuente}"]`).textContent
+  const val   = document.getElementById("delete-target").value;
+  const label = val
+    ? document.querySelector(`#delete-target option[value="${val}"]`)?.textContent || val
     : "TODAS las fuentes";
-  showConfirm(`⚠️ Eliminar movimientos de: ${label}`, async () => {
-    const url = fuente ? `${BASE}/api/gastos?fuente=${fuente}` : `${BASE}/api/gastos`;
+
+  showConfirm(`⚠️ Eliminar movimientos: ${label}`, async () => {
+    let url;
+    if (val.startsWith("fuente:")) {
+      url = `${BASE}/api/gastos?fuente=${val.slice(7)}`;
+    } else if (val.startsWith("import:")) {
+      url = `${BASE}/api/gastos?import_id=${val.slice(7)}`;
+    } else {
+      url = `${BASE}/api/gastos`;
+    }
     const res  = await fetch(url, {method:"DELETE"});
     const data = await res.json();
     if (res.ok) {
       showToast(`✓ ${data.eliminados} movimientos eliminados`, "ok");
-      loadGastos(); loadMonthlyChart(); loadCategorias();
+      loadGastos(); loadMonthlyChart(); loadCategorias(); loadImportaciones();
     } else { showToast("Error al borrar", "err", 0); }
   });
 });
@@ -652,7 +684,7 @@ document.getElementById("btn-upload").addEventListener("click", async () => {
     const data = await res.json();
     if (res.ok) {
       showResult(result, `✅ ${data.importados} movimientos importados (${data.total_parseados} parseados).`, true);
-      loadGastos(); loadMonthlyChart(); loadCategorias(); loadSaldos();
+      loadGastos(); loadMonthlyChart(); loadCategorias(); loadSaldos(); loadImportaciones();
     } else { showResult(result, `❌ ${data.detail||JSON.stringify(data)}`, false); }
   } catch(e) { showResult(result, `❌ Error de red: ${e}`, false); }
 });
@@ -1584,6 +1616,7 @@ function handleAddUsuarioKey(e) {
 }
 
 loadUsuarios();
+loadImportaciones();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {

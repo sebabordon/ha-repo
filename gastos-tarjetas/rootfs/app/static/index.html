@@ -252,17 +252,20 @@
         <div class="cfg-section-body" id="cfg-body-importar" style="display:none">
           <div class="upload-card">
             <div class="danger-zone">
-              <select id="delete-fuente">
+              <select id="delete-target" style="min-width:240px">
                 <option value="">Todas las fuentes</option>
-                <option value="amex">AMEX</option>
-                <option value="bbva_mc">BBVA Mastercard</option>
-                <option value="bbva_visa">BBVA Visa</option>
-                <option value="bbva_cuenta">BBVA Cuenta</option>
-                <option value="galicia_mc">Galicia Mastercard</option>
-                <option value="mercadopago">MercadoPago</option>
+                <optgroup label="Por fuente">
+                  <option value="fuente:amex">AMEX</option>
+                  <option value="fuente:bbva_mc">BBVA Mastercard</option>
+                  <option value="fuente:bbva_visa">BBVA Visa</option>
+                  <option value="fuente:bbva_cuenta">BBVA Cuenta</option>
+                  <option value="fuente:galicia_mc">Galicia Mastercard</option>
+                  <option value="fuente:mercadopago">MercadoPago</option>
+                </optgroup>
+                <optgroup label="Por importación" id="delete-import-optgroup"></optgroup>
               </select>
               <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
-              <span class="danger-hint">Elimina los movimientos de la fuente seleccionada (o todos). Útil para reimportar.</span>
+              <span class="danger-hint">Eliminá por fuente o por importación individual. Útil para reimportar un resumen sin perder el resto.</span>
             </div>
             <div class="form-group">
               <label>Fuente</label>

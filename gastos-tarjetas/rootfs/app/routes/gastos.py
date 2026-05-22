@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from auth import require_auth
 from categorizer import auto_add_keyword_to_rule
-from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, update_gasto_fecha, delete_all_gastos, get_gasto, delete_gasto_manual
+from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, update_gasto_fecha, delete_all_gastos, get_gasto, delete_gasto_manual, list_importaciones
 
 router = APIRouter()
 
@@ -25,6 +25,12 @@ def _parse_categorias(categorias: Optional[str]) -> Optional[list]:
 def get_monthly(request: Request):
     require_auth(request)
     return monthly_summary()
+
+
+@router.get("/importaciones")
+def get_importaciones(request: Request):
+    require_auth(request)
+    return list_importaciones()
 
 
 @router.get("/categorias")
@@ -121,10 +127,14 @@ def post_mark_transfers(body: dict, request: Request):
 
 
 @router.delete("/gastos")
-def delete_all(request: Request, fuente: Optional[str] = Query(None)):
+def delete_all(
+    request: Request,
+    fuente:    Optional[str] = Query(None),
+    import_id: Optional[int] = Query(None),
+):
     require_auth(request)
-    deleted = delete_all_gastos(fuente=fuente)
-    return {"ok": True, "eliminados": deleted, "fuente": fuente}
+    deleted = delete_all_gastos(fuente=fuente, import_id=import_id)
+    return {"ok": True, "eliminados": deleted, "fuente": fuente, "import_id": import_id}
 
 
 @router.delete("/gastos/{gasto_id}")
