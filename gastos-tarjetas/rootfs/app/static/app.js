@@ -1751,10 +1751,17 @@ async function saveRenameUsuario(i) {
   // Propagate into user rules
   _userRules.forEach(r => { if (r.usuario === oldName) r.usuario = newName; });
   await _saveUsuariosConfig();
+  // Also rename in existing gastos rows in the DB
+  const dbRes = await fetch(`${BASE}/api/config/usuarios/rename-db`, {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({old: oldName, new: newName}),
+  });
+  const dbData = dbRes.ok ? await dbRes.json() : {};
   _populateUsuarioDropdowns();
   renderUsuarios();
   renderUserRules();
-  showToast(`✓ "${oldName}" → "${newName}"`, "ok", 2000);
+  const extra = dbData.actualizados > 0 ? ` (${dbData.actualizados} gastos actualizados)` : "";
+  showToast(`✓ "${oldName}" → "${newName}"${extra}`, "ok", 3000);
 }
 
 function handleRenameUsuarioKey(e, i) {

@@ -1,3 +1,10 @@
+## 0.2.36
+
+- **Fix persona de adicional en importación**: los parsers de AMEX y BBVA siempre emitían `"Adicional"` hardcodeado; ahora `upload.py` lo traduce al nombre real configurado en la slot 1 de personas (ej. "Mada"). Si renombrás la persona, los próximos imports ya usan el nombre nuevo.
+- **Rename de persona propaga a la DB**: al renombrar una persona en Config → Personas, ahora también se actualiza `usuario` en todos los registros existentes de la tabla `gastos` (antes solo se actualizaba el config). El toast confirma cuántos gastos fueron actualizados.
+- **Nuevo endpoint** `POST /api/config/usuarios/rename-db` + `rename_usuario_in_gastos()` en `db.py`.
+- **Edición inline de keywords** (doble clic en etiquetas de reglas de categoría y persona): Enter guarda, Escape cancela, blur guarda, campo vacío elimina.
+
 ## 0.2.35
 
 - **Unificación de convención de signos**: a partir de esta versión todos los movimientos en la BD usan `monto > 0 = egreso` y `monto < 0 = ingreso`, sin excepción de fuente. Se eliminan los CASE especiales por fuente en todas las queries SQL.

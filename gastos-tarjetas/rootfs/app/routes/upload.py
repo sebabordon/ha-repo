@@ -33,9 +33,16 @@ async def upload_file(
     if not gastos:
         return {"importados": 0, "total_parseados": 0, "mensaje": "No se encontraron movimientos en el archivo."}
 
-    user_cfg       = read_user_config()
+    user_cfg        = read_user_config()
     usuario_default = user_cfg["fuente_usuario"].get(fuente)
     reglas_usuario  = user_cfg.get("reglas_usuario", [])
+    # Map parser's hardcoded persona slots to whatever names the user configured.
+    # Parsers always emit "Titular" (slot 0) or "Adicional" (slot 1); translate
+    # those to the actual configured persona names so renames are respected.
+    _usuarios = user_cfg.get("usuarios", ["Titular", "Adicional"])
+    _parser_persona_map = {}
+    if len(_usuarios) > 0: _parser_persona_map["Titular"]  = _usuarios[0]
+    if len(_usuarios) > 1: _parser_persona_map["Adicional"] = _usuarios[1]
 
     # Non-CC parsers return negative monto for expenses; normalize to positive=egreso.
     needs_flip = fuente not in _CC_FUENTES
@@ -49,8 +56,9 @@ async def upload_file(
         if needs_flip and d["monto"] != 0:
             d["monto"] = -float(d["monto"])
         if g.usuario is not None:
-            # Parser detected a specific person (e.g. additional cardholder)
-            d["usuario"] = g.usuario
+            # Parser detected a specific person (e.g. additional cardholder).
+            # Translate hardcoded slot name ("Adicional") to the user-configured name.
+            d["usuario"] = _parser_persona_map.get(g.usuario, g.usuario)
         else:
             # Try user classification rules first, then fall back to source default
             assigned = None

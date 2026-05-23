@@ -335,6 +335,16 @@ def update_usuario(gasto_id: int, usuario: str):
         conn.execute("UPDATE gastos SET usuario = ? WHERE id = ?", (usuario or None, gasto_id))
 
 
+def rename_usuario_in_gastos(old_name: str, new_name: str) -> int:
+    """Rename all occurrences of a persona in the gastos table. Returns rows updated."""
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE gastos SET usuario = ? WHERE usuario = ?",
+            (new_name.strip(), old_name.strip()),
+        )
+        return conn.execute("SELECT changes()").fetchone()[0]
+
+
 def delete_gastos_by_archivo(archivo: str):
     with _conn() as conn:
         conn.execute("DELETE FROM gastos WHERE archivo_origen = ?", (archivo,))

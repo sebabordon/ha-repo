@@ -41,3 +41,16 @@ def apply_user_rules_endpoint(request: Request):
     from db import apply_user_rules
     count = apply_user_rules(reglas)
     return {"asignados": count}
+
+
+@router.post("/config/usuarios/rename-db")
+def rename_usuario_in_db(body: dict, request: Request):
+    """Rename a persona in all existing gastos rows (called after UI rename)."""
+    require_auth(request)
+    old_name = str(body.get("old", "")).strip()
+    new_name = str(body.get("new", "")).strip()
+    if not old_name or not new_name or old_name == new_name:
+        return {"actualizados": 0}
+    from db import rename_usuario_in_gastos
+    count = rename_usuario_in_gastos(old_name, new_name)
+    return {"actualizados": count}
