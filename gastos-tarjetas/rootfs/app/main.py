@@ -1,12 +1,13 @@
 import os
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, admin, config_route
 from db import init_db
+from config import APP_VERSION
 
 app = FastAPI(title="Gastos", docs_url=None, redoc_url=None)
 
@@ -48,11 +49,16 @@ async def serve_manifest():
 
 @app.get("/sw.js")
 async def serve_sw():
-    """Service worker — must be served from root; header grants scope /."""
-    return FileResponse(
-        "static/sw.js",
+    """Service worker — served from root with versioned cache name to bust stale caches."""
+    with open("static/sw.js") as f:
+        content = f.read()
+    # Inject the current app version so cache name changes on every release,
+    # invalidating cached static assets automatically.
+    content = content.replace('"gastos-v0.2.32"', f'"gastos-v{APP_VERSION}"')
+    return PlainTextResponse(
+        content,
         media_type="application/javascript",
-        headers={"Service-Worker-Allowed": "/"},
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
     )
 
 

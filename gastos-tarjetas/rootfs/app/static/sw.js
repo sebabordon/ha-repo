@@ -1,5 +1,5 @@
 /* Gastos — service worker (minimal, cache-first for statics) */
-const CACHE = "gastos-v1";
+const CACHE = "gastos-v0.2.32";
 const PRECACHE = ["/", "/static/app.js", "/static/style.css"];
 
 self.addEventListener("install", e => {
