@@ -75,7 +75,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.tab === "graficos")    loadCharts();
     if (tab.dataset.tab === "presupuesto") loadPresupuesto();
     if (tab.dataset.tab === "cuentas")     loadCuentas();
-    if (tab.dataset.tab === "config")      { renderUsuarios(); renderUserRules(); }
+    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); }
   });
 });
 
@@ -359,9 +359,53 @@ function renderCatChips(cats) {
     const chip = document.createElement("span");
     chip.className = `cat-chip${_selectedCats.has(cat)?" active":""}`;
     chip.textContent = cat;
+    chip.title = "Click para filtrar · Doble clic para renombrar";
     chip.onclick = () => toggleCat(cat);
+    chip.ondblclick = (e) => { e.stopPropagation(); startRenameCat(chip, cat); };
     container.appendChild(chip);
   });
+}
+
+function startRenameCat(chip, oldCat) {
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.value = oldCat;
+  inp.className = "tag-edit-input";
+  inp.style.cssText = "font-size:.8rem;padding:.2rem .5rem;border-radius:12px;min-width:80px;max-width:200px";
+  inp.title = "Enter para guardar · Esc para cancelar · Vacío para limpiar";
+
+  let saved = false;
+  async function doSave() {
+    if (saved) return; saved = true;
+    const newCat = inp.value.trim();
+    if (newCat === oldCat) { loadCategorias(); return; }
+    const res = await fetch(`${BASE}/api/categorias/rename`, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({old: oldCat, new: newCat}),
+    });
+    const data = res.ok ? await res.json() : {};
+    if (res.ok) {
+      const msg = newCat
+        ? `✓ "${oldCat}" → "${newCat}" (${data.actualizados} gastos)`
+        : `✓ Categoría "${oldCat}" eliminada de ${data.actualizados} gastos`;
+      showToast(msg, "ok", 3000);
+      if (_selectedCats.has(oldCat)) {
+        _selectedCats.delete(oldCat);
+        if (newCat) _selectedCats.add(newCat);
+      }
+    } else {
+      showToast("Error al renombrar categoría", "err");
+    }
+    loadCategorias();
+    loadGastos();
+  }
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter")  { e.preventDefault(); doSave(); }
+    if (e.key === "Escape") { saved = true; loadCategorias(); }
+  });
+  inp.addEventListener("blur", doSave);
+  chip.replaceWith(inp);
+  inp.focus(); inp.select();
 }
 
 function toggleSinCat() {
@@ -836,14 +880,40 @@ document.getElementById("btn-apply-rules").addEventListener("click", async () =>
 loadRules();
 
 // ── Match rules ───────────────────────────────────────────────────────────────
-const FUENTE_OPTS = `
-  <option value="">Cualquier fuente</option>
-  <option value="amex">AMEX</option>
-  <option value="bbva_mc">BBVA Mastercard</option>
-  <option value="bbva_visa">BBVA Visa</option>
-  <option value="bbva_cuenta">BBVA Cuenta</option>
-  <option value="galicia_mc">Galicia Mastercard</option>
-  <option value="mercadopago">MercadoPago</option>`;
+const _FUENTES_FALLBACK = [
+  {fuente:"amex",        nombre:"AMEX"},
+  {fuente:"bbva_mc",     nombre:"BBVA Mastercard"},
+  {fuente:"bbva_visa",   nombre:"BBVA Visa"},
+  {fuente:"bbva_cuenta", nombre:"BBVA Cuenta"},
+  {fuente:"galicia_mc",  nombre:"Galicia Mastercard"},
+  {fuente:"mercadopago", nombre:"MercadoPago"},
+];
+
+function _buildFuenteOpts() {
+  const src = _cuentasData.length > 0 ? _cuentasData : _FUENTES_FALLBACK;
+  return `<option value="">Cualquier fuente</option>` +
+    src.map(c => `<option value="${escHtml(c.fuente)}">${escHtml(c.nombre)}</option>`).join("");
+}
+
+function _populateFuenteSelects() {
+  const src = _cuentasData.length > 0 ? _cuentasData : _FUENTES_FALLBACK;
+  const optHtml = `<option value="">Todas las fuentes</option>` +
+    src.map(c => `<option value="${escHtml(c.fuente)}">${escHtml(c.nombre)}</option>`).join("");
+  ["filter-fuente","cf-fuente"].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = optHtml;
+    if (cur) sel.value = cur;
+  });
+  // delete-target "Por fuente" optgroup
+  const dtGroup = document.querySelector('#delete-target optgroup[label="Por fuente"]');
+  if (dtGroup) {
+    dtGroup.innerHTML = src.map(c =>
+      `<option value="fuente:${escHtml(c.fuente)}">${escHtml(c.nombre)}</option>`
+    ).join("");
+  }
+}
 
 let _matchRules = [];
 
@@ -872,13 +942,13 @@ function renderMatchRules() {
         <div class="match-side">
           <div class="match-side-label">Lado A <span class="match-side-hint">(obligatorio)</span></div>
           <input class="match-patron-a" data-i="${i}" value="${escHtml(r.patron_a)}" placeholder="Patrón en descripción">
-          <select class="match-fuente-a" data-i="${i}">${FUENTE_OPTS}</select>
+          <select class="match-fuente-a" data-i="${i}">${_buildFuenteOpts()}</select>
         </div>
         <div class="match-arrow-col">↔</div>
         <div class="match-side">
           <div class="match-side-label">Lado B <span class="match-side-hint">(opcional, para emparejado)</span></div>
           <input class="match-patron-b" data-i="${i}" value="${escHtml(r.patron_b||"")}" placeholder="Patrón (vacío = cualquiera)">
-          <select class="match-fuente-b" data-i="${i}">${FUENTE_OPTS}</select>
+          <select class="match-fuente-b" data-i="${i}">${_buildFuenteOpts()}</select>
         </div>
       </div>
       <div class="match-rule-footer">
@@ -965,6 +1035,9 @@ let _widgetCuentas = [];
 async function loadSaldos() {
   const res    = await fetch(`${BASE}/api/cuentas`);
   _widgetCuentas = await res.json();
+  // Reuse the same fetch to keep fuente dropdowns up-to-date
+  _cuentasData = _widgetCuentas;
+  _populateFuenteSelects();
   renderSaldos(_widgetCuentas.filter(c => c.activa));
 }
 
@@ -1325,6 +1398,7 @@ let _cuentasData = [];
 async function loadCuentas() {
   const res = await fetch(`${BASE}/api/cuentas`);
   _cuentasData = await res.json();
+  _populateFuenteSelects();
   renderCuentas();
 }
 
@@ -1632,7 +1706,7 @@ function renderUsuarios() {
       <span>+</span>
     </div>`;
 
-  const _FUENTES = [
+  const _autoFuentesFallback = [
     {id:"amex",        label:"AMEX"},
     {id:"bbva_mc",     label:"BBVA Mastercard"},
     {id:"bbva_visa",   label:"BBVA Visa"},
@@ -1640,6 +1714,9 @@ function renderUsuarios() {
     {id:"galicia_mc",  label:"Galicia MC"},
     {id:"mercadopago", label:"MercadoPago"},
   ];
+  const _FUENTES = _cuentasData.length > 0
+    ? _cuentasData.filter(c => c.tipo !== "manual").map(c => ({id: c.fuente, label: c.nombre}))
+    : _autoFuentesFallback;
   const map = document.getElementById("fuente-usuario-map");
   if (!map) return;
   const fuMap = _usuariosConfig.fuente_usuario || {};

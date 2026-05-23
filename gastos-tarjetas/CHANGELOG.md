@@ -1,3 +1,11 @@
+## 0.2.37
+
+- **Combos de fuente dinámicos**: los selectores de fuente en los filtros de Gastos, Gráficos, Eliminar por fuente y las reglas de emparejado ahora se construyen a partir de las cuentas configuradas (via `/api/cuentas`). Reflejan automáticamente cambios de nombre de cuenta (ej. "BBVA ARS" en lugar de "BBVA Cuenta") y cuentas manuales.
+- **Tabla fuente→persona dinámica**: la tabla de asignación de fuente a persona en Config → Personas también usa los nombres reales de las cuentas.
+- **Renombrar categoría**: doble clic en cualquier chip de categoría abre un editor inline. Enter/blur guarda, Escape cancela. Campo vacío limpia la categoría de todos los gastos (útil para eliminar categorías con typos sin gastos asociados). Llama a `POST /api/categorias/rename`.
+- **Config tab refresca reglas**: al hacer clic en la pestaña Config, las reglas de categoría y de emparejado se recargan del servidor para reflejar aprendizaje automático (keywords auto-agregadas al categorizar gastos).
+- **Fix Galicia MC — cuotas usan fecha del resumen**: los pagos en cuotas (`CUOTA DEL MES`) y débitos automáticos (`DEBITOS AUTOMATICOS`) usaban la fecha original de compra (ej. Nov-25) en lugar de la del resumen actual. Ahora se detecta la fecha de cierre del resumen (3er fecha en la fila de 6 fechas del encabezado) y se reasigna al mes de liquidación. El indicador de cuota (`NN/NN`) se elimina de la descripción almacenada.
+
 ## 0.2.36
 
 - **Fix persona de adicional en importación**: los parsers de AMEX y BBVA siempre emitían `"Adicional"` hardcodeado; ahora `upload.py` lo traduce al nombre real configurado en la slot 1 de personas (ej. "Mada"). Si renombrás la persona, los próximos imports ya usan el nombre nuevo.

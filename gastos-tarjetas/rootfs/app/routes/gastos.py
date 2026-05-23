@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from auth import require_auth
 from categorizer import auto_add_keyword_to_rule
-from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, update_gasto_fecha, delete_all_gastos, get_gasto, delete_gasto_manual, list_importaciones
+from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, update_gasto_fecha, delete_all_gastos, get_gasto, delete_gasto_manual, list_importaciones, rename_categoria_in_gastos
 
 router = APIRouter()
 
@@ -37,6 +37,19 @@ def get_importaciones(request: Request):
 def get_categorias(request: Request):
     require_auth(request)
     return list_categorias()
+
+
+@router.post("/categorias/rename")
+def post_rename_categoria(body: dict, request: Request):
+    """Rename or clear a category across all gastos.
+    {old: "OldName", new: "NewName"} — pass new="" to clear."""
+    require_auth(request)
+    old = str(body.get("old", "")).strip()
+    new = str(body.get("new", "")).strip()
+    if not old:
+        return {"actualizados": 0}
+    count = rename_categoria_in_gastos(old, new or None)
+    return {"actualizados": count}
 
 
 @router.get("/gastos/export")
