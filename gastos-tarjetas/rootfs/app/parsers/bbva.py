@@ -38,10 +38,11 @@ _TITULAR2_RE = re.compile(rf"Consumos\s+{re.escape(TITULAR2_NAME)}", re.IGNORECA
 _DATE_RE = re.compile(r"^\d{2}-[A-Za-z]{3}-\d{2}$")
 _INSTALL_RE = re.compile(r"\s+C\.(\d+)/(\d+)$")
 
-_TAX_SKIP = re.compile(
-    r"^(IIBB|IVA RG|DB\.RG|CR\.RG|SU PAGO|SALDO|TOTAL CONSUMOS|TOTAL DE CARGOS)",
-    re.IGNORECASE,
-)
+# Only skip actual payment rows; taxes, withholdings and credit returns are
+# intentionally included. Negative amounts (credits) come through as ingresos.
+# SALDO / TOTAL CONSUMOS rows have no date prefix so they are already excluded
+# by the _DATE_RE guard above.
+_SKIP_RE = re.compile(r"^SU PAGO\b", re.IGNORECASE)
 
 # Column boundaries
 _ARS_X0 = 440.0
@@ -127,7 +128,7 @@ class BBVAParser(BaseParser):
                     # Remove installment suffix (C.03/12) from stored description
                     description = _INSTALL_RE.sub("", desc_raw).strip()
 
-                    if not description or _TAX_SKIP.match(description):
+                    if not description or _SKIP_RE.match(description):
                         continue
                     # Skip header/summary rows where description looks like a date or balance
                     if re.match(r"^\d{2}-[A-Za-z]{3}-\d{2}", description):
@@ -144,9 +145,11 @@ class BBVAParser(BaseParser):
                     ars = parse_ar_amount("".join(w["text"] for w in ars_words))
                     usd = parse_ar_amount("".join(w["text"] for w in usd_words))
 
-                    if usd and usd > 0:
+                    # Include both positive (charges) and negative (credits/refunds).
+                    # upload.py normalises the sign for all CC sources at import time.
+                    if usd:
                         gastos.append(self._gasto(fecha, description, usd, Moneda.USD, filename, usuario=current_usuario))
-                    elif ars and ars > 0:
+                    elif ars:
                         gastos.append(self._gasto(fecha, description, ars, Moneda.ARS, filename, usuario=current_usuario))
 
         return gastos
