@@ -192,16 +192,18 @@ const _charts = {};
 
 function _chartParams() {
   const p = new URLSearchParams();
-  const fuente  = document.getElementById("cf-fuente").value;
-  const usuario = document.getElementById("cf-usuario").value;
-  const mes     = document.getElementById("cf-mes").value;
-  const meses   = document.getElementById("cf-meses").value;
-  const moneda  = document.getElementById("cf-moneda").value;
+  const fuente     = document.getElementById("cf-fuente").value;
+  const usuario    = document.getElementById("cf-usuario").value;
+  const mes        = document.getElementById("cf-mes").value;
+  const meses      = document.getElementById("cf-meses").value;
+  const moneda     = document.getElementById("cf-moneda").value;
+  const excluirEsp = document.getElementById("chk-excluir-especiales-graf")?.checked ?? true;
   if (fuente)  p.set("fuente",  fuente);
   if (usuario) p.set("usuario", usuario);
   if (mes)     p.set("mes", mes);
   else         p.set("meses", meses);
   if (moneda)  p.set("moneda", moneda);
+  p.set("excluir_especiales", excluirEsp ? "true" : "false");
   return p;
 }
 
@@ -476,11 +478,13 @@ function _gastosParams() {
   const mes       = document.getElementById("filter-mes").value;
   const moneda    = document.getElementById("filter-moneda").value;
   const importId  = document.getElementById("filter-import")?.value;
+  const excluirEsp = document.getElementById("chk-excluir-especiales")?.checked;
   if (fuente)    p.set("fuente",    fuente);
   if (usuario)   p.set("usuario",   usuario);
   if (mes)       p.set("mes",       mes);
   if (moneda)    p.set("moneda",    moneda);
   if (importId)  p.set("import_id", importId);
+  if (excluirEsp) p.set("excluir_especiales", "true");
   if (_sinCat) {
     p.set("sin_categoria", "true");
   } else if (_selectedCats.size > 0) {
@@ -599,6 +603,8 @@ async function saveUsuario(id, sel) {
 
 ["filter-fuente","filter-usuario","filter-mes","filter-moneda","filter-import"].forEach(id =>
   document.getElementById(id).addEventListener("change", function() { this.blur(); loadGastos(); }));
+document.getElementById("chk-excluir-especiales").addEventListener("change", loadGastos);
+document.getElementById("chk-excluir-especiales-graf").addEventListener("change", loadCharts);
 document.getElementById("btn-load").addEventListener("click", loadGastos);
 document.getElementById("btn-export").addEventListener("click", () =>
   window.open(`${BASE}/api/gastos/export?${_gastosParams()}`, "_blank"));
@@ -814,6 +820,7 @@ async function loadRules() {
   _rules = (data.reglas||[]).map(r => ({
     palabras: Array.isArray(r.palabras) ? r.palabras.map(String) : _patternToWords(r.patron||""),
     categoria: r.categoria||"",
+    especial: !!r.especial,
   }));
   renderRules();
 }
@@ -828,13 +835,16 @@ function renderRules() {
   list.innerHTML = "";
   _rules.forEach((rule,i) => {
     const card = document.createElement("div");
-    card.className = "rule-card";
+    card.className = "rule-card" + (rule.especial ? " rule-especial" : "");
     const tagsHtml = rule.palabras.map((w,j) =>
       `<span class="tag"><span class="tag-label" title="Doble clic para editar" ondblclick="editTag(${i},${j})">${escHtml(w)}</span><button class="tag-x" type="button" onclick="removeTag(${i},${j})">×</button></span>`
     ).join("");
     card.innerHTML = `
       <div class="rule-header">
         <input class="rule-cat" data-i="${i}" value="${escHtml(rule.categoria)}" placeholder="Nombre de categoría">
+        <label class="rule-especial-label" title="Categoría especial: se excluye de totales y gráficos">
+          <input type="checkbox" class="rule-especial-chk" data-i="${i}" ${rule.especial?"checked":""}> Especial
+        </label>
         <button type="button" class="btn btn-danger btn-sm" onclick="removeRule(${i})">Eliminar</button>
       </div>
       <div class="rule-tags" id="tags-${i}">${tagsHtml}</div>
@@ -844,10 +854,21 @@ function renderRules() {
       </div>`;
     list.appendChild(card);
   });
+  // Wire especial checkboxes immediately (they fire _scheduleSaveRules on change)
+  document.querySelectorAll(".rule-especial-chk").forEach(chk => {
+    chk.addEventListener("change", function() {
+      const i = parseInt(this.dataset.i);
+      _syncRules();
+      _rules[i].especial = this.checked;
+      this.closest(".rule-card").classList.toggle("rule-especial", this.checked);
+      _scheduleSaveRules();
+    });
+  });
 }
 
 function _syncRules() {
   document.querySelectorAll(".rule-cat").forEach((inp,i) => { if (_rules[i]) _rules[i].categoria = inp.value; });
+  document.querySelectorAll(".rule-especial-chk").forEach((chk,i) => { if (_rules[i]) _rules[i].especial = chk.checked; });
 }
 
 // Auto-save with debounce
@@ -856,7 +877,9 @@ function _scheduleSaveRules() {
   clearTimeout(_saveRulesTimer);
   _saveRulesTimer = setTimeout(async () => {
     _syncRules();
-    const reglas = _rules.filter(r => r.palabras.length > 0 && r.categoria.trim());
+    const reglas = _rules
+      .filter(r => r.palabras.length > 0 && r.categoria.trim())
+      .map(r => ({palabras: r.palabras, categoria: r.categoria, especial: !!r.especial}));
     const res = await fetch(`${BASE}/api/rules`, {
       method:"PUT", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({reglas}),
@@ -907,7 +930,7 @@ function editTag(i, j) {
 }
 
 document.getElementById("btn-add-rule").addEventListener("click", () => {
-  _syncRules(); _rules.push({palabras:[],categoria:""}); renderRules();
+  _syncRules(); _rules.push({palabras:[],categoria:"",especial:false}); renderRules();
   const el = document.querySelectorAll(".rule-cat").at(-1);
   el?.focus();
   el?.scrollIntoView({behavior:"smooth", block:"nearest"});

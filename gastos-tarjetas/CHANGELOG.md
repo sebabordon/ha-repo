@@ -1,3 +1,12 @@
+## 0.2.40
+
+- **Categorías especiales**: las reglas de categorización ahora tienen un checkbox "Especial". Las categorías marcadas como especiales se excluyen de totales y gráficos. Dos checkboxes "Sin especiales" (activos por defecto) en las solapas Gastos y Gráficos controlan la exclusión.
+- **Siempre excluido en el gráfico superior**: el chart mensual de la página principal siempre excluye categorías especiales.
+- **Categorías especiales built-in**: "Transferencia" y "Transferencia Intercuentas" siempre se excluyen de los totales (sin necesidad de crear regla).
+- **🔁 Transferencias → "Transferencia Intercuentas"**: el botón de matching automático ahora categoriza como "Transferencia Intercuentas" en lugar de "Transferencia".
+- **Excluye especiales en stats**: `/api/stats` y `/api/gastos/monthly` excluyen categorías especiales por defecto; se puede desactivar con `excluir_especiales=false`.
+- **`GET /api/categorias/especiales`**: nuevo endpoint que retorna la lista de categorías especiales activas.
+
 ## 0.2.39
 
 - **Filtro por importación en Gastos**: nuevo combo "+" en la barra de filtros de la solapa Gastos que permite filtrar todos los movimientos de una importación específica. Oculto por default; se despliega con el botón `+` y colapsa limpiando el filtro. Útil para detectar inconsistencias en imports recientes.

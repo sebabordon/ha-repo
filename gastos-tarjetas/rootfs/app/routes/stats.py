@@ -12,22 +12,24 @@ router = APIRouter()
 @router.get("/stats")
 def get_stats(
     request: Request,
-    fuente:  Optional[str] = Query(None),
-    usuario: Optional[str] = Query(None),
-    mes:     Optional[str] = Query(None),
-    meses:   int = Query(6),
-    moneda:  str = Query('ARS'),
+    fuente:              Optional[str] = Query(None),
+    usuario:             Optional[str] = Query(None),
+    mes:                 Optional[str] = Query(None),
+    meses:               int  = Query(6),
+    moneda:              str  = Query('ARS'),
+    excluir_especiales:  bool = Query(True),
 ):
     require_auth(request)
     if moneda not in ('ARS', 'USD'):
         moneda = 'ARS'
-    kw = dict(fuente=fuente, usuario=usuario, mes=mes, meses=meses, moneda=moneda)
+    kw = dict(fuente=fuente, usuario=usuario, mes=mes, meses=meses, moneda=moneda,
+              excluir_especiales=excluir_especiales)
     return {
         "by_category":         stats_by_category(**kw),
-        "by_fuente":           stats_by_fuente(usuario=usuario, mes=mes, meses=meses, moneda=moneda),
-        "by_usuario":          stats_by_usuario(fuente=fuente, mes=mes, meses=meses, moneda=moneda),
+        "by_fuente":           stats_by_fuente(usuario=usuario, mes=mes, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales),
+        "by_usuario":          stats_by_usuario(fuente=fuente, mes=mes, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales),
         "top_descriptions":    stats_top_descriptions(**kw),
-        "monthly_by_category": stats_monthly_by_category(fuente=fuente, usuario=usuario, meses=meses, moneda=moneda),
+        "monthly_by_category": stats_monthly_by_category(fuente=fuente, usuario=usuario, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales),
     }
 
 

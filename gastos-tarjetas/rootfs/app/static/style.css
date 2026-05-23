@@ -319,6 +319,28 @@ tbody tr:hover { background: #fafbff; }
   margin-bottom: .75rem;
   background: #fafafa;
 }
+.rule-card.rule-especial {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+.rule-especial-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font-size: .82rem;
+  color: #92400e;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chk-especiales {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font-size: .82rem;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+}
 .rule-header {
   display: flex;
   align-items: center;

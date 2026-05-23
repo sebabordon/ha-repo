@@ -78,6 +78,9 @@
           <option value="USD">USD $</option>
         </select>
         <button id="btn-refresh-charts" class="btn btn-sm">↺ Actualizar</button>
+        <label class="chk-especiales" title="Ocultar categorías especiales (Transferencias, Pagos de tarjeta, etc.)">
+          <input type="checkbox" id="chk-excluir-especiales-graf" checked> Sin especiales
+        </label>
       </div>
 
       <div class="charts-grid">
@@ -193,6 +196,9 @@
           </select>
           <button id="btn-load" class="btn">↺</button>
           <button id="btn-export" class="btn">Exportar Excel</button>
+          <label class="chk-especiales" title="Ocultar categorías especiales (Transferencias, Pagos de tarjeta, etc.)">
+            <input type="checkbox" id="chk-excluir-especiales" checked> Sin especiales
+          </label>
           <button id="btn-toggle-import-filter" class="btn btn-sm" title="Filtrar por importación" aria-expanded="false">+</button>
         </div>
         <div id="import-filter-row" style="display:none;padding:.25rem 0 .1rem">

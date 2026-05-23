@@ -3,10 +3,16 @@ from fastapi import APIRouter, Request, HTTPException
 from auth import require_auth
 from categorizer import categorize_by_rules
 from config import RULES_FILE, MATCH_RULES_FILE
-from db import apply_rules_to_all, apply_match_rules
+from db import apply_rules_to_all, apply_match_rules, get_special_categorias
 from models import ReglasCategorias, ReglasEmparejado
 
 router = APIRouter()
+
+
+@router.get("/categorias/especiales")
+def get_categorias_especiales(request: Request):
+    require_auth(request)
+    return {"especiales": sorted(get_special_categorias())}
 
 
 @router.get("/rules")

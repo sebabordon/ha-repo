@@ -39,6 +39,7 @@ class Gasto(BaseModel):
 class ReglaCategoria(BaseModel):
     palabras: list[str]
     categoria: str
+    especial: bool = False
 
 
 class ReglasCategorias(BaseModel):

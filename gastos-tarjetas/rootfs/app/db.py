@@ -3,7 +3,9 @@ import sqlite3
 from contextlib import contextmanager
 from typing import Optional
 
-from config import DB_PATH
+import yaml
+
+from config import DB_PATH, RULES_FILE
 
 # After the sign-normalization migration (v0.2.35), ALL sources use the same
 # convention: positive monto = egreso (money going out), negative = ingreso.
@@ -13,6 +15,27 @@ _EGRESO_EXPR = "CASE WHEN CAST(monto AS REAL) > 0 THEN CAST(monto AS REAL) ELSE 
 # Credit-card sources — only used during import to know which sources do NOT
 # need their sign flipped (CC parsers already return positive = expense).
 _CC_FUENTES = frozenset(("amex", "bbva_mc", "bbva_visa", "galicia_mc"))
+
+# Categories that are always considered "special" regardless of user rules.
+_BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas"})
+
+
+def get_special_categorias() -> set[str]:
+    """
+    Return the set of category names to exclude from totals and charts.
+    Includes built-in specials (Transferencia / Transferencia Intercuentas) plus
+    any categories where especial=True in rules.yaml.
+    """
+    try:
+        with open(RULES_FILE) as f:
+            data = yaml.safe_load(f) or {}
+        user_specials = {
+            r["categoria"] for r in data.get("reglas", [])
+            if r.get("especial") and r.get("categoria")
+        }
+    except Exception:
+        user_specials = set()
+    return _BUILTIN_SPECIALS | user_specials
 
 
 def init_db():
@@ -180,6 +203,7 @@ def list_gastos(
     sin_categoria: bool = False,
     moneda: Optional[str] = None,
     import_id: Optional[int] = None,
+    excluir_especiales: bool = False,
 ) -> list[dict]:
     query = """SELECT g.*, COALESCE(c.tipo,'auto') AS tipo
                FROM gastos g LEFT JOIN cuentas c ON g.fuente = c.fuente
@@ -191,6 +215,12 @@ def list_gastos(
         query += " AND g.moneda = ?"; params.append(moneda)
     if import_id is not None:
         query += " AND g.import_id = ?"; params.append(import_id)
+    if excluir_especiales:
+        specials = get_special_categorias()
+        if specials:
+            ph = ",".join("?" * len(specials))
+            query += f" AND (g.categoria IS NULL OR g.categoria NOT IN ({ph}))"
+            params.extend(specials)
     if sin_categoria:
         query += " AND (g.categoria IS NULL OR g.categoria = '')"
     elif categorias:
@@ -218,23 +248,31 @@ def delete_gasto_manual(gasto_id: int) -> bool:
     return delete_movimiento_manual(gasto_id, gasto["fuente"])
 
 
-def monthly_summary() -> list[dict]:
+def monthly_summary(excluir_especiales: bool = True) -> list[dict]:
     """
     Returns month-by-month ARS totals.
     After the normalize_signs_v1 migration: positive monto = egreso for ALL sources.
-    Transactions with categoria = 'Transferencia' are excluded.
+    Special categories (Transferencia, Transferencia Intercuentas, user-defined) are
+    excluded by default.
     """
-    query = """
+    base = "WHERE moneda = 'ARS'"
+    params: list = []
+    if excluir_especiales:
+        specials = get_special_categorias()
+        if specials:
+            ph = ",".join("?" * len(specials))
+            base += f" AND (categoria IS NULL OR categoria NOT IN ({ph}))"
+            params.extend(specials)
+    query = f"""
         SELECT substr(fecha, 1, 7) AS mes,
           ROUND(SUM(CASE WHEN CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL) ELSE 0 END), 2) AS egresos,
           ROUND(SUM(CASE WHEN CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL) ELSE 0 END), 2) AS ingresos
         FROM gastos
-        WHERE moneda = 'ARS'
-          AND (categoria IS NULL OR categoria != 'Transferencia')
+        {base}
         GROUP BY mes ORDER BY mes
     """
     with _conn() as conn:
-        rows = conn.execute(query).fetchall()
+        rows = conn.execute(query, params).fetchall()
     return [{"mes": r["mes"], "ingresos": float(r["ingresos"]), "egresos": float(r["egresos"])} for r in rows]
 
 
@@ -243,13 +281,21 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
     Find candidate inter-account transfer pairs:
     a BBVA Cuenta egreso matched to a MercadoPago ingreso (or vice versa)
     with the same absolute ARS amount within `days_window` days.
-    Returns only pairs where neither transaction is already categorized
-    as 'Transferencia'.
+    Returns only pairs where neither transaction is already a special category.
     """
     # After normalize_signs_v1: positive monto = egreso for all sources.
     # A transfer from bbva_cuenta to mercadopago (or vice-versa) appears as
     # an outflow (monto > 0) on the sending side and an inflow (monto < 0) on
     # the receiving side.
+    specials = get_special_categorias()
+    if specials:
+        ph = ",".join("?" * len(specials))
+        excl_a = f"AND (a.categoria IS NULL OR a.categoria NOT IN ({ph}))"
+        excl_b = f"AND (b.categoria IS NULL OR b.categoria NOT IN ({ph}))"
+        excl_params = list(specials) + list(specials)
+    else:
+        excl_a = excl_b = ""
+        excl_params = []
     query = f"""
         SELECT
             a.id        AS id_out,
@@ -274,12 +320,12 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
                 (a.fuente = 'mercadopago' AND CAST(a.monto AS REAL) > 0
                  AND b.fuente = 'bbva_cuenta' AND CAST(b.monto AS REAL) < 0)
             )
-            AND (a.categoria IS NULL OR a.categoria != 'Transferencia')
-            AND (b.categoria IS NULL OR b.categoria != 'Transferencia')
+            {excl_a}
+            {excl_b}
         ORDER BY a.fecha DESC
     """
     with _conn() as conn:
-        rows = conn.execute(query).fetchall()
+        rows = conn.execute(query, excl_params).fetchall()
     seen = set()
     result = []
     for r in rows:
@@ -292,14 +338,14 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
 
 
 def mark_transfers(id_pairs: list[tuple[int, int]]):
-    """Mark both sides of each transfer pair as categoria='Transferencia'."""
+    """Mark both sides of each transfer pair as categoria='Transferencia Intercuentas'."""
     ids = list({i for pair in id_pairs for i in pair})
     if not ids:
         return
     placeholders = ",".join("?" * len(ids))
     with _conn() as conn:
         conn.execute(
-            f"UPDATE gastos SET categoria='Transferencia', categoria_fuente='auto' WHERE id IN ({placeholders})",
+            f"UPDATE gastos SET categoria='Transferencia Intercuentas', categoria_fuente='auto' WHERE id IN ({placeholders})",
             ids,
         )
 
@@ -367,10 +413,16 @@ def delete_gastos_by_archivo(archivo: str):
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
 
-def _base_where(fuente=None, usuario=None, mes=None, meses=None, extra="", moneda='ARS'):
+def _base_where(fuente=None, usuario=None, mes=None, meses=None, extra="", moneda='ARS', excluir_especiales=True):
     """Build WHERE clause + params for stats queries."""
-    conds = ["(categoria IS NULL OR categoria != 'Transferencia')"]
+    conds = []
     params = []
+    if excluir_especiales:
+        specials = get_special_categorias()
+        if specials:
+            ph = ",".join("?" * len(specials))
+            conds.append(f"(categoria IS NULL OR categoria NOT IN ({ph}))")
+            params.extend(specials)
     if moneda:
         conds.insert(0, "moneda = ?"); params.insert(0, moneda)
     if fuente:
@@ -386,8 +438,8 @@ def _base_where(fuente=None, usuario=None, mes=None, meses=None, extra="", moned
     return "WHERE " + " AND ".join(conds), params
 
 
-def stats_by_category(fuente=None, usuario=None, mes=None, meses=6, moneda='ARS'):
-    where, params = _base_where(fuente, usuario, mes, meses if not mes else None, moneda=moneda)
+def stats_by_category(fuente=None, usuario=None, mes=None, meses=6, moneda='ARS', excluir_especiales=True):
+    where, params = _base_where(fuente, usuario, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales)
     q = f"""SELECT COALESCE(categoria,'Sin categoría') AS cat,
               ROUND(SUM({_EGRESO_EXPR}),2) AS total,
               COUNT(*) AS cnt
@@ -398,8 +450,8 @@ def stats_by_category(fuente=None, usuario=None, mes=None, meses=6, moneda='ARS'
     return [{"categoria": r["cat"], "total": float(r["total"]), "count": r["cnt"]} for r in rows]
 
 
-def stats_by_fuente(usuario=None, mes=None, meses=6, moneda='ARS'):
-    where, params = _base_where(None, usuario, mes, meses if not mes else None, moneda=moneda)
+def stats_by_fuente(usuario=None, mes=None, meses=6, moneda='ARS', excluir_especiales=True):
+    where, params = _base_where(None, usuario, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales)
     q = f"""SELECT fuente,
               ROUND(SUM({_EGRESO_EXPR}),2) AS egreso
             FROM gastos {where}
@@ -409,8 +461,8 @@ def stats_by_fuente(usuario=None, mes=None, meses=6, moneda='ARS'):
     return [{"fuente": r["fuente"], "total": float(r["egreso"])} for r in rows]
 
 
-def stats_by_usuario(fuente=None, mes=None, meses=6, moneda='ARS'):
-    where, params = _base_where(fuente, None, mes, meses if not mes else None, moneda=moneda)
+def stats_by_usuario(fuente=None, mes=None, meses=6, moneda='ARS', excluir_especiales=True):
+    where, params = _base_where(fuente, None, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales)
     q = f"""SELECT COALESCE(usuario,'Sin asignar') AS usr,
               ROUND(SUM({_EGRESO_EXPR}),2) AS egreso
             FROM gastos {where}
@@ -420,8 +472,8 @@ def stats_by_usuario(fuente=None, mes=None, meses=6, moneda='ARS'):
     return [{"usuario": r["usr"], "total": float(r["egreso"])} for r in rows]
 
 
-def stats_top_descriptions(fuente=None, usuario=None, mes=None, meses=6, limit=15, moneda='ARS'):
-    where, params = _base_where(fuente, usuario, mes, meses if not mes else None, moneda=moneda)
+def stats_top_descriptions(fuente=None, usuario=None, mes=None, meses=6, limit=15, moneda='ARS', excluir_especiales=True):
+    where, params = _base_where(fuente, usuario, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales)
     q = f"""SELECT descripcion,
               ROUND(SUM({_EGRESO_EXPR}),2) AS total,
               COUNT(*) AS cnt
@@ -433,8 +485,8 @@ def stats_top_descriptions(fuente=None, usuario=None, mes=None, meses=6, limit=1
     return [{"descripcion": r["descripcion"], "total": float(r["total"]), "count": r["cnt"]} for r in rows]
 
 
-def stats_monthly_by_category(fuente=None, usuario=None, meses=6, moneda='ARS'):
-    where, params = _base_where(fuente, usuario, meses=meses, moneda=moneda)
+def stats_monthly_by_category(fuente=None, usuario=None, meses=6, moneda='ARS', excluir_especiales=True):
+    where, params = _base_where(fuente, usuario, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales)
     q = f"""SELECT substr(fecha,1,7) AS mes,
               COALESCE(categoria,'Sin categoría') AS cat,
               ROUND(SUM({_EGRESO_EXPR}),2) AS total

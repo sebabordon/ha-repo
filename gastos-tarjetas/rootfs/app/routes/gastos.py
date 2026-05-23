@@ -113,6 +113,7 @@ def get_gastos(
     sin_categoria: bool = Query(False),
     moneda: Optional[str] = Query(None),
     import_id: Optional[int] = Query(None),
+    excluir_especiales: bool = Query(False),
 ):
     require_auth(request)
     return list_gastos(
@@ -123,6 +124,7 @@ def get_gastos(
         sin_categoria=sin_categoria,
         moneda=moneda,
         import_id=import_id,
+        excluir_especiales=excluir_especiales,
     )
 
 
