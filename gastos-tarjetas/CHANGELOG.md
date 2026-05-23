@@ -1,3 +1,7 @@
+## 0.2.38
+
+- **Fix Galicia MC — comisión de mantenimiento de cuenta**: la comisión (COMISION MANT DE CTA + IVA) aparece solo en el bloque CONSOLIDADO del PDF sin prefijo de fecha, por lo que el parser no la capturaba. Ahora se extrae del texto del PDF y se agrega como egreso en la fecha de cierre del resumen. En meses con bonificación (el banco la devuelve cuando se supera el umbral de gasto), el BONIF.COM.MEN.MANT.C del DETALLE se incluye como ingreso compensatorio — neto = 0. El neto de egresos e ingresos cuadra exactamente con el "TOTAL A PAGAR" del resumen.
+
 ## 0.2.37
 
 - **Combos de fuente dinámicos**: los selectores de fuente en los filtros de Gastos, Gráficos, Eliminar por fuente y las reglas de emparejado ahora se construyen a partir de las cuentas configuradas (via `/api/cuentas`). Reflejan automáticamente cambios de nombre de cuenta (ej. "BBVA ARS" en lugar de "BBVA Cuenta") y cuentas manuales.
