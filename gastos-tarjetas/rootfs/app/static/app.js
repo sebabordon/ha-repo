@@ -1,13 +1,9 @@
 const BASE = window.INGRESS_PREFIX || "";
 
-// Fuentes donde monto positivo = egreso (tarjetas de crédito).
-// Para el resto (cuentas/billeteras) monto negativo = egreso.
-const _CC_FUENTES = ["amex","bbva_mc","bbva_visa","galicia_mc"];
-
+// v0.2.35: unified sign convention — positive monto = egreso for ALL sources.
 /** Devuelve true si el movimiento es un egreso (dinero que sale). */
-function _isEgreso(monto, fuente) {
-  const m = parseFloat(monto);
-  return _CC_FUENTES.includes(fuente) ? m > 0 : m < 0;
+function _isEgreso(monto) {
+  return parseFloat(monto) > 0;
 }
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -440,7 +436,7 @@ async function loadGastos() {
   let egARS = 0, inARS = 0, egUSD = 0, inUSD = 0;
   gastos.forEach(g => {
     const abs = Math.abs(parseFloat(g.monto));
-    const eg  = _isEgreso(g.monto, g.fuente);
+    const eg  = _isEgreso(g.monto);
     if (g.moneda === "ARS") { if (eg) egARS += abs; else inARS += abs; }
     else if (g.moneda === "USD") { if (eg) egUSD += abs; else inUSD += abs; }
   });
@@ -454,7 +450,7 @@ async function loadGastos() {
   gastos.forEach(g => {
     const tr = document.createElement("tr");
     const u = g.usuario || "";
-    const egreso = _isEgreso(g.monto, g.fuente);
+    const egreso = _isEgreso(g.monto);
     const displayMonto = Math.abs(parseFloat(g.monto));
     const displayStr   = egreso ? _fmtNum2(displayMonto) : `+${_fmtNum2(displayMonto)}`;
     tr.innerHTML = `
@@ -581,7 +577,8 @@ document.getElementById("btn-save-new-mov").addEventListener("click", async () =
   if (!fecha || !desc || isNaN(raw) || raw <= 0) {
     showToast("Completá fecha, descripción y monto.", "err"); return;
   }
-  const monto = tipo === "egreso" ? -raw : raw;
+  // v0.2.35: positive = egreso, negative = ingreso for all sources
+  const monto = tipo === "egreso" ? raw : -raw;
   const res = await fetch(`${BASE}/api/cuentas/${fuente}/movimientos`, {
     method: "POST", headers: {"Content-Type":"application/json"},
     body: JSON.stringify({fecha, descripcion: desc, monto, moneda: mon, categoria: cat||null}),
@@ -1520,12 +1517,14 @@ async function loadMovimientos(fuente) {
     <tbody>
       ${movs.map(m => {
         const v = parseFloat(m.monto);
-        const cls = v >= 0 ? "mov-monto-pos" : "mov-monto-neg";
-        const sign = v >= 0 ? "+" : "";
+        // v0.2.35: positive = egreso (red), negative = ingreso (green)
+        const isEg = v > 0;
+        const cls  = isEg ? "mov-monto-neg" : "mov-monto-pos";
+        const sign = isEg ? "" : "+";
         return `<tr>
           <td>${m.fecha}</td>
           <td>${escHtml(m.descripcion)}</td>
-          <td class="${cls}">${sign}${_fmtNum2(v)} ${escHtml(m.moneda)}</td>
+          <td class="${cls}">${sign}${_fmtNum2(Math.abs(v))} ${escHtml(m.moneda)}</td>
           <td>${escHtml(m.categoria||"")}</td>
           <td><button class="btn btn-sm btn-danger" style="padding:.15rem .4rem"
               onclick="deleteMovimiento('${fuente}',${m.id})">✕</button></td>

@@ -5,22 +5,26 @@ from typing import Optional
 
 from config import DB_PATH
 
-# SQL expression that normalises monto to a positive ARS egreso value.
-# Returns 0 for ingresos / non-expense rows — useful in SUM().
-_EGRESO_EXPR = f"""CASE
-  WHEN fuente IN ('{("','".join(("amex","bbva_mc","bbva_visa","galicia_mc")))}')
-       AND CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL)
-  WHEN fuente NOT IN ('{("','".join(("amex","bbva_mc","bbva_visa","galicia_mc")))}')
-       AND CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL)
-  ELSE 0 END"""
+# After the sign-normalization migration (v0.2.35), ALL sources use the same
+# convention: positive monto = egreso (money going out), negative = ingreso.
+# This expression returns the absolute egreso amount for a row, or 0 for income.
+_EGRESO_EXPR = "CASE WHEN CAST(monto AS REAL) > 0 THEN CAST(monto AS REAL) ELSE 0 END"
 
-# Fuentes that are credit cards: positive monto = expense
-_CC_FUENTES = ("amex", "bbva_mc", "bbva_visa", "galicia_mc")
-_cc_list = "','".join(_CC_FUENTES)
+# Credit-card sources — only used during import to know which sources do NOT
+# need their sign flipped (CC parsers already return positive = expense).
+_CC_FUENTES = frozenset(("amex", "bbva_mc", "bbva_visa", "galicia_mc"))
 
 
 def init_db():
     with _conn() as conn:
+        # ── Migration tracking ──────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS db_migrations (
+                name TEXT PRIMARY KEY,
+                applied_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now'))
+            )
+        """)
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS gastos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,6 +99,27 @@ def init_db():
                 moneda TEXT DEFAULT 'ARS'
             )
         """)
+
+        # ── One-time migrations ─────────────────────────────────────────────────
+        _run_migrations(conn)
+
+
+def _run_migrations(conn):
+    """Apply any pending one-time DB migrations in order."""
+    done = {r[0] for r in conn.execute("SELECT name FROM db_migrations").fetchall()}
+
+    if "normalize_signs_v1" not in done:
+        # v0.2.35: unify sign convention — positive monto = egreso for ALL sources.
+        # Before this migration, non-CC sources (bbva_cuenta, mercadopago, manual_*)
+        # used negative = egreso. Flip their signs so all sources are consistent.
+        cc_list = "','".join(_CC_FUENTES)
+        conn.execute(f"""
+            UPDATE gastos
+            SET monto = CAST(-CAST(monto AS REAL) AS TEXT)
+            WHERE fuente NOT IN ('{cc_list}')
+              AND CAST(monto AS REAL) != 0
+        """)
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('normalize_signs_v1')")
 
 
 @contextmanager
@@ -192,23 +217,14 @@ def delete_gasto_manual(gasto_id: int) -> bool:
 
 def monthly_summary() -> list[dict]:
     """
-    Returns month-by-month ARS totals with correct sign interpretation.
-    Transactions with categoria = 'Transferencia' are excluded from both
-    egresos and ingresos so inter-account transfers don't inflate totals.
-
-    - Credit cards (amex, bbva_mc, bbva_visa, galicia_mc): positive = egreso
-    - Savings/wallet (bbva_cuenta, mercadopago): positive = ingreso, negative = egreso
+    Returns month-by-month ARS totals.
+    After the normalize_signs_v1 migration: positive monto = egreso for ALL sources.
+    Transactions with categoria = 'Transferencia' are excluded.
     """
-    query = f"""
+    query = """
         SELECT substr(fecha, 1, 7) AS mes,
-          ROUND(SUM(CASE
-            WHEN fuente IN ('{_cc_list}') AND CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL)
-            WHEN fuente NOT IN ('{_cc_list}') AND CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL)
-            ELSE 0 END), 2) AS egresos,
-          ROUND(SUM(CASE
-            WHEN fuente NOT IN ('{_cc_list}') AND CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL)
-            WHEN fuente IN ('{_cc_list}') AND CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL)
-            ELSE 0 END), 2) AS ingresos
+          ROUND(SUM(CASE WHEN CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL) ELSE 0 END), 2) AS egresos,
+          ROUND(SUM(CASE WHEN CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL) ELSE 0 END), 2) AS ingresos
         FROM gastos
         WHERE moneda = 'ARS'
           AND (categoria IS NULL OR categoria != 'Transferencia')
@@ -227,6 +243,10 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
     Returns only pairs where neither transaction is already categorized
     as 'Transferencia'.
     """
+    # After normalize_signs_v1: positive monto = egreso for all sources.
+    # A transfer from bbva_cuenta to mercadopago (or vice-versa) appears as
+    # an outflow (monto > 0) on the sending side and an inflow (monto < 0) on
+    # the receiving side.
     query = f"""
         SELECT
             a.id        AS id_out,
@@ -245,11 +265,11 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
             AND ABS(julianday(a.fecha) - julianday(b.fecha)) <= {days_window}
             AND a.moneda = 'ARS' AND b.moneda = 'ARS'
             AND (
-                (a.fuente = 'bbva_cuenta' AND CAST(a.monto AS REAL) < 0
-                 AND b.fuente = 'mercadopago' AND CAST(b.monto AS REAL) > 0)
+                (a.fuente = 'bbva_cuenta' AND CAST(a.monto AS REAL) > 0
+                 AND b.fuente = 'mercadopago' AND CAST(b.monto AS REAL) < 0)
                 OR
-                (a.fuente = 'mercadopago' AND CAST(a.monto AS REAL) < 0
-                 AND b.fuente = 'bbva_cuenta' AND CAST(b.monto AS REAL) > 0)
+                (a.fuente = 'mercadopago' AND CAST(a.monto AS REAL) > 0
+                 AND b.fuente = 'bbva_cuenta' AND CAST(b.monto AS REAL) < 0)
             )
             AND (a.categoria IS NULL OR a.categoria != 'Transferencia')
             AND (b.categoria IS NULL OR b.categoria != 'Transferencia')
@@ -596,7 +616,11 @@ def delete_cuenta_manual(fuente: str) -> bool:
 
 
 def recalc_cuenta_saldo(fuente: str):
-    """Recompute saldo for a manual account from the sum of its movements."""
+    """Recompute saldo for a manual account from the sum of its movements.
+
+    After the normalize_signs_v1 migration, positive monto = egreso.
+    Balance = income - expenses = -SUM(monto).
+    """
     with _conn() as conn:
         cuenta = conn.execute("SELECT moneda FROM cuentas WHERE fuente=?", (fuente,)).fetchone()
         if not cuenta:
@@ -606,7 +630,7 @@ def recalc_cuenta_saldo(fuente: str):
             "SELECT ROUND(SUM(CAST(monto AS REAL)),2) AS t FROM gastos WHERE fuente=?",
             (fuente,),
         ).fetchone()
-        total = float(row["t"] or 0)
+        total = -float(row["t"] or 0)  # negate: income adds to balance, expense subtracts
         field = "saldo_usd" if moneda == "USD" else "saldo"
         conn.execute(
             f"UPDATE cuentas SET {field}=?, fecha_actualizacion=date('now') "
@@ -730,10 +754,7 @@ def stats_forecast(
         placeholders = ",".join("?" * len(exclude_income_cats))
         excl_q = f"""
             SELECT substr(fecha, 1, 7) AS mes,
-              ROUND(SUM(CASE
-                WHEN fuente NOT IN ('{_cc_list}') AND CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL)
-                WHEN fuente IN ('{_cc_list}') AND CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL)
-                ELSE 0 END), 2) AS ingreso_excl
+              ROUND(SUM(CASE WHEN CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL) ELSE 0 END), 2) AS ingreso_excl
             FROM gastos
             WHERE moneda = 'ARS'
               AND categoria IN ({placeholders})

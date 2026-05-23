@@ -5,7 +5,7 @@ from fastapi import APIRouter, File, Form, UploadFile, Request, HTTPException
 
 from auth import require_auth
 from categorizer import categorize
-from db import insert_gastos, upsert_cuenta_saldo
+from db import insert_gastos, upsert_cuenta_saldo, _CC_FUENTES
 from parsers import PARSERS
 from user_config import read_user_config
 
@@ -37,12 +37,17 @@ async def upload_file(
     usuario_default = user_cfg["fuente_usuario"].get(fuente)
     reglas_usuario  = user_cfg.get("reglas_usuario", [])
 
+    # Non-CC parsers return negative monto for expenses; normalize to positive=egreso.
+    needs_flip = fuente not in _CC_FUENTES
+
     records = []
     for g in gastos:
         cat, fuente_cat = await categorize(g.descripcion)
         d = g.model_dump()
         d["categoria"] = cat
         d["categoria_fuente"] = fuente_cat
+        if needs_flip and d["monto"] != 0:
+            d["monto"] = -float(d["monto"])
         if g.usuario is not None:
             # Parser detected a specific person (e.g. additional cardholder)
             d["usuario"] = g.usuario

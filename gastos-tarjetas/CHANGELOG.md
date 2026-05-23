@@ -1,3 +1,12 @@
+## 0.2.35
+
+- **Unificación de convención de signos**: a partir de esta versión todos los movimientos en la BD usan `monto > 0 = egreso` y `monto < 0 = ingreso`, sin excepción de fuente. Se eliminan los CASE especiales por fuente en todas las queries SQL.
+- **Migración automática** (`normalize_signs_v1`): al iniciar, la app flipea los montos de las fuentes no-CC (bbva_cuenta, mercadopago, manuales) existentes en la BD. La migración es idempotente (tabla `db_migrations`).
+- **Import normalizado**: `upload.py` ahora flipea el signo para fuentes no-CC en el momento de importar, sin necesidad de modificar los parsers.
+- **Backend simplificado**: `_EGRESO_EXPR` es ahora `CASE WHEN monto > 0 THEN monto ELSE 0 END`; `monthly_summary`, `detect_transfers` y `stats_forecast` usan la misma expresión simple. Se eliminó `_cc_list`.
+- **`recalc_cuenta_saldo`**: actualizado para usar `−SUM(monto)` (balance = ingresos − egresos con la nueva convención).
+- **Frontend**: `_isEgreso(monto)` ya no necesita el segundo argumento `fuente`. Los movimientos manuales se guardan con el signo correcto (egreso = positivo), y la lista de movimientos de cuenta refleja el nuevo display (positivo → rojo, negativo → verde con "+").
+
 ## 0.2.34
 
 - **Tabla de Gastos — display normalizado**: los montos siempre se muestran como valor absoluto. Rojo = egreso (dinero que sale), verde con "+" = ingreso (dinero que entra). Aplica la convención correcta según la fuente: tarjetas CC (positivo = egreso) y cuentas/billeteras (negativo = egreso).
