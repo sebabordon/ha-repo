@@ -132,6 +132,12 @@ body {
   background: #e8eaf0; padding: .3rem .75rem;
   border-radius: 20px; font-size: .88rem;
 }
+.usuario-chip > span:first-child {
+  cursor: pointer;
+}
+.usuario-chip > span:first-child:hover {
+  text-decoration: underline dotted;
+}
 .usuario-add-chip {
   cursor: pointer; background: #f0f4ff; border: 1px dashed #8fa8e0;
   color: #4a6fa5; font-weight: 700; font-size: 1rem; padding: .2rem .65rem;
@@ -553,6 +559,10 @@ tbody tr:hover { background: #fafbff; }
   font-size: 1rem;
   color: #1a1a2e;
   flex: 1;
+  cursor: pointer;
+}
+.cuenta-nombre:hover {
+  text-decoration: underline dotted;
 }
 .cuenta-badge {
   font-size: .7rem;

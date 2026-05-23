@@ -557,6 +557,11 @@ def update_cuenta(fuente: str, saldo: float, saldo_usd: float, moneda: str, acti
         )
 
 
+def rename_cuenta(fuente: str, nombre: str) -> None:
+    with _conn() as conn:
+        conn.execute("UPDATE cuentas SET nombre=? WHERE fuente=?", (nombre.strip(), fuente))
+
+
 def _slugify(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", text.lower().strip()).strip("_")
     return f"manual_{slug}" if slug else "manual_cuenta"

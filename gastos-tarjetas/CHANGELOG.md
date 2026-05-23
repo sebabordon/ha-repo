@@ -1,3 +1,8 @@
+## 0.2.32
+
+- **Renombrar personas**: click en el chip de cualquier persona (incluidas las dos primeras) para editarlo inline. Enter guarda, Escape cancela. Propaga el rename a los mapeos de fuente→persona y a las reglas de asignación.
+- **Renombrar cuentas**: click en el nombre de cualquier cuenta (auto o manual) para editarlo inline. Enter o click fuera guarda, Escape cancela. Backend: `PUT /api/cuentas/{fuente}` ahora acepta `{nombre}`.
+
 ## 0.2.31
 
 - **Renombrar "Usuario" → "Persona"** en toda la UI (columna de tabla, gráfico, acordeón Config, encabezados, mensajes). Los campos internos de API/DB (`usuario`) no cambiaron.

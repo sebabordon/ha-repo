@@ -1381,7 +1381,8 @@ function _renderCuentaCard(c) {
   return `
   <div class="cuenta-card" id="cuenta-card-${c.fuente}">
     <div class="cuenta-header">
-      <span class="cuenta-nombre">${escHtml(c.nombre)}</span>
+      <span class="cuenta-nombre" title="Click para renombrar"
+            onclick="startRenameCuenta('${c.fuente}')">${escHtml(c.nombre)}</span>
       ${badge}
       ${monedaSel}
       ${saldoDisplay}
@@ -1442,6 +1443,48 @@ async function deleteCuenta(fuente) {
     await fetch(`${BASE}/api/cuentas/${fuente}`, {method:"DELETE"});
     loadCuentas(); loadSaldos();
   });
+}
+
+function startRenameCuenta(fuente) {
+  const span = document.querySelector(`#cuenta-card-${fuente} .cuenta-nombre`);
+  if (!span || span.tagName === "INPUT") return; // already editing
+  const oldName = span.textContent.trim();
+
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.value = oldName;
+  inp.className = "cuenta-nombre";
+  inp.style.cssText = "border:1px solid #93c5fd;border-radius:4px;padding:.1rem .4rem;" +
+                      "font-size:inherit;font-weight:inherit;background:#fff;color:inherit;" +
+                      "cursor:text;min-width:100px;width:auto;max-width:220px";
+
+  let saved = false;
+  async function doSave() {
+    if (saved) return;
+    saved = true;
+    const newName = inp.value.trim();
+    if (!newName || newName === oldName) { loadCuentas(); return; }
+    const res = await fetch(`${BASE}/api/cuentas/${fuente}`, {
+      method: "PUT", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({nombre: newName}),
+    });
+    if (res.ok) {
+      showToast(`✓ Cuenta renombrada a "${newName}"`, "ok", 2000);
+      loadCuentas(); loadSaldos();
+    } else {
+      showToast("Error al renombrar", "err");
+      loadCuentas();
+    }
+  }
+
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter")  { e.preventDefault(); doSave(); }
+    if (e.key === "Escape") { saved = true; loadCuentas(); }
+  });
+  inp.addEventListener("blur", () => doSave());
+
+  span.replaceWith(inp);
+  inp.focus(); inp.select();
 }
 
 async function loadMovimientos(fuente) {
@@ -1537,8 +1580,8 @@ function renderUsuarios() {
   const users = _usuariosConfig.usuarios || [];
   // Chips for existing users + an inline "+" chip at the end
   list.innerHTML = users.map((u, i) => `
-    <div class="usuario-chip">
-      <span>${escHtml(u)}</span>
+    <div class="usuario-chip" title="Click para renombrar">
+      <span onclick="startRenameUsuario(${i})">${escHtml(u)}</span>
       ${i >= 2 ? `<button class="tag-x" type="button" onclick="removeUsuario(${i})">×</button>` : ""}
     </div>`).join("") +
     `<div class="usuario-chip usuario-add-chip" id="usuario-add-chip" onclick="startAddUsuario()" title="Agregar usuario">
@@ -1627,6 +1670,51 @@ async function saveNewUsuario() {
 
 function handleAddUsuarioKey(e) {
   if (e.key === "Enter")  { e.preventDefault(); saveNewUsuario(); }
+  if (e.key === "Escape") renderUsuarios();
+}
+
+function startRenameUsuario(i) {
+  const chips = document.querySelectorAll("#usuarios-list .usuario-chip:not(.usuario-add-chip)");
+  const chip  = chips[i];
+  if (!chip) return;
+  const span = chip.querySelector("span");
+  if (!span) return;
+  const old = _usuariosConfig.usuarios[i] || "";
+  span.outerHTML = `
+    <input id="ru-inp-${i}" type="text" value="${escHtml(old)}"
+           style="border:none;background:transparent;outline:none;font-size:.85rem;width:110px;color:inherit"
+           onkeydown="handleRenameUsuarioKey(event,${i})">
+    <button class="tag-x" type="button" onclick="saveRenameUsuario(${i})">✓</button>
+    <button class="tag-x" type="button" onclick="renderUsuarios()">×</button>`;
+  const inp = document.getElementById(`ru-inp-${i}`);
+  inp?.focus(); inp?.select();
+}
+
+async function saveRenameUsuario(i) {
+  const inp     = document.getElementById(`ru-inp-${i}`);
+  const newName = (inp?.value || "").trim();
+  const oldName = _usuariosConfig.usuarios[i];
+  if (!newName || newName === oldName) { renderUsuarios(); return; }
+  if ((_usuariosConfig.usuarios || []).some((u, j) => j !== i && u === newName)) {
+    showToast("Ya existe esa persona.", "err"); return;
+  }
+  _usuariosConfig.usuarios[i] = newName;
+  // Propagate rename into fuente_usuario map
+  Object.keys(_usuariosConfig.fuente_usuario || {}).forEach(f => {
+    if (_usuariosConfig.fuente_usuario[f] === oldName)
+      _usuariosConfig.fuente_usuario[f] = newName;
+  });
+  // Propagate into user rules
+  _userRules.forEach(r => { if (r.usuario === oldName) r.usuario = newName; });
+  await _saveUsuariosConfig();
+  _populateUsuarioDropdowns();
+  renderUsuarios();
+  renderUserRules();
+  showToast(`✓ "${oldName}" → "${newName}"`, "ok", 2000);
+}
+
+function handleRenameUsuarioKey(e, i) {
+  if (e.key === "Enter")  { e.preventDefault(); saveRenameUsuario(i); }
   if (e.key === "Escape") renderUsuarios();
 }
 

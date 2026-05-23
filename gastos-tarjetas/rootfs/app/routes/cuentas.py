@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from auth import require_auth
 from db import (
-    get_cuentas, update_cuenta,
+    get_cuentas, update_cuenta, rename_cuenta,
     create_cuenta_manual, delete_cuenta_manual,
     get_movimientos_cuenta, insert_movimiento_manual, delete_movimiento_manual,
 )
@@ -34,6 +34,10 @@ def put_cuenta(fuente: str, body: dict, request: Request):
     current = next((c for c in get_cuentas() if c["fuente"] == fuente), None)
     if not current:
         raise HTTPException(404, f"Cuenta {fuente} no encontrada")
+    if "nombre" in body:
+        nuevo_nombre = str(body["nombre"]).strip()
+        if nuevo_nombre:
+            rename_cuenta(fuente, nuevo_nombre)
     moneda = body.get("moneda", current["moneda"])
     if moneda not in ("ARS", "USD", "MULTI"):
         moneda = current["moneda"]
