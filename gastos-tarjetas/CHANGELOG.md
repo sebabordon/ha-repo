@@ -1,6 +1,7 @@
 ## 0.2.41
 
 - **Fix forecast — mes incompleto**: el chart de proyección excluye el mes en curso de la regresión lineal. Un mes parcial (ej. 23 de 31 días importados) tiraba la tendencia a cero y proyectaba gastos casi nulos. El mes actual sigue apareciendo en la serie histórica del gráfico.
+- **Fix gráfico mensual superior — actualización dinámica**: ahora se refresca al guardar un movimiento manual, al cambiar la fecha de un gasto, y al cambiar la categoría de un gasto.
 
 ## 0.2.40
 

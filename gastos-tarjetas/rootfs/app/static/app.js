@@ -576,7 +576,10 @@ async function saveCategoria(id, btn) {
     method:"PATCH", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({categoria: input.value}),
   });
-  if (res.ok) { input.classList.remove("dirty"); btn.classList.remove("btn-dirty"); }
+  if (res.ok) {
+    input.classList.remove("dirty"); btn.classList.remove("btn-dirty");
+    loadMonthlyChart();
+  }
   btn.textContent = res.ok ? "✓" : "✗";
   setTimeout(() => btn.textContent = "✓", 1500);
 }
@@ -589,6 +592,7 @@ async function saveFecha(id, input) {
   if (res.ok) {
     input.classList.remove("dirty");
     showToast("Fecha actualizada.", "ok", 1500);
+    loadMonthlyChart();
   } else {
     showToast("Error al guardar fecha.", "err");
   }
@@ -663,7 +667,7 @@ document.getElementById("btn-save-new-mov").addEventListener("click", async () =
     document.getElementById("nm-monto").value = "";
     document.getElementById("nm-cat").value   = "";
     showToast("Movimiento guardado.", "ok");
-    loadGastos(); loadSaldos();
+    loadGastos(); loadSaldos(); loadMonthlyChart();
   } else {
     showToast("Error al guardar.", "err");
   }
