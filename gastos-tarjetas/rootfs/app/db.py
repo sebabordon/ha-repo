@@ -848,7 +848,16 @@ def stats_forecast(
     if len(historical) < 2:
         return {"historical": historical, "forecast": []}
 
-    recent = historical[-max(2, meses_historico):]
+    # Exclude the current (incomplete) month from the regression baseline so a
+    # partial month doesn't drag the trend line toward zero.  The current month
+    # is still shown in the historical series on the chart.
+    from datetime import date as _date
+    current_ym = _date.today().strftime("%Y-%m")
+    regression_base = [h for h in historical if h["mes"] < current_ym]
+    if len(regression_base) < 2:
+        regression_base = historical  # fall back if not enough complete months
+
+    recent = regression_base[-max(2, meses_historico):]
     n = len(recent)
 
     def _linreg(vals):
