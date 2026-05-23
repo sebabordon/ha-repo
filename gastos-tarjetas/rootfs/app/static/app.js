@@ -739,7 +739,7 @@ function renderRules() {
     const card = document.createElement("div");
     card.className = "rule-card";
     const tagsHtml = rule.palabras.map((w,j) =>
-      `<span class="tag">${escHtml(w)}<button class="tag-x" type="button" onclick="removeTag(${i},${j})">×</button></span>`
+      `<span class="tag"><span class="tag-label" title="Doble clic para editar" ondblclick="editTag(${i},${j})">${escHtml(w)}</span><button class="tag-x" type="button" onclick="removeTag(${i},${j})">×</button></span>`
     ).join("");
     card.innerHTML = `
       <div class="rule-header">
@@ -788,6 +788,31 @@ function addTag(event,i) {
   renderRules();
   document.querySelectorAll(".tag-input")[i]?.focus();
   _scheduleSaveRules();
+}
+function editTag(i, j) {
+  _syncRules();
+  const labelEl = document.querySelector(`#tags-${i} .tag:nth-child(${j+1}) .tag-label`);
+  if (!labelEl) return;
+  const orig = _rules[i].palabras[j];
+  const inp = document.createElement("input");
+  inp.className = "tag-edit-input";
+  inp.value = orig;
+  inp.style.width = Math.max(60, orig.length * 8) + "px";
+  let saved = false;
+  function doSave() {
+    if (saved) return; saved = true;
+    const val = inp.value.trim();
+    if (!val) { _rules[i].palabras.splice(j, 1); }
+    else       { _rules[i].palabras[j] = val; }
+    renderRules(); _scheduleSaveRules();
+  }
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter")  { e.preventDefault(); doSave(); }
+    if (e.key === "Escape") { saved = true; renderRules(); }
+  });
+  inp.addEventListener("blur", doSave);
+  labelEl.replaceWith(inp);
+  inp.focus(); inp.select();
 }
 
 document.getElementById("btn-add-rule").addEventListener("click", () => {
@@ -1751,7 +1776,7 @@ function renderUserRules() {
     const card = document.createElement("div");
     card.className = "rule-card";
     const tagsHtml = rule.palabras.map((w, j) =>
-      `<span class="tag">${escHtml(w)}<button class="tag-x" type="button" onclick="removeUserTag(${i},${j})">×</button></span>`
+      `<span class="tag"><span class="tag-label" title="Doble clic para editar" ondblclick="editUserTag(${i},${j})">${escHtml(w)}</span><button class="tag-x" type="button" onclick="removeUserTag(${i},${j})">×</button></span>`
     ).join("");
     const userOpts = users.map(u =>
       `<option value="${escHtml(u)}" ${rule.usuario === u ? "selected" : ""}>${escHtml(u)}</option>`
@@ -1808,6 +1833,31 @@ function addUserTag(event, i) {
   renderUserRules();
   document.querySelectorAll(".user-tag-input")[i]?.focus();
   _scheduleSaveUserRules();
+}
+function editUserTag(i, j) {
+  _syncUserRules();
+  const labelEl = document.querySelector(`#user-tags-${i} .tag:nth-child(${j+1}) .tag-label`);
+  if (!labelEl) return;
+  const orig = _userRules[i].palabras[j];
+  const inp = document.createElement("input");
+  inp.className = "tag-edit-input";
+  inp.value = orig;
+  inp.style.width = Math.max(60, orig.length * 8) + "px";
+  let saved = false;
+  function doSave() {
+    if (saved) return; saved = true;
+    const val = inp.value.trim();
+    if (!val) { _userRules[i].palabras.splice(j, 1); }
+    else       { _userRules[i].palabras[j] = val; }
+    renderUserRules(); _scheduleSaveUserRules();
+  }
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter")  { e.preventDefault(); doSave(); }
+    if (e.key === "Escape") { saved = true; renderUserRules(); }
+  });
+  inp.addEventListener("blur", doSave);
+  labelEl.replaceWith(inp);
+  inp.focus(); inp.select();
 }
 
 document.getElementById("btn-add-user-rule")?.addEventListener("click", () => {

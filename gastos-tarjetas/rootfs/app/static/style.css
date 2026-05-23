@@ -355,6 +355,20 @@ tbody tr:hover { background: #fafbff; }
   padding: 0;
 }
 .tag-x:hover { color: #b91c1c; }
+.tag-label { cursor: text; }
+.tag-label:hover { text-decoration: underline dotted #6366f1; }
+.tag-edit-input {
+  border: none;
+  border-bottom: 1.5px solid #6366f1;
+  background: transparent;
+  color: #3730a3;
+  font-size: .82rem;
+  padding: 0 2px;
+  min-width: 60px;
+  max-width: 200px;
+  outline: none;
+  font-family: inherit;
+}
 
 .rule-add input {
   width: 100%;
