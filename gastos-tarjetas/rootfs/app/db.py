@@ -179,6 +179,7 @@ def list_gastos(
     mes: Optional[str] = None,
     sin_categoria: bool = False,
     moneda: Optional[str] = None,
+    import_id: Optional[int] = None,
 ) -> list[dict]:
     query = """SELECT g.*, COALESCE(c.tipo,'auto') AS tipo
                FROM gastos g LEFT JOIN cuentas c ON g.fuente = c.fuente
@@ -188,6 +189,8 @@ def list_gastos(
         query += " AND g.fuente = ?"; params.append(fuente)
     if moneda:
         query += " AND g.moneda = ?"; params.append(moneda)
+    if import_id is not None:
+        query += " AND g.import_id = ?"; params.append(import_id)
     if sin_categoria:
         query += " AND (g.categoria IS NULL OR g.categoria = '')"
     elif categorias:

@@ -443,19 +443,44 @@ document.getElementById("btn-toggle-filters").addEventListener("click", function
   panel.style.display = open ? "none" : "";
   this.textContent = open ? "Filtros ▾" : "Filtros ▴";
   this.setAttribute("aria-expanded", !open);
+  // Hide import filter row too when collapsing the whole filter panel
+  if (open) {
+    const importRow = document.getElementById("import-filter-row");
+    const importBtn = document.getElementById("btn-toggle-import-filter");
+    importRow.style.display = "none";
+    importBtn.textContent = "+";
+    importBtn.setAttribute("aria-expanded", "false");
+  }
+});
+
+document.getElementById("btn-toggle-import-filter").addEventListener("click", function () {
+  const row  = document.getElementById("import-filter-row");
+  const open = row.style.display !== "none";
+  row.style.display = open ? "none" : "";
+  this.textContent = open ? "+" : "−";
+  this.setAttribute("aria-expanded", !open);
+  // Reset import filter when hiding
+  if (!open) {
+    document.getElementById("filter-import").focus();
+  } else {
+    const sel = document.getElementById("filter-import");
+    if (sel.value) { sel.value = ""; loadGastos(); }
+  }
 });
 
 // ── Gastos ────────────────────────────────────────────────────────────────────
 function _gastosParams() {
   const p = new URLSearchParams();
-  const fuente  = document.getElementById("filter-fuente").value;
-  const usuario = document.getElementById("filter-usuario").value;
-  const mes     = document.getElementById("filter-mes").value;
-  const moneda  = document.getElementById("filter-moneda").value;
-  if (fuente)  p.set("fuente",  fuente);
-  if (usuario) p.set("usuario", usuario);
-  if (mes)     p.set("mes",     mes);
-  if (moneda)  p.set("moneda",  moneda);
+  const fuente    = document.getElementById("filter-fuente").value;
+  const usuario   = document.getElementById("filter-usuario").value;
+  const mes       = document.getElementById("filter-mes").value;
+  const moneda    = document.getElementById("filter-moneda").value;
+  const importId  = document.getElementById("filter-import")?.value;
+  if (fuente)    p.set("fuente",    fuente);
+  if (usuario)   p.set("usuario",   usuario);
+  if (mes)       p.set("mes",       mes);
+  if (moneda)    p.set("moneda",    moneda);
+  if (importId)  p.set("import_id", importId);
   if (_sinCat) {
     p.set("sin_categoria", "true");
   } else if (_selectedCats.size > 0) {
@@ -572,7 +597,7 @@ async function saveUsuario(id, sel) {
   });
 }
 
-["filter-fuente","filter-usuario","filter-mes","filter-moneda"].forEach(id =>
+["filter-fuente","filter-usuario","filter-mes","filter-moneda","filter-import"].forEach(id =>
   document.getElementById(id).addEventListener("change", function() { this.blur(); loadGastos(); }));
 document.getElementById("btn-load").addEventListener("click", loadGastos);
 document.getElementById("btn-export").addEventListener("click", () =>
@@ -696,23 +721,45 @@ async function loadImportaciones() {
   const res  = await fetch(`${BASE}/api/importaciones`);
   const data = await res.json();
   const grp  = document.getElementById("delete-import-optgroup");
-  if (!grp) return;
-  if (!data.length) {
-    grp.innerHTML = "<option disabled>Sin importaciones registradas</option>";
-    return;
-  }
   const _FUENTE_LABEL = {
     amex:"AMEX", bbva_mc:"BBVA MC", bbva_visa:"BBVA Visa",
     bbva_cuenta:"BBVA Cuenta", galicia_mc:"Galicia MC", mercadopago:"MercadoPago",
   };
-  grp.innerHTML = data.map(imp => {
-    const fLabel = _FUENTE_LABEL[imp.fuente] || imp.fuente;
-    const mes    = imp.mes_resumen ? ` (${_fmtMes(imp.mes_resumen)})` : "";
-    const arch   = imp.archivo && imp.archivo !== imp.fuente ? ` — ${imp.archivo}` : "";
-    const fecha  = (imp.fecha_import || "").slice(0, 10);
-    const label  = `[${fecha}] ${fLabel}${mes}${arch} · ${imp.cantidad} mov.`;
-    return `<option value="import:${imp.id}">${label}</option>`;
-  }).join("");
+
+  // Populate delete-target optgroup
+  if (grp) {
+    if (!data.length) {
+      grp.innerHTML = "<option disabled>Sin importaciones registradas</option>";
+    } else {
+      grp.innerHTML = data.map(imp => {
+        const fLabel = _FUENTE_LABEL[imp.fuente] || imp.fuente;
+        const mes    = imp.mes_resumen ? ` (${_fmtMes(imp.mes_resumen)})` : "";
+        const arch   = imp.archivo && imp.archivo !== imp.fuente ? ` — ${imp.archivo}` : "";
+        const fecha  = (imp.fecha_import || "").slice(0, 10);
+        const label  = `[${fecha}] ${fLabel}${mes}${arch} · ${imp.cantidad} mov.`;
+        return `<option value="import:${imp.id}">${label}</option>`;
+      }).join("");
+    }
+  }
+
+  // Populate gastos filter-import combo
+  const filterImport = document.getElementById("filter-import");
+  if (filterImport) {
+    const current = filterImport.value;
+    filterImport.innerHTML = `<option value="">Todas las importaciones</option>` +
+      data.map(imp => {
+        const fLabel = _FUENTE_LABEL[imp.fuente] || imp.fuente;
+        const mes    = imp.mes_resumen ? ` (${_fmtMes(imp.mes_resumen)})` : "";
+        const arch   = imp.archivo && imp.archivo !== imp.fuente ? ` — ${imp.archivo}` : "";
+        const fecha  = (imp.fecha_import || "").slice(0, 10);
+        const label  = `[${fecha}] ${fLabel}${mes}${arch} · ${imp.cantidad} mov.`;
+        return `<option value="${imp.id}">${label}</option>`;
+      }).join("");
+    // Restore selection if still valid
+    if (current && filterImport.querySelector(`option[value="${current}"]`)) {
+      filterImport.value = current;
+    }
+  }
 }
 
 // ── Delete all ────────────────────────────────────────────────────────────────
@@ -1680,6 +1727,8 @@ async function loadUsuarios() {
 }
 
 function _populateUsuarioDropdowns() {
+  // TODO: agregar opción "Sin usuario" (value="__none__") para filtrar gastos
+  // sin persona asignada y poder categorizarlos fácilmente desde la tabla.
   ["filter-usuario","cf-usuario"].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
