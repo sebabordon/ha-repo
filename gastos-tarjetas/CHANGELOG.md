@@ -1,3 +1,10 @@
+## 0.2.34
+
+- **Tabla de Gastos — display normalizado**: los montos siempre se muestran como valor absoluto. Rojo = egreso (dinero que sale), verde con "+" = ingreso (dinero que entra). Aplica la convención correcta según la fuente: tarjetas CC (positivo = egreso) y cuentas/billeteras (negativo = egreso).
+- **Resumen normalizado**: el contador de la tabla ahora muestra "Egresos ARS X · Ingresos +Y" en lugar del total crudo, que era engañoso al mezclar fuentes con convenciones distintas.
+- **CSS**: `.monto.egreso` (rojo), `.monto.ingreso` (verde), `.monto.usd` (itálica). Se elimina `.monto.neg`.
+- Los gráficos ya usaban `_EGRESO_EXPR` y no cambian.
+
 ## 0.2.33
 
 - **Fix caché de service worker**: el CACHE name del SW ahora incluye la versión (`gastos-v0.2.33`) y se inyecta dinámicamente desde el servidor. Cada deploy invalida el caché anterior, evitando que el browser sirva app.js/style.css viejos.

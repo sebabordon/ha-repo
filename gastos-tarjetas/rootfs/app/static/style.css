@@ -257,8 +257,9 @@ tbody tr:hover { background: #fafbff; }
 .badge-mercadopago { background: #fef9c3; color: #854d0e; }
 
 .monto { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.monto.usd { color: #065f46; }
-.monto.neg { color: #16a34a; }
+.monto.egreso  { color: #dc2626; }          /* rojo — dinero que sale  */
+.monto.ingreso { color: #16a34a; }          /* verde — dinero que entra */
+.monto.usd     { font-style: italic; }      /* USD en itálica (el color viene de egreso/ingreso) */
 
 .cat-input { border: 1px solid #ddd; border-radius: 4px; padding: .2rem .5rem; width: 130px; font-size: .85rem; }
 .cat-input.dirty { border-color: #f59e0b; }

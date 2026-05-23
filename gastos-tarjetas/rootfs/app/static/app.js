@@ -1,5 +1,15 @@
 const BASE = window.INGRESS_PREFIX || "";
 
+// Fuentes donde monto positivo = egreso (tarjetas de crédito).
+// Para el resto (cuentas/billeteras) monto negativo = egreso.
+const _CC_FUENTES = ["amex","bbva_mc","bbva_visa","galicia_mc"];
+
+/** Devuelve true si el movimiento es un egreso (dinero que sale). */
+function _isEgreso(monto, fuente) {
+  const m = parseFloat(monto);
+  return _CC_FUENTES.includes(fuente) ? m > 0 : m < 0;
+}
+
 // ── Palette ───────────────────────────────────────────────────────────────────
 const PALETTE = [
   "#6366f1","#22c55e","#f59e0b","#ef4444","#3b82f6",
@@ -426,21 +436,31 @@ async function loadGastos() {
     return;
   }
 
-  const totalARS = gastos.filter(g=>g.moneda==="ARS").reduce((s,g)=>s+parseFloat(g.monto),0);
-  const totalUSD = gastos.filter(g=>g.moneda==="USD").reduce((s,g)=>s+parseFloat(g.monto),0);
+  // Normalized summary: always show egresos/ingresos as positive amounts
+  let egARS = 0, inARS = 0, egUSD = 0, inUSD = 0;
+  gastos.forEach(g => {
+    const abs = Math.abs(parseFloat(g.monto));
+    const eg  = _isEgreso(g.monto, g.fuente);
+    if (g.moneda === "ARS") { if (eg) egARS += abs; else inARS += abs; }
+    else if (g.moneda === "USD") { if (eg) egUSD += abs; else inUSD += abs; }
+  });
   let summary = `${gastos.length} movimientos`;
-  if (totalARS) summary += ` — ARS ${_fmtNum2(totalARS)}`;
-  if (totalUSD) summary += ` — USD ${_fmtNum2(totalUSD)}`;
+  if (egARS)  summary += ` — Egresos ARS ${_fmtNum2(egARS)}`;
+  if (inARS)  summary += ` · Ingresos +${_fmtNum2(inARS)}`;
+  if (egUSD)  summary += ` — Egresos USD ${_fmtNum2(egUSD)}`;
+  if (inUSD)  summary += ` · Ingresos +${_fmtNum2(inUSD)}`;
   document.getElementById("gastos-summary").textContent = summary;
 
   gastos.forEach(g => {
     const tr = document.createElement("tr");
     const u = g.usuario || "";
-    const isNeg = parseFloat(g.monto) < 0;
+    const egreso = _isEgreso(g.monto, g.fuente);
+    const displayMonto = Math.abs(parseFloat(g.monto));
+    const displayStr   = egreso ? _fmtNum2(displayMonto) : `+${_fmtNum2(displayMonto)}`;
     tr.innerHTML = `
       <td><input class="fecha-input" data-id="${g.id}" type="date" value="${g.fecha}"></td>
       <td>${escHtml(g.descripcion)}</td>
-      <td class="monto ${g.moneda==="USD"?"usd":""} ${isNeg?"neg":""}">${_fmtNum2(g.monto)}</td>
+      <td class="monto ${g.moneda==="USD"?"usd":""} ${egreso?"egreso":"ingreso"}">${displayStr}</td>
       <td class="col-moneda">${g.moneda}</td>
       <td><span class="badge badge-${g.fuente}">${g.fuente.replace("_"," ")}</span></td>
       <td>
