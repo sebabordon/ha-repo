@@ -7,40 +7,62 @@ Layout observations (from real PDFs):
   - Each transaction row ends with a running SALDO (always the rightmost
     number in the row).
   - Movement amount is everything to the left of SALDO:
-      negative  → DÉBITO  (money leaving, stored as negative monto)
-      positive  → CRÉDITO (money entering, stored as positive monto)
+      negative  → DEBITO  (money leaving, stored as negative monto)
+      positive  → CREDITO (money entering, stored as positive monto)
   - Amount words always contain a comma (Argentine decimal separator ',').
-    This reliably distinguishes them from reference codes like '70378120'
+    This reliably distinguishes them from reference numbers like '70378120'
     or account numbers like '316-393325/9'.
   - The PDF may contain a second "intervinientes" table (transfer recipients)
-    whose date rows only have ONE amount (the transfer value, no SALDO) →
-    they are skipped by the "need ≥ 2 amounts" rule.
+    whose date rows only have ONE amount (the transfer value, no SALDO) ->
+    they are skipped by the "need >= 2 amounts" rule.
+
+Debit card section ("Tarjetas de Debito"):
+  - Date format: DD/MM/YYYY (full year), distinct from movements (DD/MM).
+  - Merchant name in COMERCIO column (x0 ~218-405).
+  - Amount in IMPORTE column (x0 ~480+), always negative (expense).
+  - The same purchases reappear in "Movimientos" as "PAGO CON VISA DEBITO"
+    (generic). We use the debit-section entries for the merchant name and
+    skip the corresponding duplicate movement rows.
 """
 import re
+from collections import defaultdict
 from datetime import date, datetime
+from decimal import Decimal
 from typing import BinaryIO, Optional
 
 import pdfplumber
 
 from models import Fuente, Moneda
 from parsers.base import BaseParser
-from parsers.utils import group_by_y, parse_ar_amount
+from parsers.utils import group_by_y, parse_ar_amount, row_text
 
+# Movements section: date is DD/MM
 _DATE_RE = re.compile(r"^\d{2}/\d{2}$")
+# Debit card section: date is DD/MM/YYYY
+_DEBIT_DATE_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
 
 _SKIP_DESC = re.compile(
-    r"^(FECHA|ORIGEN|CONCEPTO|DÉB|DEB|CRÉ|CRED|SALDO|TOTAL|BANCO|EMPRESA|"
-    r"REFERENCIA|MON$|DOCUMENTO|PERÍODO|HOJA|ANTERIOR)",
+    r"^(FECHA|ORIGEN|CONCEPTO|D[EÉ]B|CR[EÉ]D|SALDO|TOTAL|BANCO|EMPRESA|"
+    r"REFERENCIA|MON$|DOCUMENTO|PER[IÍ]ODO|HOJA|ANTERIOR)",
     re.IGNORECASE,
 )
 
-# CONCEPTO column starts here; ORIGEN code (x0≈96-132) is excluded.
+# Generic description used for debit-card purchases in the Movimientos section.
+# These are duplicates of the richer Tarjetas de Debito section.
+_DEBIT_CARD_DESC = re.compile(r"^PAGO CON VISA DEBITO\b", re.IGNORECASE)
+
+# CONCEPTO column starts here; ORIGEN code (x0~96-132) is excluded.
 _DESC_X_MIN = 134.0
 # Safe upper bound for description words — amounts never start this early.
 _DESC_X_MAX = 340.0
-# Amounts can start anywhere right of here (they're right-aligned so x0
-# may be left of their column header).
-_AMT_X_MIN  = 340.0
+# Amounts can start anywhere right of here (right-aligned, so x0 may be
+# well left of the column header).
+_AMT_X_MIN = 340.0
+
+# Debit card section column boundaries
+_COMERCIO_X_MIN = 218.0   # COMERCIO column start
+_COMERCIO_X_MAX = 405.0   # COMERCIO column end
+_DEBIT_AMT_X_MIN = 480.0  # IMPORTE column start
 
 
 def _detect_year(pdf) -> int:
@@ -60,6 +82,15 @@ def _parse_date_dm(s: str, year: int) -> Optional[date]:
         return None
 
 
+def _parse_date_dmy(s: str) -> Optional[date]:
+    """Parse DD/MM/YYYY full date from the Tarjetas de Debito section."""
+    try:
+        day, month, year = int(s[:2]), int(s[3:5]), int(s[6:10])
+        return date(year, month, day)
+    except (ValueError, IndexError):
+        return None
+
+
 class BBVACuentaParser(BaseParser):
     fuente = Fuente.BBVA_CUENTA
 
@@ -69,6 +100,68 @@ class BBVACuentaParser(BaseParser):
 
         with pdfplumber.open(file) as pdf:
             year = _detect_year(pdf)
+
+            # ── Pass 1: collect debit-card purchases from "Tarjetas de Debito" ──
+            # These have the real merchant name and a full DD/MM/YYYY date.
+            # Maps abs(monto) -> list of (fecha, comercio, monto) for dedup.
+            debit_purchases: dict[Decimal, list] = defaultdict(list)
+            in_debit = False
+
+            for page in pdf.pages:
+                words = page.extract_words(keep_blank_chars=False)
+                rows = group_by_y(words, tol=2.0)
+
+                for row in rows:
+                    if not row:
+                        continue
+                    rt = row_text(row)
+                    first = row[0]["text"]
+
+                    # Enter debit card sub-section on header rows
+                    if re.search(r"Compras\s+Visa\s+D", rt, re.IGNORECASE) or \
+                       re.search(r"CUENTA\s+D[EÉ]BITO", rt, re.IGNORECASE):
+                        in_debit = True
+                        continue
+
+                    # Exit when we reach the next main section heading
+                    if in_debit and not _DEBIT_DATE_RE.match(first):
+                        if re.match(r"^(Cuentas|Movimientos|CONSOLIDADO|DETALLE)", rt, re.IGNORECASE):
+                            in_debit = False
+                        continue
+
+                    if not in_debit or not _DEBIT_DATE_RE.match(first):
+                        continue
+
+                    fecha = _parse_date_dmy(first)
+                    if fecha is None:
+                        continue
+
+                    comercio_words = [
+                        w for w in row
+                        if _COMERCIO_X_MIN <= w["x0"] < _COMERCIO_X_MAX
+                    ]
+                    comercio = " ".join(w["text"] for w in comercio_words).strip()
+                    if not comercio:
+                        continue
+
+                    amt_words = [
+                        w for w in row
+                        if w["x0"] >= _DEBIT_AMT_X_MIN and "," in w["text"]
+                    ]
+                    monto = parse_ar_amount("".join(w["text"] for w in amt_words))
+                    if monto is None or monto == 0:
+                        continue
+
+                    debit_purchases[abs(monto)].append((fecha, comercio, monto))
+
+            # Add debit-card purchases with their merchant names
+            for entries in debit_purchases.values():
+                for fecha, comercio, monto in entries:
+                    gastos.append(self._gasto(fecha, comercio, monto, Moneda.ARS, filename))
+
+            # ── Pass 2: "Movimientos en cuentas" ─────────────────────────────────
+            # Skip "PAGO CON VISA DEBITO" rows that were already captured above.
+            debit_consumed: dict[Decimal, int] = defaultdict(int)
 
             for page in pdf.pages:
                 words = page.extract_words(keep_blank_chars=False)
@@ -94,8 +187,7 @@ class BBVACuentaParser(BaseParser):
                         continue
 
                     # ── Amounts ───────────────────────────────────────────────
-                    # Only words that contain ',' (Argentine decimal separator).
-                    # This filters out reference numbers, account numbers, etc.
+                    # Only words containing ',' (Argentine decimal separator).
                     amount_candidates = sorted(
                         [
                             (w["x0"], parse_ar_amount(w["text"]))
@@ -104,25 +196,28 @@ class BBVACuentaParser(BaseParser):
                         ],
                         key=lambda t: t[0],
                     )
-                    # Remove unparseable entries
                     amount_candidates = [(x, v) for x, v in amount_candidates if v is not None]
 
                     # Need at least 2: one movement + one SALDO.
                     if len(amount_candidates) < 2:
                         continue
 
-                    # Rightmost value is always the running SALDO — track it.
                     last_saldo = amount_candidates[-1][1]
-
-                    # Movement amount(s) are everything except the rightmost.
                     movement_amounts = [v for _, v in amount_candidates[:-1]]
                     monto = sum(movement_amounts)
 
-                    if monto > 0:
-                        gastos.append(self._gasto(fecha, description, monto, Moneda.ARS, filename))
-                    elif monto < 0:
-                        gastos.append(self._gasto(fecha, description, monto, Moneda.ARS, filename))
-                    # monto == 0 → skip (zero-value or offsetting entries)
+                    if monto == 0:
+                        continue
+
+                    # Skip generic debit-card rows already captured with
+                    # merchant names from the Tarjetas de Debito section.
+                    if _DEBIT_CARD_DESC.match(description):
+                        key = abs(monto)
+                        if debit_consumed[key] < len(debit_purchases.get(key, [])):
+                            debit_consumed[key] += 1
+                            continue
+
+                    gastos.append(self._gasto(fecha, description, monto, Moneda.ARS, filename))
 
         # Expose the final running balance so upload.py can persist it.
         if last_saldo is not None:
