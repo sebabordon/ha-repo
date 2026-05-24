@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, admin, config_route
+from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, admin, config_route, charts
 from db import init_db
 from config import APP_VERSION
 
@@ -36,6 +36,7 @@ app.include_router(stats.router,      prefix="/api",  tags=["stats"])
 app.include_router(cuentas.router,    prefix="/api",  tags=["cuentas"])
 app.include_router(presupuesto.router,  prefix="/api",   tags=["presupuesto"])
 app.include_router(config_route.router, prefix="/api",   tags=["config"])
+app.include_router(charts.router,       prefix="/api",   tags=["charts"])
 app.include_router(admin.router,        prefix="/admin", tags=["admin"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

@@ -1,3 +1,4 @@
+import json
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -128,6 +129,24 @@ def init_db():
                 usuario TEXT PRIMARY KEY,
                 monto_mensual REAL DEFAULT 0,
                 moneda TEXT DEFAULT 'ARS'
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS custom_charts (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre    TEXT NOT NULL,
+                tipo      TEXT NOT NULL DEFAULT 'bar',
+                dimension TEXT NOT NULL DEFAULT 'categoria',
+                metrica   TEXT NOT NULL DEFAULT 'egresos',
+                filtros   TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chart_layout (
+                position INTEGER PRIMARY KEY,
+                chart_id TEXT NOT NULL
             )
         """)
 
@@ -839,6 +858,90 @@ def save_presupuestos_usuario(items: list[dict]):
             "INSERT INTO presupuestos_usuario (usuario, monto_mensual, moneda) VALUES (?,?,?)",
             [(it["usuario"], it["monto_mensual"], it.get("moneda","ARS")) for it in items if it.get("usuario")],
         )
+
+
+_DEFAULT_LAYOUT = ["category", "top_desc", "monthly_cat", "fuente", "usuario", "forecast"]
+
+_INGRESO_EXPR = "CASE WHEN CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL) ELSE 0 END"
+
+
+def get_chart_layout() -> list[str]:
+    with _conn() as conn:
+        rows = conn.execute("SELECT chart_id FROM chart_layout ORDER BY position").fetchall()
+    return [r["chart_id"] for r in rows] if rows else _DEFAULT_LAYOUT[:]
+
+
+def save_chart_layout(layout: list[str]):
+    with _conn() as conn:
+        conn.execute("DELETE FROM chart_layout")
+        conn.executemany(
+            "INSERT INTO chart_layout (position, chart_id) VALUES (?,?)",
+            [(i, cid) for i, cid in enumerate(layout)],
+        )
+
+
+def get_custom_charts() -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute("SELECT * FROM custom_charts ORDER BY id").fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["filtros"] = json.loads(d.get("filtros") or "{}")
+        result.append(d)
+    return result
+
+
+def create_custom_chart(data: dict) -> int:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO custom_charts (nombre,tipo,dimension,metrica,filtros) VALUES (?,?,?,?,?)",
+            (data["nombre"], data.get("tipo","bar"), data.get("dimension","categoria"),
+             data.get("metrica","egresos"), json.dumps(data.get("filtros",{}))),
+        )
+        return cur.lastrowid
+
+
+def update_custom_chart(id: int, data: dict):
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE custom_charts SET nombre=?,tipo=?,dimension=?,metrica=?,filtros=? WHERE id=?",
+            (data["nombre"], data.get("tipo","bar"), data.get("dimension","categoria"),
+             data.get("metrica","egresos"), json.dumps(data.get("filtros",{})), id),
+        )
+
+
+def delete_custom_chart(id: int):
+    with _conn() as conn:
+        conn.execute("DELETE FROM custom_charts WHERE id=?", (id,))
+
+
+def stats_pivot(dimension="categoria", metrica="egresos", fuente=None, usuario=None,
+                mes=None, meses=6, moneda="ARS", excluir_especiales=True, categoria=None) -> list[dict]:
+    """Generic pivot query: group gastos by any dimension, aggregate by any metric."""
+    DIM_MAP = {
+        "categoria": "COALESCE(categoria,'Sin categoría')",
+        "fuente":    "fuente",
+        "usuario":   "COALESCE(usuario,'Sin asignar')",
+        "mes":       "substr(fecha,1,7)",
+    }
+    MET_MAP = {
+        "egresos":  f"ROUND(SUM({_EGRESO_EXPR}),2)",
+        "ingresos": f"ROUND(SUM({_INGRESO_EXPR}),2)",
+        "cantidad": "COUNT(*)",
+    }
+    dim_expr = DIM_MAP.get(dimension, DIM_MAP["categoria"])
+    met_expr = MET_MAP.get(metrica,   MET_MAP["egresos"])
+    order_by = "dim ASC" if dimension == "mes" else "valor DESC"
+    where, params = _base_where(
+        fuente, usuario, mes, meses if not mes else None,
+        moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria,
+    )
+    q = f"""SELECT {dim_expr} AS dim, {met_expr} AS valor
+            FROM gastos {where}
+            GROUP BY dim HAVING valor > 0 ORDER BY {order_by}"""
+    with _conn() as conn:
+        rows = conn.execute(q, params).fetchall()
+    return [{"label": r["dim"], "valor": float(r["valor"])} for r in rows]
 
 
 def stats_presupuesto_usuario_vs_actual(mes: str) -> list[dict]:

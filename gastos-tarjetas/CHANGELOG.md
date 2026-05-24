@@ -1,3 +1,10 @@
+## 0.2.51
+
+- **Grilla de charts unificada y reordenable**: todos los charts (fijos y personalizados) viven en la misma grilla. Cada uno tiene botones ← → para reordenar. El orden se persiste en base de datos.
+- **Charts personalizados**: botón "+ Chart" que abre un modal para configurar nombre, tipo (barras/línea/dona), dimensión (categoría/mes/fuente/persona) y métrica (egresos/ingresos/cantidad). Filtros opcionales fijos por mes, fuente, persona y categoría; si vacíos, usan los filtros globales del tab. Los charts personalizados tienen además ✎ editar y ✕ eliminar.
+- **Endpoint `/api/stats/pivot`**: nuevo endpoint para queries dinámicos agrupados por cualquier dimensión.
+- **Nuevo módulo `routes/charts.py`**: CRUD de custom charts + layout + pivot.
+
 ## 0.2.50
 
 - **Cross-filtering en Gráficos**: hacer click en una categoría (donut o stacked bar) filtra todos los demás charts al instante. Aparece un badge oscuro con el nombre de la categoría y un × para limpiar. Las categorías no seleccionadas se atenúan en el donut.

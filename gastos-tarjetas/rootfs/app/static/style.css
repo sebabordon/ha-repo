@@ -476,11 +476,26 @@ tbody tr:hover { background: #fafbff; }
   position: relative;
 }
 .chart-box-full { grid-column: 1 / -1; }
+.chart-box-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: .65rem; gap: .5rem;
+}
 .chart-box-title {
   font-size: .82rem; font-weight: 600; color: #666;
   text-transform: uppercase; letter-spacing: .04em;
-  margin-bottom: .65rem;
+  flex: 1; min-width: 0;
 }
+.chart-ctrls {
+  display: flex; gap: .2rem; align-items: center; flex-shrink: 0;
+}
+.chart-ctrl-btn {
+  background: none; border: 1px solid #ddd; border-radius: 4px;
+  padding: .1rem .35rem; font-size: .8rem; color: #666;
+  cursor: pointer; line-height: 1.4; transition: background .12s;
+}
+.chart-ctrl-btn:hover:not(:disabled) { background: #ebedf5; color: #16213e; }
+.chart-ctrl-btn:disabled { opacity: .3; cursor: default; }
+.chart-ctrl-del:hover:not(:disabled) { background: #fff1f2; color: #b91c1c; border-color: #fca5a5; }
 .chart-total {
   font-size: .85rem; font-weight: 700;
   color: #16213e; letter-spacing: 0;

@@ -86,61 +86,84 @@
         </span>
       </div>
 
-      <div class="charts-grid">
-        <!-- Row 1: donut + top descriptions -->
-        <div class="chart-box">
-          <div class="chart-box-title">Egresos por categoría<span class="chart-total" id="total-category"></span></div>
-          <canvas id="chart-by-category"></canvas>
-        </div>
-        <div class="chart-box">
-          <div class="chart-box-title">Top 15 descripciones<span class="chart-total" id="total-top-desc"></span></div>
-          <div id="top-desc-wrap" style="position:relative">
-            <canvas id="chart-top-desc"></canvas>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:.4rem">
+        <button class="btn btn-sm" onclick="openChartModal()">+ Chart</button>
+      </div>
+      <div id="charts-grid" class="charts-grid"></div>
+    </section>
+
+    <!-- ── Custom chart modal ────────────────────────────────────────────── -->
+    <div id="chart-modal" class="modal-backdrop" style="display:none">
+      <div class="modal" style="max-width:460px">
+        <h3 id="chart-modal-title">Nuevo chart</h3>
+        <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:.75rem">
+          <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.9rem">
+            Nombre
+            <input id="cm-nombre" type="text" placeholder="Ej: Supermercado por mes" style="padding:.4rem .6rem;border:1px solid #ccc;border-radius:4px">
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem">
+            <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.9rem">
+              Tipo
+              <select id="cm-tipo">
+                <option value="bar">Barras</option>
+                <option value="line">Línea</option>
+                <option value="doughnut">Dona</option>
+              </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.9rem">
+              Dimensión
+              <select id="cm-dimension">
+                <option value="categoria">Categoría</option>
+                <option value="mes">Mes</option>
+                <option value="fuente">Fuente</option>
+                <option value="usuario">Persona</option>
+              </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:.25rem;font-size:.9rem">
+              Métrica
+              <select id="cm-metrica">
+                <option value="egresos">Egresos</option>
+                <option value="ingresos">Ingresos</option>
+                <option value="cantidad">Cantidad</option>
+              </select>
+            </label>
           </div>
-        </div>
-
-        <!-- Row 2: stacked monthly full width -->
-        <div class="chart-box chart-box-full">
-          <div class="chart-box-title">Egresos por categoría — mes a mes<span class="chart-total" id="total-monthly-cat"></span></div>
-          <canvas id="chart-monthly-cat"></canvas>
-        </div>
-
-        <!-- Row 3: by fuente + by usuario -->
-        <div class="chart-box">
-          <div class="chart-box-title">Egresos por fuente<span class="chart-total" id="total-fuente"></span></div>
-          <canvas id="chart-by-fuente"></canvas>
-        </div>
-        <div class="chart-box">
-          <div class="chart-box-title">Egresos por persona<span class="chart-total" id="total-usuario"></span></div>
-          <canvas id="chart-by-usuario"></canvas>
-        </div>
-
-        <!-- Row 4: forecast full width -->
-        <div class="chart-box chart-box-full">
-          <div class="chart-box-title" style="margin-bottom:.4rem">Forecast — próximos meses</div>
-          <div style="display:flex;gap:1rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;font-size:.85rem;color:#666">
-            <label>Proyección:
-              <select id="cf-forecast-meses">
-                <option value="6" selected>6 meses</option>
-                <option value="12">12 meses</option>
-              </select>
-            </label>
-            <label>Basado en:
-              <select id="cf-forecast-historico">
-                <option value="3" selected>Últimos 3 meses</option>
-                <option value="6">Últimos 6 meses</option>
-              </select>
-            </label>
-            <div id="forecast-exclude-wrap" style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">
-              <span>Excluir de ingresos:</span>
-              <span id="forecast-exclude-chips" style="display:inline-flex;flex-wrap:wrap;gap:.25rem"></span>
-              <button id="btn-forecast-exclude-add" class="btn btn-sm" style="padding:.15rem .5rem;font-size:.82rem">+</button>
+          <details>
+            <summary style="cursor:pointer;font-size:.85rem;color:#666;user-select:none">Filtros fijos (opcional — si vacío usa los globales)</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.5rem">
+              <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">
+                Mes
+                <select id="cm-mes"><option value="">Global</option></select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">
+                Fuente
+                <select id="cm-fuente">
+                  <option value="">Global</option>
+                  <option value="amex">AMEX</option>
+                  <option value="bbva_mc">BBVA MC</option>
+                  <option value="bbva_visa">BBVA Visa</option>
+                  <option value="bbva_cuenta">BBVA Cuenta</option>
+                  <option value="galicia_mc">Galicia MC</option>
+                  <option value="mercadopago">MercadoPago</option>
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">
+                Persona
+                <select id="cm-usuario"><option value="">Global</option></select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">
+                Categoría
+                <input id="cm-categoria" type="text" list="cat-datalist" placeholder="Todas" style="padding:.35rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.85rem">
+              </label>
             </div>
-          </div>
-          <canvas id="chart-forecast"></canvas>
+          </details>
+        </div>
+        <div class="modal-footer" style="margin-top:1rem">
+          <button class="btn" onclick="closeChartModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="saveChartModal()">Guardar</button>
         </div>
       </div>
-    </section>
+    </div>
 
     <!-- ── Tab: Gastos ────────────────────────────────────────────────── -->
     <section id="tab-gastos" class="tab-content">

@@ -203,11 +203,20 @@ function _populateMonthFilter(meses) {
   if (!_monthFilterReady) {
     _monthFilterReady = true;
     loadGastos();
-    loadCharts(); // moved here so cf-mes is already set when charts first load
+    _filtersReadyForCharts = true;
+    _checkInitialChartLoad();
   }
 }
 
-loadMonthlyChart(); // triggers _populateMonthFilter → loadGastos + loadCharts
+// Coordinate initial load: charts need both layout AND month filter ready
+let _layoutReady      = false;
+let _filtersReadyForCharts = false;
+function _checkInitialChartLoad() {
+  if (_layoutReady && _filtersReadyForCharts) loadCharts();
+}
+
+loadMonthlyChart(); // triggers _populateMonthFilter → loadGastos + sets _filtersReadyForCharts
+loadChartLayout();  // fetches layout, rebuilds grid, sets _layoutReady
 
 // ── Charts tab ────────────────────────────────────────────────────────────────
 const _charts = {};
@@ -254,6 +263,318 @@ async function loadCharts() {
   _drawByFuente(data.by_fuente);
   _drawByUsuario(data.by_usuario);
   loadForecast();
+  // Draw any custom charts that are in the layout
+  for (const cid of _chartLayout) {
+    if (cid.startsWith("custom_")) _drawCustomChart(cid);
+  }
+}
+
+// ── Chart layout & custom charts ─────────────────────────────────────────────
+let _chartLayout    = [];
+let _customChartsMap = {};
+
+const _FIXED_META = {
+  category:    { title:"Egresos por categoría",             totalId:"total-category",    full:false },
+  top_desc:    { title:"Top 15 descripciones",              totalId:"total-top-desc",    full:false },
+  monthly_cat: { title:"Egresos por categoría — mes a mes", totalId:"total-monthly-cat", full:true  },
+  fuente:      { title:"Egresos por fuente",                totalId:"total-fuente",      full:false },
+  usuario:     { title:"Egresos por persona",               totalId:"total-usuario",     full:false },
+  forecast:    { title:"Forecast — próximos meses",                                      full:true  },
+};
+
+const _FIXED_CANVAS = {
+  category:    "chart-by-category",
+  top_desc:    "chart-top-desc",
+  monthly_cat: "chart-monthly-cat",
+  fuente:      "chart-by-fuente",
+  usuario:     "chart-by-usuario",
+  forecast:    "chart-forecast",
+};
+
+async function loadChartLayout() {
+  const res  = await fetch(`${BASE}/api/charts/layout`);
+  const data = await res.json();
+  _chartLayout = data.layout || [];
+  _customChartsMap = {};
+  (data.custom || []).forEach(c => { _customChartsMap[`custom_${c.id}`] = c; });
+  rebuildChartsGrid();
+  _layoutReady = true;
+  _checkInitialChartLoad();
+}
+
+function rebuildChartsGrid() {
+  // Destroy existing Chart.js instances
+  Object.values(_charts).forEach(c => { try { c.destroy(); } catch(_){} });
+  Object.keys(_charts).forEach(k => delete _charts[k]);
+
+  const grid = document.getElementById("charts-grid");
+  grid.innerHTML = "";
+  _chartLayout.forEach((cid, idx) => {
+    const box = _buildChartBox(cid, idx, _chartLayout.length);
+    if (box) grid.appendChild(box);
+  });
+  // Populate cm-mes and cm-usuario options (for the modal)
+  _refreshModalSelects();
+}
+
+function _buildChartBox(cid, idx, total) {
+  const meta   = _FIXED_META[cid];
+  const custom = _customChartsMap[cid];
+  if (!meta && !custom) return null;
+
+  const title   = meta ? meta.title : custom.nombre;
+  const totalId = meta?.totalId || null;
+  const isFull  = meta ? meta.full : false;
+
+  const div = document.createElement("div");
+  div.className = `chart-box${isFull ? " chart-box-full" : ""}`;
+  div.dataset.chartId = cid;
+
+  const first = idx === 0, last = idx === total - 1;
+  const ctrlsHtml = `
+    <div class="chart-ctrls">
+      <button class="chart-ctrl-btn" onclick="moveChart('${cid}',-1)" title="Mover izquierda" ${first?"disabled":""}>←</button>
+      <button class="chart-ctrl-btn" onclick="moveChart('${cid}', 1)" title="Mover derecha"   ${last ?"disabled":""}>→</button>
+      ${!meta ? `
+        <button class="chart-ctrl-btn" onclick="editCustomChart('${cid}')" title="Editar">✎</button>
+        <button class="chart-ctrl-btn chart-ctrl-del" onclick="deleteCustomChart('${cid}')" title="Eliminar">✕</button>
+      ` : ""}
+    </div>`;
+
+  const headerHtml = `
+    <div class="chart-box-header">
+      <div class="chart-box-title">${escHtml(title)}${totalId?`<span class="chart-total" id="${totalId}"></span>`:""}</div>
+      ${ctrlsHtml}
+    </div>`;
+
+  if (cid === "forecast") {
+    div.innerHTML = headerHtml + `
+      <div style="display:flex;gap:1rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;font-size:.85rem;color:#666">
+        <label>Proyección:
+          <select id="cf-forecast-meses" onchange="this.blur();loadForecast()">
+            <option value="6" selected>6 meses</option><option value="12">12 meses</option>
+          </select>
+        </label>
+        <label>Basado en:
+          <select id="cf-forecast-historico" onchange="this.blur();loadForecast()">
+            <option value="3" selected>Últimos 3 meses</option><option value="6">Últimos 6 meses</option>
+          </select>
+        </label>
+        <div id="forecast-exclude-wrap" style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">
+          <span>Excluir de ingresos:</span>
+          <span id="forecast-exclude-chips" style="display:inline-flex;flex-wrap:wrap;gap:.25rem"></span>
+          <button id="btn-forecast-exclude-add" class="btn btn-sm" style="padding:.15rem .5rem;font-size:.82rem">+</button>
+        </div>
+      </div>
+      <canvas id="chart-forecast"></canvas>`;
+    // Re-bind exclude button (was lost on DOM rebuild)
+    setTimeout(() => {
+      document.getElementById("btn-forecast-exclude-add")?.addEventListener("click", _onForecastExcludeAdd);
+      _renderForecastExcludes();
+    }, 0);
+  } else if (cid === "top_desc") {
+    div.innerHTML = headerHtml + `<div id="top-desc-wrap" style="position:relative"><canvas id="chart-top-desc"></canvas></div>`;
+  } else if (meta) {
+    div.innerHTML = headerHtml + `<canvas id="${_FIXED_CANVAS[cid]}"></canvas>`;
+  } else {
+    // Custom chart
+    div.innerHTML = headerHtml + `<canvas id="chart-custom-${custom.id}"></canvas>`;
+  }
+  return div;
+}
+
+function moveChart(cid, dir) {
+  const idx = _chartLayout.indexOf(cid);
+  if (idx < 0) return;
+  const ni = idx + dir;
+  if (ni < 0 || ni >= _chartLayout.length) return;
+  [_chartLayout[idx], _chartLayout[ni]] = [_chartLayout[ni], _chartLayout[idx]];
+  _saveLayout();
+  rebuildChartsGrid();
+  loadCharts();
+}
+
+function _saveLayout() {
+  return fetch(`${BASE}/api/charts/layout`, {
+    method:"PUT", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({layout: _chartLayout}),
+  });
+}
+
+// ── Custom chart draw ─────────────────────────────────────────────────────────
+async function _drawCustomChart(cid) {
+  const c = _customChartsMap[cid];
+  if (!c) return;
+  const filtros = c.filtros || {};
+  const p = new URLSearchParams();
+  p.set("dimension", c.dimension);
+  p.set("metrica",   c.metrica);
+
+  const mes    = filtros.mes     || document.getElementById("cf-mes").value;
+  const meses  = filtros.meses   || document.getElementById("cf-meses").value;
+  const fuente = filtros.fuente  || document.getElementById("cf-fuente").value;
+  const usr    = filtros.usuario || document.getElementById("cf-usuario").value;
+  const moneda = filtros.moneda  || document.getElementById("cf-moneda").value;
+  const excl   = document.getElementById("chk-excluir-especiales-graf")?.checked ?? true;
+
+  if (mes)            p.set("mes",     mes);
+  else                p.set("meses",   meses);
+  if (fuente)         p.set("fuente",  fuente);
+  if (usr)            p.set("usuario", usr);
+  if (moneda)         p.set("moneda",  moneda);
+  if (filtros.categoria) p.set("categoria", filtros.categoria);
+  if (_crossFilterCat)   p.set("categoria", _crossFilterCat);
+  p.set("excluir_especiales", excl ? "true" : "false");
+
+  const res  = await fetch(`${BASE}/api/stats/pivot?${p}`);
+  const data = await res.json();
+  const rows = data.data || [];
+
+  const canvasId = `chart-custom-${c.id}`;
+  const canvas   = document.getElementById(canvasId);
+  if (!canvas) return;
+
+  const labels = rows.map(r => r.label);
+  const values = rows.map(r => r.valor);
+  const ttl    = values.reduce((s, v) => s + v, 0);
+
+  const titleSpan = canvas.closest(".chart-box")?.querySelector(".chart-total");
+  if (titleSpan) titleSpan.textContent = ttl ? ` — ${_fmtNum2(ttl)}` : "";
+
+  if (_charts[canvasId]) { try { _charts[canvasId].destroy(); } catch(_){} }
+
+  const MET = {egresos:"Egresos", ingresos:"Ingresos", cantidad:"Cantidad"};
+  const tipo = c.tipo || "bar";
+  const baseOpts = {
+    responsive:true, maintainAspectRatio:true,
+    plugins:{ legend:{display:false},
+      tooltip:{callbacks:{label: ctx => ` ${_fmtNum(ctx.raw)}`}} },
+    scales:{ y:{ticks:{callback: v => v>=1000?`${(v/1000).toFixed(0)}k`:v}} },
+  };
+
+  if (tipo === "doughnut" || tipo === "pie") {
+    _charts[canvasId] = new Chart(canvas.getContext("2d"), {
+      type: tipo,
+      data: { labels, datasets:[{ data:values,
+        backgroundColor:PALETTE.slice(0,labels.length), borderWidth:2, borderColor:"#fff" }] },
+      options:{ responsive:true, maintainAspectRatio:true,
+        plugins:{ legend:{position:"right",labels:{boxWidth:12,font:{size:11}}},
+          tooltip:{callbacks:{label: ctx => ` ${ctx.label}: ${_fmtNum(ctx.raw)}`}} } },
+    });
+  } else if (tipo === "line") {
+    _charts[canvasId] = new Chart(canvas.getContext("2d"), {
+      type:"line",
+      data:{ labels, datasets:[{ label:MET[c.metrica]||c.metrica, data:values,
+        borderColor:PALETTE[0], backgroundColor:PALETTE[0]+"33",
+        fill:true, tension:.3, pointRadius:4 }] },
+      options:{...baseOpts, plugins:{...baseOpts.plugins, legend:{display:false}}},
+    });
+  } else {
+    _charts[canvasId] = new Chart(canvas.getContext("2d"), {
+      type:"bar",
+      data:{ labels, datasets:[{ label:MET[c.metrica]||c.metrica, data:values,
+        backgroundColor:PALETTE.slice(0,labels.length), borderRadius:4 }] },
+      options: baseOpts,
+    });
+  }
+}
+
+// ── Custom chart modal ────────────────────────────────────────────────────────
+let _editingChartCid = null;
+
+function _refreshModalSelects() {
+  // Populate cm-mes from existing month options
+  const cmMes = document.getElementById("cm-mes");
+  if (cmMes) {
+    const current = cmMes.value;
+    while (cmMes.options.length > 1) cmMes.remove(1);
+    const src = document.getElementById("cf-mes");
+    if (src) [...src.options].forEach(o => { if (o.value) { const n = new Option(o.text, o.value); cmMes.appendChild(n); } });
+    if (current) cmMes.value = current;
+  }
+  // Populate cm-usuario from _usuariosConfig
+  const cmUsr = document.getElementById("cm-usuario");
+  if (cmUsr) {
+    while (cmUsr.options.length > 1) cmUsr.remove(1);
+    (_usuariosConfig.usuarios || ["Titular","Adicional"]).forEach(u => {
+      cmUsr.appendChild(new Option(u, u));
+    });
+  }
+}
+
+function openChartModal(cid) {
+  _editingChartCid = cid || null;
+  const c = cid ? _customChartsMap[cid] : null;
+  document.getElementById("chart-modal-title").textContent = c ? "Editar chart" : "Nuevo chart";
+  document.getElementById("cm-nombre").value    = c?.nombre    || "";
+  document.getElementById("cm-tipo").value      = c?.tipo      || "bar";
+  document.getElementById("cm-dimension").value = c?.dimension || "categoria";
+  document.getElementById("cm-metrica").value   = c?.metrica   || "egresos";
+  const f = c?.filtros || {};
+  _refreshModalSelects();
+  document.getElementById("cm-mes").value      = f.mes      || "";
+  document.getElementById("cm-fuente").value   = f.fuente   || "";
+  document.getElementById("cm-usuario").value  = f.usuario  || "";
+  document.getElementById("cm-categoria").value = f.categoria || "";
+  document.getElementById("chart-modal").style.display = "";
+}
+
+function closeChartModal() {
+  document.getElementById("chart-modal").style.display = "none";
+  _editingChartCid = null;
+}
+
+async function saveChartModal() {
+  const nombre = document.getElementById("cm-nombre").value.trim();
+  if (!nombre) { showToast("Ingresá un nombre para el chart", "err"); return; }
+  const filtros = {};
+  const mes      = document.getElementById("cm-mes").value;
+  const fuente   = document.getElementById("cm-fuente").value;
+  const usuario  = document.getElementById("cm-usuario").value;
+  const categoria = document.getElementById("cm-categoria").value.trim();
+  if (mes)       filtros.mes      = mes;
+  if (fuente)    filtros.fuente   = fuente;
+  if (usuario)   filtros.usuario  = usuario;
+  if (categoria) filtros.categoria = categoria;
+
+  const body = {
+    nombre,
+    tipo:      document.getElementById("cm-tipo").value,
+    dimension: document.getElementById("cm-dimension").value,
+    metrica:   document.getElementById("cm-metrica").value,
+    filtros,
+  };
+
+  if (_editingChartCid) {
+    const id = parseInt(_editingChartCid.replace("custom_",""));
+    await fetch(`${BASE}/api/charts/custom/${id}`, {
+      method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body),
+    });
+  } else {
+    const res  = await fetch(`${BASE}/api/charts/custom`, {
+      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body),
+    });
+    const data = await res.json();
+    const newCid = `custom_${data.id}`;
+    _chartLayout.push(newCid);
+    await _saveLayout();
+  }
+
+  closeChartModal();
+  await loadChartLayout();
+  loadCharts();
+}
+
+function editCustomChart(cid) { openChartModal(cid); }
+
+async function deleteCustomChart(cid) {
+  if (!confirm("¿Eliminar este chart?")) return;
+  const id = parseInt(cid.replace("custom_",""));
+  await fetch(`${BASE}/api/charts/custom/${id}`, {method:"DELETE"});
+  _chartLayout = _chartLayout.filter(c => c !== cid);
+  await _saveLayout();
+  await loadChartLayout();
+  loadCharts();
 }
 
 function _destroyAndCreate(id, config) {
@@ -1787,7 +2108,7 @@ function removeForecastExclude(i) {
   loadForecast();
 }
 
-document.getElementById("btn-forecast-exclude-add")?.addEventListener("click", async () => {
+async function _onForecastExcludeAdd() {
   const cats = await fetch(`${BASE}/api/categorias`).then(r => r.json());
   const available = cats.filter(c => !_forecastExcludes.includes(c));
   if (!available.length) { showToast("No hay más categorías para excluir.", "ok"); return; }
@@ -1803,9 +2124,8 @@ document.getElementById("btn-forecast-exclude-add")?.addEventListener("click", a
       }
     }
   );
-});
-
-_renderForecastExcludes();
+}
+// Note: btn-forecast-exclude-add is re-bound in _buildChartBox each time the grid rebuilds
 
 async function loadForecast() {
   const meses     = document.getElementById("cf-forecast-meses")?.value || "6";
@@ -1853,8 +2173,7 @@ function _drawForecast(data) {
   });
 }
 
-["cf-forecast-meses","cf-forecast-historico"].forEach(id =>
-  document.getElementById(id)?.addEventListener("change", function() { this.blur(); loadForecast(); }));
+// forecast controls use inline onchange="loadForecast()" — no module-level binding needed
 
 // ── Cuentas tab ───────────────────────────────────────────────────────────────
 let _cuentasData = [];
