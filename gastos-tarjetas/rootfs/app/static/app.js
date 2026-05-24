@@ -238,6 +238,13 @@ loadChartLayout();  // fetches layout, rebuilds grid, sets _layoutReady
 const _charts = {};
 let _crossFilterCat = null;
 
+// Consistent color map built by _drawDonut so all charts share the same
+// category→color assignment.
+const _categoryColors = {};
+function _catColor(cat, fallbackIdx) {
+  return _categoryColors[cat] || PALETTE[fallbackIdx % PALETTE.length];
+}
+
 function setCrossFilter(cat) {
   if (_crossFilterCat === cat) { clearCrossFilter(); return; }
   _crossFilterCat = cat;
@@ -625,15 +632,17 @@ function _drawDonut(data) {
   const _tc = document.getElementById("total-category");
   if (_tc) _tc.textContent = total ? ` — ${_fmtNum2(total)}` : "";
   const top = data.slice(0, 12);
+  // Build / refresh the global color map so other charts stay in sync
+  top.forEach((d, i) => { _categoryColors[d.categoria] = PALETTE[i % PALETTE.length]; });
   _destroyAndCreate("chart-by-category", {
     type: "doughnut",
     data: {
       labels:   top.map(d => d.categoria),
       datasets: [{ data: top.map(d => d.total),
-        backgroundColor: top.map((d, i) =>
+        backgroundColor: top.map(d =>
           _crossFilterCat && d.categoria !== _crossFilterCat
             ? "#d1d5db"
-            : PALETTE[i % PALETTE.length]),
+            : _categoryColors[d.categoria]),
         borderWidth: 2, borderColor: "#fff" }],
     },
     options: {
@@ -695,7 +704,7 @@ function _drawMonthlyCat(rows) {
   const datasets = cats.map((cat, i) => ({
     label: cat,
     data:  months.map(m => { const f = rows.find(r=>r.mes===m&&r.categoria===cat); return f?f.total:0; }),
-    backgroundColor: PALETTE[i % PALETTE.length],
+    backgroundColor: _catColor(cat, i),
     borderRadius: 2, borderWidth: 0,
   }));
 

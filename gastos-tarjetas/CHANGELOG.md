@@ -1,3 +1,7 @@
+## 0.2.59
+
+- **Colores consistentes entre charts**: el donut "por categoría" ahora construye un mapa global `categoría → color` al renderizar, y el stacked bar "mes a mes" lo usa para asignar el mismo color a cada categoría. "Supermercado" siempre es el mismo color en ambos charts.
+
 ## 0.2.58
 
 - **Versión en el navbar**: muestra `v0.2.58` en gris pequeño al lado del título "Gastos". Se inyecta desde el servidor (`window.APP_VERSION`) así siempre queda en sincronía con la versión del add-on.
