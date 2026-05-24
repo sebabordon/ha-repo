@@ -361,6 +361,10 @@ async function loadCategorias() {
 }
 
 function renderCatChips(cats) {
+  // Populate shared datalist for category autocomplete
+  const dl = document.getElementById("cat-datalist");
+  if (dl) dl.innerHTML = cats.map(c => `<option value="${escHtml(c)}"></option>`).join("");
+
   const container = document.getElementById("cat-chips");
   const allActive = !_sinCat && _selectedCats.size === 0;
   container.innerHTML = `<span class="cat-chip cat-todos ${allActive?"active":""}" onclick="toggleAllCats()">Todas</span>`;
@@ -554,7 +558,8 @@ async function loadGastos() {
       </td>
       <td>
         <input class="cat-input" data-id="${g.id}" value="${escHtml(g.categoria||"")}"
-          title="${g.categoria_fuente?"Fuente: "+g.categoria_fuente:""}" />
+          title="${g.categoria_fuente?"Fuente: "+g.categoria_fuente:""}"
+          list="cat-datalist" autocomplete="off" />
       </td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm btn-action" onclick="saveCategoria(${g.id},this)">✓</button>

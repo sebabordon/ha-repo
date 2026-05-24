@@ -162,7 +162,7 @@
             <option value="ingreso">Ingreso (+)</option>
           </select>
           <input id="nm-monto" class="f-monto" type="number" placeholder="Monto" min="0" step="0.01">
-          <input id="nm-cat"   class="f-cat"   type="text"   placeholder="Categoría">
+          <input id="nm-cat"   class="f-cat"   type="text"   placeholder="Categoría" list="cat-datalist" autocomplete="off">
           <select id="nm-mon">
             <option value="ARS">ARS</option>
             <option value="USD">USD</option>
@@ -396,5 +396,7 @@
   </div>
 
   <script src="/static/app.js"></script>
+  <!-- Shared datalist for category autocomplete (populated by renderCatChips) -->
+  <datalist id="cat-datalist"></datalist>
 </body>
 </html>
