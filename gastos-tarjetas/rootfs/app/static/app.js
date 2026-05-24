@@ -269,7 +269,19 @@ function _chartParams() {
 async function loadCharts() {
   const res  = await fetch(`${BASE}/api/stats?${_chartParams()}`);
   const data = await res.json();
-  _drawDonut(data.by_category);
+
+  // The category donut always shows ALL categories (so the gray dimming makes
+  // sense). When cross-filtering we make a second call without the categoria
+  // param so we get the full list, then dim non-selected slices client-side.
+  if (_crossFilterCat) {
+    const p = new URLSearchParams(_chartParams().toString());
+    p.delete("categoria");
+    const res2 = await fetch(`${BASE}/api/stats?${p}`);
+    const data2 = await res2.json();
+    _drawDonut(data2.by_category);
+  } else {
+    _drawDonut(data.by_category);
+  }
   _drawTopDesc(data.top_descriptions);
   _drawMonthlyCat(data.monthly_by_category);
   _drawByFuente(data.by_fuente);
