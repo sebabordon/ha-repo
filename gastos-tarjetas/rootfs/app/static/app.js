@@ -363,7 +363,7 @@ function _buildChartBox(cid, idx, total) {
 
   const headerHtml = `
     <div class="chart-box-header">
-      <div class="chart-box-title">${escHtml(title)}${totalId?`<span class="chart-total" id="${totalId}"></span>`:""}</div>
+      <div class="chart-box-title">${escHtml(title)}<span class="chart-total"${totalId?` id="${totalId}"`:""}></span></div>
       ${ctrlsHtml}
     </div>`;
 

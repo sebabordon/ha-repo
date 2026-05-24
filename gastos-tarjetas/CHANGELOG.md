@@ -1,3 +1,7 @@
+## 0.2.55
+
+- **Fix charts custom — total en el título**: los charts personalizados ahora muestran el total en el encabezado igual que los charts fijos. El span `.chart-total` se crea siempre en `_buildChartBox`, con o sin `id`.
+
 ## 0.2.54
 
 - **Fix**: `user_config.json` (personas, mapeo fuente→persona, reglas de asignación) ahora también se almacena en el directorio por usuario `/data/{email}/` en lugar del directorio raíz.
