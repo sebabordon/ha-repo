@@ -433,11 +433,12 @@ def delete_gastos_by_archivo(archivo: str):
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
 
-def _base_where(fuente=None, usuario=None, mes=None, meses=None, extra="", moneda='ARS', excluir_especiales=True):
+def _base_where(fuente=None, usuario=None, mes=None, meses=None, extra="", moneda='ARS',
+                excluir_especiales=True, categoria=None):
     """Build WHERE clause + params for stats queries."""
     conds = []
     params = []
-    if excluir_especiales:
+    if excluir_especiales and not categoria:  # skip special-exclusion when drilling into a specific cat
         specials = get_special_categorias()
         if specials:
             ph = ",".join("?" * len(specials))
@@ -449,6 +450,8 @@ def _base_where(fuente=None, usuario=None, mes=None, meses=None, extra="", moned
         conds.append("fuente = ?"); params.append(fuente)
     if usuario:
         conds.append("usuario = ?"); params.append(usuario)
+    if categoria:
+        conds.append("categoria = ?"); params.append(categoria)
     if mes:
         conds.append("fecha LIKE ?"); params.append(f"{mes}-%")
     elif meses:
@@ -458,8 +461,8 @@ def _base_where(fuente=None, usuario=None, mes=None, meses=None, extra="", moned
     return "WHERE " + " AND ".join(conds), params
 
 
-def stats_by_category(fuente=None, usuario=None, mes=None, meses=6, moneda='ARS', excluir_especiales=True):
-    where, params = _base_where(fuente, usuario, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales)
+def stats_by_category(fuente=None, usuario=None, mes=None, meses=6, moneda='ARS', excluir_especiales=True, categoria=None):
+    where, params = _base_where(fuente, usuario, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria)
     q = f"""SELECT COALESCE(categoria,'Sin categoría') AS cat,
               ROUND(SUM({_EGRESO_EXPR}),2) AS total,
               COUNT(*) AS cnt
@@ -470,8 +473,8 @@ def stats_by_category(fuente=None, usuario=None, mes=None, meses=6, moneda='ARS'
     return [{"categoria": r["cat"], "total": float(r["total"]), "count": r["cnt"]} for r in rows]
 
 
-def stats_by_fuente(usuario=None, mes=None, meses=6, moneda='ARS', excluir_especiales=True):
-    where, params = _base_where(None, usuario, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales)
+def stats_by_fuente(usuario=None, mes=None, meses=6, moneda='ARS', excluir_especiales=True, categoria=None):
+    where, params = _base_where(None, usuario, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria)
     q = f"""SELECT fuente,
               ROUND(SUM({_EGRESO_EXPR}),2) AS egreso
             FROM gastos {where}
@@ -481,8 +484,8 @@ def stats_by_fuente(usuario=None, mes=None, meses=6, moneda='ARS', excluir_espec
     return [{"fuente": r["fuente"], "total": float(r["egreso"])} for r in rows]
 
 
-def stats_by_usuario(fuente=None, mes=None, meses=6, moneda='ARS', excluir_especiales=True):
-    where, params = _base_where(fuente, None, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales)
+def stats_by_usuario(fuente=None, mes=None, meses=6, moneda='ARS', excluir_especiales=True, categoria=None):
+    where, params = _base_where(fuente, None, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria)
     q = f"""SELECT COALESCE(usuario,'Sin asignar') AS usr,
               ROUND(SUM({_EGRESO_EXPR}),2) AS egreso
             FROM gastos {where}
@@ -492,8 +495,8 @@ def stats_by_usuario(fuente=None, mes=None, meses=6, moneda='ARS', excluir_espec
     return [{"usuario": r["usr"], "total": float(r["egreso"])} for r in rows]
 
 
-def stats_top_descriptions(fuente=None, usuario=None, mes=None, meses=6, limit=15, moneda='ARS', excluir_especiales=True):
-    where, params = _base_where(fuente, usuario, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales)
+def stats_top_descriptions(fuente=None, usuario=None, mes=None, meses=6, limit=15, moneda='ARS', excluir_especiales=True, categoria=None):
+    where, params = _base_where(fuente, usuario, mes, meses if not mes else None, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria)
     q = f"""SELECT descripcion,
               ROUND(SUM({_EGRESO_EXPR}),2) AS total,
               COUNT(*) AS cnt
@@ -505,8 +508,8 @@ def stats_top_descriptions(fuente=None, usuario=None, mes=None, meses=6, limit=1
     return [{"descripcion": r["descripcion"], "total": float(r["total"]), "count": r["cnt"]} for r in rows]
 
 
-def stats_monthly_by_category(fuente=None, usuario=None, meses=6, moneda='ARS', excluir_especiales=True):
-    where, params = _base_where(fuente, usuario, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales)
+def stats_monthly_by_category(fuente=None, usuario=None, meses=6, moneda='ARS', excluir_especiales=True, categoria=None):
+    where, params = _base_where(fuente, usuario, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria)
     q = f"""SELECT substr(fecha,1,7) AS mes,
               COALESCE(categoria,'Sin categoría') AS cat,
               ROUND(SUM({_EGRESO_EXPR}),2) AS total

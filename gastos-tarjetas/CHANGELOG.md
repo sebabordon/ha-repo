@@ -1,3 +1,10 @@
+## 0.2.50
+
+- **Cross-filtering en Gráficos**: hacer click en una categoría (donut o stacked bar) filtra todos los demás charts al instante. Aparece un badge oscuro con el nombre de la categoría y un × para limpiar. Las categorías no seleccionadas se atenúan en el donut.
+- **Click en leyenda (stacked bar)**: hacer click en un ítem de la leyenda también activa el cross-filter.
+- **Click en Fuente o Persona**: hacer click en una barra/slice de esos charts actualiza el selector correspondiente (fuente / persona) y recarga los charts.
+- **Backend**: nuevo parámetro `categoria` en `/api/stats` y todas las funciones de stats para soportar el filtrado.
+
 ## 0.2.49
 
 - **Fix carga inicial de Gráficos mostraba todo el historial**: `loadCharts()` se ejecutaba antes de que `_populateMonthFilter` tuviera tiempo de setear `cf-mes`, así que el primer render usaba filtro vacío (todos los meses). Ahora `loadCharts()` se dispara desde dentro de `_populateMonthFilter`, garantizando que el filtro ya esté seteado.

@@ -18,18 +18,19 @@ def get_stats(
     meses:               int  = Query(6),
     moneda:              str  = Query('ARS'),
     excluir_especiales:  bool = Query(True),
+    categoria:           Optional[str] = Query(None),
 ):
     require_auth(request)
     if moneda not in ('ARS', 'USD'):
         moneda = 'ARS'
     kw = dict(fuente=fuente, usuario=usuario, mes=mes, meses=meses, moneda=moneda,
-              excluir_especiales=excluir_especiales)
+              excluir_especiales=excluir_especiales, categoria=categoria)
     return {
         "by_category":         stats_by_category(**kw),
-        "by_fuente":           stats_by_fuente(usuario=usuario, mes=mes, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales),
-        "by_usuario":          stats_by_usuario(fuente=fuente, mes=mes, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales),
+        "by_fuente":           stats_by_fuente(usuario=usuario, mes=mes, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria),
+        "by_usuario":          stats_by_usuario(fuente=fuente, mes=mes, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria),
         "top_descriptions":    stats_top_descriptions(**kw),
-        "monthly_by_category": stats_monthly_by_category(fuente=fuente, usuario=usuario, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales),
+        "monthly_by_category": stats_monthly_by_category(fuente=fuente, usuario=usuario, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria),
     }
 
 

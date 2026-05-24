@@ -211,6 +211,21 @@ loadMonthlyChart(); // triggers _populateMonthFilter → loadGastos + loadCharts
 
 // ── Charts tab ────────────────────────────────────────────────────────────────
 const _charts = {};
+let _crossFilterCat = null;
+
+function setCrossFilter(cat) {
+  if (_crossFilterCat === cat) { clearCrossFilter(); return; }
+  _crossFilterCat = cat;
+  const badge = document.getElementById("cross-filter-badge");
+  document.getElementById("cross-filter-label").textContent = cat;
+  badge.style.display = "";
+  loadCharts();
+}
+function clearCrossFilter() {
+  _crossFilterCat = null;
+  document.getElementById("cross-filter-badge").style.display = "none";
+  loadCharts();
+}
 
 function _chartParams() {
   const p = new URLSearchParams();
@@ -220,11 +235,12 @@ function _chartParams() {
   const meses      = document.getElementById("cf-meses").value;
   const moneda     = document.getElementById("cf-moneda").value;
   const excluirEsp = document.getElementById("chk-excluir-especiales-graf")?.checked ?? true;
-  if (fuente)  p.set("fuente",  fuente);
-  if (usuario) p.set("usuario", usuario);
-  if (mes)     p.set("mes", mes);
-  else         p.set("meses", meses);
-  if (moneda)  p.set("moneda", moneda);
+  if (fuente)          p.set("fuente",    fuente);
+  if (usuario)         p.set("usuario",   usuario);
+  if (mes)             p.set("mes",       mes);
+  else                 p.set("meses",     meses);
+  if (moneda)          p.set("moneda",    moneda);
+  if (_crossFilterCat) p.set("categoria", _crossFilterCat);
   p.set("excluir_especiales", excluirEsp ? "true" : "false");
   return p;
 }
@@ -254,14 +270,26 @@ function _drawDonut(data) {
     data: {
       labels:   top.map(d => d.categoria),
       datasets: [{ data: top.map(d => d.total),
-        backgroundColor: PALETTE.slice(0, top.length),
+        backgroundColor: top.map((d, i) =>
+          _crossFilterCat && d.categoria !== _crossFilterCat
+            ? PALETTE[i % PALETTE.length] + "44"
+            : PALETTE[i % PALETTE.length]),
         borderWidth: 2, borderColor: "#fff" }],
     },
     options: {
       responsive: true, maintainAspectRatio: true,
+      onClick: (_, elements) => {
+        if (!elements.length) return;
+        setCrossFilter(top[elements[0].index].categoria);
+      },
       plugins: {
         legend: { position: "right", labels: { boxWidth: 12, font: { size: 11 } } },
-        tooltip: { callbacks: { label: c => ` ${c.label}: ${_fmtNum(c.raw)}` } },
+        tooltip: {
+          callbacks: {
+            label: c => ` ${c.label}: ${_fmtNum(c.raw)}`,
+            footer: () => "Click para filtrar",
+          },
+        },
       },
     },
   });
@@ -314,9 +342,22 @@ function _drawMonthlyCat(rows) {
     data: { labels: months.map(_fmtMes), datasets },
     options: {
       responsive: true, maintainAspectRatio: true,
+      onClick: (_, elements) => {
+        if (!elements.length) return;
+        setCrossFilter(cats[elements[0].datasetIndex]);
+      },
       plugins: {
-        legend: { position:"top", labels:{ boxWidth:12, font:{size:11} } },
-        tooltip: { mode:"index", callbacks:{ label: c => ` ${c.dataset.label}: ${_fmtNum(c.raw)}` } },
+        legend: {
+          position:"top", labels:{ boxWidth:12, font:{size:11} },
+          onClick: (e, item) => { setCrossFilter(item.text); },
+        },
+        tooltip: {
+          mode:"index",
+          callbacks:{
+            label: c => ` ${c.dataset.label}: ${_fmtNum(c.raw)}`,
+            footer: () => "Click para filtrar",
+          },
+        },
       },
       scales: {
         x: { stacked: true },
@@ -338,8 +379,18 @@ function _drawByFuente(data) {
     },
     options: {
       responsive:true, maintainAspectRatio:true,
+      onClick: (_, elements) => {
+        if (!elements.length) return;
+        const fuente = data[elements[0].index].fuente;
+        const sel = document.getElementById("cf-fuente");
+        sel.value = sel.value === fuente ? "" : fuente;
+        loadCharts();
+      },
       plugins:{ legend:{display:false},
-        tooltip:{callbacks:{label: c => ` ${_fmtNum(c.raw)}`}} },
+        tooltip:{callbacks:{
+          label: c => ` ${_fmtNum(c.raw)}`,
+          footer: () => "Click para filtrar por fuente",
+        }} },
       scales:{ y:{ ticks:{callback: v => v>=1000?`${(v/1000).toFixed(0)}k`:v} } },
     },
   });
@@ -358,8 +409,18 @@ function _drawByUsuario(data) {
     },
     options: {
       responsive:true, maintainAspectRatio:true,
+      onClick: (_, elements) => {
+        if (!elements.length) return;
+        const usr = data[elements[0].index].usuario;
+        const sel = document.getElementById("cf-usuario");
+        sel.value = sel.value === usr ? "" : usr;
+        loadCharts();
+      },
       plugins:{ legend:{position:"bottom"},
-        tooltip:{callbacks:{label: c => ` ${c.label}: ${_fmtNum(c.raw)}`}} },
+        tooltip:{callbacks:{
+          label: c => ` ${c.label}: ${_fmtNum(c.raw)}`,
+          footer: () => "Click para filtrar por persona",
+        }} },
     },
   });
 }
