@@ -74,8 +74,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    loadCharts();
     if (tab.dataset.tab === "presupuesto") loadPresupuesto();
-    if (tab.dataset.tab === "cuentas")     loadCuentas();
-    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); }
+    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); }
   });
 });
 
@@ -88,6 +87,21 @@ function toggleCfgSection(id) {
   body.style.display = open ? "none" : "";
   if (arrow) arrow.textContent = open ? "+" : "−";
 }
+
+function cerrarTodoConfig() {
+  ["importar","reglas","usuarios","cuentas","borrar"].forEach(id => {
+    const body  = document.getElementById(`cfg-body-${id}`);
+    const arrow = document.getElementById(`cfg-arr-${id}`);
+    if (body)  body.style.display = "none";
+    if (arrow) arrow.textContent  = "+";
+  });
+}
+
+// ── Scroll-to-top button ──────────────────────────────────────────────────────
+window.addEventListener("scroll", () => {
+  const btn = document.getElementById("btn-scroll-top");
+  if (btn) btn.classList.toggle("visible", window.scrollY > 200);
+});
 
 // ── PWA service worker ────────────────────────────────────────────────────────
 if (!window.INGRESS_PREFIX && "serviceWorker" in navigator) {

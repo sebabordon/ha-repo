@@ -128,6 +128,26 @@ body {
 }
 .cfg-section-body { padding: 1rem 1.5rem; }
 
+.cfg-topbar {
+  display: flex; justify-content: flex-end;
+  margin-bottom: .5rem;
+}
+
+/* ── Scroll-to-top floating button ─────────────────────────────────────────*/
+#btn-scroll-top {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  width: 2.4rem; height: 2.4rem;
+  border-radius: 50%;
+  background: #16213e; color: #fff;
+  border: none; font-size: 1.1rem; line-height: 1;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+  z-index: 900;
+}
+#btn-scroll-top.visible { opacity: 1; pointer-events: auto; }
+#btn-scroll-top:hover   { background: #0f3460; }
+
 /* ── Usuarios config ────────────────────────────────────────────────────────*/
 .usuario-chip {
   display: inline-flex; align-items: center; gap: .3rem;

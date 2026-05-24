@@ -44,7 +44,6 @@
     <div class="tabs">
       <button class="tab active" data-tab="graficos">Gráficos</button>
       <button class="tab" data-tab="gastos">Gastos</button>
-      <button class="tab" data-tab="cuentas">Cuentas</button>
       <button class="tab" data-tab="presupuesto">Presupuesto</button>
       <button class="tab" data-tab="config">⚙ Config</button>
     </div>
@@ -234,18 +233,6 @@
     </section>
 
     <!-- ── Tab: Cuentas ──────────────────────────────────────────────── -->
-    <section id="tab-cuentas" class="tab-content">
-      <div class="rules-header">
-        <h2>Cuentas</h2>
-        <button id="btn-add-cuenta" class="btn">+ Nueva cuenta manual</button>
-      </div>
-      <p class="rules-hint">
-        Las cuentas <strong>automáticas</strong> se actualizan al importar un archivo.
-        Las <strong>manuales</strong> permiten cargar movimientos a mano.
-      </p>
-      <div id="cuentas-list"></div>
-    </section>
-
     <!-- ── Tab: Presupuesto ─────────────────────────────────────────────────── -->
     <section id="tab-presupuesto" class="tab-content">
       <div class="presup-header">
@@ -265,6 +252,10 @@
     <!-- ── Tab: Config ──────────────────────────────────────────────────────── -->
     <section id="tab-config" class="tab-content">
 
+      <div class="cfg-topbar">
+        <button class="btn btn-sm" onclick="cerrarTodoConfig()">Cerrar todo</button>
+      </div>
+
       <!-- ── Accordion: Importar ──────────────────────────────────── -->
       <div class="cfg-section">
         <div class="cfg-section-header" onclick="toggleCfgSection('importar')">
@@ -272,7 +263,6 @@
           Importar
         </div>
         <div class="cfg-section-body" id="cfg-body-importar" style="display:none">
-          <!-- Hidden shared file input — triggered by each parser card -->
           <input type="file" id="upload-file-hidden" accept=".pdf,.xls,.xlsx" style="display:none">
           <div id="parser-grid" class="parser-grid"></div>
           <div id="upload-result-global" style="margin-top:.5rem"></div>
@@ -286,7 +276,6 @@
           Reglas
         </div>
         <div class="cfg-section-body" id="cfg-body-reglas" style="display:none">
-
           <div class="rules-header">
             <h2>Reglas de categorización</h2>
             <button id="btn-add-rule" class="btn">+ Nueva regla</button>
@@ -294,7 +283,6 @@
           </div>
           <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto. "Reaplicar a todos" categoriza los movimientos ya importados (respeta los que editaste a mano).</p>
           <div id="rules-list"></div>
-
           <div class="match-rules-block">
             <div class="rules-header">
               <h2>Reglas de emparejado</h2>
@@ -308,6 +296,56 @@
             </p>
             <div id="match-rules-list"></div>
           </div>
+        </div>
+      </div>
+
+      <!-- ── Accordion: Personas ──────────────────────────────────── -->
+      <div class="cfg-section">
+        <div class="cfg-section-header" onclick="toggleCfgSection('usuarios')">
+          <span class="cfg-arr" id="cfg-arr-usuarios">+</span>
+          Personas
+        </div>
+        <div class="cfg-section-body" id="cfg-body-usuarios" style="display:none">
+          <p class="rules-hint">
+            Gestioná las personas asociadas a los movimientos. Las dos primeras no se pueden eliminar.
+            La <strong>persona por defecto</strong> se asigna automáticamente al importar según la fuente.
+            Hacé click en <strong>+</strong> al final de la lista para agregar una nueva.
+          </p>
+          <h3 style="font-size:.95rem;margin:.5rem 0 .6rem">Personas configuradas</h3>
+          <div id="usuarios-list" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.75rem"></div>
+          <h3 style="font-size:.95rem;margin:0 0 .6rem">Persona por defecto según fuente</h3>
+          <div id="fuente-usuario-map"></div>
+          <div style="margin-top:1.75rem">
+            <div class="rules-header">
+              <h2>Reglas de asignación de persona</h2>
+              <button id="btn-add-user-rule" class="btn">+ Nueva regla</button>
+              <button id="btn-apply-user-rules" class="btn">Reaplicar a todos</button>
+            </div>
+            <p class="rules-hint">
+              Definí palabras clave para asignar automáticamente una persona al importar.
+              La primera regla que coincida con la descripción del gasto gana.
+              "Reaplicar a todos" reasigna los movimientos ya importados.
+            </p>
+            <div id="user-rules-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Accordion: Cuentas ───────────────────────────────────── -->
+      <div class="cfg-section">
+        <div class="cfg-section-header" onclick="toggleCfgSection('cuentas')">
+          <span class="cfg-arr" id="cfg-arr-cuentas">+</span>
+          Cuentas
+        </div>
+        <div class="cfg-section-body" id="cfg-body-cuentas" style="display:none">
+          <div class="rules-header" style="margin-bottom:.5rem">
+            <button id="btn-add-cuenta" class="btn">+ Nueva cuenta manual</button>
+          </div>
+          <p class="rules-hint">
+            Las cuentas <strong>automáticas</strong> se actualizan al importar un archivo.
+            Las <strong>manuales</strong> permiten cargar movimientos a mano.
+          </p>
+          <div id="cuentas-list"></div>
         </div>
       </div>
 
@@ -337,42 +375,10 @@
         </div>
       </div>
 
-      <!-- ── Accordion: Usuarios ──────────────────────────────────── -->
-      <div class="cfg-section">
-        <div class="cfg-section-header" onclick="toggleCfgSection('usuarios')">
-          <span class="cfg-arr" id="cfg-arr-usuarios">+</span>
-          Personas
-        </div>
-        <div class="cfg-section-body" id="cfg-body-usuarios" style="display:none">
-          <p class="rules-hint">
-            Gestioná las personas asociadas a los movimientos. Las dos primeras no se pueden eliminar.
-            La <strong>persona por defecto</strong> se asigna automáticamente al importar según la fuente.
-            Hacé click en <strong>+</strong> al final de la lista para agregar una nueva.
-          </p>
-
-          <h3 style="font-size:.95rem;margin:.5rem 0 .6rem">Personas configuradas</h3>
-          <div id="usuarios-list" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.75rem"></div>
-
-          <h3 style="font-size:.95rem;margin:0 0 .6rem">Persona por defecto según fuente</h3>
-          <div id="fuente-usuario-map"></div>
-
-          <div style="margin-top:1.75rem">
-            <div class="rules-header">
-              <h2>Reglas de asignación de persona</h2>
-              <button id="btn-add-user-rule" class="btn">+ Nueva regla</button>
-              <button id="btn-apply-user-rules" class="btn">Reaplicar a todos</button>
-            </div>
-            <p class="rules-hint">
-              Definí palabras clave para asignar automáticamente una persona al importar.
-              La primera regla que coincida con la descripción del gasto gana.
-              "Reaplicar a todos" reasigna los movimientos ya importados.
-            </p>
-            <div id="user-rules-list"></div>
-          </div>
-        </div>
-      </div>
-
     </section>
+
+    <!-- Scroll to top button -->
+    <button id="btn-scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Volver arriba">↑</button>
 
   </main>
 

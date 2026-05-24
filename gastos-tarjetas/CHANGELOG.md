@@ -1,3 +1,9 @@
+## 0.2.44
+
+- **Cuentas en Config**: la solapa "Cuentas" fue eliminada y su contenido se movió a una sección colapsable dentro de ⚙ Config, al final del orden Importar → Reglas → Personas → Cuentas → Borrar.
+- **"Cerrar todo" en Config**: nuevo botón que colapsa todas las secciones de Config de una vez para navegar más rápido.
+- **Botón ↑ scroll-to-top**: botón flotante que aparece al scrollear más de 200px y lleva de vuelta al inicio de la página.
+
 ## 0.2.43
 
 - **Fix `importaciones.cantidad` siempre mostraba 1**: `SELECT changes()` después de `executemany()` en SQLite devuelve solo el conteo de la **última** fila del batch, no el total. Corregido usando `total_changes()` antes y después. Migración automática `fix_importaciones_cantidad_v1` recalcula los conteos históricos desde la tabla `gastos`.
