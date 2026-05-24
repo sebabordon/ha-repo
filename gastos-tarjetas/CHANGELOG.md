@@ -1,3 +1,8 @@
+## 0.2.42
+
+- **Importar por parser**: la sección Importar en Config ahora muestra una grilla de cards — una por fuente (AMEX, BBVA MC, BBVA Visa, BBVA Cuenta, Galicia MC, MercadoPago). Cada card indica el último mes importado y la cantidad de movimientos. Click en la card abre el selector de archivo y sube automáticamente.
+- **Borrar datos separado**: el danger zone de borrar movimientos se movió a su propia sección "Borrar datos" al final de Config, colapsada por default, con header en rojo para distinguirla claramente.
+
 ## 0.2.41
 
 - **Fix forecast — mes incompleto**: el chart de proyección excluye el mes en curso de la regresión lineal. Un mes parcial (ej. 23 de 31 días importados) tiraba la tendencia a cero y proyectaba gastos casi nulos. El mes actual sigue apareciendo en la serie histórica del gráfico.

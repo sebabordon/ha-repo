@@ -727,14 +727,15 @@ document.getElementById("transfer-modal").addEventListener("click", function(e) 
 });
 
 // ── Import batches ────────────────────────────────────────────────────────────
+const _FUENTE_LABEL = {
+  amex:"AMEX", bbva_mc:"BBVA MC", bbva_visa:"BBVA Visa",
+  bbva_cuenta:"BBVA Cuenta", galicia_mc:"Galicia MC", mercadopago:"MercadoPago",
+};
+
 async function loadImportaciones() {
   const res  = await fetch(`${BASE}/api/importaciones`);
   const data = await res.json();
   const grp  = document.getElementById("delete-import-optgroup");
-  const _FUENTE_LABEL = {
-    amex:"AMEX", bbva_mc:"BBVA MC", bbva_visa:"BBVA Visa",
-    bbva_cuenta:"BBVA Cuenta", galicia_mc:"Galicia MC", mercadopago:"MercadoPago",
-  };
 
   // Populate delete-target optgroup
   if (grp) {
@@ -765,11 +766,13 @@ async function loadImportaciones() {
         const label  = `[${fecha}] ${fLabel}${mes}${arch} · ${imp.cantidad} mov.`;
         return `<option value="${imp.id}">${label}</option>`;
       }).join("");
-    // Restore selection if still valid
     if (current && filterImport.querySelector(`option[value="${current}"]`)) {
       filterImport.value = current;
     }
   }
+
+  // Populate parser grid with last-import-per-fuente info
+  renderParserGrid(data);
 }
 
 // ── Delete all ────────────────────────────────────────────────────────────────
@@ -797,22 +800,77 @@ document.getElementById("btn-delete-all").addEventListener("click", () => {
   });
 });
 
-// ── Upload ────────────────────────────────────────────────────────────────────
-document.getElementById("btn-upload").addEventListener("click", async () => {
-  const file   = document.getElementById("upload-file").files[0];
-  const fuente = document.getElementById("upload-fuente").value;
-  const result = document.getElementById("upload-result");
-  if (!file) { showResult(result, "Seleccioná un archivo.", false); return; }
-  const fd = new FormData(); fd.append("file", file); fd.append("fuente", fuente);
+// ── Upload — per-parser grid ──────────────────────────────────────────────────
+const _PARSERS = [
+  { fuente: "amex",        label: "AMEX",        sub: "PDF",  accept: ".pdf" },
+  { fuente: "bbva_mc",     label: "BBVA MC",      sub: "PDF",  accept: ".pdf" },
+  { fuente: "bbva_visa",   label: "BBVA Visa",    sub: "PDF",  accept: ".pdf" },
+  { fuente: "bbva_cuenta", label: "BBVA Cuenta",  sub: "PDF",  accept: ".pdf" },
+  { fuente: "galicia_mc",  label: "Galicia MC",   sub: "PDF",  accept: ".pdf" },
+  { fuente: "mercadopago", label: "MercadoPago",  sub: "XLSX", accept: ".xls,.xlsx" },
+];
+
+let _pendingUploadFuente = null;
+
+function renderParserGrid(importaciones) {
+  // Build map: fuente → most recent import info
+  const lastByFuente = {};
+  for (const imp of importaciones) {
+    if (!lastByFuente[imp.fuente]) lastByFuente[imp.fuente] = imp;
+  }
+
+  const grid = document.getElementById("parser-grid");
+  if (!grid) return;
+  grid.innerHTML = _PARSERS.map(p => {
+    const last = lastByFuente[p.fuente];
+    const lastLine = last
+      ? `<span class="parser-card-last">${last.mes_resumen ? _fmtMes(last.mes_resumen) : (last.fecha_import||"").slice(0,10)} · ${last.cantidad} mov.</span>`
+      : `<span class="parser-card-last parser-card-last-none">Sin imports</span>`;
+    return `
+      <div class="parser-card" onclick="triggerUpload('${p.fuente}')" title="Importar ${p.label}">
+        <div class="parser-card-label">${p.label}</div>
+        <div class="parser-card-sub">${p.sub}</div>
+        ${lastLine}
+        <div class="parser-card-uploading" id="pc-uploading-${p.fuente}" style="display:none">⏳</div>
+      </div>`;
+  }).join("");
+}
+
+function triggerUpload(fuente) {
+  const parser = _PARSERS.find(p => p.fuente === fuente);
+  if (!parser) return;
+  _pendingUploadFuente = fuente;
+  const inp = document.getElementById("upload-file-hidden");
+  inp.accept = parser.accept;
+  inp.click();
+}
+
+document.getElementById("upload-file-hidden").addEventListener("change", async function () {
+  const file   = this.files[0];
+  const fuente = _pendingUploadFuente;
+  this.value   = "";   // reset so same file can be re-selected
+  if (!file || !fuente) return;
+
+  const result    = document.getElementById("upload-result-global");
+  const spinner   = document.getElementById(`pc-uploading-${fuente}`);
+  if (spinner) spinner.style.display = "";
   result.className = ""; result.textContent = "Procesando…";
+
+  const fd = new FormData(); fd.append("file", file); fd.append("fuente", fuente);
   try {
     const res  = await fetch(`${BASE}/api/upload`, {method:"POST", body:fd});
     const data = await res.json();
     if (res.ok) {
       showResult(result, `✅ ${data.importados} movimientos importados (${data.total_parseados} parseados).`, true);
       loadGastos(); loadMonthlyChart(); loadCategorias(); loadSaldos(); loadImportaciones();
-    } else { showResult(result, `❌ ${data.detail||JSON.stringify(data)}`, false); }
-  } catch(e) { showResult(result, `❌ Error de red: ${e}`, false); }
+    } else {
+      showResult(result, `❌ ${data.detail||JSON.stringify(data)}`, false);
+    }
+  } catch(e) {
+    showResult(result, `❌ Error de red: ${e}`, false);
+  } finally {
+    if (spinner) spinner.style.display = "none";
+  }
 });
 
 // ── Categorization rules ──────────────────────────────────────────────────────

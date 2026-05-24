@@ -272,41 +272,10 @@
           Importar
         </div>
         <div class="cfg-section-body" id="cfg-body-importar" style="display:none">
-          <div class="upload-card">
-            <div class="danger-zone">
-              <select id="delete-target" style="min-width:240px">
-                <option value="">Todas las fuentes</option>
-                <optgroup label="Por fuente">
-                  <option value="fuente:amex">AMEX</option>
-                  <option value="fuente:bbva_mc">BBVA Mastercard</option>
-                  <option value="fuente:bbva_visa">BBVA Visa</option>
-                  <option value="fuente:bbva_cuenta">BBVA Cuenta</option>
-                  <option value="fuente:galicia_mc">Galicia Mastercard</option>
-                  <option value="fuente:mercadopago">MercadoPago</option>
-                </optgroup>
-                <optgroup label="Por importación" id="delete-import-optgroup"></optgroup>
-              </select>
-              <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
-              <span class="danger-hint">Eliminá por fuente o por importación individual. Útil para reimportar un resumen sin perder el resto.</span>
-            </div>
-            <div class="form-group">
-              <label>Fuente</label>
-              <select id="upload-fuente">
-                <option value="amex">AMEX Platinum (PDF)</option>
-                <option value="bbva_mc">BBVA Mastercard (PDF)</option>
-                <option value="bbva_visa">BBVA Visa (PDF)</option>
-                <option value="bbva_cuenta">BBVA Cuenta (PDF)</option>
-                <option value="galicia_mc">Galicia Mastercard (PDF)</option>
-                <option value="mercadopago">MercadoPago (XLSX)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Archivo</label>
-              <input type="file" id="upload-file" accept=".pdf,.xls,.xlsx" />
-            </div>
-            <button id="btn-upload" class="btn btn-primary">Importar</button>
-            <div id="upload-result"></div>
-          </div>
+          <!-- Hidden shared file input — triggered by each parser card -->
+          <input type="file" id="upload-file-hidden" accept=".pdf,.xls,.xlsx" style="display:none">
+          <div id="parser-grid" class="parser-grid"></div>
+          <div id="upload-result-global" style="margin-top:.5rem"></div>
         </div>
       </div>
 
@@ -338,6 +307,32 @@
               una categoría — ideal para excluir pagos de tarjeta, transferencias entre cuentas, etc.
             </p>
             <div id="match-rules-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Accordion: Borrar datos ────────────────────────────── -->
+      <div class="cfg-section">
+        <div class="cfg-section-header cfg-section-header-danger" onclick="toggleCfgSection('borrar')">
+          <span class="cfg-arr" id="cfg-arr-borrar">+</span>
+          Borrar datos
+        </div>
+        <div class="cfg-section-body" id="cfg-body-borrar" style="display:none">
+          <div class="danger-zone">
+            <select id="delete-target" style="min-width:240px">
+              <option value="">Todas las fuentes</option>
+              <optgroup label="Por fuente">
+                <option value="fuente:amex">AMEX</option>
+                <option value="fuente:bbva_mc">BBVA Mastercard</option>
+                <option value="fuente:bbva_visa">BBVA Visa</option>
+                <option value="fuente:bbva_cuenta">BBVA Cuenta</option>
+                <option value="fuente:galicia_mc">Galicia Mastercard</option>
+                <option value="fuente:mercadopago">MercadoPago</option>
+              </optgroup>
+              <optgroup label="Por importación" id="delete-import-optgroup"></optgroup>
+            </select>
+            <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
+            <span class="danger-hint">Eliminá por fuente o por importación individual. Útil para reimportar un resumen sin perder el resto.</span>
           </div>
         </div>
       </div>

@@ -118,6 +118,8 @@ body {
   user-select: none;
 }
 .cfg-section-header:hover { background: #ebedf5; }
+.cfg-section-header-danger { color: #b91c1c; }
+.cfg-section-header-danger:hover { background: #fff1f2; }
 .cfg-arr {
   display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px;
@@ -282,9 +284,37 @@ tbody tr:hover { background: #fafbff; }
 .form-group { margin-bottom: 1rem; display: flex; flex-direction: column; gap: .3rem; }
 .form-group label { font-weight: 500; }
 .form-group select, .form-group input[type=file] { padding: .4rem; border: 1px solid #ccc; border-radius: 4px; }
-#upload-result { margin-top: 1rem; padding: .75rem; border-radius: 4px; }
-#upload-result.ok { background: #d1fae5; color: #065f46; }
-#upload-result.err { background: #fee2e2; color: #b91c1c; }
+#upload-result-global { padding: .6rem .75rem; border-radius: 4px; font-size:.88rem; }
+#upload-result-global.ok  { background: #d1fae5; color: #065f46; }
+#upload-result-global.err { background: #fee2e2; color: #b91c1c; }
+
+/* ── Parser grid ──────────────────────────────────────────────────────────── */
+.parser-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .65rem;
+}
+.parser-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 100px;
+  padding: .7rem .9rem .55rem;
+  border: 1.5px solid #c7d2fe;
+  border-radius: 8px;
+  background: #f5f7ff;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .1s;
+  text-align: center;
+  user-select: none;
+}
+.parser-card:hover  { background: #e0e7ff; border-color: #818cf8; transform: translateY(-1px); }
+.parser-card:active { transform: translateY(0); background: #c7d2fe; }
+.parser-card-label  { font-weight: 700; font-size: .92rem; color: #3730a3; }
+.parser-card-sub    { font-size: .72rem; color: #6366f1; margin-bottom: .3rem; }
+.parser-card-last   { font-size: .75rem; color: #475569; white-space: nowrap; }
+.parser-card-last-none { color: #94a3b8; }
 
 .danger-zone {
   display: flex;
