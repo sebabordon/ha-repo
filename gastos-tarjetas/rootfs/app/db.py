@@ -144,6 +144,17 @@ def _run_migrations(conn):
         """)
         conn.execute("INSERT INTO db_migrations (name) VALUES ('normalize_signs_v1')")
 
+    if "fix_importaciones_cantidad_v1" not in done:
+        # v0.2.43: SELECT changes() after executemany() returns 1 (last row only).
+        # Recalculate cantidad for all import batches from actual gastos counts.
+        conn.execute("""
+            UPDATE importaciones
+            SET cantidad = (
+                SELECT COUNT(*) FROM gastos WHERE gastos.import_id = importaciones.id
+            )
+        """)
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('fix_importaciones_cantidad_v1')")
+
 
 @contextmanager
 def _conn():
@@ -166,6 +177,7 @@ def insert_gastos(gastos: list[dict], import_info: dict = None) -> int:
             )
             import_id = cur.lastrowid
 
+        before = conn.execute("SELECT total_changes()").fetchone()[0]
         conn.executemany(
             """INSERT INTO gastos
                (fecha, descripcion, monto, moneda, fuente, categoria, categoria_fuente, archivo_origen, usuario, import_id)
@@ -181,7 +193,7 @@ def insert_gastos(gastos: list[dict], import_info: dict = None) -> int:
                 for g in gastos
             ],
         )
-        count = conn.execute("SELECT changes()").fetchone()[0]
+        count = conn.execute("SELECT total_changes()").fetchone()[0] - before
         if import_id:
             conn.execute("UPDATE importaciones SET cantidad = ? WHERE id = ?", (count, import_id))
         return count

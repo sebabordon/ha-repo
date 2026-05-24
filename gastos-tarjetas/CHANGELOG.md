@@ -1,3 +1,7 @@
+## 0.2.43
+
+- **Fix `importaciones.cantidad` siempre mostraba 1**: `SELECT changes()` después de `executemany()` en SQLite devuelve solo el conteo de la **última** fila del batch, no el total. Corregido usando `total_changes()` antes y después. Migración automática `fix_importaciones_cantidad_v1` recalcula los conteos históricos desde la tabla `gastos`.
+
 ## 0.2.42
 
 - **Importar por parser**: la sección Importar en Config ahora muestra una grilla de cards — una por fuente (AMEX, BBVA MC, BBVA Visa, BBVA Cuenta, Galicia MC, MercadoPago). Cada card indica el último mes importado y la cantidad de movimientos. Click en la card abre el selector de archivo y sube automáticamente.
