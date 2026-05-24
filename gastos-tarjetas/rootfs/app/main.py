@@ -104,6 +104,9 @@ async def root(request: Request):
     html = html.replace('href="/static/', f'href="{prefix}/static/')
     html = html.replace('src="/static/', f'src="{prefix}/static/')
     html = html.replace('href="/auth/', f'href="{prefix}/auth/')
+    # Append ?v= to the two main assets so any version bump busts the browser cache
+    html = html.replace('/static/app.js"',   f'/static/app.js?v={APP_VERSION}"')
+    html = html.replace('/static/style.css"', f'/static/style.css?v={APP_VERSION}"')
     inject = f'<script>window.INGRESS_PREFIX="{prefix}";window.APP_VERSION="{APP_VERSION}";</script>'
     html = html.replace("</head>", inject + "</head>")
     return HTMLResponse(html)

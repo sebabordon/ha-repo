@@ -1,3 +1,7 @@
+## 0.2.60
+
+- **Fix cache de estáticos**: el servidor ahora añade `?v=0.2.60` a las URLs de `app.js` y `style.css` al servir la página. El browser trata la URL como nueva en cada release y descarga los archivos frescos, eliminando el problema de que el código viejo se seguía ejecutando aunque se actualizara el add-on.
+
 ## 0.2.59
 
 - **Colores consistentes entre charts**: el donut "por categoría" ahora construye un mapa global `categoría → color` al renderizar, y el stacked bar "mes a mes" lo usa para asignar el mismo color a cada categoría. "Supermercado" siempre es el mismo color en ambos charts.
