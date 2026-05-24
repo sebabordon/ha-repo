@@ -1,3 +1,7 @@
+## 0.2.56
+
+- **Fix cross-filter donut**: las categorías no seleccionadas ahora se muestran en gris claro (`#d1d5db`) en lugar del semitransparente confuso que tenían antes.
+
 ## 0.2.55
 
 - **Fix charts custom — total en el título**: los charts personalizados ahora muestran el total en el encabezado igual que los charts fijos. El span `.chart-total` se crea siempre en `_buildChartBox`, con o sin `id`.

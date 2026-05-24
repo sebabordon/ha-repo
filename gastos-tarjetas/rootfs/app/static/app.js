@@ -616,7 +616,7 @@ function _drawDonut(data) {
       datasets: [{ data: top.map(d => d.total),
         backgroundColor: top.map((d, i) =>
           _crossFilterCat && d.categoria !== _crossFilterCat
-            ? PALETTE[i % PALETTE.length] + "44"
+            ? "#d1d5db"
             : PALETTE[i % PALETTE.length]),
         borderWidth: 2, borderColor: "#fff" }],
     },
