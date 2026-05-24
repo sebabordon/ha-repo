@@ -8,13 +8,39 @@ from starlette.middleware.sessions import SessionMiddleware
 from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, admin, config_route, charts
 from db import init_db
 from config import APP_VERSION
+import userctx
 
 app = FastAPI(title="Gastos", docs_url=None, redoc_url=None)
 
 
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    init_db()  # initialise the root-level DB (used as migration source)
+
+
+# ── Per-user data context middleware ─────────────────────────────────────────
+# Tracks which users have already had init_db() run this process lifetime so
+# we don't repeat the (cheap but non-zero) work on every request.
+_initialized_users: set[str] = set()
+
+
+@app.middleware("http")
+async def user_data_context(request: Request, call_next):
+    """Set the per-user data directory for the duration of each request."""
+    user = request.session.get("user")
+    token = None
+    if user and user.get("email"):
+        email = user["email"]
+        token = userctx.set_user_context(email)
+        if email not in _initialized_users:
+            init_db()  # create/migrate tables in this user's DB
+            _initialized_users.add(email)
+    try:
+        response = await call_next(request)
+    finally:
+        if token is not None:
+            userctx.reset_user_context(token)
+    return response
 
 app.add_middleware(
     SessionMiddleware,

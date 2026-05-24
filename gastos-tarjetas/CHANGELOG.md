@@ -1,3 +1,14 @@
+## 0.2.53
+
+- **Aislamiento de datos por usuario**: cada usuario tiene su propio directorio de datos en `/data/{email}/` con su `gastos.db`, `rules.yaml` y `match_rules.yaml` independientes. Un middleware establece el contexto de datos por cada request usando `contextvars` de Python, sin necesidad de cambiar las firmas de las funciones existentes.
+- **Migración automática**: en el primer acceso de cada usuario, si existen archivos en `/data/` (instalación anterior con un solo usuario), se copian automáticamente a su directorio personal, preservando todos los datos existentes.
+- Nuevo módulo `userctx.py` con `get_db_path()`, `get_rules_file()`, `get_match_rules_file()` y `set_user_context()`.
+
+## 0.2.52
+
+- **Fix charts desaparecen al recargar la página**: `loadChartLayout()` no tenía manejo de errores — cualquier excepción en el fetch, el JSON o `rebuildChartsGrid()` dejaba `_layoutReady` en `false` para siempre y `loadCharts()` nunca se ejecutaba. Se agregaron try/catch/finally en ambas rutas de inicialización (`loadChartLayout` y `loadMonthlyChart`) garantizando que los flags `_layoutReady` y `_filtersReadyForCharts` siempre se setean aunque algo falle.
+- **Fix crash en cascade**: `_destroyAndCreate()` y todas las funciones `_draw*` hacían `getElementById(...)` sin null-check; si el canvas o el span de total no existían en el DOM, la excepción cortaba el render del resto de los charts. Ahora todos son defensivos.
+
 ## 0.2.51
 
 - **Grilla de charts unificada y reordenable**: todos los charts (fijos y personalizados) viven en la misma grilla. Cada uno tiene botones ← → para reordenar. El orden se persiste en base de datos.

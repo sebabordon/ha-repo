@@ -2,7 +2,7 @@ import yaml
 from fastapi import APIRouter, Request, HTTPException
 from auth import require_auth
 from categorizer import categorize_by_rules
-from config import RULES_FILE, MATCH_RULES_FILE
+from userctx import get_rules_file, get_match_rules_file
 from db import apply_rules_to_all, apply_match_rules, get_special_categorias
 from models import ReglasCategorias, ReglasEmparejado
 
@@ -19,7 +19,7 @@ def get_categorias_especiales(request: Request):
 def get_rules(request: Request):
     require_auth(request)
     try:
-        with open(RULES_FILE) as f:
+        with open(get_rules_file()) as f:
             return yaml.safe_load(f) or {"reglas": []}
     except FileNotFoundError:
         return {"reglas": []}
@@ -31,7 +31,7 @@ def get_rules(request: Request):
 def put_rules(body: ReglasCategorias, request: Request):
     require_auth(request)
     try:
-        with open(RULES_FILE, "w") as f:
+        with open(get_rules_file(), "w") as f:
             yaml.dump(body.model_dump(), f, allow_unicode=True, default_flow_style=False)
     except Exception as e:
         raise HTTPException(500, f"Error al guardar reglas: {e}")
@@ -50,7 +50,7 @@ def post_apply_rules(request: Request):
 
 def _load_match_rules() -> list[dict]:
     try:
-        with open(MATCH_RULES_FILE) as f:
+        with open(get_match_rules_file()) as f:
             data = yaml.safe_load(f) or {}
         return data.get("reglas", [])
     except FileNotFoundError:
@@ -69,7 +69,7 @@ def get_match_rules(request: Request):
 def put_match_rules(body: ReglasEmparejado, request: Request):
     require_auth(request)
     try:
-        with open(MATCH_RULES_FILE, "w") as f:
+        with open(get_match_rules_file(), "w") as f:
             yaml.dump(body.model_dump(), f, allow_unicode=True, default_flow_style=False)
     except Exception as e:
         raise HTTPException(500, f"Error al guardar reglas de emparejado: {e}")

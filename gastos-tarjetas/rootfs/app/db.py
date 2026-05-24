@@ -6,7 +6,7 @@ from typing import Optional
 
 import yaml
 
-from config import DB_PATH, RULES_FILE
+from userctx import get_db_path, get_rules_file
 
 # After the sign-normalization migration (v0.2.35), ALL sources use the same
 # convention: positive monto = egreso (money going out), negative = ingreso.
@@ -28,7 +28,7 @@ def get_special_categorias() -> set[str]:
     any categories where especial=True in rules.yaml.
     """
     try:
-        with open(RULES_FILE) as f:
+        with open(get_rules_file()) as f:
             data = yaml.safe_load(f) or {}
         user_specials = {
             r["categoria"] for r in data.get("reglas", [])
@@ -185,7 +185,7 @@ def _run_migrations(conn):
 
 @contextmanager
 def _conn():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     try:
         yield conn

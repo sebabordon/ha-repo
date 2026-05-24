@@ -125,8 +125,20 @@ fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {
 let _monthlyChart = null;
 
 async function loadMonthlyChart() {
-  const res = await fetch(`${BASE}/api/gastos/monthly`);
-  const data = await res.json();
+  let data;
+  try {
+    const res = await fetch(`${BASE}/api/gastos/monthly`);
+    data = await res.json();
+  } catch(e) {
+    console.error("loadMonthlyChart error:", e);
+    // Ensure chart system can still proceed even if this request fails
+    if (!_monthFilterReady) {
+      _monthFilterReady = true;
+      _filtersReadyForCharts = true;
+      _checkInitialChartLoad();
+    }
+    return;
+  }
   _populateMonthFilter(data.map(d => d.mes));
 
   const labels   = data.map(d => _fmtMes(d.mes));
@@ -291,13 +303,21 @@ const _FIXED_CANVAS = {
   forecast:    "chart-forecast",
 };
 
+const _DEFAULT_LAYOUT_IDS = ["category", "top_desc", "monthly_cat", "fuente", "usuario", "forecast"];
+
 async function loadChartLayout() {
-  const res  = await fetch(`${BASE}/api/charts/layout`);
-  const data = await res.json();
-  _chartLayout = data.layout || [];
-  _customChartsMap = {};
-  (data.custom || []).forEach(c => { _customChartsMap[`custom_${c.id}`] = c; });
-  rebuildChartsGrid();
+  try {
+    const res  = await fetch(`${BASE}/api/charts/layout`);
+    const data = await res.json();
+    _chartLayout = (data.layout && data.layout.length > 0) ? data.layout : [..._DEFAULT_LAYOUT_IDS];
+    _customChartsMap = {};
+    (data.custom || []).forEach(c => { _customChartsMap[`custom_${c.id}`] = c; });
+  } catch(e) {
+    console.error("loadChartLayout error:", e);
+    if (!_chartLayout.length) _chartLayout = [..._DEFAULT_LAYOUT_IDS];
+    _customChartsMap = {};
+  }
+  try { rebuildChartsGrid(); } catch(e) { console.error("rebuildChartsGrid error:", e); }
   _layoutReady = true;
   _checkInitialChartLoad();
 }
@@ -578,13 +598,16 @@ async function deleteCustomChart(cid) {
 }
 
 function _destroyAndCreate(id, config) {
-  if (_charts[id]) _charts[id].destroy();
-  _charts[id] = new Chart(document.getElementById(id).getContext("2d"), config);
+  const canvas = document.getElementById(id);
+  if (!canvas) { console.warn(`_destroyAndCreate: canvas #${id} not found`); return; }
+  if (_charts[id]) { try { _charts[id].destroy(); } catch(_){} }
+  _charts[id] = new Chart(canvas.getContext("2d"), config);
 }
 
 function _drawDonut(data) {
   const total = data.reduce((s, d) => s + (d.total || 0), 0);
-  document.getElementById("total-category").textContent = total ? ` — ${_fmtNum2(total)}` : "";
+  const _tc = document.getElementById("total-category");
+  if (_tc) _tc.textContent = total ? ` — ${_fmtNum2(total)}` : "";
   const top = data.slice(0, 12);
   _destroyAndCreate("chart-by-category", {
     type: "doughnut",
@@ -619,11 +642,12 @@ function _drawDonut(data) {
 function _drawTopDesc(data) {
   const d = data.slice(0, 15);
   const total = d.reduce((s, r) => s + (r.total || 0), 0);
-  document.getElementById("total-top-desc").textContent = total ? ` — ${_fmtNum2(total)}` : "";
+  const _tt = document.getElementById("total-top-desc");
+  if (_tt) _tt.textContent = total ? ` — ${_fmtNum2(total)}` : "";
   // Fix height on the wrapper BEFORE creating the chart so Chart.js reads
   // a stable size and doesn't enter a grow loop.
   const wrap = document.getElementById("top-desc-wrap");
-  wrap.style.height = Math.max(240, d.length * 26 + 40) + "px";
+  if (wrap) wrap.style.height = Math.max(240, d.length * 26 + 40) + "px";
 
   _destroyAndCreate("chart-top-desc", {
     type: "bar",
@@ -645,7 +669,8 @@ function _drawTopDesc(data) {
 
 function _drawMonthlyCat(rows) {
   const total = rows.reduce((s, r) => s + (r.total || 0), 0);
-  document.getElementById("total-monthly-cat").textContent = total ? ` — ${_fmtNum2(total)}` : "";
+  const _tm = document.getElementById("total-monthly-cat");
+  if (_tm) _tm.textContent = total ? ` — ${_fmtNum2(total)}` : "";
   const months = [...new Set(rows.map(r => r.mes))].sort();
   const cats   = [...new Map(
     rows.sort((a,b)=>b.total-a.total).map(r=>[r.categoria, r.total])
@@ -690,7 +715,8 @@ function _drawMonthlyCat(rows) {
 
 function _drawByFuente(data) {
   const total = data.reduce((s, d) => s + (d.total || 0), 0);
-  document.getElementById("total-fuente").textContent = total ? ` — ${_fmtNum2(total)}` : "";
+  const _tf = document.getElementById("total-fuente");
+  if (_tf) _tf.textContent = total ? ` — ${_fmtNum2(total)}` : "";
   _destroyAndCreate("chart-by-fuente", {
     type: "bar",
     data: {
@@ -719,7 +745,8 @@ function _drawByFuente(data) {
 
 function _drawByUsuario(data) {
   const total = data.reduce((s, d) => s + (d.total || 0), 0);
-  document.getElementById("total-usuario").textContent = total ? ` — ${_fmtNum2(total)}` : "";
+  const _tu = document.getElementById("total-usuario");
+  if (_tu) _tu.textContent = total ? ` — ${_fmtNum2(total)}` : "";
   _destroyAndCreate("chart-by-usuario", {
     type: "doughnut",
     data: {

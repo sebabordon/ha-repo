@@ -2,7 +2,8 @@ import re
 import yaml
 from typing import Optional
 
-from config import RULES_FILE, CLAUDE_API_KEY, GROQ_API_KEY, GEMINI_API_KEY
+from config import CLAUDE_API_KEY, GROQ_API_KEY, GEMINI_API_KEY
+from userctx import get_rules_file
 
 _PROMPT = (
     "Categoriza este gasto de tarjeta de crédito argentina en una sola palabra o frase corta "
@@ -15,7 +16,7 @@ _PROMPT = (
 
 def load_rules() -> list[dict]:
     try:
-        with open(RULES_FILE) as f:
+        with open(get_rules_file()) as f:
             data = yaml.safe_load(f) or {}
         return data.get("reglas", [])
     except (FileNotFoundError, yaml.YAMLError):
@@ -106,7 +107,7 @@ def auto_add_keyword_to_rule(descripcion: str, categoria: str) -> bool:
     if not descripcion or not categoria:
         return False
     try:
-        with open(RULES_FILE) as f:
+        with open(get_rules_file()) as f:
             data = yaml.safe_load(f) or {}
     except (FileNotFoundError, yaml.YAMLError):
         data = {}
@@ -125,7 +126,7 @@ def auto_add_keyword_to_rule(descripcion: str, categoria: str) -> bool:
 
     palabras.append(descripcion)
     data["reglas"] = reglas
-    with open(RULES_FILE, "w") as f:
+    with open(get_rules_file(), "w") as f:
         yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
     return True
 
