@@ -495,11 +495,13 @@ async function _drawCustomChart(cid) {
     scales:{ y:{ticks:{callback: v => v>=1000?`${(v/1000).toFixed(0)}k`:v}} },
   };
 
+  const bgColors = labels.map((l, i) => _catColor(l, i));
+
   if (tipo === "doughnut" || tipo === "pie") {
     _charts[canvasId] = new Chart(canvas.getContext("2d"), {
       type: tipo,
       data: { labels, datasets:[{ data:values,
-        backgroundColor:PALETTE.slice(0,labels.length), borderWidth:2, borderColor:"#fff" }] },
+        backgroundColor:bgColors, borderWidth:2, borderColor:"#fff" }] },
       options:{ responsive:true, maintainAspectRatio:true,
         plugins:{ legend:{position:"right",labels:{boxWidth:12,font:{size:11}}},
           tooltip:{callbacks:{label: ctx => ` ${ctx.label}: ${_fmtNum(ctx.raw)}`}} } },
@@ -516,7 +518,7 @@ async function _drawCustomChart(cid) {
     _charts[canvasId] = new Chart(canvas.getContext("2d"), {
       type:"bar",
       data:{ labels, datasets:[{ label:MET[c.metrica]||c.metrica, data:values,
-        backgroundColor:PALETTE.slice(0,labels.length), borderRadius:4 }] },
+        backgroundColor:bgColors, borderRadius:4 }] },
       options: baseOpts,
     });
   }
