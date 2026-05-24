@@ -1,4 +1,8 @@
 const BASE = window.INGRESS_PREFIX || "";
+if (window.APP_VERSION) {
+  const el = document.getElementById("app-version");
+  if (el) el.textContent = "v" + window.APP_VERSION;
+}
 
 // v0.2.35: unified sign convention — positive monto = egreso for ALL sources.
 /** Devuelve true si el movimiento es un egreso (dinero que sale). */

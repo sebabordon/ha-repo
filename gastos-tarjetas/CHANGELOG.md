@@ -1,3 +1,7 @@
+## 0.2.58
+
+- **Versión en el navbar**: muestra `v0.2.58` en gris pequeño al lado del título "Gastos". Se inyecta desde el servidor (`window.APP_VERSION`) así siempre queda en sincronía con la versión del add-on.
+
 ## 0.2.57
 
 - **Fix cross-filter donut**: al clickear una categoría, el donut ahora sigue mostrando todas las categorías (las no seleccionadas en gris) en lugar de colapsar a un solo slice. El problema era que el filtro `categoria=X` se enviaba también al endpoint que alimenta el donut, devolviendo solo una categoría. Ahora se hace un segundo fetch sin ese filtro exclusivamente para el donut.

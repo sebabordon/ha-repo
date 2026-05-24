@@ -52,6 +52,7 @@ body {
   justify-content: space-between;
 }
 .brand { font-size: 1.1rem; font-weight: 600; }
+.app-version { font-size: .72rem; font-weight: 400; color: #94a3b8; margin-left: .4rem; vertical-align: middle; }
 .nav-right { display: flex; gap: 1rem; align-items: center; }
 .nav-right a { color: #aaa; text-decoration: none; }
 .nav-right a:hover { color: #fff; }

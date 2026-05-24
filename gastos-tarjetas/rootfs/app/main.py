@@ -104,6 +104,6 @@ async def root(request: Request):
     html = html.replace('href="/static/', f'href="{prefix}/static/')
     html = html.replace('src="/static/', f'src="{prefix}/static/')
     html = html.replace('href="/auth/', f'href="{prefix}/auth/')
-    inject = f'<script>window.INGRESS_PREFIX="{prefix}";</script>'
+    inject = f'<script>window.INGRESS_PREFIX="{prefix}";window.APP_VERSION="{APP_VERSION}";</script>'
     html = html.replace("</head>", inject + "</head>")
     return HTMLResponse(html)
