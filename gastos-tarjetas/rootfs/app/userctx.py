@@ -22,9 +22,10 @@ from contextvars import ContextVar
 
 # ── Base paths (fall back to env vars, mirroring config.py) ──────────────────
 _DATA_DIR        = os.environ.get("DATA_DIR",        "/data")
-_DEFAULT_DB      = os.path.join(_DATA_DIR, "gastos.db")
-_DEFAULT_RULES   = os.environ.get("RULES_FILE",       os.path.join(_DATA_DIR, "rules.yaml"))
-_DEFAULT_MATCH   = os.environ.get("MATCH_RULES_FILE", os.path.join(_DATA_DIR, "match_rules.yaml"))
+_DEFAULT_DB          = os.path.join(_DATA_DIR, "gastos.db")
+_DEFAULT_RULES       = os.environ.get("RULES_FILE",       os.path.join(_DATA_DIR, "rules.yaml"))
+_DEFAULT_MATCH       = os.environ.get("MATCH_RULES_FILE", os.path.join(_DATA_DIR, "match_rules.yaml"))
+_DEFAULT_USER_CONFIG = os.path.join(_DATA_DIR, "user_config.json")
 
 # Sentinel written after legacy data is migrated to the first user's directory.
 # Its presence tells us NOT to copy root-level files for any subsequent user
@@ -84,9 +85,10 @@ def set_user_context(email: str):
     if not os.path.exists(_MIGRATED_SENTINEL):
         copied_any = False
         for src, fname in [
-            (_DEFAULT_DB,    "gastos.db"),
-            (_DEFAULT_RULES, "rules.yaml"),
-            (_DEFAULT_MATCH, "match_rules.yaml"),
+            (_DEFAULT_DB,          "gastos.db"),
+            (_DEFAULT_RULES,       "rules.yaml"),
+            (_DEFAULT_MATCH,       "match_rules.yaml"),
+            (_DEFAULT_USER_CONFIG, "user_config.json"),
         ]:
             dest = os.path.join(user_dir, fname)
             if not os.path.exists(dest) and os.path.exists(src):

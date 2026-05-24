@@ -1,11 +1,15 @@
 """
 User configuration: managed users list and source→user default mapping.
-Stored in /data/user_config.json (persists across restarts).
+Stored in {user_data_dir}/user_config.json (persists across restarts).
 """
 import json
 import os
 
-_USER_CONFIG_PATH = "/data/user_config.json"
+from userctx import get_data_dir
+
+
+def _user_config_path() -> str:
+    return os.path.join(get_data_dir(), "user_config.json")
 
 _DEFAULT_CONFIG: dict = {
     "usuarios": ["Titular", "Adicional"],
@@ -22,9 +26,10 @@ _DEFAULT_CONFIG: dict = {
 
 
 def read_user_config() -> dict:
-    if os.path.exists(_USER_CONFIG_PATH):
+    path = _user_config_path()
+    if os.path.exists(path):
         try:
-            with open(_USER_CONFIG_PATH) as f:
+            with open(path) as f:
                 data = json.load(f)
             # Ensure required keys exist
             if "usuarios" not in data:
@@ -44,8 +49,7 @@ def read_user_config() -> dict:
 
 
 def write_user_config(data: dict) -> None:
-    dir_ = os.path.dirname(_USER_CONFIG_PATH)
-    if dir_:
-        os.makedirs(dir_, exist_ok=True)
-    with open(_USER_CONFIG_PATH, "w") as f:
+    path = _user_config_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
