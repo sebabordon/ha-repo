@@ -1,3 +1,7 @@
+## 0.2.54
+
+- **Fix**: `user_config.json` (personas, mapeo fuente→persona, reglas de asignación) ahora también se almacena en el directorio por usuario `/data/{email}/` en lugar del directorio raíz.
+
 ## 0.2.53
 
 - **Aislamiento de datos por usuario**: cada usuario tiene su propio directorio de datos en `/data/{email}/` con su `gastos.db`, `rules.yaml` y `match_rules.yaml` independientes. Un middleware establece el contexto de datos por cada request usando `contextvars` de Python, sin necesidad de cambiar las firmas de las funciones existentes.
