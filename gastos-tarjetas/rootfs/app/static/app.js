@@ -173,9 +173,14 @@ function _fmtSaldo(n) {
 let _monthFilterReady = false;
 
 function _populateMonthFilter(meses) {
-  // Auto-select the most recent month ≤ today when there is no prior selection
   const today = new Date().toISOString().slice(0, 7); // "YYYY-MM"
-  const defaultMes = meses.filter(m => m <= today).at(-1) || meses.at(-1) || "";
+
+  // Gastos/presupuesto: mes activo (puede ser el corriente, con datos parciales)
+  const defaultActive = meses.filter(m => m <= today).at(-1) || meses.at(-1) || "";
+  // Gráficos: último mes *cerrado* (estrictamente anterior al mes en curso)
+  const defaultClosed = meses.filter(m => m < today).at(-1) || defaultActive;
+
+  const initialDefaults = { "filter-mes": defaultActive, "cf-mes": defaultClosed, "presup-mes": defaultActive };
 
   ["filter-mes","cf-mes","presup-mes"].forEach(id => {
     const sel = document.getElementById(id);
@@ -188,21 +193,21 @@ function _populateMonthFilter(meses) {
       sel.appendChild(opt);
     });
     // After first load: always restore whatever the user had (including "" = Todos).
-    // On first load only: auto-select the most recent month if nothing was chosen.
+    // On first load only: auto-select the appropriate default per selector.
     if (_monthFilterReady) sel.value = current;
     else if (current)      sel.value = current;
-    else if (defaultMes)   sel.value = defaultMes;
+    else                   sel.value = initialDefaults[id] || defaultActive;
   });
 
-  // Trigger initial gastos load now that the month filter is set
+  // Trigger initial loads now that the month filters are set
   if (!_monthFilterReady) {
     _monthFilterReady = true;
     loadGastos();
+    loadCharts(); // moved here so cf-mes is already set when charts first load
   }
 }
 
-loadMonthlyChart();
-loadCharts();
+loadMonthlyChart(); // triggers _populateMonthFilter → loadGastos + loadCharts
 
 // ── Charts tab ────────────────────────────────────────────────────────────────
 const _charts = {};

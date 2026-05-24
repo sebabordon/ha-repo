@@ -1,3 +1,8 @@
+## 0.2.49
+
+- **Fix carga inicial de Gráficos mostraba todo el historial**: `loadCharts()` se ejecutaba antes de que `_populateMonthFilter` tuviera tiempo de setear `cf-mes`, así que el primer render usaba filtro vacío (todos los meses). Ahora `loadCharts()` se dispara desde dentro de `_populateMonthFilter`, garantizando que el filtro ya esté seteado.
+- **Gráficos arranca en el último mes cerrado**: el selector de mes de Gráficos (`cf-mes`) defaultea al último mes *completo* (estrictamente anterior al mes en curso), mientras que Gastos sigue defaulteando al mes activo (mes corriente con datos parciales).
+
 ## 0.2.48
 
 - **Total en cada gráfico**: cada chart de Gráficos muestra el total del período en el encabezado — Egresos por categoría, Top 15 descripciones, Mes a mes, Por fuente y Por persona.
