@@ -1,3 +1,7 @@
+## 0.2.46
+
+- **Fix filtro de mes se reseteaba al guardar categoría**: al llamar `saveCategoria` o `saveFecha` se recargaba el gráfico mensual, que a su vez repoblaba el combo de meses. Si el usuario tenía "Todos los meses" seleccionado (valor vacío), la lógica lo trataba como "sin selección" y aplicaba el mes por defecto (mes actual). Ahora, después del primer cargado inicial, el combo siempre preserva el valor que el usuario tenía — incluido el vacío ("Todos los meses").
+
 ## 0.2.45
 
 - **Autocomplete de categorías**: el campo de categoría en la tabla de Gastos y en el panel "Nuevo movimiento" ahora sugiere las categorías existentes al tipear, usando un `<datalist>` nativo del browser. Evita crear categorías duplicadas por errores de tipeo.

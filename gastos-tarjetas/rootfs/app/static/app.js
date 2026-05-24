@@ -187,8 +187,11 @@ function _populateMonthFilter(meses) {
       opt.value = m; opt.textContent = _fmtMes(m);
       sel.appendChild(opt);
     });
-    if (current) sel.value = current;
-    else if (defaultMes) sel.value = defaultMes;
+    // After first load: always restore whatever the user had (including "" = Todos).
+    // On first load only: auto-select the most recent month if nothing was chosen.
+    if (_monthFilterReady) sel.value = current;
+    else if (current)      sel.value = current;
+    else if (defaultMes)   sel.value = defaultMes;
   });
 
   // Trigger initial gastos load now that the month filter is set
