@@ -241,6 +241,8 @@ function _destroyAndCreate(id, config) {
 }
 
 function _drawDonut(data) {
+  const total = data.reduce((s, d) => s + (d.total || 0), 0);
+  document.getElementById("total-category").textContent = total ? ` — ${_fmtNum2(total)}` : "";
   const top = data.slice(0, 12);
   _destroyAndCreate("chart-by-category", {
     type: "doughnut",
@@ -262,6 +264,8 @@ function _drawDonut(data) {
 
 function _drawTopDesc(data) {
   const d = data.slice(0, 15);
+  const total = d.reduce((s, r) => s + (r.total || 0), 0);
+  document.getElementById("total-top-desc").textContent = total ? ` — ${_fmtNum2(total)}` : "";
   // Fix height on the wrapper BEFORE creating the chart so Chart.js reads
   // a stable size and doesn't enter a grow loop.
   const wrap = document.getElementById("top-desc-wrap");
@@ -286,6 +290,8 @@ function _drawTopDesc(data) {
 }
 
 function _drawMonthlyCat(rows) {
+  const total = rows.reduce((s, r) => s + (r.total || 0), 0);
+  document.getElementById("total-monthly-cat").textContent = total ? ` — ${_fmtNum2(total)}` : "";
   const months = [...new Set(rows.map(r => r.mes))].sort();
   const cats   = [...new Map(
     rows.sort((a,b)=>b.total-a.total).map(r=>[r.categoria, r.total])
@@ -316,6 +322,8 @@ function _drawMonthlyCat(rows) {
 }
 
 function _drawByFuente(data) {
+  const total = data.reduce((s, d) => s + (d.total || 0), 0);
+  document.getElementById("total-fuente").textContent = total ? ` — ${_fmtNum2(total)}` : "";
   _destroyAndCreate("chart-by-fuente", {
     type: "bar",
     data: {
@@ -333,6 +341,8 @@ function _drawByFuente(data) {
 }
 
 function _drawByUsuario(data) {
+  const total = data.reduce((s, d) => s + (d.total || 0), 0);
+  document.getElementById("total-usuario").textContent = total ? ` — ${_fmtNum2(total)}` : "";
   _destroyAndCreate("chart-by-usuario", {
     type: "doughnut",
     data: {

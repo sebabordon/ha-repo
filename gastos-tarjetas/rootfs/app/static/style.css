@@ -481,6 +481,11 @@ tbody tr:hover { background: #fafbff; }
   text-transform: uppercase; letter-spacing: .04em;
   margin-bottom: .65rem;
 }
+.chart-total {
+  font-size: .85rem; font-weight: 700;
+  color: #16213e; letter-spacing: 0;
+  text-transform: none;
+}
 
 /* ── Match rules ─────────────────────────────────────────────────────────────*/
 

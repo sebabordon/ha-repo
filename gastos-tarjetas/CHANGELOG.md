@@ -1,3 +1,7 @@
+## 0.2.48
+
+- **Total en cada gráfico**: cada chart de Gráficos muestra el total del período en el encabezado — Egresos por categoría, Top 15 descripciones, Mes a mes, Por fuente y Por persona.
+
 ## 0.2.47
 
 - **Columnas ordenables — Gastos**: hacer click en los encabezados Fecha, Descripción, Monto, Persona y Categoría ordena la tabla. Click de nuevo invierte el orden. El orden es client-side sobre los datos ya cargados.

@@ -85,11 +85,11 @@
       <div class="charts-grid">
         <!-- Row 1: donut + top descriptions -->
         <div class="chart-box">
-          <div class="chart-box-title">Egresos por categoría</div>
+          <div class="chart-box-title">Egresos por categoría<span class="chart-total" id="total-category"></span></div>
           <canvas id="chart-by-category"></canvas>
         </div>
         <div class="chart-box">
-          <div class="chart-box-title">Top 15 descripciones</div>
+          <div class="chart-box-title">Top 15 descripciones<span class="chart-total" id="total-top-desc"></span></div>
           <div id="top-desc-wrap" style="position:relative">
             <canvas id="chart-top-desc"></canvas>
           </div>
@@ -97,17 +97,17 @@
 
         <!-- Row 2: stacked monthly full width -->
         <div class="chart-box chart-box-full">
-          <div class="chart-box-title">Egresos por categoría — mes a mes</div>
+          <div class="chart-box-title">Egresos por categoría — mes a mes<span class="chart-total" id="total-monthly-cat"></span></div>
           <canvas id="chart-monthly-cat"></canvas>
         </div>
 
         <!-- Row 3: by fuente + by usuario -->
         <div class="chart-box">
-          <div class="chart-box-title">Egresos por fuente</div>
+          <div class="chart-box-title">Egresos por fuente<span class="chart-total" id="total-fuente"></span></div>
           <canvas id="chart-by-fuente"></canvas>
         </div>
         <div class="chart-box">
-          <div class="chart-box-title">Egresos por persona</div>
+          <div class="chart-box-title">Egresos por persona<span class="chart-total" id="total-usuario"></span></div>
           <canvas id="chart-by-usuario"></canvas>
         </div>
 
