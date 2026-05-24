@@ -1,3 +1,10 @@
+## 0.2.47
+
+- **Columnas ordenables — Gastos**: hacer click en los encabezados Fecha, Descripción, Monto, Persona y Categoría ordena la tabla. Click de nuevo invierte el orden. El orden es client-side sobre los datos ya cargados.
+- **Columnas ordenables — Presupuesto**: los encabezados Categoría/Persona, Presupuesto, Gastado y Diferencia también son clicables. Por defecto ordena por Gastado descendente.
+- **Presupuesto por Persona**: segunda sección en la solapa Presupuesto que permite definir un presupuesto mensual por usuario y compararlo contra el gasto real del mes. Misma UX que el presupuesto por categoría — editable inline, auto-save, barra de progreso.
+- **Reglas de usuario (nota)**: ya existían en Config → Personas → "Reglas de asignación de persona".
+
 ## 0.2.46
 
 - **Fix filtro de mes se reseteaba al guardar categoría**: al llamar `saveCategoria` o `saveFecha` se recargaba el gráfico mensual, que a su vez repoblaba el combo de meses. Si el usuario tenía "Todos los meses" seleccionado (valor vacío), la lógica lo trataba como "sin selección" y aplicaba el mes por defecto (mes actual). Ahora, después del primer cargado inicial, el combo siempre preserva el valor que el usuario tenía — incluido el vacío ("Todos los meses").

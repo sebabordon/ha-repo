@@ -73,7 +73,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     tab.classList.add("active");
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    loadCharts();
-    if (tab.dataset.tab === "presupuesto") loadPresupuesto();
+    if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
     if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); }
   });
 });
@@ -514,9 +514,42 @@ function _gastosParams() {
   return p;
 }
 
+let _gastosData = [];
+let _gastosSort = {col: null, dir: 1};
+
+function sortGastos(col) {
+  if (_gastosSort.col === col) _gastosSort.dir *= -1;
+  else { _gastosSort.col = col; _gastosSort.dir = col === "monto" ? -1 : 1; }
+  _renderGastos();
+}
+
 async function loadGastos() {
-  const res    = await fetch(`${BASE}/api/gastos?${_gastosParams()}`);
-  const gastos = await res.json();
+  const res  = await fetch(`${BASE}/api/gastos?${_gastosParams()}`);
+  _gastosData = await res.json();
+  _renderGastos();
+}
+
+function _renderGastos() {
+  let gastos = _gastosData;
+
+  // Sort client-side
+  if (_gastosSort.col) {
+    const col = _gastosSort.col, dir = _gastosSort.dir;
+    gastos = [...gastos].sort((a, b) => {
+      let va = a[col], vb = b[col];
+      if (col === "monto") { va = Math.abs(parseFloat(va)||0); vb = Math.abs(parseFloat(vb)||0); }
+      if (typeof va === "string" || typeof vb === "string")
+        return dir * (va||"").localeCompare(vb||"", "es");
+      return dir * ((va||0) - (vb||0));
+    });
+  }
+
+  // Update sort indicators
+  ["fecha","descripcion","monto","usuario","categoria"].forEach(c => {
+    const el = document.getElementById(`gsort-${c}`);
+    if (el) el.textContent = _gastosSort.col === c ? (_gastosSort.dir > 0 ? "▲" : "▼") : "";
+  });
+
   const tbody  = document.getElementById("gastos-body");
   tbody.innerHTML = "";
 
@@ -1279,18 +1312,28 @@ async function saveSaldo(fuente) {
 loadSaldos();
 
 // ── Presupuesto tab ───────────────────────────────────────────────────────────
-let _presupItems = [];  // [{categoria, monto_mensual, moneda}]
+let _presupItems    = [];  // [{categoria, monto_mensual, moneda}]
+let _presupVsActual = [];
+let _presupSort     = {col: "gastado", dir: -1};
+
+function sortPresup(col) {
+  if (_presupSort.col === col) _presupSort.dir *= -1;
+  else { _presupSort.col = col; _presupSort.dir = col === "categoria" ? 1 : -1; }
+  renderPresupuesto();
+}
 
 async function loadPresupuesto() {
   const mes = document.getElementById("presup-mes").value;
   const url = mes ? `${BASE}/api/presupuesto?mes=${mes}` : `${BASE}/api/presupuesto`;
   const res  = await fetch(url);
   const data = await res.json();
-  _presupItems = data.items || [];
-  renderPresupuesto(data.vs_actual || []);
+  _presupItems    = data.items || [];
+  _presupVsActual = data.vs_actual || [];
+  renderPresupuesto();
 }
 
-function renderPresupuesto(vsActual) {
+function renderPresupuesto() {
+  const vsActual = _presupVsActual;
   const wrap = document.getElementById("presup-table-wrap");
   if (!vsActual.length && !_presupItems.length) {
     wrap.innerHTML = `<p style="color:#aaa;padding:1rem 0">No hay categorías con gastos ni presupuesto definido. Importá movimientos primero.</p>`;
@@ -1300,9 +1343,16 @@ function renderPresupuesto(vsActual) {
   const budgetMap = {};
   _presupItems.forEach(it => { budgetMap[it.categoria] = it.monto_mensual; });
 
-  const rows = vsActual.length ? vsActual : _presupItems.map(it => ({
+  let rows = vsActual.length ? vsActual : _presupItems.map(it => ({
     categoria: it.categoria, presupuesto: it.monto_mensual, gastado: 0, diferencia: it.monto_mensual, pct: null,
   }));
+
+  // Sort
+  const sc = _presupSort.col, sd = _presupSort.dir;
+  rows = [...rows].sort((a, b) => {
+    if (sc === "categoria") return sd * (a.categoria||"").localeCompare(b.categoria||"", "es");
+    return sd * ((a[sc]||0) - (b[sc]||0));
+  });
 
   // Totals
   let totalPresup = 0, totalGastado = 0;
@@ -1325,15 +1375,16 @@ function renderPresupuesto(vsActual) {
       ${totalPresup > 0 ? `<span style="color:#888">${totalPct}% utilizado</span>` : ""}
     </div>` : "";
 
+  const _psi = col => _presupSort.col === col ? (_presupSort.dir > 0 ? "▲" : "▼") : "";
   wrap.innerHTML = summaryHtml + `
     <div class="table-wrap">
     <table class="presup-table">
       <thead>
         <tr>
-          <th>Categoría</th>
-          <th>Presupuesto</th>
-          <th>Gastado</th>
-          <th>Diferencia</th>
+          <th class="th-sort" onclick="sortPresup('categoria')">Categoría <span class="sort-ind">${_psi("categoria")}</span></th>
+          <th class="th-sort" onclick="sortPresup('presupuesto')">Presupuesto <span class="sort-ind">${_psi("presupuesto")}</span></th>
+          <th class="th-sort" onclick="sortPresup('gastado')">Gastado <span class="sort-ind">${_psi("gastado")}</span></th>
+          <th class="th-sort" onclick="sortPresup('diferencia')">Diferencia <span class="sort-ind">${_psi("diferencia")}</span></th>
           <th>Progreso</th>
           <th></th>
         </tr>
@@ -1400,13 +1451,15 @@ function updatePresupItem(categoria, rawValue) {
 
 function removePresupItem(categoria) {
   _presupItems = _presupItems.filter(it => it.categoria !== categoria);
-  renderPresupuesto([]);
+  _presupVsActual = _presupVsActual.filter(r => r.categoria !== categoria);
+  renderPresupuesto();
   _scheduleSavePresup();
 }
 
 document.getElementById("presup-mes").addEventListener("change", function() {
   this.blur();
   loadPresupuesto();
+  loadPresupuestoUsuario();
 });
 
 // Auto-save helpers — same debounce pattern as rules
@@ -1447,8 +1500,189 @@ document.getElementById("btn-add-presup-row").addEventListener("click", () => {
   showPrompt("Nueva categoría de presupuesto:", "ej: Supermercado", name => {
     if (!_presupItems.find(it => it.categoria === name))
       _presupItems.push({categoria: name, monto_mensual: 0, moneda: "ARS"});
-    renderPresupuesto([]);
+    renderPresupuesto();
     _scheduleSavePresup();
+  });
+});
+
+// ── Presupuesto por usuario ───────────────────────────────────────────────────
+let _presupUItems    = [];  // [{usuario, monto_mensual, moneda}]
+let _presupUVsActual = [];
+let _presupUSort     = {col: "gastado", dir: -1};
+
+function sortPresupU(col) {
+  if (_presupUSort.col === col) _presupUSort.dir *= -1;
+  else { _presupUSort.col = col; _presupUSort.dir = col === "usuario" ? 1 : -1; }
+  renderPresupuestoUsuario();
+}
+
+async function loadPresupuestoUsuario() {
+  const mes = document.getElementById("presup-mes").value;
+  const url = mes ? `${BASE}/api/presupuesto/usuario?mes=${mes}` : `${BASE}/api/presupuesto/usuario`;
+  const res  = await fetch(url);
+  const data = await res.json();
+  _presupUItems    = data.items || [];
+  _presupUVsActual = data.vs_actual || [];
+  renderPresupuestoUsuario();
+}
+
+function renderPresupuestoUsuario() {
+  const vsActual = _presupUVsActual;
+  const wrap = document.getElementById("presup-u-table-wrap");
+  if (!vsActual.length && !_presupUItems.length) {
+    wrap.innerHTML = `<p style="color:#aaa;padding:1rem 0">No hay personas con gastos ni presupuesto definido.</p>`;
+    return;
+  }
+
+  const budgetMap = {};
+  _presupUItems.forEach(it => { budgetMap[it.usuario] = it.monto_mensual; });
+
+  let rows = vsActual.length ? vsActual : _presupUItems.map(it => ({
+    usuario: it.usuario, presupuesto: it.monto_mensual, gastado: 0, diferencia: it.monto_mensual, pct: null,
+  }));
+
+  // Sort
+  const sc = _presupUSort.col, sd = _presupUSort.dir;
+  rows = [...rows].sort((a, b) => {
+    if (sc === "usuario") return sd * (a.usuario||"").localeCompare(b.usuario||"", "es");
+    return sd * ((a[sc]||0) - (b[sc]||0));
+  });
+
+  let totalPresup = 0, totalGastado = 0;
+  rows.forEach(r => {
+    totalPresup  += r.presupuesto > 0 ? r.presupuesto : (budgetMap[r.usuario] || 0);
+    totalGastado += r.gastado || 0;
+  });
+  const totalDiff   = totalPresup - totalGastado;
+  const totalPct    = totalPresup > 0 ? Math.round(totalGastado / totalPresup * 100) : 0;
+  const totalBarCls = totalPct >= 100 ? "over" : totalPct >= 80 ? "warn" : "";
+
+  const summaryHtml = vsActual.length ? `
+    <div class="presup-summary">
+      <span>Presupuestado: <strong>${_fmtNum2(totalPresup)}</strong></span>
+      <span>Gastado: <strong>${_fmtNum2(totalGastado)}</strong></span>
+      <span class="${totalDiff >= 0 ? "presup-diff-pos" : "presup-diff-neg"}">
+        Diferencia: <strong>${totalDiff >= 0 ? "+" : ""}${_fmtNum2(totalDiff)}</strong>
+      </span>
+      ${totalPresup > 0 ? `<span style="color:#888">${totalPct}% utilizado</span>` : ""}
+    </div>` : "";
+
+  const _psi = col => _presupUSort.col === col ? (_presupUSort.dir > 0 ? "▲" : "▼") : "";
+  wrap.innerHTML = summaryHtml + `
+    <div class="table-wrap">
+    <table class="presup-table">
+      <thead>
+        <tr>
+          <th class="th-sort" onclick="sortPresupU('usuario')">Persona <span class="sort-ind">${_psi("usuario")}</span></th>
+          <th class="th-sort" onclick="sortPresupU('presupuesto')">Presupuesto <span class="sort-ind">${_psi("presupuesto")}</span></th>
+          <th class="th-sort" onclick="sortPresupU('gastado')">Gastado <span class="sort-ind">${_psi("gastado")}</span></th>
+          <th class="th-sort" onclick="sortPresupU('diferencia')">Diferencia <span class="sort-ind">${_psi("diferencia")}</span></th>
+          <th>Progreso</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => {
+          const budget  = r.presupuesto > 0 ? r.presupuesto : (budgetMap[r.usuario] || 0);
+          const pct     = budget > 0 ? Math.round(r.gastado / budget * 100) : 0;
+          const barW    = Math.min(pct, 100);
+          const barCls  = pct >= 100 ? "over" : pct >= 80 ? "warn" : "";
+          const diffCls = r.diferencia >= 0 ? "presup-diff-pos" : "presup-diff-neg";
+          return `<tr>
+            <td>${escHtml(r.usuario)}</td>
+            <td>
+              <input type="text" class="presup-u-input" data-usr="${escHtml(r.usuario)}"
+                     value="${_fmtNum2(budget)}"
+                     onfocus="this.select()"
+                     onchange="updatePresupUItem('${escHtml(r.usuario)}',this.value)" />
+            </td>
+            <td style="font-variant-numeric:tabular-nums">${_fmtNum2(r.gastado)}</td>
+            <td class="${budget > 0 ? diffCls : ""}">
+              ${budget > 0 ? (r.diferencia >= 0 ? "+" : "") + _fmtNum2(r.diferencia) : "—"}
+            </td>
+            <td>
+              ${budget > 0 ? `
+                <div class="progress-bar-wrap"><div class="progress-bar ${barCls}" style="width:${barW}%"></div></div>
+                <span class="presup-pct">${pct}%</span>
+              ` : "—"}
+            </td>
+            <td>
+              <button class="btn btn-sm btn-danger"
+                      onclick="removePresupUItem('${escHtml(r.usuario)}')">✕</button>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+      <tfoot>
+        <tr class="presup-total-row">
+          <td><strong>Total</strong></td>
+          <td><strong style="font-variant-numeric:tabular-nums">${_fmtNum2(totalPresup)}</strong></td>
+          <td><strong style="font-variant-numeric:tabular-nums">${_fmtNum2(totalGastado)}</strong></td>
+          <td class="${totalPresup > 0 ? (totalDiff >= 0 ? "presup-diff-pos" : "presup-diff-neg") : ""}">
+            <strong>${totalPresup > 0 ? (totalDiff >= 0 ? "+" : "") + _fmtNum2(totalDiff) : "—"}</strong>
+          </td>
+          <td>
+            ${totalPresup > 0 ? `
+              <div class="progress-bar-wrap"><div class="progress-bar ${totalBarCls}" style="width:${Math.min(totalPct,100)}%"></div></div>
+              <span class="presup-pct">${totalPct}%</span>
+            ` : "—"}
+          </td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+    </div>`;
+}
+
+function updatePresupUItem(usuario, rawValue) {
+  const val = parseFloat(rawValue.replace(/\./g,"").replace(",",".")) || 0;
+  const existing = _presupUItems.find(it => it.usuario === usuario);
+  if (existing) existing.monto_mensual = val;
+  else _presupUItems.push({usuario, monto_mensual: val, moneda: "ARS"});
+}
+
+function removePresupUItem(usuario) {
+  _presupUItems    = _presupUItems.filter(it => it.usuario !== usuario);
+  _presupUVsActual = _presupUVsActual.filter(r => r.usuario !== usuario);
+  renderPresupuestoUsuario();
+  _scheduleSavePresupU();
+}
+
+let _savePresupUTimer = null;
+function _scheduleSavePresupU() {
+  clearTimeout(_savePresupUTimer);
+  _savePresupUTimer = setTimeout(savePresupuestoUsuario, 800);
+}
+
+async function savePresupuestoUsuario() {
+  document.querySelectorAll(".presup-u-input").forEach(inp => {
+    updatePresupUItem(inp.dataset.usr, inp.value);
+  });
+  const items = _presupUItems.filter(it => it.monto_mensual > 0);
+  const res = await fetch(`${BASE}/api/presupuesto/usuario`, {
+    method: "PUT",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({items}),
+  });
+  if (res.ok) { showToast("✓ Presupuesto por persona guardado", "ok"); loadPresupuestoUsuario(); }
+  else showToast("Error al guardar presupuesto por persona", "err", 0);
+}
+
+document.getElementById("presup-u-table-wrap").addEventListener("focusout", _scheduleSavePresupU);
+document.getElementById("presup-u-table-wrap").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.classList.contains("presup-u-input")) {
+    e.preventDefault();
+    e.target.blur();
+    savePresupuestoUsuario();
+  }
+});
+
+document.getElementById("btn-add-presup-u-row").addEventListener("click", () => {
+  showPrompt("Nombre de la persona:", "ej: Titular", name => {
+    if (!_presupUItems.find(it => it.usuario === name))
+      _presupUItems.push({usuario: name, monto_mensual: 0, moneda: "ARS"});
+    renderPresupuestoUsuario();
+    _scheduleSavePresupU();
   });
 });
 

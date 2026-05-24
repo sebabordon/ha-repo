@@ -217,13 +217,13 @@
         <table id="gastos-table">
           <thead>
             <tr>
-              <th>Fecha</th>
-              <th>Descripción</th>
-              <th>Monto</th>
+              <th class="th-sort" onclick="sortGastos('fecha')">Fecha<span class="sort-ind" id="gsort-fecha"></span></th>
+              <th class="th-sort" onclick="sortGastos('descripcion')">Descripción<span class="sort-ind" id="gsort-descripcion"></span></th>
+              <th class="th-sort" onclick="sortGastos('monto')">Monto<span class="sort-ind" id="gsort-monto"></span></th>
               <th class="col-moneda">Mon.</th>
               <th>Fuente</th>
-              <th>Persona</th>
-              <th>Categoría</th>
+              <th class="th-sort" onclick="sortGastos('usuario')">Persona<span class="sort-ind" id="gsort-usuario"></span></th>
+              <th class="th-sort" onclick="sortGastos('categoria')">Categoría<span class="sort-ind" id="gsort-categoria"></span></th>
               <th></th>
             </tr>
           </thead>
@@ -240,13 +240,23 @@
         <select id="presup-mes">
           <option value="">Seleccioná un mes</option>
         </select>
-        <button id="btn-add-presup-row" class="btn">+ Categoría</button>
       </div>
       <p class="rules-hint">
-        Editá el presupuesto por categoría y compará con el gasto real del mes seleccionado.
+        Editá los presupuestos y compará con el gasto real del mes seleccionado.
         Las barras se vuelven amarillas al 80% y rojas al superar el 100%.
       </p>
+
+      <div class="presup-section-header">
+        <h3 class="presup-section-title">Por categoría</h3>
+        <button id="btn-add-presup-row" class="btn btn-sm">+ Categoría</button>
+      </div>
       <div id="presup-table-wrap"></div>
+
+      <div class="presup-section-header" style="margin-top:2rem">
+        <h3 class="presup-section-title">Por persona</h3>
+        <button id="btn-add-presup-u-row" class="btn btn-sm">+ Persona</button>
+      </div>
+      <div id="presup-u-table-wrap"></div>
     </section>
 
     <!-- ── Tab: Config ──────────────────────────────────────────────────────── -->

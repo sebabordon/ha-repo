@@ -750,6 +750,31 @@ tbody tr:hover { background: #fafbff; }
 
 /* ── Presupuesto tab ─────────────────────────────────────────────────────────*/
 
+/* ── Sortable column headers ────────────────────────────────────────────────*/
+.th-sort {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.th-sort:hover { background: #e8eaf0; }
+.sort-ind {
+  display: inline-block;
+  width: 1em;
+  font-size: .7em;
+  color: #4f6bd6;
+  margin-left: .2em;
+}
+
+/* ── Presupuesto tab ────────────────────────────────────────────────────────*/
+.presup-section-header {
+  display: flex; align-items: center; gap: .75rem;
+  margin: .75rem 0 .4rem;
+}
+.presup-section-title {
+  margin: 0; font-size: 1rem; font-weight: 600;
+  color: #16213e;
+}
+
 .presup-header {
   display: flex;
   align-items: center;

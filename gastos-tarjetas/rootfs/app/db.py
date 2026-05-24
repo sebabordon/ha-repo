@@ -123,6 +123,14 @@ def init_db():
             )
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS presupuestos_usuario (
+                usuario TEXT PRIMARY KEY,
+                monto_mensual REAL DEFAULT 0,
+                moneda TEXT DEFAULT 'ARS'
+            )
+        """)
+
         # ── One-time migrations ─────────────────────────────────────────────────
         _run_migrations(conn)
 
@@ -812,6 +820,53 @@ def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
             "pct":         round(g / b * 100, 1) if b > 0 else None,
         })
     result.sort(key=lambda r: (-r["gastado"]))
+    return result
+
+
+def get_presupuestos_usuario() -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute("SELECT * FROM presupuestos_usuario ORDER BY usuario").fetchall()
+    return [dict(r) for r in rows]
+
+
+def save_presupuestos_usuario(items: list[dict]):
+    with _conn() as conn:
+        conn.execute("DELETE FROM presupuestos_usuario")
+        conn.executemany(
+            "INSERT INTO presupuestos_usuario (usuario, monto_mensual, moneda) VALUES (?,?,?)",
+            [(it["usuario"], it["monto_mensual"], it.get("moneda","ARS")) for it in items if it.get("usuario")],
+        )
+
+
+def stats_presupuesto_usuario_vs_actual(mes: str) -> list[dict]:
+    """Presupuesto por persona vs gasto real del mes."""
+    where, params = _base_where(mes=mes)
+    q_actual = f"""
+        SELECT COALESCE(usuario, 'Sin asignar') AS usr,
+               ROUND(SUM({_EGRESO_EXPR}), 2) AS gastado
+        FROM gastos {where}
+        GROUP BY usr
+    """
+    with _conn() as conn:
+        actual_rows = conn.execute(q_actual, params).fetchall()
+        budget_rows = conn.execute("SELECT usuario, monto_mensual FROM presupuestos_usuario").fetchall()
+
+    actual = {r["usr"]: float(r["gastado"]) for r in actual_rows if float(r["gastado"]) > 0}
+    budget = {r["usuario"]: float(r["monto_mensual"]) for r in budget_rows}
+
+    users = sorted(set(list(actual) + list(budget)))
+    result = []
+    for usr in users:
+        g = actual.get(usr, 0.0)
+        b = budget.get(usr, 0.0)
+        result.append({
+            "usuario":     usr,
+            "presupuesto": b,
+            "gastado":     g,
+            "diferencia":  round(b - g, 2),
+            "pct":         round(g / b * 100, 1) if b > 0 else None,
+        })
+    result.sort(key=lambda r: -r["gastado"])
     return result
 
 
