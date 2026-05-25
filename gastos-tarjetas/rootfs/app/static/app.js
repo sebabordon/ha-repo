@@ -1842,8 +1842,12 @@ function renderVencimientos(items) {
     // ARS amounts → green, USD amounts → blue
     const arsStr   = arsSum > 0 ? `<span class="venc-ars">$ ${_fmtNum2(arsSum)}</span>` : "";
     const usdStr   = usdSum > 0 ? `<span class="venc-usd"> · U$S ${_fmtNum2(usdSum)}</span>` : "";
+    // Store raw values as data-attrs for the RG-5617 toggle (double-click)
+    const hasRg = rg5617 > 0.5 && arsSum > 0;
     const montoHtml = (arsStr || usdStr)
-      ? `<div class="venc-monto">${arsStr}${usdStr}</div>` : "";
+      ? `<div class="venc-monto${hasRg ? " venc-monto--has-rg" : ""}"` +
+        ` data-ars-full="${arsSum.toFixed(2)}" data-rg5617="${rg5617.toFixed(2)}"` +
+        `${hasRg ? ' title="Doble clic: ver sin RG 5617"' : ""}>${arsStr}${usdStr}</div>` : "";
 
     // Fuente label colour: green if card has ARS charges, blue if USD-only
     const fuenteCls = arsSum > 0 ? "venc-fuente ars-label" : "venc-fuente usd-label";
@@ -1895,6 +1899,25 @@ function renderVencimientos(items) {
 }
 
 loadVencimientos();
+
+// Double-click on an ARS amount to toggle the RG-5617-free view
+document.getElementById("vencimientos-widget").addEventListener("dblclick", e => {
+  const monto = e.target.closest(".venc-monto--has-rg");
+  if (!monto) return;
+  const full   = parseFloat(monto.dataset.arsFull  || "0");
+  const rg5617 = parseFloat(monto.dataset.rg5617   || "0");
+  const span   = monto.querySelector(".venc-ars");
+  if (!span) return;
+  const toggled = monto.classList.toggle("venc-monto--sin-rg");
+  if (toggled) {
+    const sinRg = full - rg5617;
+    span.innerHTML = `$ ${_fmtNum2(sinRg)}<span class="venc-sin-rg-tag"> −RG</span>`;
+    monto.title = "Doble clic: ver total";
+  } else {
+    span.textContent = `$ ${_fmtNum2(full)}`;
+    monto.title = "Doble clic: ver sin RG 5617";
+  }
+});
 
 // ── Presupuesto tab ───────────────────────────────────────────────────────────
 let _presupItems    = [];  // [{categoria, monto_mensual, moneda}]

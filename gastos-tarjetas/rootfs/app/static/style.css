@@ -730,6 +730,16 @@ tbody tr:hover { background: #fafbff; }
 }
 .venc-ars { color: #16a34a; font-weight: 600; }
 .venc-usd { color: #2563eb; font-weight: 600; }
+.venc-monto--has-rg  { cursor: pointer; }
+.venc-monto--has-rg:hover .venc-ars { opacity: .8; }
+.venc-monto--sin-rg .venc-ars { color: #d97706; }  /* amber while toggled */
+.venc-sin-rg-tag {
+  font-size: .6rem;
+  font-weight: 400;
+  opacity: .7;
+  vertical-align: super;
+  margin-left: .1rem;
+}
 .venc-pdf-ref {
   font-size: .74rem;
   color: #f59e0b;

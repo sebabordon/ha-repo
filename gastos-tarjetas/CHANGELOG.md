@@ -1,3 +1,7 @@
+## 0.2.75
+
+- **Widget vencimientos — doble clic para ver monto sin RG 5617**: cuando una card tiene percepción RG 5617 del período, hacer doble clic sobre el total ARS muestra el importe neto sin el cargo (`net_ars − rg5617_ars`) en color ámbar con etiqueta `−RG` en superíndice. Un segundo doble clic vuelve al total original en verde. El cursor cambia a `pointer` y hay un `title` como ayuda. El estado se resetea automáticamente cuando el widget se recarga.
+
 ## 0.2.74
 
 - **Widget vencimientos — próximo cierre y próximo vencimiento**: cada card muestra debajo del consumo una línea `Próx. cierre DD/MM · venc. DD/MM` con las fechas del siguiente ciclo. AMEX expone solo el próximo vencimiento (fecha que sigue al `- + = <total>` en el encabezado); BBVA expone ambas (fila `PRÓXIMO CIERRE PRÓXIMO VENCIMIENTO` en el header). Las fechas se guardan en las columnas `proximo_cierre` y `proximo_venc` de `importaciones` (migración automática `ALTER TABLE`).
