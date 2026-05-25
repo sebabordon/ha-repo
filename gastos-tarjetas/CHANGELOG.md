@@ -1,3 +1,24 @@
+## 0.2.64
+
+- **Widget de vencimientos — suma de egresos siempre visible**: `list_vencimientos()` ahora hace JOIN con `gastos` y calcula `sum_ars`/`sum_usd` (suma de egresos del import) además del total extraído del PDF (`total_ars`/`total_usd`). El widget muestra `sum_ars` como valor principal — siempre disponible aunque el parser no haya detectado el total del PDF. Si `total_ars` existe y difiere de `sum_ars` en más de $0,50, aparece una línea secundaria en amarillo `PDF: $X` para detectar inconsistencias del parser.
+
+## 0.2.63
+
+- **Fila sintética "Créditos del resumen"**: al importar un resumen de tarjeta, si el parser detectó el `SALDO ACTUAL` / `TOTAL A PAGAR` del PDF, se inserta automáticamente una fila de ajuste con `monto = stmt_total_ars − suma_egresos_ARS`. El delta es típicamente negativo (crédito/sobrepago aplicado por el banco) y aparece como ingreso en la lista de gastos, haciendo visible el overpayment. Para BBVA, donde se puede reclamar el saldo a favor, esto es crítico. La respuesta del upload incluye `ajuste_resumen_ars` con el valor del ajuste cuando aplica.
+
+## 0.2.62
+
+- **Fecha de vencimiento en parsers**: AMEX, BBVA (MC y Visa) y Galicia MC ahora extraen la `fecha_vencimiento` directamente del PDF.
+- **Totales del resumen**: los parsers también extraen el `SALDO ACTUAL` (BBVA) o `TOTAL A PAGAR` (Galicia) / saldo a pagar (AMEX) en ARS y USD.
+- **Columnas en `importaciones`**: se agregan `fecha_venc TEXT`, `total_ars REAL`, `total_usd REAL` con migración automática.
+- **Endpoint `/api/stats/vencimientos`**: retorna los imports más recientes por fuente que tienen `fecha_venc`.
+- **Widget de vencimientos**: cards encima del contenido principal con fecha de vencimiento, días restantes y total a pagar por tarjeta. Colores: rojo (≤3 días / vencido), amarillo (≤7 días), verde (>7 días).
+- **Fix BBVA — transacción USD faltante**: texto de marca de agua (`ocnaB` = "Banco" rotado 180°) se concatenaba con el monto en la columna USD. Corregido con filtro `_AMOUNT_WORD_RE` que descarta tokens no numéricos en las columnas de monto.
+
+## 0.2.61
+
+- **Fix colores inconsistentes en charts personalizados**: `_drawCustomChart` usaba `PALETTE.slice()` en lugar de `_catColor()`, por lo que las barras de charts custom mostraban colores distintos al donut de categorías. Ahora todos los charts usan `_catColor(label, index)` para mantener coherencia visual.
+
 ## 0.2.60
 
 - **Fix cache de estáticos**: el servidor ahora añade `?v=0.2.60` a las URLs de `app.js` y `style.css` al servir la página. El browser trata la URL como nueva en cada release y descarga los archivos frescos, eliminando el problema de que el código viejo se seguía ejecutando aunque se actualizara el add-on.
