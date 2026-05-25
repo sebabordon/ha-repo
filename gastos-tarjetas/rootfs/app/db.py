@@ -82,10 +82,14 @@ def init_db():
                 fecha_venc TEXT
             )
         """)
-        # Migration: add fecha_venc to existing installations
+        # Migrations: add columns to existing installations
         icols = {r[1] for r in conn.execute("PRAGMA table_info(importaciones)").fetchall()}
-        if "fecha_venc" not in icols:
+        if "fecha_venc"  not in icols:
             conn.execute("ALTER TABLE importaciones ADD COLUMN fecha_venc TEXT")
+        if "total_ars"   not in icols:
+            conn.execute("ALTER TABLE importaciones ADD COLUMN total_ars REAL")
+        if "total_usd"   not in icols:
+            conn.execute("ALTER TABLE importaciones ADD COLUMN total_usd REAL")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS cuentas (
@@ -204,9 +208,11 @@ def insert_gastos(gastos: list[dict], import_info: dict = None) -> int:
         import_id = None
         if import_info:
             cur = conn.execute(
-                "INSERT INTO importaciones (fuente, archivo, mes_resumen, fecha_venc) VALUES (?,?,?,?)",
+                "INSERT INTO importaciones (fuente, archivo, mes_resumen, fecha_venc, total_ars, total_usd) "
+                "VALUES (?,?,?,?,?,?)",
                 (import_info.get("fuente"), import_info.get("archivo"),
-                 import_info.get("mes_resumen"), import_info.get("fecha_venc")),
+                 import_info.get("mes_resumen"), import_info.get("fecha_venc"),
+                 import_info.get("total_ars"), import_info.get("total_usd")),
             )
             import_id = cur.lastrowid
 
@@ -243,23 +249,18 @@ def list_importaciones() -> list[dict]:
 
 def list_vencimientos() -> list[dict]:
     """
-    Return the most-recent import per fuente that has a fecha_venc, together
-    with the ARS and USD totals computed from its associated gastos rows.
-    Only credit-card fuentes ever have a fecha_venc, so bank accounts are
-    naturally excluded.
+    Return the most-recent import per fuente that has a fecha_venc.
+    Uses the statement-level SALDO ACTUAL / TOTAL A PAGAR (stored at import time)
+    so totals reflect what the card actually charges, not just the sum of
+    individual transactions (which excludes previous-period balance and payments).
     """
     with _conn() as conn:
         rows = conn.execute("""
-            SELECT i.id, i.fuente, i.archivo, i.mes_resumen, i.fecha_venc,
-                   ROUND(SUM(CASE WHEN g.moneda='ARS' AND CAST(g.monto AS REAL) > 0
-                             THEN CAST(g.monto AS REAL) ELSE 0 END), 2) AS total_ars,
-                   ROUND(SUM(CASE WHEN g.moneda='USD' AND CAST(g.monto AS REAL) > 0
-                             THEN CAST(g.monto AS REAL) ELSE 0 END), 2) AS total_usd
-            FROM importaciones i
-            LEFT JOIN gastos g ON g.import_id = i.id
-            WHERE i.fecha_venc IS NOT NULL
-            GROUP BY i.id
-            ORDER BY i.fecha_venc DESC
+            SELECT id, fuente, archivo, mes_resumen, fecha_venc,
+                   total_ars, total_usd
+            FROM importaciones
+            WHERE fecha_venc IS NOT NULL
+            ORDER BY fecha_venc DESC
             LIMIT 20
         """).fetchall()
     return [dict(r) for r in rows]

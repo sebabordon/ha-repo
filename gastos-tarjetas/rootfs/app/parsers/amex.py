@@ -33,7 +33,9 @@ _SKIP_DESC = re.compile(
 _AMOUNT_X = 500.0  # amount words start at x0 > 500
 
 # Matches DD/MM/YY or DD/MM/YYYY date tokens in the AMEX header
-_AMEX_DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{2,4})\b")
+_AMEX_DATE_RE  = re.compile(r"\b(\d{2})/(\d{2})/(\d{2,4})\b")
+# "- + = 6.722.726,82 01/06/26" — captures the amount between = and the date
+_AMEX_SALDO_RE = re.compile(r"-\s+\+\s+=\s+([\d.,]+)")
 
 
 def _detect_vencimiento_amex(pdf) -> Optional[_date]:
@@ -64,6 +66,46 @@ def _detect_vencimiento_amex(pdf) -> Optional[_date]:
     return None
 
 
+def _detect_totals_amex(pdf) -> tuple[Optional["Decimal"], Optional["Decimal"]]:
+    """
+    Extract ARS and USD 'saldo a pagar' from the AMEX summary header.
+
+    ARS: line matching '- + = [amount] DD/MM/YY'  (first occurrence = ARS section)
+    USD: same pattern a few lines later             (second occurrence = USD section)
+
+    Example:
+      '- + = 6.722.726,82 01/06/26'   → ARS saldo
+      '- + = cargos recibidos ...'     → (no amount here for USD)
+      '5.469,31 28 de Abril 2026'      → USD saldo is on the NEXT line after the '- + =' line
+    """
+    from parsers.utils import parse_ar_amount
+    for page in pdf.pages[:2]:
+        text = page.extract_text() or ""
+        lines = text.split("\n")
+        ars: Optional["Decimal"] = None
+        usd: Optional["Decimal"] = None
+        for i, line in enumerate(lines):
+            m = _AMEX_SALDO_RE.search(line)
+            if m:
+                if ars is None:
+                    ars = parse_ar_amount(m.group(1))
+                else:
+                    usd = parse_ar_amount(m.group(1))
+                    break
+            # USD section: "- + = cargos..." puts the amount on the next line
+            if ars is not None and usd is None and re.search(r"-\s+\+\s+=", line):
+                # Check the NEXT line for a standalone amount
+                if i + 1 < len(lines):
+                    nxt = lines[i + 1].strip()
+                    first_tok = nxt.split()[0] if nxt.split() else ""
+                    if re.match(r"^[\d.,]+$", first_tok):
+                        usd = parse_ar_amount(first_tok)
+                        break
+        if ars is not None:
+            return ars, usd
+    return None, None
+
+
 class AmexParser(BaseParser):
     fuente = Fuente.AMEX
 
@@ -75,6 +117,7 @@ class AmexParser(BaseParser):
 
         with pdfplumber.open(file) as pdf:
             self.fecha_vencimiento = _detect_vencimiento_amex(pdf)
+            self.stmt_total_ars, self.stmt_total_usd = _detect_totals_amex(pdf)
             for page in pdf.pages:
                 words = page.extract_words(keep_blank_chars=False)
                 rows = group_by_y(words)

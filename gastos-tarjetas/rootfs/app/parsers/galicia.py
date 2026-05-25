@@ -46,7 +46,8 @@ from parsers.utils import (
     group_by_y, parse_ar_amount, parse_date_dmy, words_in_band
 )
 
-_DATE_RE = re.compile(r"^\d{2}-[A-Za-z]{3}-\d{2}$")
+_DATE_RE        = re.compile(r"^\d{2}-[A-Za-z]{3}-\d{2}$")
+_AMOUNT_WORD_RE = re.compile(r"^-?[\d.,]+$")
 
 _SKIP_DESC = re.compile(
     r"^(PAGO CAJERO|SALDO|TOTAL|COMISION|SUBTOTAL|CUOTA DEL MES|"
@@ -63,8 +64,10 @@ _ARS_X1 = 530.0
 _USD_X0 = 530.0
 
 # Patterns to extract commission + IVA from the CONSOLIDADO summary text
-_COMISION_RE = re.compile(r"COMISION\s+MANT\s+DE\s+CTA\s+([\d\.]+,\d+)", re.IGNORECASE)
-_IVA_RE      = re.compile(r"I\.V\.A\.\s+[\d,]+%\s+([\d\.]+,\d+)", re.IGNORECASE)
+_COMISION_RE   = re.compile(r"COMISION\s+MANT\s+DE\s+CTA\s+([\d\.]+,\d+)", re.IGNORECASE)
+_IVA_RE        = re.compile(r"I\.V\.A\.\s+[\d,]+%\s+([\d\.]+,\d+)", re.IGNORECASE)
+# TOTAL A PAGAR line: "TOTAL A PAGAR 497.631,26 0,00"
+_TOTAL_PAGAR_RE = re.compile(r"TOTAL\s+A\s+PAGAR\s+([\d\.]+,\d+)(?:\s+([\d\.]+,\d+))?", re.IGNORECASE)
 
 
 def _detect_statement_dates(pdf) -> tuple[Optional[date], Optional[date]]:
@@ -88,6 +91,19 @@ def _detect_statement_dates(pdf) -> tuple[Optional[date], Optional[date]]:
                     return cierre, venc
                 except Exception:
                     continue
+    return None, None
+
+
+def _detect_total_galicia(pdf) -> tuple[Optional["Decimal"], Optional["Decimal"]]:
+    """Extract TOTAL A PAGAR ARS and USD from the CONSOLIDADO summary."""
+    from parsers.utils import parse_ar_amount
+    for page in pdf.pages[:3]:
+        txt = page.extract_text() or ""
+        m = _TOTAL_PAGAR_RE.search(txt)
+        if m:
+            ars = parse_ar_amount(m.group(1))
+            usd = parse_ar_amount(m.group(2)) if m.group(2) else None
+            return ars, usd
     return None, None
 
 
@@ -129,6 +145,7 @@ class GaliciaParser(BaseParser):
 
         with pdfplumber.open(file) as pdf:
             stmt_date, self.fecha_vencimiento = _detect_statement_dates(pdf)
+            self.stmt_total_ars, self.stmt_total_usd = _detect_total_galicia(pdf)
             comision  = _extract_comision(pdf)
 
             # Add commission as egreso at the statement close date (when charged).
@@ -172,8 +189,10 @@ class GaliciaParser(BaseParser):
                     if is_installment and stmt_date is not None:
                         fecha = _installment_date(fecha, stmt_date)
 
-                    ars_words = words_in_band(row, _ARS_X0, _ARS_X1)
-                    usd_words = [w for w in row if w["x0"] >= _USD_X0]
+                    ars_words = [w for w in words_in_band(row, _ARS_X0, _ARS_X1)
+                                 if _AMOUNT_WORD_RE.match(w["text"])]
+                    usd_words = [w for w in row
+                                 if w["x0"] >= _USD_X0 and _AMOUNT_WORD_RE.match(w["text"])]
 
                     ars = parse_ar_amount("".join(w["text"] for w in ars_words))
                     usd = parse_ar_amount("".join(w["text"] for w in usd_words))

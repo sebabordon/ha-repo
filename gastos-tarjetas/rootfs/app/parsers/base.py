@@ -8,8 +8,10 @@ from models import Gasto, Fuente, Moneda
 
 class BaseParser(ABC):
     fuente: Fuente
-    saldo_final = None          # parsers that can detect a balance set this after parse()
-    fecha_vencimiento: Optional[date] = None  # due date of the parsed statement
+    saldo_final = None                          # account balance detected after parse()
+    fecha_vencimiento: Optional[date] = None   # payment due date of the statement
+    stmt_total_ars: Optional[Decimal] = None   # SALDO ACTUAL / TOTAL A PAGAR in ARS
+    stmt_total_usd: Optional[Decimal] = None   # SALDO ACTUAL / TOTAL A PAGAR in USD
 
     @abstractmethod
     def parse(self, file: BinaryIO, filename: str) -> list[Gasto]:

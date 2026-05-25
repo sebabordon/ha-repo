@@ -35,8 +35,11 @@ from parsers.utils import (
 
 _TITULAR2_RE = re.compile(rf"Consumos\s+{re.escape(TITULAR2_NAME)}", re.IGNORECASE) if TITULAR2_NAME else None
 
-_DATE_RE = re.compile(r"^\d{2}-[A-Za-z]{3}-\d{2}$")
+_DATE_RE    = re.compile(r"^\d{2}-[A-Za-z]{3}-\d{2}$")
 _INSTALL_RE = re.compile(r"\s+C\.(\d+)/(\d+)$")
+# Only digits, dots, commas and optional leading minus — filters out watermark/letterhead
+# text that sometimes bleeds into the amount columns (e.g. "ocnaB" = "Banco" mirrored).
+_AMOUNT_WORD_RE = re.compile(r"^-?[\d.,]+$")
 
 # Only skip actual payment rows; taxes, withholdings and credit returns are
 # intentionally included. Negative amounts (credits) come through as ingresos.
@@ -74,14 +77,16 @@ def _detect_statement_date(pdf) -> Optional[date]:
     return None
 
 
-def _detect_vencimiento_bbva(pdf) -> Optional[date]:
+def _detect_vencimiento_bbva(pdf) -> tuple[Optional[date], Optional["Decimal"], Optional["Decimal"]]:
     """
     Locate the 'CIERRE ACTUAL  VENCIMIENTO ACTUAL' column-header row, then read
-    the following line and return the 2nd DD-Mmm-YY token (= VENCIMIENTO ACTUAL).
+    the following data line.  Returns (fecha_venc, saldo_ars, saldo_usd).
 
-    Example header : 'CIERRE ACTUAL VENCIMIENTO ACTUAL SALDO ACTUAL $ ...'
-    Example data   : '23-Abr-26 04-May-26 1.900.755,43 ...'
+    Example header : 'CIERRE ACTUAL VENCIMIENTO ACTUAL SALDO ACTUAL $ SALDO ACTUAL U$S ...'
+    Example data   : '21-May-26 03-Jun-26 595.951,81 736,56 375.400,00'
+                       idx 0      idx 1    idx 2       idx 3   idx 4
     """
+    from parsers.utils import parse_ar_amount
     for page in pdf.pages[:2]:
         text = page.extract_text() or ""
         lines = text.split("\n")
@@ -89,10 +94,13 @@ def _detect_vencimiento_bbva(pdf) -> Optional[date]:
             if "VENCIMIENTO ACTUAL" in line.upper() and "CIERRE ACTUAL" in line.upper():
                 if i + 1 < len(lines):
                     tokens = lines[i + 1].split()
-                    dates = [t for t in tokens if _DATE_RE.match(t)]
-                    if len(dates) >= 2:
-                        return parse_date_dmy(dates[1])  # index 0=cierre, 1=vencimiento
-    return None
+                    dates   = [t for t in tokens if _DATE_RE.match(t)]
+                    amounts = [t for t in tokens if _AMOUNT_WORD_RE.match(t) and not _DATE_RE.match(t)]
+                    venc   = parse_date_dmy(dates[1]) if len(dates) >= 2 else None
+                    s_ars  = parse_ar_amount(amounts[0]) if len(amounts) >= 1 else None
+                    s_usd  = parse_ar_amount(amounts[1]) if len(amounts) >= 2 else None
+                    return venc, s_ars, s_usd
+    return None, None, None
 
 
 def _installment_date(original: date, stmt: date) -> date:
@@ -111,7 +119,7 @@ class BBVAParser(BaseParser):
 
         with pdfplumber.open(file) as pdf:
             stmt_date = _detect_statement_date(pdf)
-            self.fecha_vencimiento = _detect_vencimiento_bbva(pdf)
+            self.fecha_vencimiento, self.stmt_total_ars, self.stmt_total_usd = _detect_vencimiento_bbva(pdf)
 
             for page in pdf.pages:
                 words = page.extract_words(keep_blank_chars=False)
@@ -160,9 +168,12 @@ class BBVAParser(BaseParser):
                     if is_installment and stmt_date is not None:
                         fecha = _installment_date(fecha, stmt_date)
 
-                    # Amounts by column
-                    ars_words = words_in_band(row, _ARS_X0, _ARS_X1)
-                    usd_words = [w for w in row if w["x0"] >= _USD_X0]
+                    # Amounts by column — filter out non-numeric words (e.g. mirrored
+                    # letterhead/watermark text that bleeds into the amount columns).
+                    ars_words = [w for w in words_in_band(row, _ARS_X0, _ARS_X1)
+                                 if _AMOUNT_WORD_RE.match(w["text"])]
+                    usd_words = [w for w in row
+                                 if w["x0"] >= _USD_X0 and _AMOUNT_WORD_RE.match(w["text"])]
 
                     ars = parse_ar_amount("".join(w["text"] for w in ars_words))
                     usd = parse_ar_amount("".join(w["text"] for w in usd_words))
