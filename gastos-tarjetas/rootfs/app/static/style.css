@@ -721,6 +721,11 @@ tbody tr:hover { background: #fafbff; }
   color: #f59e0b;
   font-variant-numeric: tabular-nums;
 }
+.venc-rg5617 {
+  font-size: .74rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── Cuentas tab ─────────────────────────────────────────────────────────────*/
 

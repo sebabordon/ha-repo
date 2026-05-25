@@ -1846,6 +1846,15 @@ function renderVencimientos(items) {
     const pdfHtml = (pdfArsStr || pdfUsdStr)
       ? `<div class="venc-pdf-ref">${pdfArsStr}${pdfUsdStr}</div>` : "";
 
+    // RG 5617 perception line — shows the net perception charged/credited for
+    // this statement so the user can track their AFIP tax credit.
+    // Positive = net charge (perception paid, deductible from AFIP).
+    // Negative = net credit (more DEV PERCEPCION than charges this period).
+    const rg5617 = v.rg5617_ars || 0;
+    const rg5617Html = Math.abs(rg5617) > 0.5
+      ? `<div class="venc-rg5617">RG 5617: ${rg5617 < 0 ? "−" : ""}$ ${_fmtNum2(Math.abs(rg5617))}</div>`
+      : "";
+
     // Format date as DD/MM/YYYY
     const d = vencDate;
     const fechaStr = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
@@ -1855,6 +1864,7 @@ function renderVencimientos(items) {
       <div class="venc-fecha">${fechaStr}</div>
       <div class="venc-dias">${diasTxt}</div>
       ${montoHtml}
+      ${rg5617Html}
       ${pdfHtml}
     </div>`;
   }).join("");

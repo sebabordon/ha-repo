@@ -1,3 +1,7 @@
+## 0.2.69
+
+- **Widget de vencimientos — línea RG 5617**: cada card muestra una línea secundaria con el neto de percepciones RG 5617 del resumen (`LIKE '%5617%'` sobre `descripcion`). Valor positivo = percepción neta cobrada (crédito fiscal ante AFIP deducible); valor negativo = más DEV que cargos en ese período. La línea no aparece si el valor es cero o menor a $0,50. Implementado como nueva columna `rg5617_ars` en `list_vencimientos()` y elemento `.venc-rg5617` en el widget.
+
 ## 0.2.68
 
 - **Fix fila sintética "Créditos del resumen" con delta positivo (BBVA / AMEX)**: con el cálculo neto introducido en 0.2.67, el delta para BBVA y AMEX resultaba positivo (saldo de período anterior no representado como transacción del ciclo actual), lo que generaba filas de egreso erróneas. Ahora la fila sintética solo se inserta cuando `delta < -0,50` (genuine credit/overpayment); un delta positivo se ignora silenciosamente.
