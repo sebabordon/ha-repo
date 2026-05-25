@@ -1689,7 +1689,7 @@ async function loadSaldos() {
 }
 
 function _saldoMonto(saldo, moneda) {
-  const cls = saldo > 0 ? "positivo" : saldo < 0 ? "negativo" : "";
+  const cls = moneda === "USD" ? "usd-val" : "ars-val";
   return `<div class="saldo-monto ${cls}">${_fmtSaldo(saldo)} ${moneda}</div>`;
 }
 
@@ -1724,13 +1724,10 @@ function renderSaldos(cuentas) {
       <input type="text" id="saldo-input-${c.fuente}" value="${_fmtNum2(isUsd ? sUsd : sArs)}"
              onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')" style="width:90px">`;
 
-    const nombreCls = isUsd ? "saldo-nombre usd-label"
-                    : isMulti ? "saldo-nombre"
-                    : "saldo-nombre ars-label";
     return `
       <div class="saldo-card" id="saldo-card-${c.fuente}">
         <button class="saldo-edit-btn" title="Editar saldo" onclick="toggleSaldoEdit('${c.fuente}')">✏</button>
-        <div class="${nombreCls}">${escHtml(c.nombre)}</div>
+        <div class="saldo-nombre">${escHtml(c.nombre)}</div>
         ${montoHtml}
         <div class="saldo-fecha">${c.fecha_actualizacion ? `Actualizado ${c.fecha_actualizacion}` : "Sin datos"}</div>
         <div class="saldo-edit-row" id="saldo-edit-${c.fuente}" style="display:none">
@@ -1853,8 +1850,7 @@ function renderVencimientos(items) {
         ` data-ars-full="${arsSum.toFixed(2)}" data-rg5617="${rg5617.toFixed(2)}"` +
         `${hasRg ? ' title="Doble clic: ver sin RG 5617"' : ""}>${arsStr}${usdStr}</div>` : "";
 
-    // Fuente label colour: green if card has ARS charges, blue if USD-only
-    const fuenteCls = arsSum > 0 ? "venc-fuente ars-label" : "venc-fuente usd-label";
+    const fuenteCls = "venc-fuente";  // name always grey; colour is on the amounts
 
     // Compare NET (egresos + synthetic credits) against PDF total.
     // When the synthetic "Créditos del resumen" row was inserted correctly,

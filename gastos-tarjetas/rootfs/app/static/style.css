@@ -646,8 +646,8 @@ tbody tr:hover { background: #fafbff; }
   font-variant-numeric: tabular-nums;
   color: #1a1a2e;
 }
-.saldo-monto.positivo { color: #16a34a; }
-.saldo-monto.negativo { color: #dc2626; }
+.saldo-monto.ars-val  { color: #16a34a; }
+.saldo-monto.usd-val  { color: #2563eb; }
 .saldo-fecha {
   font-size: .72rem;
   color: #bbb;

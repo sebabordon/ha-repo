@@ -1,3 +1,7 @@
+## 0.2.78
+
+- **Widget saldos y vencimientos — color en el monto, no en el nombre**: el color verde/azul por moneda se aplica ahora sobre el importe (`saldo-monto` con clase `ars-val` o `usd-val`), no sobre el nombre de la cuenta. El nombre de la cuenta (`saldo-nombre`) vuelve siempre al gris neutro `#888`, igual que antes de v0.2.74. En el widget de vencimientos, `venc-fuente` también queda en gris; solo los montos ARS (`venc-ars`) y USD (`venc-usd`) conservan el color. El criterio positivo/negativo anterior (verde = positivo, rojo = negativo) se reemplaza por verde = ARS, azul = USD en los saldo-cards.
+
 ## 0.2.77
 
 - **Widget saldos (fila superior) — nombre en verde/azul según moneda**: el label de cada cuenta (`saldo-nombre`) ahora usa verde (`#16a34a`) para cuentas ARS y azul (`#2563eb`) para cuentas USD, igual que los montos en el widget de vencimientos. Las cuentas MULTI (ARS + USD) mantienen el gris neutro.
