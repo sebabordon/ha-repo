@@ -305,8 +305,8 @@
         <div class="cfg-section-body" id="cfg-body-importar" style="display:none">
           <input type="file" id="upload-file-hidden" accept=".pdf,.xls,.xlsx" style="display:none">
           <div id="parser-grid" class="parser-grid"></div>
-          <label class="import-opt-row" title="Por defecto las devoluciones de percepción RG 5617 (DEV PERCEPCION / CR.RG) no se importan porque se recuperan automáticamente al pagar el saldo en dólares. Activá esta opción solo si querés rastrear esas devoluciones individualmente.">
-            <input type="checkbox" id="chk-include-rg5617">
+          <label class="import-opt-row" title="Las devoluciones de percepción RG 5617 (DEV PERCEPCION / CR.RG) se importan por defecto para mostrar el gasto real. El widget de vencimientos las excluye del total a pagar ya que el banco las descuenta automáticamente. Desmarcá si no querés verlas en la lista de gastos.">
+            <input type="checkbox" id="chk-include-rg5617" checked>
             Incluir devoluciones RG 5617 (DEV PERCEPCION / CR.RG)
           </label>
           <div id="upload-result-global" style="margin-top:.5rem"></div>

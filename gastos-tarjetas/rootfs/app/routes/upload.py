@@ -100,9 +100,15 @@ async def upload_file(
     # from the previous billing cycle that isn't a line item in "Nuevos Cargos").
     ajuste_ars: float | None = None
     if stmt_ars is not None:
+        # Exclude RG 5617 credit rows from the delta base so that importing
+        # DEV PERCEPCION / CR.RG entries doesn't inflate the net and suppress
+        # the synthetic adjustment row.  The widget uses the same exclusion so
+        # "total to pay" is consistent regardless of whether 5617 credits were
+        # imported.
         net_ars_imported = sum(
             float(r["monto"]) for r in records
             if r.get("moneda") == "ARS"
+            and not ("5617" in (r.get("descripcion") or "") and float(r.get("monto", 0)) < 0)
         )
         delta = round(float(stmt_ars) - net_ars_imported, 2)
         # Only insert the synthetic row for NEGATIVE deltas (the statement charges

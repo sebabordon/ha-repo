@@ -274,6 +274,8 @@ def list_vencimientos() -> list[dict]:
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='USD' AND CAST(g.monto AS REAL) > 0
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS sum_usd,
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='ARS'
+                                               AND NOT (UPPER(g.descripcion) LIKE '%5617%'
+                                                        AND CAST(g.monto AS REAL) < 0)
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS net_ars,
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='USD'
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS net_usd,
