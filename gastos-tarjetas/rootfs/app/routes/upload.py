@@ -79,6 +79,36 @@ async def upload_file(
     fecha_venc  = getattr(PARSERS[fuente], "fecha_vencimiento", None)
     stmt_ars    = getattr(PARSERS[fuente], "stmt_total_ars",    None)
     stmt_usd    = getattr(PARSERS[fuente], "stmt_total_usd",    None)
+
+    # ── Synthetic "Créditos del resumen" adjustment ─────────────────────────────
+    # When the parser detected the statement's TOTAL A PAGAR / SALDO ACTUAL,
+    # insert a balancing row so that sum(all ARS transactions for this import)
+    # equals the statement total.  The delta is almost always negative (a credit),
+    # meaning the card charged LESS than the raw sum of egresos — e.g. because a
+    # previous overpayment was applied.  A positive delta means the PDF total
+    # exceeds the sum of parsed transactions (parser missed something).
+    ajuste_ars: float | None = None
+    if stmt_ars is not None:
+        ars_egresos = sum(
+            float(r["monto"]) for r in records
+            if r.get("moneda") == "ARS" and float(r["monto"]) > 0
+        )
+        delta = round(float(stmt_ars) - ars_egresos, 2)
+        if abs(delta) > 0.01:
+            adj_fecha = (mes_resumen + "-01") if mes_resumen else str(fecha_venc or "")
+            records.append({
+                "fecha":           adj_fecha,
+                "descripcion":     "Créditos del resumen",
+                "monto":           str(delta),   # negative = ingreso (credit/overpayment)
+                "moneda":          "ARS",
+                "fuente":          fuente,
+                "categoria":       "Créditos tarjeta",
+                "categoria_fuente": "auto",
+                "archivo_origen":  file.filename or fuente,
+                "usuario":         usuario_default,
+            })
+            ajuste_ars = delta
+
     import_info = {
         "fuente":      fuente,
         "archivo":     file.filename or fuente,
@@ -94,4 +124,7 @@ async def upload_file(
     if saldo is not None:
         upsert_cuenta_saldo(fuente, float(saldo))
 
-    return {"importados": count, "total_parseados": len(gastos)}
+    result: dict = {"importados": count, "total_parseados": len(gastos)}
+    if ajuste_ars is not None:
+        result["ajuste_resumen_ars"] = ajuste_ars
+    return result
