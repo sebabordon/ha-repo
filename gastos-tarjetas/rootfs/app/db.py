@@ -250,17 +250,34 @@ def list_importaciones() -> list[dict]:
 def list_vencimientos() -> list[dict]:
     """
     Return the most-recent import per fuente that has a fecha_venc.
-    Uses the statement-level SALDO ACTUAL / TOTAL A PAGAR (stored at import time)
-    so totals reflect what the card actually charges, not just the sum of
-    individual transactions (which excludes previous-period balance and payments).
+
+    For each import the query returns:
+      total_ars / total_usd  – statement SALDO ACTUAL / TOTAL A PAGAR extracted
+                               from the PDF at parse time (may be NULL for older
+                               imports or parsers that don't detect it).
+      sum_ars   / sum_usd    – gross egresos computed from the gastos table
+                               (sum of positive-monto rows for that import_id).
+                               Always available; includes the synthetic
+                               "Créditos del resumen" adjustment only if it was
+                               positive (i.e. an extra charge), never the credit.
+
+    The frontend uses sum_ars as the primary displayed amount so the widget
+    always shows something.  When total_ars is present and differs from sum_ars
+    the UI flags the discrepancy so the user can investigate.
     """
     with _conn() as conn:
         rows = conn.execute("""
-            SELECT id, fuente, archivo, mes_resumen, fecha_venc,
-                   total_ars, total_usd
-            FROM importaciones
-            WHERE fecha_venc IS NOT NULL
-            ORDER BY fecha_venc DESC
+            SELECT i.id, i.fuente, i.archivo, i.mes_resumen, i.fecha_venc,
+                   i.total_ars, i.total_usd,
+                   COALESCE(ROUND(SUM(CASE WHEN g.moneda='ARS' AND CAST(g.monto AS REAL) > 0
+                                          THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS sum_ars,
+                   COALESCE(ROUND(SUM(CASE WHEN g.moneda='USD' AND CAST(g.monto AS REAL) > 0
+                                          THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS sum_usd
+            FROM importaciones i
+            LEFT JOIN gastos g ON g.import_id = i.id
+            WHERE i.fecha_venc IS NOT NULL
+            GROUP BY i.id
+            ORDER BY i.fecha_venc DESC
             LIMIT 20
         """).fetchall()
     return [dict(r) for r in rows]

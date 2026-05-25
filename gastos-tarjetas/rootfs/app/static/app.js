@@ -1820,10 +1820,24 @@ function renderVencimientos(items) {
     }
 
     const label  = _FUENTE_LABELS[v.fuente] || v.fuente;
-    const arsStr = v.total_ars  ? `$ ${_fmtNum2(v.total_ars)}` : "";
-    const usdStr = v.total_usd  ? ` · U$S ${_fmtNum2(v.total_usd)}` : "";
+
+    // Primary: always show computed sum of egresos from the gastos table.
+    // Secondary: if the PDF total is available and differs from the computed sum
+    // by more than 0.50, show it as a "PDF: $X" reference line so any
+    // discrepancy (missed transactions, parser error) is immediately visible.
+    const arsSum   = v.sum_ars  || 0;
+    const usdSum   = v.sum_usd  || 0;
+    const arsStr   = arsSum > 0 ? `$ ${_fmtNum2(arsSum)}`     : "";
+    const usdStr   = usdSum > 0 ? ` · U$S ${_fmtNum2(usdSum)}` : "";
     const montoHtml = (arsStr || usdStr)
       ? `<div class="venc-monto">${arsStr}${usdStr}</div>` : "";
+
+    const arsDiff = v.total_ars != null ? Math.abs(arsSum - v.total_ars) : 0;
+    const usdDiff = v.total_usd != null ? Math.abs(usdSum - v.total_usd) : 0;
+    const pdfArsStr = (v.total_ars != null && arsDiff > 0.5) ? `PDF: $ ${_fmtNum2(v.total_ars)}` : "";
+    const pdfUsdStr = (v.total_usd != null && usdDiff > 0.5) ? ` · U$S ${_fmtNum2(v.total_usd)}` : "";
+    const pdfHtml = (pdfArsStr || pdfUsdStr)
+      ? `<div class="venc-pdf-ref">${pdfArsStr}${pdfUsdStr}</div>` : "";
 
     // Format date as DD/MM/YYYY
     const d = vencDate;
@@ -1834,6 +1848,7 @@ function renderVencimientos(items) {
       <div class="venc-fecha">${fechaStr}</div>
       <div class="venc-dias">${diasTxt}</div>
       ${montoHtml}
+      ${pdfHtml}
     </div>`;
   }).join("");
 }
