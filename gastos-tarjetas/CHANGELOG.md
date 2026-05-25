@@ -1,3 +1,9 @@
+## 0.2.67
+
+- **Fix "Créditos del resumen" duplicado en Galicia (y AMEX)**: el delta para la fila sintética ahora se calcula contra el **neto** de todas las transacciones ARS del import (`stmt_total_ars − net_ars_imported`) en lugar del bruto de egresos. Créditos que el parser ya importó como ingresos (BONIF.COM.MEN.MANT.C, devoluciones MercadoLibre, CR.RG de AFIP…) quedan en el net y cierran el gap por sí solos; el delta resulta ~0 y no se inserta ninguna fila sintética. El residuo que genera la fila sintética es exclusivamente lo que cae fuera de las transacciones del período (ej. saldo anterior de BBVA − pago → overpayment de ciclo previo).
+- **Widget de vencimientos — monto neto**: el widget ahora muestra `net_ars` (egresos − créditos ya importados) como valor principal en lugar del bruto de egresos. El número coincide con el `TOTAL A PAGAR` / `SALDO ACTUAL` del PDF cuando el import está completo.
+- **Nota**: reimportar los resúmenes afectados (Galicia / AMEX con créditos) para corregir la fila sintética duplicada en imports anteriores a esta versión.
+
 ## 0.2.66
 
 - **Fix AMEX — créditos con marcador CR**: transacciones como `DEV PERCEPCION RG 5617` no se importaban por dos bugs simultáneos: (1) el token `CR` que AMEX imprime junto al monto se concatenaba (`"1.234,56CR"`) haciendo fallar el parseo del número; (2) el filtro `description.startswith("DEV ")` descartaba explícitamente estas filas. Ahora se detecta y separa `CR` de las palabras numéricas, se niega el monto resultante (crédito → ingreso, monto negativo), y el filtro DEV se reemplaza por uno que solo salta `"Gracias por su pago"`.

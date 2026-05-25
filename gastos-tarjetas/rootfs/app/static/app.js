@@ -1825,8 +1825,11 @@ function renderVencimientos(items) {
     // Secondary: if the PDF total is available and differs from the computed sum
     // by more than 0.50, show it as a "PDF: $X" reference line so any
     // discrepancy (missed transactions, parser error) is immediately visible.
-    const arsSum   = v.sum_ars  || 0;
-    const usdSum   = v.sum_usd  || 0;
+    // Use net (egresos − already-imported credits) so the widget shows what
+    // you actually owe, consistent with the PDF's TOTAL A PAGAR / SALDO ACTUAL.
+    // Fall back to sum_ars for older imports that pre-date the net_ars column.
+    const arsSum   = v.net_ars != null ? v.net_ars : (v.sum_ars || 0);
+    const usdSum   = v.net_usd != null ? v.net_usd : (v.sum_usd || 0);
     const arsStr   = arsSum > 0 ? `$ ${_fmtNum2(arsSum)}`     : "";
     const usdStr   = usdSum > 0 ? ` · U$S ${_fmtNum2(usdSum)}` : "";
     const montoHtml = (arsStr || usdStr)

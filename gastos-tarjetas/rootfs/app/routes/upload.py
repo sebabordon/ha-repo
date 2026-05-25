@@ -82,18 +82,21 @@ async def upload_file(
 
     # ── Synthetic "Créditos del resumen" adjustment ─────────────────────────────
     # When the parser detected the statement's TOTAL A PAGAR / SALDO ACTUAL,
-    # insert a balancing row so that sum(all ARS transactions for this import)
-    # equals the statement total.  The delta is almost always negative (a credit),
-    # meaning the card charged LESS than the raw sum of egresos — e.g. because a
-    # previous overpayment was applied.  A positive delta means the PDF total
-    # exceeds the sum of parsed transactions (parser missed something).
+    # insert a balancing row so that net(all ARS transactions) == statement total.
+    #
+    # Use the NET (positive egresos + negative ingresos already imported) so that
+    # credits already present as individual rows (BONIF, ML returns, CR.RG …)
+    # are NOT double-counted.  If they already close the gap the delta is ~0 and
+    # no synthetic row is inserted.  A residual delta arises only from factors
+    # outside the current-period transactions (e.g. a BBVA overpayment carry-over
+    # from the previous billing cycle that isn't a line item in "Nuevos Cargos").
     ajuste_ars: float | None = None
     if stmt_ars is not None:
-        ars_egresos = sum(
+        net_ars_imported = sum(
             float(r["monto"]) for r in records
-            if r.get("moneda") == "ARS" and float(r["monto"]) > 0
+            if r.get("moneda") == "ARS"
         )
-        delta = round(float(stmt_ars) - ars_egresos, 2)
+        delta = round(float(stmt_ars) - net_ars_imported, 2)
         if abs(delta) > 0.01:
             adj_fecha = (mes_resumen + "-01") if mes_resumen else str(fecha_venc or "")
             records.append({
