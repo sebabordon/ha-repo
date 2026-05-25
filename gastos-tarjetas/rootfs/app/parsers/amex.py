@@ -17,7 +17,7 @@ from config import TITULAR2_NAME
 from models import Fuente, Moneda
 from parsers.base import BaseParser
 from parsers.utils import (
-    group_by_y, collect_amount, parse_date_dmy_long, row_text, words_in_band
+    group_by_y, parse_ar_amount, parse_date_dmy_long, row_text, words_in_band
 )
 
 _TITULAR2_UPPER = TITULAR2_NAME.upper() if TITULAR2_NAME else ""
@@ -158,9 +158,19 @@ class AmexParser(BaseParser):
 
                     month_name = row[2]["text"] if len(row) > 2 else ""
 
-                    # Amount: rightmost words (x0 > _AMOUNT_X)
-                    amount = collect_amount(row, _AMOUNT_X)
-                    if amount is None or amount <= 0:
+                    # Amount: rightmost words (x0 > _AMOUNT_X).
+                    # AMEX marks credits with a "CR" token at the same x-band.
+                    # Collect numeric and CR parts separately so parse_ar_amount
+                    # doesn't choke on "1.234,56CR".
+                    amount_words = [w for w in row if w["x0"] >= _AMOUNT_X]
+                    is_cr = any(w["text"].upper() == "CR" for w in amount_words)
+                    numeric_str = "".join(
+                        w["text"] for w in amount_words if w["text"].upper() != "CR"
+                    )
+                    amount = parse_ar_amount(numeric_str) if numeric_str else None
+                    if is_cr and amount is not None:
+                        amount = -amount   # credit → ingreso (negative monto)
+                    if not amount:         # None or zero
                         continue
 
                     # Description: words between month (index 3) and amount area
@@ -171,8 +181,9 @@ class AmexParser(BaseParser):
                         continue
                     if _SKIP_DESC.match(description):
                         continue
-                    # Skip payments and devolutions
-                    if "Gracias por su pago" in description or description.startswith("DEV "):
+                    # Skip only actual payment rows; "DEV PERCEPCION …" tax credits
+                    # are legitimate ingresos and must not be filtered here.
+                    if "Gracias por su pago" in description:
                         continue
 
                     # Clean USD description artefacts: "MERCHANT 31.80 US DOLLA" → "MERCHANT"

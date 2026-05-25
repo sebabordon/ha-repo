@@ -1,3 +1,7 @@
+## 0.2.66
+
+- **Fix AMEX — créditos con marcador CR**: transacciones como `DEV PERCEPCION RG 5617` no se importaban por dos bugs simultáneos: (1) el token `CR` que AMEX imprime junto al monto se concatenaba (`"1.234,56CR"`) haciendo fallar el parseo del número; (2) el filtro `description.startswith("DEV ")` descartaba explícitamente estas filas. Ahora se detecta y separa `CR` de las palabras numéricas, se niega el monto resultante (crédito → ingreso, monto negativo), y el filtro DEV se reemplaza por uno que solo salta `"Gracias por su pago"`.
+
 ## 0.2.65
 
 - **Fix widget de vencimientos — línea PDF solo aparece en inconsistencia real**: la comparación para mostrar la línea amber `PDF: $X` ahora usa el net de las transacciones del import (egresos − créditos, incluyendo la fila sintética "Créditos del resumen") en lugar del bruto de egresos. Cuando el crédito sintético fue insertado correctamente, `net_ars == total_ars` y no aparece línea secundaria. La línea amber solo se muestra si el net difiere del PDF, indicando un error real del parser o transacciones faltantes. `list_vencimientos()` agrega `net_ars`/`net_usd` al resultado.
