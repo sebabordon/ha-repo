@@ -97,7 +97,14 @@ async def upload_file(
             if r.get("moneda") == "ARS"
         )
         delta = round(float(stmt_ars) - net_ars_imported, 2)
-        if abs(delta) > 0.01:
+        # Only insert the synthetic row for NEGATIVE deltas (the statement charges
+        # you LESS than the sum of all imported transactions, meaning there is a
+        # genuine credit/overpayment applied by the card company that has no
+        # individual transaction row).
+        # Positive delta = statement charges MORE than net transactions = previous-
+        # period balance carryover that cannot be expressed as a single transaction;
+        # adding it as an egreso row would be misleading.
+        if delta < -0.5:
             adj_fecha = (mes_resumen + "-01") if mes_resumen else str(fecha_venc or "")
             records.append({
                 "fecha":           adj_fecha,

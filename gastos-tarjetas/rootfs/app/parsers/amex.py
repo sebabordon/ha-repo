@@ -122,7 +122,7 @@ class AmexParser(BaseParser):
                 words = page.extract_words(keep_blank_chars=False)
                 rows = group_by_y(words)
 
-                for row in rows:
+                for i, row in enumerate(rows):
                     rtext = row_text(row)
 
                     # Extract year from statement header
@@ -159,11 +159,23 @@ class AmexParser(BaseParser):
                     month_name = row[2]["text"] if len(row) > 2 else ""
 
                     # Amount: rightmost words (x0 > _AMOUNT_X).
-                    # AMEX marks credits with a "CR" token at the same x-band.
+                    # AMEX marks credits with a "CR" token.  It may appear:
+                    #   (a) on the same row as the amount (grouped by group_by_y), or
+                    #   (b) on a separate sub-row just below (y-gap > 2pt tolerance).
                     # Collect numeric and CR parts separately so parse_ar_amount
                     # doesn't choke on "1.234,56CR".
                     amount_words = [w for w in row if w["x0"] >= _AMOUNT_X]
                     is_cr = any(w["text"].upper() == "CR" for w in amount_words)
+
+                    # (b) peek at next row: if it's a standalone CR in the amount
+                    #     band and not the start of a new transaction, absorb it.
+                    if not is_cr and i + 1 < len(rows):
+                        nxt = rows[i + 1]
+                        nxt_amt = [w for w in nxt if w["x0"] >= _AMOUNT_X]
+                        if nxt_amt and all(w["text"].upper() == "CR" for w in nxt_amt):
+                            if not _DATE_RE.match(nxt[0]["text"]):
+                                is_cr = True
+
                     numeric_str = "".join(
                         w["text"] for w in amount_words if w["text"].upper() != "CR"
                     )

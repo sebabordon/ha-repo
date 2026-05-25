@@ -1,3 +1,8 @@
+## 0.2.68
+
+- **Fix fila sintética "Créditos del resumen" con delta positivo (BBVA / AMEX)**: con el cálculo neto introducido en 0.2.67, el delta para BBVA y AMEX resultaba positivo (saldo de período anterior no representado como transacción del ciclo actual), lo que generaba filas de egreso erróneas. Ahora la fila sintética solo se inserta cuando `delta < -0,50` (genuine credit/overpayment); un delta positivo se ignora silenciosamente.
+- **Fix AMEX — crédito CR en sub-fila**: el marcador `CR` que imprime AMEX a veces queda en una línea separada (gap y > 2 pt) no agrupada por `group_by_y`. El parser ahora hace look-ahead al siguiente row: si contiene solo tokens `CR` en la banda de importes y no comienza con dígito (no es nueva transacción), absorbe el CR como ingreso. Corrige `DEV PERCEPCION RG 5617` que seguía importándose como egreso pese al fix de 0.2.66.
+
 ## 0.2.67
 
 - **Fix "Créditos del resumen" duplicado en Galicia (y AMEX)**: el delta para la fila sintética ahora se calcula contra el **neto** de todas las transacciones ARS del import (`stmt_total_ars − net_ars_imported`) en lugar del bruto de egresos. Créditos que el parser ya importó como ingresos (BONIF.COM.MEN.MANT.C, devoluciones MercadoLibre, CR.RG de AFIP…) quedan en el net y cierran el gap por sí solos; el delta resulta ~0 y no se inserta ninguna fila sintética. El residuo que genera la fila sintética es exclusivamente lo que cae fuera de las transacciones del período (ej. saldo anterior de BBVA − pago → overpayment de ciclo previo).
