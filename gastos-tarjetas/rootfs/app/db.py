@@ -278,6 +278,7 @@ def list_vencimientos() -> list[dict]:
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='USD'
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS net_usd,
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='ARS' AND UPPER(g.descripcion) LIKE '%5617%'
+                                               AND CAST(g.monto AS REAL) > 0
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS rg5617_ars
             FROM importaciones i
             LEFT JOIN gastos g ON g.import_id = i.id

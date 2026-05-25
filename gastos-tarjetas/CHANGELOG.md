@@ -1,3 +1,10 @@
+## 0.2.70
+
+- **Fix AMEX — PERCEPCION RG 5617 con monto grande no importada**: el umbral de columna de importes (`_AMOUNT_X`) bajó de 500 pt a 490 pt. AMEX alinea los importes a la derecha en una columna de ~542 pt; números de 12+ dígitos como "2.362.741,92" comienzan en x0 ≈ 495.8 (< 500 anterior) y quedaban fuera de la banda → no se parseaban. Los números de referencia de descripción quedan por debajo de x0 ≈ 240, por lo que el nuevo límite no genera falsos positivos.
+- **Fix AMEX — Cuota Anual no importada**: el patrón `Cuota` en `_SKIP_DESC` descartaba la cuota anual de membresía (p.ej. "Cuota Anual 04/26 - 03/27 $735.000"). Las sub-filas de plan de cuotas como "Cuota 01 de 03" ya son filtradas antes por la detección de fecha, por lo que el patrón era redundante e incorrecto.
+- **Fix BBVA — fechas de cuotas (installments) no reasignadas**: `_detect_statement_date()` usa patrones DD/MM/AA pero BBVA imprime las fechas en DD-Mmm-AA; siempre retornaba `None` → `stmt_date = None` → `_installment_date()` nunca se ejecutaba → las cuotas mantenían la fecha original de compra en lugar de la del período del resumen. Solución: `_detect_vencimiento_bbva()` ya parseaba DD-Mmm-AA y ahora también retorna la fecha de cierre (`dates[0]`) que se usa como `stmt_date`.
+- **Fix widget RG 5617 — mostrar solo el cargo del período actual**: la columna `rg5617_ars` en `list_vencimientos()` ahora suma solo transacciones positivas (percepción cobrada en el período), excluyendo los créditos `DEV PERCEPCION` / `CR.RG` que corresponden a devoluciones del período anterior.
+
 ## 0.2.69
 
 - **Widget de vencimientos — línea RG 5617**: cada card muestra una línea secundaria con el neto de percepciones RG 5617 del resumen (`LIKE '%5617%'` sobre `descripcion`). Valor positivo = percepción neta cobrada (crédito fiscal ante AFIP deducible); valor negativo = más DEV que cargos en ese período. La línea no aparece si el valor es cero o menor a $0,50. Implementado como nueva columna `rg5617_ars` en `list_vencimientos()` y elemento `.venc-rg5617` en el widget.

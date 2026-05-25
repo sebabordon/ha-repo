@@ -77,14 +77,19 @@ def _detect_statement_date(pdf) -> Optional[date]:
     return None
 
 
-def _detect_vencimiento_bbva(pdf) -> tuple[Optional[date], Optional["Decimal"], Optional["Decimal"]]:
+def _detect_vencimiento_bbva(pdf) -> tuple[Optional[date], Optional[date], Optional["Decimal"], Optional["Decimal"]]:
     """
     Locate the 'CIERRE ACTUAL  VENCIMIENTO ACTUAL' column-header row, then read
-    the following data line.  Returns (fecha_venc, saldo_ars, saldo_usd).
+    the following data line.
+    Returns (fecha_cierre, fecha_venc, saldo_ars, saldo_usd).
 
     Example header : 'CIERRE ACTUAL VENCIMIENTO ACTUAL SALDO ACTUAL $ SALDO ACTUAL U$S ...'
     Example data   : '21-May-26 03-Jun-26 595.951,81 736,56 375.400,00'
                        idx 0      idx 1    idx 2       idx 3   idx 4
+
+    fecha_cierre (dates[0]) is also used as stmt_date for installment date
+    remapping — _detect_statement_date() cannot parse the DD-Mmm-YY format that
+    BBVA uses, so we derive it here instead.
     """
     from parsers.utils import parse_ar_amount
     for page in pdf.pages[:2]:
@@ -96,11 +101,12 @@ def _detect_vencimiento_bbva(pdf) -> tuple[Optional[date], Optional["Decimal"], 
                     tokens = lines[i + 1].split()
                     dates   = [t for t in tokens if _DATE_RE.match(t)]
                     amounts = [t for t in tokens if _AMOUNT_WORD_RE.match(t) and not _DATE_RE.match(t)]
+                    cierre = parse_date_dmy(dates[0]) if len(dates) >= 1 else None
                     venc   = parse_date_dmy(dates[1]) if len(dates) >= 2 else None
                     s_ars  = parse_ar_amount(amounts[0]) if len(amounts) >= 1 else None
                     s_usd  = parse_ar_amount(amounts[1]) if len(amounts) >= 2 else None
-                    return venc, s_ars, s_usd
-    return None, None, None
+                    return cierre, venc, s_ars, s_usd
+    return None, None, None, None
 
 
 def _installment_date(original: date, stmt: date) -> date:
@@ -118,8 +124,11 @@ class BBVAParser(BaseParser):
         current_usuario: Optional[str] = None
 
         with pdfplumber.open(file) as pdf:
-            stmt_date = _detect_statement_date(pdf)
-            self.fecha_vencimiento, self.stmt_total_ars, self.stmt_total_usd = _detect_vencimiento_bbva(pdf)
+            # _detect_vencimiento_bbva parses DD-Mmm-YY dates (BBVA's format);
+            # the old _detect_statement_date() used DD/MM/YY patterns and always
+            # returned None for BBVA, leaving stmt_date=None and preventing
+            # installment date remapping.
+            stmt_date, self.fecha_vencimiento, self.stmt_total_ars, self.stmt_total_usd = _detect_vencimiento_bbva(pdf)
 
             for page in pdf.pages:
                 words = page.extract_words(keep_blank_chars=False)

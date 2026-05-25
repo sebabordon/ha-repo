@@ -3,7 +3,9 @@ AMEX Argentina PDF parser.
 
 Format: text-based PDF, transactions as:
   DD de MES  MERCHANT [optional ref]  AMOUNT
-Amount words appear at x0 > 500, split by thousands dot.
+Amount words appear at x0 ≥ 490, split by thousands dot.
+Large amounts (≥ 12 characters) start slightly to the left (~495) because AMEX
+right-aligns them in a fixed-width column that ends at ~542.
 Two sections: "Nuevos Cargos en PESOS" (ARS) and "Nuevos Cargos en DOLARES" (USD).
 """
 import re
@@ -24,13 +26,17 @@ _TITULAR2_UPPER = TITULAR2_NAME.upper() if TITULAR2_NAME else ""
 
 _DATE_RE = re.compile(r"^(\d{1,2})$")
 _SKIP_DESC = re.compile(
-    r"^(DE TARJ\.|Referencia|Número de|Cuota|Socio:|Facturación|Página|The Platinum|Estado de|"
+    r"^(DE TARJ\.|Referencia|Número de|Socio:|Facturación|Página|The Platinum|Estado de|"
     r"Próxima|Centro|Membership|Información|Saldo Anterior|Limite|Tasa|Intereses|"
     r"Estimado|American Express|Comprobante|INSTRUCCIONES|PARA EL PAGO|"
     r"Ingresando|través|Con pesos|Recuerde|Importante|American)",
     re.IGNORECASE,
 )
-_AMOUNT_X = 500.0  # amount words start at x0 > 500
+# Amount words start at x0 ≥ 490.  AMEX right-aligns amounts in a column that
+# ends at ~542pt.  Larger amounts (e.g. "2.362.741,92" — 12 chars) start at
+# ~495pt; smaller ones at ~502pt.  Description reference numbers stay below
+# x0 ≈ 240pt so 490 is a safe boundary.
+_AMOUNT_X = 490.0
 
 # Matches DD/MM/YY or DD/MM/YYYY date tokens in the AMEX header
 _AMEX_DATE_RE  = re.compile(r"\b(\d{2})/(\d{2})/(\d{2,4})\b")
