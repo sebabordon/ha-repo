@@ -27,7 +27,7 @@ _TITULAR2_UPPER = TITULAR2_NAME.upper() if TITULAR2_NAME else ""
 _DATE_RE = re.compile(r"^(\d{1,2})$")
 _SKIP_DESC = re.compile(
     r"^(DE TARJ\.|Referencia|Número de|Socio:|Facturación|Página|The Platinum|Estado de|"
-    r"Próxima|Centro|Membership|Información|Saldo Anterior|Limite|Tasa|Intereses|"
+    r"Próxima|Centro|Membership|Información|Saldo Anterior|Limite|Tasa|"
     r"Estimado|American Express|Comprobante|INSTRUCCIONES|PARA EL PAGO|"
     r"Ingresando|través|Con pesos|Recuerde|Importante|American)",
     re.IGNORECASE,
@@ -146,8 +146,15 @@ class AmexParser(BaseParser):
                         current_moneda = Moneda.USD
                         current_usuario = "Adicional" if (_TITULAR2_UPPER and _TITULAR2_UPPER in rtext.upper()) else None
                         continue
-                    if "Total de Cargos en" in rtext or "Fecha y detalle" in rtext:
+                    if "Total de Cargos en" in rtext or "Fecha y detalle" in rtext or "Total de transacciones" in rtext:
                         current_moneda = None
+                        continue
+
+                    # Financial charges section (intereses, IVA) — appears after the
+                    # last per-cardholder sub-section, before the USD section.
+                    if "Transacciones financieras" in rtext:
+                        current_moneda = Moneda.ARS
+                        current_usuario = None  # account-level charges → Titular
                         continue
 
                     if current_moneda is None:
