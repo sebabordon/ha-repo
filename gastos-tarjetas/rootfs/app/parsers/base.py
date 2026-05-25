@@ -12,6 +12,8 @@ class BaseParser(ABC):
     fecha_vencimiento: Optional[date] = None   # payment due date of the statement
     stmt_total_ars: Optional[Decimal] = None   # SALDO ACTUAL / TOTAL A PAGAR in ARS
     stmt_total_usd: Optional[Decimal] = None   # SALDO ACTUAL / TOTAL A PAGAR in USD
+    proximo_cierre: Optional[date] = None      # next statement close date (if available)
+    proximo_venc: Optional[date] = None        # next payment due date (if available)
 
     @abstractmethod
     def parse(self, file: BinaryIO, filename: str) -> list[Gasto]:

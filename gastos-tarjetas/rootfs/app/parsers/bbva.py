@@ -109,6 +109,37 @@ def _detect_vencimiento_bbva(pdf) -> tuple[Optional[date], Optional[date], Optio
     return None, None, None, None
 
 
+def _detect_proximo_bbva(pdf) -> tuple[Optional[date], Optional[date]]:
+    """
+    Locate the 'PRÓXIMO CIERRE  PRÓXIMO VENCIMIENTO' column header and read the
+    data line beneath it.  BBVA prints four dates on that row:
+      [cierre_ant]  [venc_ant]  [proximo_cierre]  [proximo_venc]
+
+    Example header : 'CIERRE ANTERIOR VENCIMIENTO ANTERIOR PRÓXIMO CIERRE PRÓXIMO VENCIMIENTO'
+    Example data   : '19-Feb-26 02-Mar-26 23-Abr-26 04-May-26'
+                       idx 0      idx 1    idx 2       idx 3
+    """
+    for page in pdf.pages[:2]:
+        text = page.extract_text() or ""
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            if "PRÓXIMO CIERRE" in line.upper() or "PROXIMO CIERRE" in line.upper():
+                # Data may be on the same line or on one of the next 3 lines
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    tokens = lines[j].split()
+                    dates = [t for t in tokens if _DATE_RE.match(t)]
+                    if len(dates) >= 4:
+                        proximo_cierre = parse_date_dmy(dates[2])
+                        proximo_venc   = parse_date_dmy(dates[3])
+                        return proximo_cierre, proximo_venc
+                    if len(dates) >= 2:
+                        # Partial match: take last two as próximo cierre/venc
+                        proximo_cierre = parse_date_dmy(dates[-2])
+                        proximo_venc   = parse_date_dmy(dates[-1])
+                        return proximo_cierre, proximo_venc
+    return None, None
+
+
 def _installment_date(original: date, stmt: date) -> date:
     """Return a date in stmt's year/month, capping day to last valid day."""
     last = calendar.monthrange(stmt.year, stmt.month)[1]
@@ -129,6 +160,7 @@ class BBVAParser(BaseParser):
             # returned None for BBVA, leaving stmt_date=None and preventing
             # installment date remapping.
             stmt_date, self.fecha_vencimiento, self.stmt_total_ars, self.stmt_total_usd = _detect_vencimiento_bbva(pdf)
+            self.proximo_cierre, self.proximo_venc = _detect_proximo_bbva(pdf)
 
             for page in pdf.pages:
                 words = page.extract_words(keep_blank_chars=False)

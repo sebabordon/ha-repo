@@ -84,9 +84,11 @@ async def upload_file(
     fechas = [str(r.get("fecha", ""))[:7] for r in records if r.get("fecha")]
     mes_resumen = Counter(fechas).most_common(1)[0][0] if fechas else None
 
-    fecha_venc  = getattr(PARSERS[fuente], "fecha_vencimiento", None)
-    stmt_ars    = getattr(PARSERS[fuente], "stmt_total_ars",    None)
-    stmt_usd    = getattr(PARSERS[fuente], "stmt_total_usd",    None)
+    fecha_venc      = getattr(PARSERS[fuente], "fecha_vencimiento", None)
+    stmt_ars        = getattr(PARSERS[fuente], "stmt_total_ars",    None)
+    stmt_usd        = getattr(PARSERS[fuente], "stmt_total_usd",    None)
+    proximo_cierre  = getattr(PARSERS[fuente], "proximo_cierre",    None)
+    proximo_venc    = getattr(PARSERS[fuente], "proximo_venc",      None)
 
     # ── Synthetic "Créditos del resumen" adjustment ─────────────────────────────
     # When the parser detected the statement's TOTAL A PAGAR / SALDO ACTUAL,
@@ -134,12 +136,14 @@ async def upload_file(
             ajuste_ars = delta
 
     import_info = {
-        "fuente":      fuente,
-        "archivo":     file.filename or fuente,
-        "mes_resumen": mes_resumen,
-        "fecha_venc":  str(fecha_venc)    if fecha_venc else None,
-        "total_ars":   float(stmt_ars)    if stmt_ars   else None,
-        "total_usd":   float(stmt_usd)    if stmt_usd   else None,
+        "fuente":          fuente,
+        "archivo":         file.filename or fuente,
+        "mes_resumen":     mes_resumen,
+        "fecha_venc":      str(fecha_venc)       if fecha_venc      else None,
+        "total_ars":       float(stmt_ars)        if stmt_ars        else None,
+        "total_usd":       float(stmt_usd)        if stmt_usd        else None,
+        "proximo_cierre":  str(proximo_cierre)    if proximo_cierre  else None,
+        "proximo_venc":    str(proximo_venc)      if proximo_venc    else None,
     }
     count = insert_gastos(records, import_info=import_info)
 

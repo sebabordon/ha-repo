@@ -1839,10 +1839,14 @@ function renderVencimientos(items) {
     // Fall back to sum_ars for older imports that pre-date the net_ars column.
     const arsSum   = v.net_ars != null ? v.net_ars : (v.sum_ars || 0);
     const usdSum   = v.net_usd != null ? v.net_usd : (v.sum_usd || 0);
-    const arsStr   = arsSum > 0 ? `$ ${_fmtNum2(arsSum)}`     : "";
-    const usdStr   = usdSum > 0 ? ` · U$S ${_fmtNum2(usdSum)}` : "";
+    // ARS amounts → green, USD amounts → blue
+    const arsStr   = arsSum > 0 ? `<span class="venc-ars">$ ${_fmtNum2(arsSum)}</span>` : "";
+    const usdStr   = usdSum > 0 ? `<span class="venc-usd"> · U$S ${_fmtNum2(usdSum)}</span>` : "";
     const montoHtml = (arsStr || usdStr)
       ? `<div class="venc-monto">${arsStr}${usdStr}</div>` : "";
+
+    // Fuente label colour: green if card has ARS charges, blue if USD-only
+    const fuenteCls = arsSum > 0 ? "venc-fuente ars-label" : "venc-fuente usd-label";
 
     // Compare NET (egresos + synthetic credits) against PDF total.
     // When the synthetic "Créditos del resumen" row was inserted correctly,
@@ -1855,26 +1859,37 @@ function renderVencimientos(items) {
     const pdfHtml = (pdfArsStr || pdfUsdStr)
       ? `<div class="venc-pdf-ref">${pdfArsStr}${pdfUsdStr}</div>` : "";
 
-    // RG 5617 perception line — shows the net perception charged/credited for
-    // this statement so the user can track their AFIP tax credit.
-    // Positive = net charge (perception paid, deductible from AFIP).
-    // Negative = net credit (more DEV PERCEPCION than charges this period).
+    // RG 5617 perception line — grey, shows only the current-period charge
     const rg5617 = v.rg5617_ars || 0;
     const rg5617Html = Math.abs(rg5617) > 0.5
       ? `<div class="venc-rg5617">RG 5617: ${rg5617 < 0 ? "−" : ""}$ ${_fmtNum2(Math.abs(rg5617))}</div>`
       : "";
 
-    // Format date as DD/MM/YYYY
+    // Próximo cierre / próximo vencimiento
+    const _fmtD = iso => {
+      const [y,m,d] = iso.split("-");
+      return `${d}/${m}/${y.slice(2)}`;
+    };
+    let proxHtml = "";
+    if (v.proximo_cierre || v.proximo_venc) {
+      const parts = [];
+      if (v.proximo_cierre) parts.push(`cierre ${_fmtD(v.proximo_cierre)}`);
+      if (v.proximo_venc)   parts.push(`venc. ${_fmtD(v.proximo_venc)}`);
+      proxHtml = `<div class="venc-proximos">Próx. ${parts.join(" · ")}</div>`;
+    }
+
+    // Format current due date as DD/MM/YYYY
     const d = vencDate;
     const fechaStr = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
 
     return `<div class="venc-card ${cls}">
-      <div class="venc-fuente">${escHtml(label)}</div>
+      <div class="${fuenteCls}">${escHtml(label)}</div>
       <div class="venc-fecha">${fechaStr}</div>
       <div class="venc-dias">${diasTxt}</div>
       ${montoHtml}
       ${rg5617Html}
       ${pdfHtml}
+      ${proxHtml}
     </div>`;
   }).join("");
 }

@@ -1,3 +1,8 @@
+## 0.2.74
+
+- **Widget vencimientos — próximo cierre y próximo vencimiento**: cada card muestra debajo del consumo una línea `Próx. cierre DD/MM · venc. DD/MM` con las fechas del siguiente ciclo. AMEX expone solo el próximo vencimiento (fecha que sigue al `- + = <total>` en el encabezado); BBVA expone ambas (fila `PRÓXIMO CIERRE PRÓXIMO VENCIMIENTO` en el header). Las fechas se guardan en las columnas `proximo_cierre` y `proximo_venc` de `importaciones` (migración automática `ALTER TABLE`).
+- **Widget vencimientos — colores por moneda**: el nombre de la cuenta (`venc-fuente`) aparece en verde si el resumen tiene saldo ARS, en azul si es solo USD. Los montos ARS en la fila de consumo son verdes (`venc-ars`) y los USD azules (`venc-usd`). La línea RG 5617 mantiene el gris claro (`#94a3b8`). La línea de próximas fechas tiene un separador sutil y tipografía más pequeña.
+
 ## 0.2.73
 
 - **Devoluciones RG 5617 importadas por defecto**: el checkbox "Incluir devoluciones RG 5617" ahora viene marcado de fábrica. Importar el crédito `DEV PERCEPCION / CR.RG` junto al cargo del período hace que la lista de gastos refleje el gasto real (percepción neta) en lugar de mostrar solo el cargo sin su compensación.

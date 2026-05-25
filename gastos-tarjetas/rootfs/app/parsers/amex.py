@@ -40,8 +40,9 @@ _AMOUNT_X = 490.0
 
 # Matches DD/MM/YY or DD/MM/YYYY date tokens in the AMEX header
 _AMEX_DATE_RE  = re.compile(r"\b(\d{2})/(\d{2})/(\d{2,4})\b")
-# "- + = 6.722.726,82 01/06/26" — captures the amount between = and the date
-_AMEX_SALDO_RE = re.compile(r"-\s+\+\s+=\s+([\d.,]+)")
+# "- + = 6.722.726,82 01/06/26" — captures amount and optional date (próximo venc)
+_AMEX_SALDO_RE = re.compile(r"-\s+\+\s+=\s+([\d.,]+)(?:\s+(\d{2}/\d{2}/\d{2,4}))?")
+_AMEX_DATE2_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{2,4})\b")
 
 
 def _detect_vencimiento_amex(pdf) -> Optional[_date]:
@@ -72,15 +73,17 @@ def _detect_vencimiento_amex(pdf) -> Optional[_date]:
     return None
 
 
-def _detect_totals_amex(pdf) -> tuple[Optional["Decimal"], Optional["Decimal"]]:
+def _detect_totals_amex(pdf) -> tuple[Optional["Decimal"], Optional["Decimal"], Optional[_date]]:
     """
-    Extract ARS and USD 'saldo a pagar' from the AMEX summary header.
+    Extract ARS and USD 'saldo a pagar' plus próximo vencimiento from the AMEX
+    summary header.
 
     ARS: line matching '- + = [amount] DD/MM/YY'  (first occurrence = ARS section)
+         The DD/MM/YY on this line is the PRÓXIMO VENCIMIENTO (next due date).
     USD: same pattern a few lines later             (second occurrence = USD section)
 
     Example:
-      '- + = 6.722.726,82 01/06/26'   → ARS saldo
+      '- + = 6.722.726,82 01/06/26'   → ARS saldo + próximo venc = 01/06/26
       '- + = cargos recibidos ...'     → (no amount here for USD)
       '5.469,31 28 de Abril 2026'      → USD saldo is on the NEXT line after the '- + =' line
     """
@@ -90,11 +93,22 @@ def _detect_totals_amex(pdf) -> tuple[Optional["Decimal"], Optional["Decimal"]]:
         lines = text.split("\n")
         ars: Optional["Decimal"] = None
         usd: Optional["Decimal"] = None
+        proximo_venc: Optional[_date] = None
         for i, line in enumerate(lines):
             m = _AMEX_SALDO_RE.search(line)
             if m:
                 if ars is None:
                     ars = parse_ar_amount(m.group(1))
+                    # group(2) is the date suffix — próximo vencimiento
+                    if m.group(2):
+                        dm = _AMEX_DATE2_RE.match(m.group(2))
+                        if dm:
+                            d, mo, y = int(dm.group(1)), int(dm.group(2)), int(dm.group(3))
+                            y = y + 2000 if y < 100 else y
+                            try:
+                                proximo_venc = _date(y, mo, d)
+                            except ValueError:
+                                pass
                 else:
                     usd = parse_ar_amount(m.group(1))
                     break
@@ -108,8 +122,8 @@ def _detect_totals_amex(pdf) -> tuple[Optional["Decimal"], Optional["Decimal"]]:
                         usd = parse_ar_amount(first_tok)
                         break
         if ars is not None:
-            return ars, usd
-    return None, None
+            return ars, usd, proximo_venc
+    return None, None, None
 
 
 class AmexParser(BaseParser):
@@ -123,7 +137,8 @@ class AmexParser(BaseParser):
 
         with pdfplumber.open(file) as pdf:
             self.fecha_vencimiento = _detect_vencimiento_amex(pdf)
-            self.stmt_total_ars, self.stmt_total_usd = _detect_totals_amex(pdf)
+            self.stmt_total_ars, self.stmt_total_usd, self.proximo_venc = _detect_totals_amex(pdf)
+            self.proximo_cierre = None  # AMEX does not publish the next billing date
             for page in pdf.pages:
                 words = page.extract_words(keep_blank_chars=False)
                 rows = group_by_y(words)

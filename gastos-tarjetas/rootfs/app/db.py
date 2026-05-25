@@ -84,12 +84,16 @@ def init_db():
         """)
         # Migrations: add columns to existing installations
         icols = {r[1] for r in conn.execute("PRAGMA table_info(importaciones)").fetchall()}
-        if "fecha_venc"  not in icols:
+        if "fecha_venc"     not in icols:
             conn.execute("ALTER TABLE importaciones ADD COLUMN fecha_venc TEXT")
-        if "total_ars"   not in icols:
+        if "total_ars"      not in icols:
             conn.execute("ALTER TABLE importaciones ADD COLUMN total_ars REAL")
-        if "total_usd"   not in icols:
+        if "total_usd"      not in icols:
             conn.execute("ALTER TABLE importaciones ADD COLUMN total_usd REAL")
+        if "proximo_cierre" not in icols:
+            conn.execute("ALTER TABLE importaciones ADD COLUMN proximo_cierre TEXT")
+        if "proximo_venc"   not in icols:
+            conn.execute("ALTER TABLE importaciones ADD COLUMN proximo_venc TEXT")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS cuentas (
@@ -208,11 +212,13 @@ def insert_gastos(gastos: list[dict], import_info: dict = None) -> int:
         import_id = None
         if import_info:
             cur = conn.execute(
-                "INSERT INTO importaciones (fuente, archivo, mes_resumen, fecha_venc, total_ars, total_usd) "
-                "VALUES (?,?,?,?,?,?)",
+                "INSERT INTO importaciones "
+                "(fuente, archivo, mes_resumen, fecha_venc, total_ars, total_usd, proximo_cierre, proximo_venc) "
+                "VALUES (?,?,?,?,?,?,?,?)",
                 (import_info.get("fuente"), import_info.get("archivo"),
                  import_info.get("mes_resumen"), import_info.get("fecha_venc"),
-                 import_info.get("total_ars"), import_info.get("total_usd")),
+                 import_info.get("total_ars"), import_info.get("total_usd"),
+                 import_info.get("proximo_cierre"), import_info.get("proximo_venc")),
             )
             import_id = cur.lastrowid
 
@@ -268,7 +274,7 @@ def list_vencimientos() -> list[dict]:
     with _conn() as conn:
         rows = conn.execute("""
             SELECT i.id, i.fuente, i.archivo, i.mes_resumen, i.fecha_venc,
-                   i.total_ars, i.total_usd,
+                   i.total_ars, i.total_usd, i.proximo_cierre, i.proximo_venc,
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='ARS' AND CAST(g.monto AS REAL) > 0
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS sum_ars,
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='USD' AND CAST(g.monto AS REAL) > 0
