@@ -448,17 +448,118 @@
             </div>
           </div>
         </div>
+          <!-- ── Acento ── -->
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Color de acento</span>
+              <span class="ui-color-desc">navbar, botones primarios, chips activos</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-accent" oninput="syncColorHex('accent')">
+              <input type="text"  id="ui-hex-accent" class="ui-hex-input" maxlength="7" placeholder="#16213e" oninput="syncColorPicker('accent')">
+            </div>
+          </div>
+
+          <!-- ── Preferencias generales ── -->
+          <div class="ui-pref-section">Preferencias</div>
+
+          <div class="ui-pref-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Tamaño de texto</span>
+              <span class="ui-color-desc">tamaño base de fuente — se aplica al instante</span>
+            </div>
+            <div class="ui-pref-controls">
+              <input type="range" id="ui-font-size" min="12" max="17" step="1" oninput="syncFontSize()">
+              <span id="ui-font-size-val" class="ui-font-size-val">14px</span>
+            </div>
+          </div>
+
+          <div class="ui-pref-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Período por defecto en Gráficos</span>
+              <span class="ui-color-desc">meses a mostrar al abrir la tab Gráficos</span>
+            </div>
+            <div class="ui-pref-controls">
+              <select id="ui-graf-meses">
+                <option value="3">3 meses</option>
+                <option value="6">6 meses</option>
+                <option value="12">12 meses</option>
+                <option value="24">24 meses</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="ui-pref-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Moneda por defecto en Gráficos</span>
+              <span class="ui-color-desc">moneda seleccionada al abrir la tab Gráficos</span>
+            </div>
+            <div class="ui-pref-controls">
+              <select id="ui-graf-moneda">
+                <option value="ARS">ARS $</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- ── Widget de vencimientos ── -->
+          <div class="ui-pref-section">Widget de vencimientos</div>
+
+          <div class="ui-pref-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Días para "urgente"</span>
+              <span class="ui-color-desc">vencimientos ≤ N días se muestran en rojo</span>
+            </div>
+            <div class="ui-pref-controls">
+              <input type="number" id="ui-dias-urgente" min="0" max="30" step="1">
+            </div>
+          </div>
+
+          <div class="ui-pref-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Días para "pronto"</span>
+              <span class="ui-color-desc">vencimientos ≤ N días se muestran en ámbar</span>
+            </div>
+            <div class="ui-pref-controls">
+              <input type="number" id="ui-dias-pronto" min="1" max="60" step="1">
+            </div>
+          </div>
+
+          <div class="ui-pref-row">
+            <label class="ui-check-row">
+              <input type="checkbox" id="ui-venc-show-proximos">
+              Mostrar próximo cierre / próximo vencimiento
+            </label>
+          </div>
+
+          <div class="ui-pref-row">
+            <label class="ui-check-row">
+              <input type="checkbox" id="ui-venc-show-rg5617">
+              Mostrar línea RG 5617
+            </label>
+          </div>
+
+          <div class="ui-pref-row">
+            <label class="ui-check-row">
+              <input type="checkbox" id="ui-venc-show-pdf-ref">
+              Mostrar referencia PDF (cuando difiere del total calculado)
+            </label>
+          </div>
+
+        </div>
+
         <div class="ui-colors-actions">
-          <button class="btn btn-primary btn-sm" onclick="saveUiColors()">Guardar</button>
-          <button class="btn btn-sm" onclick="resetUiColors()">Restablecer</button>
+          <button class="btn btn-primary btn-sm" onclick="saveUiSettings()">Guardar</button>
+          <button class="btn btn-sm" onclick="resetUiSettings()">Restablecer</button>
         </div>
         <div class="ui-preview">
-          <div class="ui-preview-title">Vista previa</div>
+          <div class="ui-preview-title">Vista previa de colores</div>
           <div class="ui-preview-row">
             <span class="ui-prev-ars">$ 1.234.567 ARS</span>
             <span class="ui-prev-usd">USD 1.234,56</span>
-            <span class="ui-prev-rg">DEV PERCEPCION RG 5617</span>
+            <span class="ui-prev-rg">RG 5617</span>
             <span class="ui-prev-tog">$ 1.100.000 −RG</span>
+            <span class="ui-prev-accent">Acento</span>
           </div>
         </div>
       </div>

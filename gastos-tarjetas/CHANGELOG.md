@@ -1,3 +1,12 @@
+## 0.2.80
+
+- **Interfaz — color de acento personalizable**: nuevo picker "Color de acento" cubre navbar, botones primarios, chips activos y botón de scroll. Implementado como CSS custom property `--color-accent`; todos los usos previos de `#16213e` en el CSS ahora referencian la variable.
+- **Interfaz — tamaño de texto**: slider de 12 a 17 px que se aplica al instante como vista previa; se guarda al hacer "Guardar".
+- **Interfaz — período y moneda por defecto en Gráficos**: dos selectores que determinan los valores iniciales de los filtros al abrir la tab Gráficos (antes siempre arrancaban en 6 meses / ARS).
+- **Interfaz — umbrales de urgencia en widget de vencimientos**: dos inputs numéricos para definir cuántos días se consideran "urgente" (rojo, default 3) y "pronto" (ámbar, default 7).
+- **Interfaz — visibilidad de secciones del widget de vencimientos**: tres checkboxes para mostrar u ocultar la línea RG 5617, la referencia PDF y la fila de próximo cierre/vencimiento. Los cambios se aplican al hacer "Guardar" y el widget se recarga automáticamente.
+- **Refactor**: `saveUiColors` + `resetUiColors` renombradas a `saveUiSettings` / `resetUiSettings`; preferencias no-color se guardan en `localStorage("ui_prefs")`; las de color siguen en `localStorage("ui_colors")`.
+
 ## 0.2.79
 
 - **Config — sub-tabs en lugar de acordeones**: la pestaña ⚙ Config ahora usa una barra de sub-tabs horizontales (Importar · Reglas · Personas · Cuentas · Interfaz · ⚠ Borrar) con el mismo estilo visual que las tabs principales. Dentro de los sub-tabs que tienen varias secciones (Reglas, Personas) se conservan los acordeones expandibles (+/−). Se eliminó el botón "Cerrar todo".

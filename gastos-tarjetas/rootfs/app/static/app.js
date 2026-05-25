@@ -4,8 +4,25 @@ if (window.APP_VERSION) {
   if (el) el.textContent = "v" + window.APP_VERSION;
 }
 
-// ── UI color preferences (applied immediately from localStorage) ──────────────
-const UI_COLOR_DEFAULTS = { ars: "#15803d", usd: "#2563eb", rg: "#94a3b8", tog: "#d97706" };
+// ── UI settings (colors + prefs) applied immediately from localStorage ────────
+const UI_COLOR_DEFAULTS = {
+  ars: "#15803d", usd: "#2563eb", rg: "#94a3b8", tog: "#d97706", accent: "#16213e"
+};
+const UI_PREF_DEFAULTS = {
+  dias_urgente:       3,
+  dias_pronto:        7,
+  graf_meses:         "6",
+  graf_moneda:        "ARS",
+  font_size:          14,
+  venc_show_proximos: true,
+  venc_show_rg5617:   true,
+  venc_show_pdf_ref:  true,
+};
+
+function getUiPref(key) {
+  const stored = JSON.parse(localStorage.getItem("ui_prefs") || "{}");
+  return key in stored ? stored[key] : UI_PREF_DEFAULTS[key];
+}
 
 function applyUiColors() {
   const stored = JSON.parse(localStorage.getItem("ui_colors") || "{}");
@@ -15,8 +32,22 @@ function applyUiColors() {
   root.style.setProperty("--color-usd",       c.usd);
   root.style.setProperty("--color-rg5617",    c.rg);
   root.style.setProperty("--color-toggle-rg", c.tog);
+  root.style.setProperty("--color-accent",    c.accent);
 }
+
+function applyUiPrefs() {
+  // Font size
+  const fs = getUiPref("font_size");
+  document.documentElement.style.fontSize = fs + "px";
+  // Chart defaults — set select values now so loadCharts() picks them up
+  const mSel = document.getElementById("cf-meses");
+  const monSel = document.getElementById("cf-moneda");
+  if (mSel)   mSel.value   = getUiPref("graf_meses");
+  if (monSel) monSel.value = getUiPref("graf_moneda");
+}
+
 applyUiColors();
+applyUiPrefs();
 
 // v0.2.35: unified sign convention — positive monto = egreso for ALL sources.
 /** Devuelve true si el movimiento es un egreso (dinero que sale). */
@@ -119,16 +150,33 @@ function toggleCfgSection(id) {
   if (arrow) arrow.textContent = open ? "+" : "−";
 }
 
-// ── UI color settings ─────────────────────────────────────────────────────────
+// ── UI settings (Interfaz tab) ────────────────────────────────────────────────
 function renderUiSettings() {
-  const stored = JSON.parse(localStorage.getItem("ui_colors") || "{}");
-  const c = { ...UI_COLOR_DEFAULTS, ...stored };
-  [["ars","ars"],["usd","usd"],["rg","rg"],["tog","tog"]].forEach(([key, slot]) => {
-    const picker = document.getElementById(`ui-col-${key}`);
-    const hex    = document.getElementById(`ui-hex-${key}`);
-    if (picker) picker.value = c[slot];
-    if (hex)    hex.value   = c[slot];
+  // Colors
+  const storedC = JSON.parse(localStorage.getItem("ui_colors") || "{}");
+  const c = { ...UI_COLOR_DEFAULTS, ...storedC };
+  ["ars","usd","rg","tog","accent"].forEach(k => {
+    const picker = document.getElementById(`ui-col-${k}`);
+    const hex    = document.getElementById(`ui-hex-${k}`);
+    if (picker) picker.value = c[k];
+    if (hex)    hex.value   = c[k];
   });
+  // Prefs
+  const storedP = JSON.parse(localStorage.getItem("ui_prefs") || "{}");
+  const p = { ...UI_PREF_DEFAULTS, ...storedP };
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+  const fsEl = document.getElementById("ui-font-size");
+  const fsVal = document.getElementById("ui-font-size-val");
+  if (fsEl)  fsEl.value = p.font_size;
+  if (fsVal) fsVal.textContent = p.font_size + "px";
+  setVal("ui-graf-meses",    p.graf_meses);
+  setVal("ui-graf-moneda",   p.graf_moneda);
+  setVal("ui-dias-urgente",  p.dias_urgente);
+  setVal("ui-dias-pronto",   p.dias_pronto);
+  setChk("ui-venc-show-proximos", p.venc_show_proximos);
+  setChk("ui-venc-show-rg5617",   p.venc_show_rg5617);
+  setChk("ui-venc-show-pdf-ref",  p.venc_show_pdf_ref);
   _updateUiPreview();
 }
 
@@ -146,12 +194,37 @@ function syncColorPicker(key) {
   _updateUiPreview();
 }
 
+function syncFontSize() {
+  const el  = document.getElementById("ui-font-size");
+  const lbl = document.getElementById("ui-font-size-val");
+  if (!el) return;
+  const px = parseInt(el.value, 10);
+  if (lbl) lbl.textContent = px + "px";
+  document.documentElement.style.fontSize = px + "px";   // live preview
+}
+
 function _getUiColorInputs() {
   const get = k => {
     const h = document.getElementById(`ui-hex-${k}`);
     return (h && /^#[0-9a-fA-F]{6}$/.test(h.value)) ? h.value : UI_COLOR_DEFAULTS[k];
   };
-  return { ars: get("ars"), usd: get("usd"), rg: get("rg"), tog: get("tog") };
+  return { ars: get("ars"), usd: get("usd"), rg: get("rg"), tog: get("tog"), accent: get("accent") };
+}
+
+function _getUiPrefInputs() {
+  const num  = (id, def) => { const el = document.getElementById(id); return el ? parseInt(el.value,10)||def : def; };
+  const sel  = (id, def) => { const el = document.getElementById(id); return el ? el.value : def; };
+  const chk  = (id, def) => { const el = document.getElementById(id); return el ? el.checked : def; };
+  return {
+    dias_urgente:       num("ui-dias-urgente",  UI_PREF_DEFAULTS.dias_urgente),
+    dias_pronto:        num("ui-dias-pronto",   UI_PREF_DEFAULTS.dias_pronto),
+    graf_meses:         sel("ui-graf-meses",    UI_PREF_DEFAULTS.graf_meses),
+    graf_moneda:        sel("ui-graf-moneda",   UI_PREF_DEFAULTS.graf_moneda),
+    font_size:          num("ui-font-size",     UI_PREF_DEFAULTS.font_size),
+    venc_show_proximos: chk("ui-venc-show-proximos", true),
+    venc_show_rg5617:   chk("ui-venc-show-rg5617",   true),
+    venc_show_pdf_ref:  chk("ui-venc-show-pdf-ref",  true),
+  };
 }
 
 function _updateUiPreview() {
@@ -161,20 +234,28 @@ function _updateUiPreview() {
   set(".ui-prev-usd", c.usd);
   set(".ui-prev-rg",  c.rg);
   set(".ui-prev-tog", c.tog);
+  document.querySelectorAll(".ui-prev-accent").forEach(el => el.style.background = c.accent);
 }
 
-function saveUiColors() {
+function saveUiSettings() {
   const c = _getUiColorInputs();
+  const p = _getUiPrefInputs();
   localStorage.setItem("ui_colors", JSON.stringify(c));
+  localStorage.setItem("ui_prefs",  JSON.stringify(p));
   applyUiColors();
-  showToast("Colores guardados.", "ok", 2500);
+  applyUiPrefs();
+  loadVencimientos();   // refresh widget with new thresholds & visibility prefs
+  showToast("Configuración guardada.", "ok", 2500);
 }
 
-function resetUiColors() {
+function resetUiSettings() {
   localStorage.removeItem("ui_colors");
+  localStorage.removeItem("ui_prefs");
   applyUiColors();
+  applyUiPrefs();
   renderUiSettings();
-  showToast("Colores restablecidos.", "ok", 2500);
+  loadVencimientos();
+  showToast("Configuración restablecida.", "ok", 2500);
 }
 
 // ── Scroll-to-top button ──────────────────────────────────────────────────────
@@ -1880,6 +1961,13 @@ function renderVencimientos(items) {
     return true;
   });
 
+  // Read visibility / threshold prefs once before the map loop
+  const _tUrgente  = getUiPref("dias_urgente");
+  const _tPronto   = getUiPref("dias_pronto");
+  const _showProx  = getUiPref("venc_show_proximos");
+  const _showRg    = getUiPref("venc_show_rg5617");
+  const _showPdf   = getUiPref("venc_show_pdf_ref");
+
   widget.style.display = "flex";
   widget.innerHTML = deduped.map(v => {
     const vencDate = new Date(v.fecha_venc + "T00:00:00");
@@ -1893,10 +1981,10 @@ function renderVencimientos(items) {
     } else if (dias === 0) {
       cls = "urgente";
       diasTxt = "Vence hoy";
-    } else if (dias <= 3) {
+    } else if (dias <= _tUrgente) {
       cls = "urgente";
       diasTxt = `Vence en ${dias} día${dias === 1 ? "" : "s"}`;
-    } else if (dias <= 7) {
+    } else if (dias <= _tPronto) {
       cls = "pronto";
       diasTxt = `En ${dias} días`;
     } else {
@@ -1936,11 +2024,11 @@ function renderVencimientos(items) {
     const usdDiff = v.total_usd != null ? Math.abs((v.net_usd ?? usdSum) - v.total_usd) : 0;
     const pdfArsStr = (v.total_ars != null && arsDiff > 0.5) ? `PDF: $ ${_fmtNum2(v.total_ars)}` : "";
     const pdfUsdStr = (v.total_usd != null && usdDiff > 0.5) ? ` · U$S ${_fmtNum2(v.total_usd)}` : "";
-    const pdfHtml = (pdfArsStr || pdfUsdStr)
+    const pdfHtml = (_showPdf && (pdfArsStr || pdfUsdStr))
       ? `<div class="venc-pdf-ref">${pdfArsStr}${pdfUsdStr}</div>` : "";
 
     // RG 5617 perception line — grey, shows only the current-period charge
-    const rg5617Html = Math.abs(rg5617) > 0.5
+    const rg5617Html = (_showRg && Math.abs(rg5617) > 0.5)
       ? `<div class="venc-rg5617">RG 5617: ${rg5617 < 0 ? "−" : ""}$ ${_fmtNum2(Math.abs(rg5617))}</div>`
       : "";
 
@@ -1950,7 +2038,7 @@ function renderVencimientos(items) {
       return `${d}/${m}/${y.slice(2)}`;
     };
     let proxHtml = "";
-    if (v.proximo_cierre || v.proximo_venc) {
+    if (_showProx && (v.proximo_cierre || v.proximo_venc)) {
       const parts = [];
       if (v.proximo_cierre) parts.push(`cierre ${_fmtD(v.proximo_cierre)}`);
       if (v.proximo_venc)   parts.push(`venc. ${_fmtD(v.proximo_venc)}`);
