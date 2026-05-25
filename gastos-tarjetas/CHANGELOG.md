@@ -1,3 +1,7 @@
+## 0.2.65
+
+- **Fix widget de vencimientos — línea PDF solo aparece en inconsistencia real**: la comparación para mostrar la línea amber `PDF: $X` ahora usa el net de las transacciones del import (egresos − créditos, incluyendo la fila sintética "Créditos del resumen") en lugar del bruto de egresos. Cuando el crédito sintético fue insertado correctamente, `net_ars == total_ars` y no aparece línea secundaria. La línea amber solo se muestra si el net difiere del PDF, indicando un error real del parser o transacciones faltantes. `list_vencimientos()` agrega `net_ars`/`net_usd` al resultado.
+
 ## 0.2.64
 
 - **Widget de vencimientos — suma de egresos siempre visible**: `list_vencimientos()` ahora hace JOIN con `gastos` y calcula `sum_ars`/`sum_usd` (suma de egresos del import) además del total extraído del PDF (`total_ars`/`total_usd`). El widget muestra `sum_ars` como valor principal — siempre disponible aunque el parser no haya detectado el total del PDF. Si `total_ars` existe y difiere de `sum_ars` en más de $0,50, aparece una línea secundaria en amarillo `PDF: $X` para detectar inconsistencias del parser.

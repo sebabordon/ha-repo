@@ -1832,8 +1832,12 @@ function renderVencimientos(items) {
     const montoHtml = (arsStr || usdStr)
       ? `<div class="venc-monto">${arsStr}${usdStr}</div>` : "";
 
-    const arsDiff = v.total_ars != null ? Math.abs(arsSum - v.total_ars) : 0;
-    const usdDiff = v.total_usd != null ? Math.abs(usdSum - v.total_usd) : 0;
+    // Compare NET (egresos + synthetic credits) against PDF total.
+    // When the synthetic "Créditos del resumen" row was inserted correctly,
+    // net_ars == total_ars and no amber line appears.  A mismatch means the
+    // parser missed something or the PDF total couldn't be extracted at all.
+    const arsDiff = v.total_ars != null ? Math.abs((v.net_ars ?? arsSum) - v.total_ars) : 0;
+    const usdDiff = v.total_usd != null ? Math.abs((v.net_usd ?? usdSum) - v.total_usd) : 0;
     const pdfArsStr = (v.total_ars != null && arsDiff > 0.5) ? `PDF: $ ${_fmtNum2(v.total_ars)}` : "";
     const pdfUsdStr = (v.total_usd != null && usdDiff > 0.5) ? ` · U$S ${_fmtNum2(v.total_usd)}` : "";
     const pdfHtml = (pdfArsStr || pdfUsdStr)
