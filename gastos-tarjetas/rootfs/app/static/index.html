@@ -305,6 +305,10 @@
         <div class="cfg-section-body" id="cfg-body-importar" style="display:none">
           <input type="file" id="upload-file-hidden" accept=".pdf,.xls,.xlsx" style="display:none">
           <div id="parser-grid" class="parser-grid"></div>
+          <label class="import-opt-row" title="Por defecto las devoluciones de percepción RG 5617 (DEV PERCEPCION / CR.RG) no se importan porque se recuperan automáticamente al pagar el saldo en dólares. Activá esta opción solo si querés rastrear esas devoluciones individualmente.">
+            <input type="checkbox" id="chk-include-rg5617">
+            Incluir devoluciones RG 5617 (DEV PERCEPCION / CR.RG)
+          </label>
           <div id="upload-result-global" style="margin-top:.5rem"></div>
         </div>
       </div>
@@ -398,7 +402,8 @@
         <div class="cfg-section-body" id="cfg-body-borrar" style="display:none">
           <div class="danger-zone">
             <select id="delete-target" style="min-width:240px">
-              <option value="">Todas las fuentes</option>
+              <option value="" disabled selected>Seleccioná fuente o importación…</option>
+              <option value="__all__">⚠ Todas las fuentes</option>
               <optgroup label="Por fuente">
                 <option value="fuente:amex">AMEX</option>
                 <option value="fuente:bbva_mc">BBVA Mastercard</option>

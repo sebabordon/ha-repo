@@ -336,6 +336,17 @@ tbody tr:hover { background: #fafbff; }
 .parser-card-sub    { font-size: .72rem; color: #6366f1; margin-bottom: .3rem; }
 .parser-card-last   { font-size: .75rem; color: #475569; white-space: nowrap; }
 .parser-card-last-none { color: #94a3b8; }
+.import-opt-row {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin-top: .6rem;
+  font-size: .82rem;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+}
+.import-opt-row input[type="checkbox"] { accent-color: #6366f1; width: 14px; height: 14px; }
 
 .danger-zone {
   display: flex;

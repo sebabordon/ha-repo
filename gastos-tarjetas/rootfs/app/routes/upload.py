@@ -17,6 +17,7 @@ async def upload_file(
     request: Request,
     file: UploadFile = File(...),
     fuente: str = Form(...),
+    include_rg5617_credits: str = Form("false"),
 ):
     require_auth(request)
 
@@ -32,6 +33,13 @@ async def upload_file(
 
     if not gastos:
         return {"importados": 0, "total_parseados": 0, "mensaje": "No se encontraron movimientos en el archivo."}
+
+    # Filter RG 5617 credit/return entries (DEV PERCEPCION, CR.RG) unless the
+    # caller explicitly opted in.  These returns cancel out the previous period's
+    # perception charge when the cardholder pays their USD balance in USD, so
+    # importing them would create phantom income entries.
+    if include_rg5617_credits.lower() not in ("true", "1", "yes"):
+        gastos = [g for g in gastos if not ("5617" in g.descripcion and g.monto < 0)]
 
     user_cfg        = read_user_config()
     usuario_default = user_cfg["fuente_usuario"].get(fuente)

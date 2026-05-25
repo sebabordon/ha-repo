@@ -1283,10 +1283,12 @@ async function loadImportaciones() {
 
 // ── Delete all ────────────────────────────────────────────────────────────────
 document.getElementById("btn-delete-all").addEventListener("click", () => {
-  const val   = document.getElementById("delete-target").value;
-  const label = val
-    ? document.querySelector(`#delete-target option[value="${val}"]`)?.textContent || val
-    : "TODAS las fuentes";
+  const val = document.getElementById("delete-target").value;
+  if (!val) {
+    showToast("Seleccioná una fuente o importación primero.", "err");
+    return;
+  }
+  const label = document.querySelector(`#delete-target option[value="${val}"]`)?.textContent || val;
 
   showConfirm(`⚠️ Eliminar movimientos: ${label}`, async () => {
     let url;
@@ -1295,13 +1297,16 @@ document.getElementById("btn-delete-all").addEventListener("click", () => {
     } else if (val.startsWith("import:")) {
       url = `${BASE}/api/gastos?import_id=${val.slice(7)}`;
     } else {
+      // __all__ — delete everything
       url = `${BASE}/api/gastos`;
     }
     const res  = await fetch(url, {method:"DELETE"});
     const data = await res.json();
     if (res.ok) {
       showToast(`✓ ${data.eliminados} movimientos eliminados`, "ok");
-      loadGastos(); loadMonthlyChart(); loadCategorias(); loadImportaciones();
+      // Reset select to placeholder so it can't be accidentally re-fired
+      document.getElementById("delete-target").value = "";
+      loadGastos(); loadMonthlyChart(); loadCategorias(); loadImportaciones(); loadVencimientos();
     } else { showToast("Error al borrar", "err", 0); }
   });
 });
@@ -1362,7 +1367,11 @@ document.getElementById("upload-file-hidden").addEventListener("change", async f
   if (spinner) spinner.style.display = "";
   result.className = ""; result.textContent = "Procesando…";
 
-  const fd = new FormData(); fd.append("file", file); fd.append("fuente", fuente);
+  const chk = document.getElementById("chk-include-rg5617");
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("fuente", fuente);
+  fd.append("include_rg5617_credits", chk && chk.checked ? "true" : "false");
   try {
     const res  = await fetch(`${BASE}/api/upload`, {method:"POST", body:fd});
     const data = await res.json();

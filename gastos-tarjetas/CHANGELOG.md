@@ -1,3 +1,9 @@
+## 0.2.71
+
+- **Filtro créditos RG 5617 al importar**: los registros de devolución de percepción RG 5617 (`DEV PERCEPCION RG 5617` en AMEX, `CR.RG 5617` en BBVA) ya no se importan por defecto. El endpoint `/upload` acepta el parámetro `include_rg5617_credits` (default `false`); si es falso, se descartan las filas cuya descripción contiene "5617" y cuyo monto es negativo (créditos). En el formulario de importación se agregó un checkbox "Incluir devoluciones RG 5617" que por defecto queda desmarcado. Fundamento: quienes pagan el saldo en USD con USD recuperan la percepción del período anterior automáticamente; importarla genera ingresos fantasma.
+- **Fix widget vencimientos no se actualiza al borrar**: faltaba llamar `loadVencimientos()` en el callback de éxito del botón de borrado; ahora se llama junto a `loadGastos()`, `loadMonthlyChart()`, `loadCategorias()` e `loadImportaciones()`.
+- **Fix borrado — selección peligrosa por defecto**: la opción "Todas las fuentes" estaba seleccionada por defecto en el `<select>` del diálogo de borrado, permitiendo borrar todo con un solo clic sin intención. Ahora el `<select>` inicia con un placeholder `disabled` ("Seleccioná fuente o importación…") y la opción destructiva pasó a ser `⚠ Todas las fuentes` como entrada separada. El handler muestra un toast de error si no hay selección válida.
+
 ## 0.2.70
 
 - **Fix AMEX — PERCEPCION RG 5617 con monto grande no importada**: el umbral de columna de importes (`_AMOUNT_X`) bajó de 500 pt a 490 pt. AMEX alinea los importes a la derecha en una columna de ~542 pt; números de 12+ dígitos como "2.362.741,92" comienzan en x0 ≈ 495.8 (< 500 anterior) y quedaban fuera de la banda → no se parseaban. Los números de referencia de descripción quedan por debajo de x0 ≈ 240, por lo que el nuevo límite no genera falsos positivos.
