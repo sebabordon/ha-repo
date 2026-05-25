@@ -67,12 +67,14 @@ _COMISION_RE = re.compile(r"COMISION\s+MANT\s+DE\s+CTA\s+([\d\.]+,\d+)", re.IGNO
 _IVA_RE      = re.compile(r"I\.V\.A\.\s+[\d,]+%\s+([\d\.]+,\d+)", re.IGNORECASE)
 
 
-def _detect_statement_date(pdf) -> Optional[date]:
+def _detect_statement_dates(pdf) -> tuple[Optional[date], Optional[date]]:
     """
-    Scan first 2 pages for the 6-date header row that Galicia prints at the
-    top of each page.  Its format is:
-      26-Mar-26  07-Abr-26  30-Abr-26  11-May-26  28-May-26  08-Jun-26
-    Index 2 (0-based) is the statement close date (fecha de cierre).
+    Scan first 2 pages for the 6-date timeline row that Galicia prints at the
+    top of each page.  Format (graphical labels not extractable by pdfplumber):
+      [Cierre Ant]  [Venc Ant]  [Cierre Act]  [Venc Act]  [Próx Cierre]  [Próx Venc]
+       26-Mar-26     07-Abr-26   30-Abr-26     11-May-26   28-May-26      08-Jun-26
+
+    Returns (fecha_cierre [index 2], fecha_vencimiento [index 3]).
     """
     for page in pdf.pages[:2]:
         words = page.extract_words(keep_blank_chars=False)
@@ -81,10 +83,12 @@ def _detect_statement_date(pdf) -> Optional[date]:
             date_words = [w["text"] for w in row if _DATE_RE.match(w["text"])]
             if len(date_words) >= 4:
                 try:
-                    return parse_date_dmy(date_words[2])
+                    cierre = parse_date_dmy(date_words[2])
+                    venc   = parse_date_dmy(date_words[3])
+                    return cierre, venc
                 except Exception:
                     continue
-    return None
+    return None, None
 
 
 def _extract_comision(pdf) -> Optional[float]:
@@ -124,7 +128,7 @@ class GaliciaParser(BaseParser):
         gastos = []
 
         with pdfplumber.open(file) as pdf:
-            stmt_date = _detect_statement_date(pdf)
+            stmt_date, self.fecha_vencimiento = _detect_statement_dates(pdf)
             comision  = _extract_comision(pdf)
 
             # Add commission as egreso at the statement close date (when charged).

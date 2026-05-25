@@ -76,10 +76,12 @@ async def upload_file(
     fechas = [str(r.get("fecha", ""))[:7] for r in records if r.get("fecha")]
     mes_resumen = Counter(fechas).most_common(1)[0][0] if fechas else None
 
+    fecha_venc = getattr(PARSERS[fuente], "fecha_vencimiento", None)
     import_info = {
-        "fuente":       fuente,
-        "archivo":      file.filename or fuente,
-        "mes_resumen":  mes_resumen,
+        "fuente":      fuente,
+        "archivo":     file.filename or fuente,
+        "mes_resumen": mes_resumen,
+        "fecha_venc":  str(fecha_venc) if fecha_venc else None,
     }
     count = insert_gastos(records, import_info=import_info)
 

@@ -1368,7 +1368,7 @@ document.getElementById("upload-file-hidden").addEventListener("change", async f
     const data = await res.json();
     if (res.ok) {
       showResult(result, `✅ ${data.importados} movimientos importados (${data.total_parseados} parseados).`, true);
-      loadGastos(); loadMonthlyChart(); loadCategorias(); loadSaldos(); loadImportaciones();
+      loadGastos(); loadMonthlyChart(); loadCategorias(); loadSaldos(); loadImportaciones(); loadVencimientos();
     } else {
       showResult(result, `❌ ${data.detail||JSON.stringify(data)}`, false);
     }
@@ -1761,6 +1761,84 @@ async function saveSaldo(fuente) {
 }
 
 loadSaldos();
+
+// ── Vencimientos widget ───────────────────────────────────────────────────────
+
+const _FUENTE_LABELS = {
+  amex: "AMEX", bbva_mc: "BBVA Mastercard", bbva_visa: "BBVA Visa",
+  galicia_mc: "Galicia MC", bbva_cuenta: "BBVA Cuenta",
+  mercadopago: "MercadoPago",
+};
+
+async function loadVencimientos() {
+  try {
+    const res  = await fetch(`${BASE}/api/stats/vencimientos`);
+    const data = await res.json();
+    renderVencimientos(data.vencimientos || []);
+  } catch(e) {
+    console.error("loadVencimientos error:", e);
+  }
+}
+
+function renderVencimientos(items) {
+  const widget = document.getElementById("vencimientos-widget");
+  if (!items.length) { widget.style.display = "none"; return; }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Keep only the most-recent entry per fuente (already ordered DESC by fecha_venc)
+  const seen = new Set();
+  const deduped = items.filter(v => {
+    if (seen.has(v.fuente)) return false;
+    seen.add(v.fuente);
+    return true;
+  });
+
+  widget.style.display = "flex";
+  widget.innerHTML = deduped.map(v => {
+    const vencDate = new Date(v.fecha_venc + "T00:00:00");
+    const diffMs   = vencDate - today;
+    const dias     = Math.round(diffMs / 86400000);
+
+    let cls, diasTxt;
+    if (dias < 0) {
+      cls = "vencido";
+      diasTxt = `Vencido hace ${-dias} día${-dias === 1 ? "" : "s"}`;
+    } else if (dias === 0) {
+      cls = "urgente";
+      diasTxt = "Vence hoy";
+    } else if (dias <= 3) {
+      cls = "urgente";
+      diasTxt = `Vence en ${dias} día${dias === 1 ? "" : "s"}`;
+    } else if (dias <= 7) {
+      cls = "pronto";
+      diasTxt = `En ${dias} días`;
+    } else {
+      cls = "ok";
+      diasTxt = `En ${dias} días`;
+    }
+
+    const label  = _FUENTE_LABELS[v.fuente] || v.fuente;
+    const arsStr = v.total_ars  ? `$ ${_fmtNum2(v.total_ars)}` : "";
+    const usdStr = v.total_usd  ? ` · U$S ${_fmtNum2(v.total_usd)}` : "";
+    const montoHtml = (arsStr || usdStr)
+      ? `<div class="venc-monto">${arsStr}${usdStr}</div>` : "";
+
+    // Format date as DD/MM/YYYY
+    const d = vencDate;
+    const fechaStr = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+
+    return `<div class="venc-card ${cls}">
+      <div class="venc-fuente">${escHtml(label)}</div>
+      <div class="venc-fecha">${fechaStr}</div>
+      <div class="venc-dias">${diasTxt}</div>
+      ${montoHtml}
+    </div>`;
+  }).join("");
+}
+
+loadVencimientos();
 
 // ── Presupuesto tab ───────────────────────────────────────────────────────────
 let _presupItems    = [];  // [{categoria, monto_mensual, moneda}]

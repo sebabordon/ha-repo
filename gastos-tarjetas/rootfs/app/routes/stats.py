@@ -4,6 +4,7 @@ from auth import require_auth
 from db import (
     stats_by_category, stats_by_fuente, stats_by_usuario,
     stats_top_descriptions, stats_monthly_by_category, stats_forecast,
+    list_vencimientos,
 )
 
 router = APIRouter()
@@ -32,6 +33,13 @@ def get_stats(
         "top_descriptions":    stats_top_descriptions(**kw),
         "monthly_by_category": stats_monthly_by_category(fuente=fuente, usuario=usuario, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria),
     }
+
+
+@router.get("/stats/vencimientos")
+def get_vencimientos(request: Request):
+    """Return the most-recent statement per fuente that has a fecha_venc."""
+    require_auth(request)
+    return {"vencimientos": list_vencimientos()}
 
 
 @router.get("/stats/forecast")

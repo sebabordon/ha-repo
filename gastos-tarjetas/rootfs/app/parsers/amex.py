@@ -7,6 +7,7 @@ Amount words appear at x0 > 500, split by thousands dot.
 Two sections: "Nuevos Cargos en PESOS" (ARS) and "Nuevos Cargos en DOLARES" (USD).
 """
 import re
+from datetime import date as _date
 from decimal import Decimal
 from typing import BinaryIO, Optional
 
@@ -31,6 +32,37 @@ _SKIP_DESC = re.compile(
 )
 _AMOUNT_X = 500.0  # amount words start at x0 > 500
 
+# Matches DD/MM/YY or DD/MM/YYYY date tokens in the AMEX header
+_AMEX_DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{2,4})\b")
+
+
+def _detect_vencimiento_amex(pdf) -> Optional[_date]:
+    """
+    Locate the 'Facturación  Vencimiento' column header on page 1, then scan
+    the next 5 lines for one containing two DD/MM/YY dates.  The second date
+    is the current statement's due date (Vencimiento).
+
+    Example header row : 'Titular  Número de Cuenta  Facturación  Vencimiento'
+    Example data row   : 'SEBASTIAN ... 3701-320597-11005  28/04/26  06/05/26'
+    Note: there may be an intermediate line ('Argentina') between header and data.
+    """
+    for page in pdf.pages[:2]:
+        text = page.extract_text() or ""
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            if re.search(r"Facturaci", line, re.IGNORECASE) and re.search(r"Vencimiento", line, re.IGNORECASE):
+                # Scan the next 5 lines for a row with ≥2 dates
+                for j in range(i + 1, min(i + 6, len(lines))):
+                    matches = _AMEX_DATE_RE.findall(lines[j])
+                    if len(matches) >= 2:
+                        d, m, y = matches[-1]  # last = Vencimiento column
+                        year = int(y) + (2000 if len(y) == 2 else 0)
+                        try:
+                            return _date(year, int(m), int(d))
+                        except ValueError:
+                            pass
+    return None
+
 
 class AmexParser(BaseParser):
     fuente = Fuente.AMEX
@@ -42,6 +74,7 @@ class AmexParser(BaseParser):
         facturacion_year: int = 2026
 
         with pdfplumber.open(file) as pdf:
+            self.fecha_vencimiento = _detect_vencimiento_amex(pdf)
             for page in pdf.pages:
                 words = page.extract_words(keep_blank_chars=False)
                 rows = group_by_y(words)

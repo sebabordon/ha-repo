@@ -74,6 +74,27 @@ def _detect_statement_date(pdf) -> Optional[date]:
     return None
 
 
+def _detect_vencimiento_bbva(pdf) -> Optional[date]:
+    """
+    Locate the 'CIERRE ACTUAL  VENCIMIENTO ACTUAL' column-header row, then read
+    the following line and return the 2nd DD-Mmm-YY token (= VENCIMIENTO ACTUAL).
+
+    Example header : 'CIERRE ACTUAL VENCIMIENTO ACTUAL SALDO ACTUAL $ ...'
+    Example data   : '23-Abr-26 04-May-26 1.900.755,43 ...'
+    """
+    for page in pdf.pages[:2]:
+        text = page.extract_text() or ""
+        lines = text.split("\n")
+        for i, line in enumerate(lines):
+            if "VENCIMIENTO ACTUAL" in line.upper() and "CIERRE ACTUAL" in line.upper():
+                if i + 1 < len(lines):
+                    tokens = lines[i + 1].split()
+                    dates = [t for t in tokens if _DATE_RE.match(t)]
+                    if len(dates) >= 2:
+                        return parse_date_dmy(dates[1])  # index 0=cierre, 1=vencimiento
+    return None
+
+
 def _installment_date(original: date, stmt: date) -> date:
     """Return a date in stmt's year/month, capping day to last valid day."""
     last = calendar.monthrange(stmt.year, stmt.month)[1]
@@ -90,6 +111,7 @@ class BBVAParser(BaseParser):
 
         with pdfplumber.open(file) as pdf:
             stmt_date = _detect_statement_date(pdf)
+            self.fecha_vencimiento = _detect_vencimiento_bbva(pdf)
 
             for page in pdf.pages:
                 words = page.extract_words(keep_blank_chars=False)

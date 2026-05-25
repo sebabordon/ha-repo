@@ -666,6 +666,57 @@ tbody tr:hover { background: #fafbff; }
   font-size: .85rem;
 }
 
+/* ── Vencimientos widget ─────────────────────────────────────────────────────*/
+
+.vencimientos-widget {
+  display: flex;
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.venc-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-left: 4px solid #94a3b8;
+  border-radius: 8px;
+  padding: .65rem .9rem .65rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  min-width: 160px;
+}
+.venc-card.urgente  { border-left-color: #dc2626; }
+.venc-card.pronto   { border-left-color: #f59e0b; }
+.venc-card.ok       { border-left-color: #16a34a; }
+.venc-card.vencido  { border-left-color: #cbd5e1; }
+.venc-fuente {
+  font-size: .72rem;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.venc-fecha {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  font-variant-numeric: tabular-nums;
+}
+.venc-dias {
+  font-size: .78rem;
+  font-weight: 600;
+}
+.venc-card.urgente  .venc-dias { color: #dc2626; }
+.venc-card.pronto   .venc-dias { color: #d97706; }
+.venc-card.ok       .venc-dias { color: #16a34a; }
+.venc-card.vencido  .venc-dias { color: #94a3b8; }
+.venc-monto {
+  font-size: .82rem;
+  color: #555;
+  font-variant-numeric: tabular-nums;
+  margin-top: .1rem;
+}
+
 /* ── Cuentas tab ─────────────────────────────────────────────────────────────*/
 
 .cuenta-card {
