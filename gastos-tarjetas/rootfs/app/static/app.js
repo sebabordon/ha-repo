@@ -4,6 +4,20 @@ if (window.APP_VERSION) {
   if (el) el.textContent = "v" + window.APP_VERSION;
 }
 
+// ── UI color preferences (applied immediately from localStorage) ──────────────
+const UI_COLOR_DEFAULTS = { ars: "#15803d", usd: "#2563eb", rg: "#94a3b8", tog: "#d97706" };
+
+function applyUiColors() {
+  const stored = JSON.parse(localStorage.getItem("ui_colors") || "{}");
+  const c = { ...UI_COLOR_DEFAULTS, ...stored };
+  const root = document.documentElement;
+  root.style.setProperty("--color-ars",       c.ars);
+  root.style.setProperty("--color-usd",       c.usd);
+  root.style.setProperty("--color-rg5617",    c.rg);
+  root.style.setProperty("--color-toggle-rg", c.tog);
+}
+applyUiColors();
+
 // v0.2.35: unified sign convention — positive monto = egreso for ALL sources.
 /** Devuelve true si el movimiento es un egreso (dinero que sale). */
 function _isEgreso(monto) {
@@ -69,7 +83,7 @@ function showSelectPrompt(msg, options, onConfirm) {
   setTimeout(() => sel.focus(), 30);
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────────────────
+// ── Main tabs ─────────────────────────────────────────────────────────────────
 document.querySelectorAll(".tab").forEach(tab => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -78,11 +92,24 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    loadCharts();
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); }
+    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); renderUiSettings(); }
   });
 });
 
-// ── Config accordion (⚙ tab) ─────────────────────────────────────────────────
+// ── Config sub-tabs ───────────────────────────────────────────────────────────
+function switchCfgTab(id) {
+  document.querySelectorAll(".cfg-tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".cfg-tab-content").forEach(p => p.classList.remove("active"));
+  const btn   = document.querySelector(`.cfg-tab[data-cfgtab="${id}"]`);
+  const panel = document.getElementById(`cfg-tab-${id}`);
+  if (btn)   btn.classList.add("active");
+  if (panel) panel.classList.add("active");
+}
+document.querySelectorAll(".cfg-tab").forEach(tab => {
+  tab.addEventListener("click", () => switchCfgTab(tab.dataset.cfgtab));
+});
+
+// ── Config inner-accordion (expandable sections within sub-tabs) ──────────────
 function toggleCfgSection(id) {
   const body  = document.getElementById(`cfg-body-${id}`);
   const arrow = document.getElementById(`cfg-arr-${id}`);
@@ -92,13 +119,62 @@ function toggleCfgSection(id) {
   if (arrow) arrow.textContent = open ? "+" : "−";
 }
 
-function cerrarTodoConfig() {
-  ["importar","reglas","usuarios","cuentas","borrar"].forEach(id => {
-    const body  = document.getElementById(`cfg-body-${id}`);
-    const arrow = document.getElementById(`cfg-arr-${id}`);
-    if (body)  body.style.display = "none";
-    if (arrow) arrow.textContent  = "+";
+// ── UI color settings ─────────────────────────────────────────────────────────
+function renderUiSettings() {
+  const stored = JSON.parse(localStorage.getItem("ui_colors") || "{}");
+  const c = { ...UI_COLOR_DEFAULTS, ...stored };
+  [["ars","ars"],["usd","usd"],["rg","rg"],["tog","tog"]].forEach(([key, slot]) => {
+    const picker = document.getElementById(`ui-col-${key}`);
+    const hex    = document.getElementById(`ui-hex-${key}`);
+    if (picker) picker.value = c[slot];
+    if (hex)    hex.value   = c[slot];
   });
+  _updateUiPreview();
+}
+
+function syncColorHex(key) {
+  const picker = document.getElementById(`ui-col-${key}`);
+  const hex    = document.getElementById(`ui-hex-${key}`);
+  if (hex && picker) hex.value = picker.value;
+  _updateUiPreview();
+}
+
+function syncColorPicker(key) {
+  const picker = document.getElementById(`ui-col-${key}`);
+  const hex    = document.getElementById(`ui-hex-${key}`);
+  if (hex && picker && /^#[0-9a-fA-F]{6}$/.test(hex.value)) picker.value = hex.value;
+  _updateUiPreview();
+}
+
+function _getUiColorInputs() {
+  const get = k => {
+    const h = document.getElementById(`ui-hex-${k}`);
+    return (h && /^#[0-9a-fA-F]{6}$/.test(h.value)) ? h.value : UI_COLOR_DEFAULTS[k];
+  };
+  return { ars: get("ars"), usd: get("usd"), rg: get("rg"), tog: get("tog") };
+}
+
+function _updateUiPreview() {
+  const c = _getUiColorInputs();
+  const set = (cls, color) => document.querySelectorAll(cls).forEach(el => el.style.color = color);
+  set(".ui-prev-ars", c.ars);
+  set(".ui-prev-usd", c.usd);
+  set(".ui-prev-rg",  c.rg);
+  set(".ui-prev-tog", c.tog);
+}
+
+function saveUiColors() {
+  const c = _getUiColorInputs();
+  localStorage.setItem("ui_colors", JSON.stringify(c));
+  applyUiColors();
+  showToast("Colores guardados.", "ok", 2500);
+}
+
+function resetUiColors() {
+  localStorage.removeItem("ui_colors");
+  applyUiColors();
+  renderUiSettings();
+  showToast("Colores restablecidos.", "ok", 2500);
 }
 
 // ── Scroll-to-top button ──────────────────────────────────────────────────────

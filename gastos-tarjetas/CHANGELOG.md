@@ -1,3 +1,10 @@
+## 0.2.79
+
+- **Config — sub-tabs en lugar de acordeones**: la pestaña ⚙ Config ahora usa una barra de sub-tabs horizontales (Importar · Reglas · Personas · Cuentas · Interfaz · ⚠ Borrar) con el mismo estilo visual que las tabs principales. Dentro de los sub-tabs que tienen varias secciones (Reglas, Personas) se conservan los acordeones expandibles (+/−). Se eliminó el botón "Cerrar todo".
+- **Config — nueva sub-tab Interfaz (colores personalizables)**: permite elegir el color de los montos ARS, montos USD, línea RG 5617 y el tono del toggle "sin RG". Los colores se aplican mediante CSS custom properties (`--color-ars`, `--color-usd`, `--color-rg5617`, `--color-toggle-rg`) y se guardan en `localStorage`. Incluye una vista previa en tiempo real y un botón "Restablecer" para volver a los valores predeterminados.
+- **Verde ARS más oscuro por defecto**: el color predeterminado de montos ARS pasa de `#16a34a` (green-600) a `#15803d` (green-700), ligeramente más oscuro y con mejor contraste.
+- **Colores en widgets vía CSS vars**: todos los colores de montos en widgets (saldo-cards y vencimientos) ahora usan las custom properties en lugar de valores fijos, por lo que responden inmediatamente al cambiar los colores en la tab Interfaz.
+
 ## 0.2.78
 
 - **Widget saldos y vencimientos — color en el monto, no en el nombre**: el color verde/azul por moneda se aplica ahora sobre el importe (`saldo-monto` con clase `ars-val` o `usd-val`), no sobre el nombre de la cuenta. El nombre de la cuenta (`saldo-nombre`) vuelve siempre al gris neutro `#888`, igual que antes de v0.2.74. En el widget de vencimientos, `venc-fuente` también queda en gris; solo los montos ARS (`venc-ars`) y USD (`venc-usd`) conservan el color. El criterio positivo/negativo anterior (verde = positivo, rojo = negativo) se reemplaza por verde = ARS, azul = USD en los saldo-cards.

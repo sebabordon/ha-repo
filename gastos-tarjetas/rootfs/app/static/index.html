@@ -292,42 +292,50 @@
     <!-- ── Tab: Config ──────────────────────────────────────────────────────── -->
     <section id="tab-config" class="tab-content">
 
-      <div class="cfg-topbar">
-        <button class="btn btn-sm" onclick="cerrarTodoConfig()">Cerrar todo</button>
+      <!-- Config sub-tab bar -->
+      <div class="cfg-tabs">
+        <button class="cfg-tab active" data-cfgtab="importar">Importar</button>
+        <button class="cfg-tab" data-cfgtab="reglas">Reglas</button>
+        <button class="cfg-tab" data-cfgtab="personas">Personas</button>
+        <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
+        <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
+        <button class="cfg-tab cfg-tab-danger" data-cfgtab="borrar">⚠ Borrar</button>
       </div>
 
-      <!-- ── Accordion: Importar ──────────────────────────────────── -->
-      <div class="cfg-section">
-        <div class="cfg-section-header" onclick="toggleCfgSection('importar')">
-          <span class="cfg-arr" id="cfg-arr-importar">+</span>
-          Importar
-        </div>
-        <div class="cfg-section-body" id="cfg-body-importar" style="display:none">
-          <input type="file" id="upload-file-hidden" accept=".pdf,.xls,.xlsx" style="display:none">
-          <div id="parser-grid" class="parser-grid"></div>
-          <label class="import-opt-row" title="Las devoluciones de percepción RG 5617 (DEV PERCEPCION / CR.RG) se importan por defecto para mostrar el gasto real. El widget de vencimientos las excluye del total a pagar ya que el banco las descuenta automáticamente. Desmarcá si no querés verlas en la lista de gastos.">
-            <input type="checkbox" id="chk-include-rg5617" checked>
-            Incluir devoluciones RG 5617 (DEV PERCEPCION / CR.RG)
-          </label>
-          <div id="upload-result-global" style="margin-top:.5rem"></div>
-        </div>
+      <!-- ── Sub-tab: Importar ─────────────────────────────────────── -->
+      <div id="cfg-tab-importar" class="cfg-tab-content active">
+        <input type="file" id="upload-file-hidden" accept=".pdf,.xls,.xlsx" style="display:none">
+        <div id="parser-grid" class="parser-grid"></div>
+        <label class="import-opt-row" title="Las devoluciones de percepción RG 5617 (DEV PERCEPCION / CR.RG) se importan por defecto para mostrar el gasto real. El widget de vencimientos las excluye del total a pagar ya que el banco las descuenta automáticamente. Desmarcá si no querés verlas en la lista de gastos.">
+          <input type="checkbox" id="chk-include-rg5617" checked>
+          Incluir devoluciones RG 5617 (DEV PERCEPCION / CR.RG)
+        </label>
+        <div id="upload-result-global" style="margin-top:.5rem"></div>
       </div>
 
-      <!-- ── Accordion: Reglas ────────────────────────────────────── -->
-      <div class="cfg-section">
-        <div class="cfg-section-header" onclick="toggleCfgSection('reglas')">
-          <span class="cfg-arr" id="cfg-arr-reglas">+</span>
-          Reglas
-        </div>
-        <div class="cfg-section-body" id="cfg-body-reglas" style="display:none">
-          <div class="rules-header">
-            <h2>Reglas de categorización</h2>
-            <button id="btn-add-rule" class="btn">+ Nueva regla</button>
-            <button id="btn-apply-rules" class="btn">Reaplicar a todos</button>
+      <!-- ── Sub-tab: Reglas ───────────────────────────────────────── -->
+      <div id="cfg-tab-reglas" class="cfg-tab-content">
+        <div class="cfg-section">
+          <div class="cfg-section-header" onclick="toggleCfgSection('reglas-cat')">
+            <span class="cfg-arr" id="cfg-arr-reglas-cat">+</span>
+            Reglas de categorización
           </div>
-          <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto. "Reaplicar a todos" categoriza los movimientos ya importados (respeta los que editaste a mano).</p>
-          <div id="rules-list"></div>
-          <div class="match-rules-block">
+          <div class="cfg-section-body" id="cfg-body-reglas-cat" style="display:none">
+            <div class="rules-header">
+              <h2>Reglas de categorización</h2>
+              <button id="btn-add-rule" class="btn">+ Nueva regla</button>
+              <button id="btn-apply-rules" class="btn">Reaplicar a todos</button>
+            </div>
+            <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto. "Reaplicar a todos" categoriza los movimientos ya importados (respeta los que editaste a mano).</p>
+            <div id="rules-list"></div>
+          </div>
+        </div>
+        <div class="cfg-section">
+          <div class="cfg-section-header" onclick="toggleCfgSection('reglas-match')">
+            <span class="cfg-arr" id="cfg-arr-reglas-match">+</span>
+            Reglas de emparejado
+          </div>
+          <div class="cfg-section-body" id="cfg-body-reglas-match" style="display:none">
             <div class="rules-header">
               <h2>Reglas de emparejado</h2>
               <button id="btn-add-match-rule" class="btn">+ Nueva regla</button>
@@ -343,23 +351,31 @@
         </div>
       </div>
 
-      <!-- ── Accordion: Personas ──────────────────────────────────── -->
-      <div class="cfg-section">
-        <div class="cfg-section-header" onclick="toggleCfgSection('usuarios')">
-          <span class="cfg-arr" id="cfg-arr-usuarios">+</span>
-          Personas
+      <!-- ── Sub-tab: Personas ─────────────────────────────────────── -->
+      <div id="cfg-tab-personas" class="cfg-tab-content">
+        <div class="cfg-section">
+          <div class="cfg-section-header" onclick="toggleCfgSection('pers-list')">
+            <span class="cfg-arr" id="cfg-arr-pers-list">+</span>
+            Personas y fuente por defecto
+          </div>
+          <div class="cfg-section-body" id="cfg-body-pers-list" style="display:none">
+            <p class="rules-hint">
+              Gestioná las personas asociadas a los movimientos. Las dos primeras no se pueden eliminar.
+              La <strong>persona por defecto</strong> se asigna automáticamente al importar según la fuente.
+              Hacé click en <strong>+</strong> al final de la lista para agregar una nueva.
+            </p>
+            <h3 style="font-size:.95rem;margin:.5rem 0 .6rem">Personas configuradas</h3>
+            <div id="usuarios-list" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.75rem"></div>
+            <h3 style="font-size:.95rem;margin:0 0 .6rem">Persona por defecto según fuente</h3>
+            <div id="fuente-usuario-map"></div>
+          </div>
         </div>
-        <div class="cfg-section-body" id="cfg-body-usuarios" style="display:none">
-          <p class="rules-hint">
-            Gestioná las personas asociadas a los movimientos. Las dos primeras no se pueden eliminar.
-            La <strong>persona por defecto</strong> se asigna automáticamente al importar según la fuente.
-            Hacé click en <strong>+</strong> al final de la lista para agregar una nueva.
-          </p>
-          <h3 style="font-size:.95rem;margin:.5rem 0 .6rem">Personas configuradas</h3>
-          <div id="usuarios-list" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.75rem"></div>
-          <h3 style="font-size:.95rem;margin:0 0 .6rem">Persona por defecto según fuente</h3>
-          <div id="fuente-usuario-map"></div>
-          <div style="margin-top:1.75rem">
+        <div class="cfg-section">
+          <div class="cfg-section-header" onclick="toggleCfgSection('pers-rules')">
+            <span class="cfg-arr" id="cfg-arr-pers-rules">+</span>
+            Reglas de asignación de persona
+          </div>
+          <div class="cfg-section-body" id="cfg-body-pers-rules" style="display:none">
             <div class="rules-header">
               <h2>Reglas de asignación de persona</h2>
               <button id="btn-add-user-rule" class="btn">+ Nueva regla</button>
@@ -375,48 +391,96 @@
         </div>
       </div>
 
-      <!-- ── Accordion: Cuentas ───────────────────────────────────── -->
-      <div class="cfg-section">
-        <div class="cfg-section-header" onclick="toggleCfgSection('cuentas')">
-          <span class="cfg-arr" id="cfg-arr-cuentas">+</span>
-          Cuentas
+      <!-- ── Sub-tab: Cuentas ──────────────────────────────────────── -->
+      <div id="cfg-tab-cuentas" class="cfg-tab-content">
+        <div class="rules-header" style="margin-bottom:.5rem">
+          <button id="btn-add-cuenta" class="btn">+ Nueva cuenta manual</button>
         </div>
-        <div class="cfg-section-body" id="cfg-body-cuentas" style="display:none">
-          <div class="rules-header" style="margin-bottom:.5rem">
-            <button id="btn-add-cuenta" class="btn">+ Nueva cuenta manual</button>
+        <p class="rules-hint">
+          Las cuentas <strong>automáticas</strong> se actualizan al importar un archivo.
+          Las <strong>manuales</strong> permiten cargar movimientos a mano.
+        </p>
+        <div id="cuentas-list"></div>
+      </div>
+
+      <!-- ── Sub-tab: Interfaz ─────────────────────────────────────── -->
+      <div id="cfg-tab-ui" class="cfg-tab-content">
+        <p class="rules-hint" style="margin-bottom:1rem">Personalizá los colores usados en los widgets. Los cambios se guardan en este navegador.</p>
+        <div class="ui-colors-grid">
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Color ARS</span>
+              <span class="ui-color-desc">montos en pesos — widgets y saldo-cards</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-ars" oninput="syncColorHex('ars')">
+              <input type="text"  id="ui-hex-ars" class="ui-hex-input" maxlength="7" placeholder="#15803d" oninput="syncColorPicker('ars')">
+            </div>
           </div>
-          <p class="rules-hint">
-            Las cuentas <strong>automáticas</strong> se actualizan al importar un archivo.
-            Las <strong>manuales</strong> permiten cargar movimientos a mano.
-          </p>
-          <div id="cuentas-list"></div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Color USD</span>
+              <span class="ui-color-desc">montos en dólares — widgets y saldo-cards</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-usd" oninput="syncColorHex('usd')">
+              <input type="text"  id="ui-hex-usd" class="ui-hex-input" maxlength="7" placeholder="#2563eb" oninput="syncColorPicker('usd')">
+            </div>
+          </div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Color RG 5617</span>
+              <span class="ui-color-desc">línea de percepción RG 5617 en vencimientos</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-rg" oninput="syncColorHex('rg')">
+              <input type="text"  id="ui-hex-rg" class="ui-hex-input" maxlength="7" placeholder="#94a3b8" oninput="syncColorPicker('rg')">
+            </div>
+          </div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Color toggle −RG</span>
+              <span class="ui-color-desc">monto ARS al hacer doble clic para ocultar RG</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-tog" oninput="syncColorHex('tog')">
+              <input type="text"  id="ui-hex-tog" class="ui-hex-input" maxlength="7" placeholder="#d97706" oninput="syncColorPicker('tog')">
+            </div>
+          </div>
+        </div>
+        <div class="ui-colors-actions">
+          <button class="btn btn-primary btn-sm" onclick="saveUiColors()">Guardar</button>
+          <button class="btn btn-sm" onclick="resetUiColors()">Restablecer</button>
+        </div>
+        <div class="ui-preview">
+          <div class="ui-preview-title">Vista previa</div>
+          <div class="ui-preview-row">
+            <span class="ui-prev-ars">$ 1.234.567 ARS</span>
+            <span class="ui-prev-usd">USD 1.234,56</span>
+            <span class="ui-prev-rg">DEV PERCEPCION RG 5617</span>
+            <span class="ui-prev-tog">$ 1.100.000 −RG</span>
+          </div>
         </div>
       </div>
 
-      <!-- ── Accordion: Borrar datos ────────────────────────────── -->
-      <div class="cfg-section">
-        <div class="cfg-section-header cfg-section-header-danger" onclick="toggleCfgSection('borrar')">
-          <span class="cfg-arr" id="cfg-arr-borrar">+</span>
-          Borrar datos
-        </div>
-        <div class="cfg-section-body" id="cfg-body-borrar" style="display:none">
-          <div class="danger-zone">
-            <select id="delete-target" style="min-width:240px">
-              <option value="" disabled selected>Seleccioná fuente o importación…</option>
-              <option value="__all__">⚠ Todas las fuentes</option>
-              <optgroup label="Por fuente">
-                <option value="fuente:amex">AMEX</option>
-                <option value="fuente:bbva_mc">BBVA Mastercard</option>
-                <option value="fuente:bbva_visa">BBVA Visa</option>
-                <option value="fuente:bbva_cuenta">BBVA Cuenta</option>
-                <option value="fuente:galicia_mc">Galicia Mastercard</option>
-                <option value="fuente:mercadopago">MercadoPago</option>
-              </optgroup>
-              <optgroup label="Por importación" id="delete-import-optgroup"></optgroup>
-            </select>
-            <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
-            <span class="danger-hint">Eliminá por fuente o por importación individual. Útil para reimportar un resumen sin perder el resto.</span>
-          </div>
+      <!-- ── Sub-tab: Borrar datos ─────────────────────────────────── -->
+      <div id="cfg-tab-borrar" class="cfg-tab-content">
+        <div class="danger-zone">
+          <select id="delete-target" style="min-width:240px">
+            <option value="" disabled selected>Seleccioná fuente o importación…</option>
+            <option value="__all__">⚠ Todas las fuentes</option>
+            <optgroup label="Por fuente">
+              <option value="fuente:amex">AMEX</option>
+              <option value="fuente:bbva_mc">BBVA Mastercard</option>
+              <option value="fuente:bbva_visa">BBVA Visa</option>
+              <option value="fuente:bbva_cuenta">BBVA Cuenta</option>
+              <option value="fuente:galicia_mc">Galicia Mastercard</option>
+              <option value="fuente:mercadopago">MercadoPago</option>
+            </optgroup>
+            <optgroup label="Por importación" id="delete-import-optgroup"></optgroup>
+          </select>
+          <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
+          <span class="danger-hint">Eliminá por fuente o por importación individual. Útil para reimportar un resumen sin perder el resto.</span>
         </div>
       </div>
 

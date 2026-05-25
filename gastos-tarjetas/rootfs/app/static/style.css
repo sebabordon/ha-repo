@@ -1,5 +1,13 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── CSS custom properties (overridable via Interfaz tab) ───────────────────*/
+:root {
+  --color-ars:       #15803d;   /* montos ARS — verde oscuro  */
+  --color-usd:       #2563eb;   /* montos USD — azul          */
+  --color-rg5617:    #94a3b8;   /* línea RG 5617 — gris       */
+  --color-toggle-rg: #d97706;   /* toggle "sin RG" — ámbar    */
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: #f0f2f5;
@@ -129,10 +137,79 @@ body {
 }
 .cfg-section-body { padding: 1rem 1.5rem; }
 
-.cfg-topbar {
-  display: flex; justify-content: flex-end;
-  margin-bottom: .5rem;
+/* ── Config sub-tabs ─────────────────────────────────────────────────────────*/
+#tab-config { padding: 0; }   /* sub-tab bar must reach the border edges */
+
+.cfg-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #ddd;
+  padding: .65rem 1.1rem 0;
+  background: #f5f6fa;
+  border-radius: 0 5px 0 0;
 }
+.cfg-tab {
+  padding: .42rem 1rem;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: .85rem;
+  border-radius: 5px 5px 0 0;
+  color: #555;
+  margin-bottom: -1px;
+  transition: background .12s;
+}
+.cfg-tab:hover  { background: #ebedf5; }
+.cfg-tab.active { background: #fff; font-weight: 600; color: #1a1a2e; border-color: #ddd #ddd #fff; }
+.cfg-tab-danger         { color: #b91c1c; }
+.cfg-tab-danger:hover   { background: #fff1f2; }
+.cfg-tab-danger.active  { color: #b91c1c; }
+
+.cfg-tab-content          { display: none; padding: 1.25rem 1.5rem; }
+.cfg-tab-content.active   { display: block; }
+
+/* ── UI color settings (Interfaz sub-tab) ───────────────────────────────────*/
+.ui-colors-grid { display: flex; flex-direction: column; gap: .75rem; max-width: 560px; }
+.ui-color-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem;
+  padding: .6rem .75rem;
+  background: #f8f9fc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+.ui-color-label { display: flex; flex-direction: column; gap: .1rem; }
+.ui-color-name  { font-weight: 600; font-size: .88rem; }
+.ui-color-desc  { font-size: .78rem; color: #888; }
+.ui-color-pick  { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
+.ui-color-pick input[type="color"] {
+  width: 36px; height: 28px;
+  border: 1px solid #ccc; border-radius: 4px;
+  cursor: pointer; padding: 1px 2px; background: #fff;
+}
+.ui-hex-input {
+  width: 76px;
+  padding: .28rem .5rem;
+  border: 1px solid #ccc; border-radius: 4px;
+  font-size: .85rem; font-family: monospace;
+}
+.ui-colors-actions { display: flex; gap: .5rem; margin-top: .9rem; }
+.ui-preview {
+  margin-top: 1.25rem;
+  padding: .75rem 1rem;
+  background: #f8f9fc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  max-width: 560px;
+}
+.ui-preview-title { font-size: .78rem; font-weight: 600; color: #888; text-transform: uppercase;
+                    letter-spacing: .05em; margin-bottom: .5rem; }
+.ui-preview-row   { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; align-items: baseline; }
+.ui-prev-ars  { font-weight: 700; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.ui-prev-usd  { font-weight: 700; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.ui-prev-rg   { font-size: .82rem; }
+.ui-prev-tog  { font-weight: 700; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
 
 /* ── Scroll-to-top floating button ─────────────────────────────────────────*/
 #btn-scroll-top {
@@ -638,16 +715,16 @@ tbody tr:hover { background: #fafbff; }
   text-transform: uppercase;
   letter-spacing: .04em;
 }
-.saldo-nombre.ars-label { color: #16a34a; }
-.saldo-nombre.usd-label { color: #2563eb; }
+.saldo-nombre.ars-label { color: var(--color-ars); }
+.saldo-nombre.usd-label { color: var(--color-usd); }
 .saldo-monto {
   font-size: 1.25rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: #1a1a2e;
 }
-.saldo-monto.ars-val  { color: #16a34a; }
-.saldo-monto.usd-val  { color: #2563eb; }
+.saldo-monto.ars-val  { color: var(--color-ars); }
+.saldo-monto.usd-val  { color: var(--color-usd); }
 .saldo-fecha {
   font-size: .72rem;
   color: #bbb;
@@ -700,7 +777,7 @@ tbody tr:hover { background: #fafbff; }
 }
 .venc-card.urgente  { border-left-color: #dc2626; }
 .venc-card.pronto   { border-left-color: #f59e0b; }
-.venc-card.ok       { border-left-color: #16a34a; }
+.venc-card.ok       { border-left-color: var(--color-ars); }
 .venc-card.vencido  { border-left-color: #cbd5e1; }
 .venc-fuente {
   font-size: .72rem;
@@ -709,8 +786,8 @@ tbody tr:hover { background: #fafbff; }
   text-transform: uppercase;
   letter-spacing: .04em;
 }
-.venc-fuente.ars-label { color: #16a34a; }
-.venc-fuente.usd-label { color: #2563eb; }
+.venc-fuente.ars-label { color: var(--color-ars); }
+.venc-fuente.usd-label { color: var(--color-usd); }
 .venc-fecha {
   font-size: 1rem;
   font-weight: 700;
@@ -723,18 +800,18 @@ tbody tr:hover { background: #fafbff; }
 }
 .venc-card.urgente  .venc-dias { color: #dc2626; }
 .venc-card.pronto   .venc-dias { color: #d97706; }
-.venc-card.ok       .venc-dias { color: #16a34a; }
+.venc-card.ok       .venc-dias { color: var(--color-ars); }
 .venc-card.vencido  .venc-dias { color: #94a3b8; }
 .venc-monto {
   font-size: .82rem;
   font-variant-numeric: tabular-nums;
   margin-top: .1rem;
 }
-.venc-ars { color: #16a34a; font-weight: 600; }
-.venc-usd { color: #2563eb; font-weight: 600; }
+.venc-ars { color: var(--color-ars); font-weight: 600; }
+.venc-usd { color: var(--color-usd); font-weight: 600; }
 .venc-monto--has-rg  { cursor: pointer; }
 .venc-monto--has-rg:hover .venc-ars { opacity: .8; }
-.venc-monto--sin-rg .venc-ars { color: #d97706; }  /* amber while toggled */
+.venc-monto--sin-rg .venc-ars { color: var(--color-toggle-rg); }  /* amber while toggled */
 .venc-sin-rg-tag {
   font-size: .6rem;
   font-weight: 400;
@@ -749,7 +826,7 @@ tbody tr:hover { background: #fafbff; }
 }
 .venc-rg5617 {
   font-size: .74rem;
-  color: #94a3b8;
+  color: var(--color-rg5617);
   font-variant-numeric: tabular-nums;
 }
 .venc-proximos {
@@ -1060,4 +1137,10 @@ tbody tr:hover { background: #fafbff; }
   .presup-table thead th, .presup-table tbody td { padding: .35rem .4rem; font-size: .8rem; }
   .presup-input { width: 90px; }
   .progress-bar-wrap { width: 60px; }
+
+  .cfg-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; padding: .45rem .6rem 0; }
+  .cfg-tab  { white-space: nowrap; padding: .38rem .75rem; font-size: .8rem; }
+  .cfg-tab-content { padding: .9rem .75rem; }
+  .ui-color-row { flex-direction: column; align-items: flex-start; gap: .4rem; }
+  .ui-colors-grid { max-width: 100%; }
 }
