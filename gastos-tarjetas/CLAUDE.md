@@ -17,6 +17,10 @@ Never commit without doing both. If a PR/push contains more than one logical
 change, group them under a single version entry — don't split into micro-bumps
 unless the changes are deployed separately.
 
+3. **Push to GitHub** immediately after committing (`git push`).
+   Every session that produces a commit must end with a push — GitHub must
+   never lag behind the local repo.
+
 ## Security
 
 - NEVER commit anything inside `samples/` — those files contain real personal
