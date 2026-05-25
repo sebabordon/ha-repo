@@ -1,3 +1,7 @@
+## 0.2.76
+
+- **Fix widget vencimientos — pantalla en blanco**: `const rg5617` se declaraba en la línea 1867 pero se usaba en `hasRg` (línea 1846), violando la zona muerta temporal de `const` y lanzando un `ReferenceError` que impedía renderizar todas las cards. Se movió la declaración al inicio del bloque, antes de su primer uso, y se eliminó la declaración duplicada.
+
 ## 0.2.75
 
 - **Widget vencimientos — doble clic para ver monto sin RG 5617**: cuando una card tiene percepción RG 5617 del período, hacer doble clic sobre el total ARS muestra el importe neto sin el cargo (`net_ars − rg5617_ars`) en color ámbar con etiqueta `−RG` en superíndice. Un segundo doble clic vuelve al total original en verde. El cursor cambia a `pointer` y hay un `title` como ayuda. El estado se resetea automáticamente cuando el widget se recarga.

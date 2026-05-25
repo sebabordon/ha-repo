@@ -1839,6 +1839,7 @@ function renderVencimientos(items) {
     // Fall back to sum_ars for older imports that pre-date the net_ars column.
     const arsSum   = v.net_ars != null ? v.net_ars : (v.sum_ars || 0);
     const usdSum   = v.net_usd != null ? v.net_usd : (v.sum_usd || 0);
+    const rg5617   = v.rg5617_ars || 0;   // declared early — used by hasRg below
     // ARS amounts → green, USD amounts → blue
     const arsStr   = arsSum > 0 ? `<span class="venc-ars">$ ${_fmtNum2(arsSum)}</span>` : "";
     const usdStr   = usdSum > 0 ? `<span class="venc-usd"> · U$S ${_fmtNum2(usdSum)}</span>` : "";
@@ -1864,7 +1865,6 @@ function renderVencimientos(items) {
       ? `<div class="venc-pdf-ref">${pdfArsStr}${pdfUsdStr}</div>` : "";
 
     // RG 5617 perception line — grey, shows only the current-period charge
-    const rg5617 = v.rg5617_ars || 0;
     const rg5617Html = Math.abs(rg5617) > 0.5
       ? `<div class="venc-rg5617">RG 5617: ${rg5617 < 0 ? "−" : ""}$ ${_fmtNum2(Math.abs(rg5617))}</div>`
       : "";
