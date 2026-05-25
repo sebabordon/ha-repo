@@ -1724,10 +1724,13 @@ function renderSaldos(cuentas) {
       <input type="text" id="saldo-input-${c.fuente}" value="${_fmtNum2(isUsd ? sUsd : sArs)}"
              onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')" style="width:90px">`;
 
+    const nombreCls = isUsd ? "saldo-nombre usd-label"
+                    : isMulti ? "saldo-nombre"
+                    : "saldo-nombre ars-label";
     return `
       <div class="saldo-card" id="saldo-card-${c.fuente}">
         <button class="saldo-edit-btn" title="Editar saldo" onclick="toggleSaldoEdit('${c.fuente}')">✏</button>
-        <div class="saldo-nombre">${escHtml(c.nombre)}</div>
+        <div class="${nombreCls}">${escHtml(c.nombre)}</div>
         ${montoHtml}
         <div class="saldo-fecha">${c.fecha_actualizacion ? `Actualizado ${c.fecha_actualizacion}` : "Sin datos"}</div>
         <div class="saldo-edit-row" id="saldo-edit-${c.fuente}" style="display:none">

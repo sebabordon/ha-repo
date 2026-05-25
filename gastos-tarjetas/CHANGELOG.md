@@ -1,3 +1,8 @@
+## 0.2.77
+
+- **Widget saldos (fila superior) — nombre en verde/azul según moneda**: el label de cada cuenta (`saldo-nombre`) ahora usa verde (`#16a34a`) para cuentas ARS y azul (`#2563eb`) para cuentas USD, igual que los montos en el widget de vencimientos. Las cuentas MULTI (ARS + USD) mantienen el gris neutro.
+- **Widget vencimientos — fecha en gris**: `venc-fecha` cambia de `#1a1a2e` (casi negro) a `#64748b` (slate-500) para igualar el tono visual apagado de los saldo-cards de la fila superior.
+
 ## 0.2.76
 
 - **Fix widget vencimientos — pantalla en blanco**: `const rg5617` se declaraba en la línea 1867 pero se usaba en `hasRg` (línea 1846), violando la zona muerta temporal de `const` y lanzando un `ReferenceError` que impedía renderizar todas las cards. Se movió la declaración al inicio del bloque, antes de su primer uso, y se eliminó la declaración duplicada.

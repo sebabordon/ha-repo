@@ -638,6 +638,8 @@ tbody tr:hover { background: #fafbff; }
   text-transform: uppercase;
   letter-spacing: .04em;
 }
+.saldo-nombre.ars-label { color: #16a34a; }
+.saldo-nombre.usd-label { color: #2563eb; }
 .saldo-monto {
   font-size: 1.25rem;
   font-weight: 700;
@@ -712,7 +714,7 @@ tbody tr:hover { background: #fafbff; }
 .venc-fecha {
   font-size: 1rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #64748b;
   font-variant-numeric: tabular-nums;
 }
 .venc-dias {
