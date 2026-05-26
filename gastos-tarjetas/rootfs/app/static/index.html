@@ -421,17 +421,19 @@
       <div id="cfg-tab-ui" class="cfg-tab-content">
 
         <!-- ── PWA Shortcuts ── -->
-        <div class="ui-pref-section">Shortcuts de la PWA</div>
+        <div class="ui-pref-section">Accesos rápidos</div>
         <p class="rules-hint" style="margin:.4rem 0 .75rem">
-          Configurá qué cuentas aparecen como accesos directos al mantener presionado el ícono de la app en iOS/Android.
-          Cada shortcut abre un formulario rápido de carga de gastos.
-          <strong>Reinstalá la PWA</strong> (o cerrá y reabrí) para que el cambio se refleje en el home screen.
+          Definí qué cuentas querés tener como accesos rápidos. Cada una abre un formulario
+          de carga de gastos. En <strong>Android + Chrome</strong> aparecen al mantener
+          presionado el ícono; en <strong>iOS</strong> usá la sección "Instalar en iOS"
+          de abajo para agregar cada uno al inicio.
         </p>
         <div id="pwa-shortcuts-list" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem"></div>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.5rem">
-          <button class="btn btn-sm" onclick="addPwaShortcut()">+ Agregar shortcut</button>
-          <button class="btn btn-primary btn-sm" onclick="savePwaShortcuts()">Guardar shortcuts</button>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+          <button class="btn btn-sm" onclick="addPwaShortcut()">+ Agregar</button>
+          <button class="btn btn-primary btn-sm" onclick="savePwaShortcuts()">Guardar</button>
         </div>
+        <div id="pwa-ios-guide"></div>
 
         <p class="rules-hint" style="margin-bottom:1rem">Personalizá los colores usados en los widgets. Los cambios se guardan en este navegador.</p>
         <div class="ui-colors-grid">

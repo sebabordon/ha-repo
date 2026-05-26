@@ -87,7 +87,7 @@ async def serve_manifest(request: Request):
                 if fuente:
                     shortcuts.append({
                         "name":        label,
-                        "url":         f"/quick?fuente={fuente}",
+                        "url":         f"/quick?fuente={fuente}&label={label}",
                         "description": f"Cargar gasto {label}",
                     })
         except Exception:
@@ -122,12 +122,25 @@ async def serve_manifest(request: Request):
 
 
 @app.get("/quick")
-async def serve_quick(request: Request):
-    """Formulario rápido de carga de gastos (abierto desde shortcuts PWA)."""
+async def serve_quick(request: Request, fuente: str = "", label: str = ""):
+    """
+    Formulario rápido de carga de gastos.
+    Inyecta título dinámico para que "Agregar al inicio" en Safari
+    sugiera el nombre correcto (ej. "AMEX", "BBVA Cuenta").
+    """
     user = request.session.get("user")
     if not user:
         return _redirect(request, "/auth/login")
-    return FileResponse("static/quick.html")
+    title = label.strip() or fuente.upper().replace("_", " ") or "Gasto rápido"
+    with open("static/quick.html") as f:
+        html = f.read()
+    html = html.replace("<title>Gasto Rápido</title>", f"<title>{title}</title>")
+    html = html.replace(
+        'content="Gastos"',
+        f'content="{title}"',
+        1,  # solo el primer apple-mobile-web-app-title
+    )
+    return HTMLResponse(html)
 
 
 @app.get("/sw.js")

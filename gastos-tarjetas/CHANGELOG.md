@@ -1,3 +1,10 @@
+## 0.3.7
+
+- **Guía de instalación iOS en la UI**: la sección "Accesos rápidos" (Config → Interfaz) ahora muestra un panel "Instalar en iOS" con un link por cada acceso configurado. El usuario abre el link en Safari y usa Compartir → Agregar al inicio; el ícono queda con el nombre correcto de la cuenta.
+- **Título dinámico en `/quick`**: el servidor inyecta el nombre de la cuenta en `<title>` y `apple-mobile-web-app-title` según el parámetro `label` de la URL, para que el diálogo "Agregar al inicio" en iOS sugiera el nombre correcto (ej. "AMEX", "BBVA Cuenta").
+- **Aclaración de plataformas**: el texto de la sección explica que los shortcuts del manifest funcionan en Android + Chrome, y la vía iOS es agregar íconos individuales al inicio.
+- **URLs de manifest con label**: los shortcuts del `manifest.json` ahora incluyen `?label=…` en la URL para que el título sea correcto también al abrirlos desde Android.
+
 ## 0.3.6.1
 
 - **Fix 422 en guardar shortcuts**: `PUT /api/config/pwa-shortcuts` fallaba con 422 porque FastAPI no infiere JSON body para parámetros `list`; corregido con `Body(...)`.

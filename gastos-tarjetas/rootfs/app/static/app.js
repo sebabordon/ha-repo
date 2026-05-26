@@ -3519,7 +3519,8 @@ function _renderPwaShortcutsList() {
   const container = document.getElementById("pwa-shortcuts-list");
   if (!container) return;
   if (!_pwaShortcuts.length) {
-    container.innerHTML = `<p style="color:var(--text-muted);font-style:italic;font-size:.85rem">Sin shortcuts configurados.</p>`;
+    container.innerHTML = `<p style="color:var(--text-muted);font-style:italic;font-size:.85rem">Sin accesos rápidos configurados.</p>`;
+    _renderIosGuide();
     return;
   }
   const opts = _allFuenteOptions();
@@ -3534,6 +3535,32 @@ function _renderPwaShortcutsList() {
       <button class="btn btn-sm btn-danger" onclick="_removePwaShortcut(${idx})" style="padding:.3rem .6rem">✕</button>
     </div>
   `).join("");
+  _renderIosGuide();
+}
+
+function _renderIosGuide() {
+  const el = document.getElementById("pwa-ios-guide");
+  if (!el) return;
+  if (!_pwaShortcuts.length) { el.innerHTML = ""; return; }
+
+  const prefix = window.INGRESS_PREFIX || "";
+  const links = _pwaShortcuts.map(sc => {
+    const url = `${prefix}/quick?fuente=${encodeURIComponent(sc.fuente)}&label=${encodeURIComponent(sc.label)}`;
+    return `<a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .7rem;border:1px solid #cbd5e1;border-radius:6px;font-size:.85rem;text-decoration:none;color:inherit;background:#f8fafc">
+      <span style="font-size:1rem">↗</span> ${escHtml(sc.label)}
+    </a>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:.85rem 1rem;margin-bottom:1.5rem;background:#f8fafc">
+      <div style="font-weight:600;font-size:.85rem;margin-bottom:.5rem">Instalar en iOS</div>
+      <p style="font-size:.82rem;color:#64748b;margin-bottom:.65rem;line-height:1.5">
+        Abrí el link de cada acceso rápido en Safari, luego
+        <strong>Compartir → Agregar al inicio</strong>.
+        Cada uno queda como ícono independiente con el nombre correcto.
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:.4rem">${links}</div>
+    </div>`;
 }
 
 function _pwaShortcutChange(idx, field, value) {
