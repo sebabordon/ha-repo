@@ -6,16 +6,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, admin, config_route, charts
+from routes import scrapers as scrapers_routes
 from db import init_db
 from config import APP_VERSION
+from scraper_scheduler import start_scheduler
 import userctx
 
 app = FastAPI(title="Gastos", docs_url=None, redoc_url=None)
 
 
 @app.on_event("startup")
-def on_startup():
-    init_db()  # initialise the root-level DB (used as migration source)
+async def on_startup():
+    init_db()          # inicializa la DB raíz (fuente de migraciones)
+    start_scheduler()  # arranca scrapers programados (no-op si no hay scrapers.yaml)
 
 
 # ── Per-user data context middleware ─────────────────────────────────────────
@@ -62,8 +65,9 @@ app.include_router(stats.router,      prefix="/api",  tags=["stats"])
 app.include_router(cuentas.router,    prefix="/api",  tags=["cuentas"])
 app.include_router(presupuesto.router,  prefix="/api",   tags=["presupuesto"])
 app.include_router(config_route.router, prefix="/api",   tags=["config"])
-app.include_router(charts.router,       prefix="/api",   tags=["charts"])
-app.include_router(admin.router,        prefix="/admin", tags=["admin"])
+app.include_router(charts.router,          prefix="/api",   tags=["charts"])
+app.include_router(scrapers_routes.router, prefix="/api",   tags=["scrapers"])
+app.include_router(admin.router,           prefix="/admin", tags=["admin"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

@@ -1,3 +1,13 @@
+## 0.3.0
+
+- **Scrapers web — infraestructura completa**: nuevo sistema de scraping diario de movimientos bancarios vía Playwright. Incluye scheduler (APScheduler), tabla de staging `movimientos_raw`, tabla de estado `scraper_status` y motor de conciliación automática contra los PDF ya importados.
+- **Scrapers — AMEX, BBVA, Galicia, MercadoPago**: cuatro scrapers estructurados con selectores a calibrar contra los portales reales. Cada banco tiene su clase (BaseScraper) con check_session/do_login/scrape. Stubs listos para completar con selectores definitivos.
+- **Conciliación automática**: algoritmo de matching raw→gastos por fuente + monto exacto + ventana de ±5 días + similitud de descripción (difflib). Umbral 0.80 para auto-match; por debajo queda como "unmatched" para revisión manual.
+- **Flujo TOTP interactivo para Galicia**: setup de sesión vía endpoint `/api/scrapers/galicia/session-setup` + `/api/scrapers/galicia/totp`. El browser headless pausa en la pantalla de TOTP y espera el código ingresado por el usuario en la UI (queue asyncio, timeout 5 min).
+- **API de scrapers**: nuevos endpoints en `/api/scrapers/` — estado, trigger manual, movimientos pendientes, importar/ignorar, gestión de sesiones.
+- **Dockerfile — Playwright en Alpine arm64**: agrega chromium + dependencias gráficas vía apk; usa el Chromium del sistema (`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`) en lugar de descargar uno propio, ahorrando ~400 MB de imagen.
+- **scrapers.yaml**: credenciales en `/data/scrapers.yaml` (mismo patrón que rules.yaml); no se tocan las options de config.yaml. Incluye `owner_email` para que el background job ubique la DB del usuario correcto.
+
 ## 0.2.83
 
 - **Fix — dropdown flotante de categoría en formulario "Nuevo movimiento"**: el campo Categoría del panel "+ Movimiento" tenía el mismo problema de truncado que la tabla de gastos (usaba `<datalist>` nativo). Ahora también usa el dropdown flotante con nombres completos. Escape limpia el campo y cierra el dropdown.

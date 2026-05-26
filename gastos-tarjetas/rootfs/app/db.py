@@ -163,6 +163,50 @@ def init_db():
             )
         """)
 
+        # ── Tablas del scraper (staging + estado) ──────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS movimientos_raw (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                fuente        TEXT NOT NULL,
+                tarjeta       TEXT,
+                fecha         TEXT NOT NULL,
+                fecha_proceso TEXT,
+                descripcion   TEXT NOT NULL,
+                monto         TEXT NOT NULL,
+                moneda        TEXT NOT NULL DEFAULT 'ARS',
+                scraped_at    TEXT NOT NULL,
+                estado        TEXT NOT NULL DEFAULT 'new',
+                gasto_id      INTEGER REFERENCES gastos(id),
+                confianza     REAL,
+                raw_data      TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_fuente_fecha "
+            "ON movimientos_raw(fuente, fecha)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_estado ON movimientos_raw(estado)"
+        )
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS scraper_status (
+                fuente              TEXT PRIMARY KEY,
+                ultimo_run          TEXT,
+                ultimo_ok           TEXT,
+                estado              TEXT DEFAULT 'idle',
+                error_msg           TEXT,
+                saldo_ars           REAL,
+                saldo_usd           REAL,
+                movimientos_nuevos  INTEGER DEFAULT 0
+            )
+        """)
+        for _f in ("amex", "bbva", "galicia", "mercadopago"):
+            conn.execute(
+                "INSERT OR IGNORE INTO scraper_status (fuente, estado) VALUES (?, 'idle')",
+                (_f,),
+            )
+
         # ── One-time migrations ─────────────────────────────────────────────────
         _run_migrations(conn)
 
