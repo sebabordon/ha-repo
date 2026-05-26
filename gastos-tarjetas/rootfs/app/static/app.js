@@ -971,8 +971,11 @@ async function loadCategorias() {
   renderCatChips(cats);
 }
 
+let _catList = [];   // global list used by the gastos-table custom autocomplete
+
 function renderCatChips(cats) {
-  // Populate shared datalist for category autocomplete
+  _catList = cats;   // keep a copy for the custom autocomplete
+  // Populate shared datalist for other fields (new-mov form, chart modal)
   const dl = document.getElementById("cat-datalist");
   if (dl) dl.innerHTML = cats.map(c => `<option value="${escHtml(c)}"></option>`).join("");
 
@@ -1203,7 +1206,7 @@ function _renderGastos() {
       <td>
         <input class="cat-input" data-id="${g.id}" value="${escHtml(g.categoria||"")}"
           title="${g.categoria_fuente?"Fuente: "+g.categoria_fuente:""}"
-          list="cat-datalist" autocomplete="off" />
+          autocomplete="off" spellcheck="false" />
       </td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm btn-action" onclick="saveCategoria(${g.id},this)">✓</button>
@@ -1216,20 +1219,100 @@ function _renderGastos() {
     const origCat    = catInput.value;
     const origFecha  = fechaInput.value;
 
-    catInput.addEventListener("input", () => {
-      const changed = catInput.value !== origCat;
-      catInput.classList.toggle("dirty", changed);
-      saveBtn.classList.toggle("btn-dirty", changed);
-    });
-    catInput.addEventListener("keydown", e => {
-      if (e.key === "Enter") { e.preventDefault(); saveCategoria(g.id, saveBtn); }
-    });
+    _setupCatAC(catInput, origCat, saveBtn, g.id);
 
     fechaInput.addEventListener("change", () => {
       if (fechaInput.value !== origFecha) saveFecha(g.id, fechaInput);
     });
 
     tbody.appendChild(tr);
+  });
+}
+
+// ── Gastos-table category autocomplete ───────────────────────────────────────
+// Custom floating dropdown so full category names are always readable,
+// and Escape always cancels (restores the original value).
+function _setupCatAC(input, origCat, saveBtn, gastoId) {
+  let acEl  = null;
+  let acIdx = -1;
+
+  function _notifyChange() {
+    const changed = input.value !== origCat;
+    input.classList.toggle("dirty", changed);
+    saveBtn.classList.toggle("btn-dirty", changed);
+  }
+
+  function _showAC() {
+    _hideAC();
+    const q = (input.value || "").toLowerCase();
+    const matches = _catList.filter(c => c.toLowerCase().includes(q));
+    if (!matches.length) return;
+
+    acEl = document.createElement("div");
+    acEl.className = "cat-ac";
+    acEl.innerHTML = matches.map((c, i) =>
+      `<div class="cat-ac-item" data-i="${i}" data-val="${escHtml(c)}">${escHtml(c)}</div>`
+    ).join("");
+
+    // Float below the input, wide enough to show full names
+    const rect = input.getBoundingClientRect();
+    acEl.style.top      = (rect.bottom + window.scrollY) + "px";
+    acEl.style.left     = (rect.left   + window.scrollX) + "px";
+    acEl.style.minWidth = Math.max(rect.width, 220) + "px";
+    document.body.appendChild(acEl);
+    acIdx = -1;
+
+    acEl.querySelectorAll(".cat-ac-item").forEach(item => {
+      item.addEventListener("mousedown", e => {
+        e.preventDefault();           // keep input focused
+        input.value = item.dataset.val;
+        _notifyChange();
+        _hideAC();
+      });
+    });
+  }
+
+  function _hideAC() {
+    if (acEl) { acEl.remove(); acEl = null; }
+    acIdx = -1;
+  }
+
+  function _highlight(delta) {
+    if (!acEl) return;
+    const items = acEl.querySelectorAll(".cat-ac-item");
+    if (!items.length) return;
+    acIdx = Math.max(0, Math.min(items.length - 1, acIdx + delta));
+    items.forEach((el, i) => el.classList.toggle("active", i === acIdx));
+    items[acIdx].scrollIntoView({ block: "nearest" });
+  }
+
+  input.addEventListener("focus", _showAC);
+  input.addEventListener("input", () => { _notifyChange(); _showAC(); });
+  input.addEventListener("blur",  () => setTimeout(_hideAC, 160));
+
+  input.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      input.value = origCat;          // always undo the edit
+      _notifyChange();
+      _hideAC();
+      input.blur();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (acEl && acIdx >= 0) {
+        const item = acEl.querySelectorAll(".cat-ac-item")[acIdx];
+        if (item) { input.value = item.dataset.val; _notifyChange(); }
+      }
+      _hideAC();
+      saveCategoria(gastoId, saveBtn);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!acEl) _showAC();
+      else _highlight(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      _highlight(-1);
+    }
   });
 }
 

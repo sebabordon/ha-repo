@@ -397,6 +397,26 @@ tbody tr:hover { background: #fafbff; }
 
 .cat-input { border: 1px solid #ddd; border-radius: 4px; padding: .2rem .5rem; width: 130px; font-size: .85rem; }
 .cat-input.dirty { border-color: #f59e0b; }
+
+/* ── Category autocomplete floating dropdown ─────────────────────────────────*/
+.cat-ac {
+  position: absolute;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.13);
+  z-index: 600;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: .88rem;
+}
+.cat-ac-item {
+  padding: .32rem .7rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cat-ac-item:hover,
+.cat-ac-item.active { background: #ebedf5; }
 .btn-dirty { background: #f59e0b; color: #fff; border-color: #d97706; }
 .btn-dirty:hover { background: #d97706; }
 

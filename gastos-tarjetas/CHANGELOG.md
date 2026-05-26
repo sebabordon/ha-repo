@@ -1,3 +1,8 @@
+## 0.2.82
+
+- **Gastos — autocomplete de categoría con dropdown flotante**: reemplaza el `<datalist>` nativo del campo categoría en la tabla de gastos por un dropdown personalizado que flota encima del contenido. El ancho mínimo es 220 px (o el ancho del input si es mayor), por lo que nombres largos como "Impuestos Especiales" se muestran completos sin truncarse. El filtro es por substring (no solo prefijo). Las flechas ↑↓ navegan la lista; Enter selecciona y guarda; clic en un ítem selecciona.
+- **Gastos — Escape cancela la edición de categoría**: al presionar Escape el campo vuelve al valor original, desaparece el indicador de cambio pendiente y el input pierde el foco. El dropdown se cierra en el mismo gesto. Los otros campos que usan `cat-datalist` (formulario nuevo movimiento, modal de chart) no se ven afectados.
+
 ## 0.2.81
 
 - **Fix Interfaz — botones y preview fuera del sub-tab**: un `</div>` sobrante cerraba prematuramente el panel `cfg-tab-ui`, dejando los botones "Guardar/Restablecer" y la vista previa de colores visibles en todo el tab Config en lugar de solo dentro del sub-tab Interfaz.
