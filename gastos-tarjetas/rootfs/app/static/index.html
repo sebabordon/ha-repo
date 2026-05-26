@@ -419,6 +419,20 @@
 
       <!-- ── Sub-tab: Interfaz ─────────────────────────────────────── -->
       <div id="cfg-tab-ui" class="cfg-tab-content">
+
+        <!-- ── PWA Shortcuts ── -->
+        <div class="ui-pref-section">Shortcuts de la PWA</div>
+        <p class="rules-hint" style="margin:.4rem 0 .75rem">
+          Configurá qué cuentas aparecen como accesos directos al mantener presionado el ícono de la app en iOS/Android.
+          Cada shortcut abre un formulario rápido de carga de gastos.
+          <strong>Reinstalá la PWA</strong> (o cerrá y reabrí) para que el cambio se refleje en el home screen.
+        </p>
+        <div id="pwa-shortcuts-list" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem"></div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.5rem">
+          <button class="btn btn-sm" onclick="addPwaShortcut()">+ Agregar shortcut</button>
+          <button class="btn btn-primary btn-sm" onclick="savePwaShortcuts()">Guardar shortcuts</button>
+        </div>
+
         <p class="rules-hint" style="margin-bottom:1rem">Personalizá los colores usados en los widgets. Los cambios se guardan en este navegador.</p>
         <div class="ui-colors-grid">
           <div class="ui-color-row">
@@ -564,19 +578,6 @@
           <button class="btn btn-primary btn-sm" onclick="saveUiSettings()">Guardar</button>
           <button class="btn btn-sm" onclick="resetUiSettings()">Restablecer</button>
         </div>
-        <!-- ── PWA Shortcuts ── -->
-        <div class="ui-pref-section" style="margin-top:1.5rem">Shortcuts de la PWA</div>
-        <p class="rules-hint" style="margin:.4rem 0 .75rem">
-          Configurá qué cuentas aparecen como accesos directos al mantener presionado el ícono de la app en iOS/Android.
-          Cada shortcut abre un formulario rápido de carga de gastos.
-          <strong>Reinstalá la PWA</strong> (o cerrá y reabrí) para que el cambio se refleje en el home screen.
-        </p>
-        <div id="pwa-shortcuts-list" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem"></div>
-        <button class="btn btn-sm" onclick="addPwaShortcut()">+ Agregar shortcut</button>
-        <div style="margin-top:.75rem">
-          <button class="btn btn-primary btn-sm" onclick="savePwaShortcuts()">Guardar shortcuts</button>
-        </div>
-
         <div class="ui-preview">
           <div class="ui-preview-title">Vista previa de colores</div>
           <div class="ui-preview-row">
