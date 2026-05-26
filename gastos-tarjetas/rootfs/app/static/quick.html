@@ -305,7 +305,7 @@
       <input id="inp-desc" type="text" placeholder="Descripción del gasto" autocomplete="off">
     </div>
 
-    <div class="field">
+    <div class="field" id="field-moneda">
       <label>Moneda</label>
       <select id="inp-mon">
         <option value="ARS">ARS $</option>
@@ -334,6 +334,7 @@
   const params = new URLSearchParams(location.search);
   const fuente = params.get("fuente") || "";
   let   tipo   = "egreso";
+  let   moneda = "ARS";  // resolved after account lookup
 
   // Header
   document.getElementById("fuente-label").textContent = fuente.toUpperCase().replace(/_/g, " ");
@@ -341,18 +342,28 @@
   // Default date = today
   document.getElementById("inp-fecha").value = new Date().toISOString().slice(0, 10);
 
-  // Load categories
-  fetch("/api/categorias")
-    .then(r => r.json())
-    .then(cats => {
-      const sel = document.getElementById("inp-cat");
-      cats.sort().forEach(c => {
-        const o = document.createElement("option");
-        o.value = o.textContent = c;
-        sel.appendChild(o);
-      });
-    })
-    .catch(() => {});  // non-fatal
+  // Load categories + resolve account currency in parallel
+  Promise.all([
+    fetch("/api/categorias").then(r => r.json()).catch(() => []),
+    fetch("/api/cuentas").then(r => r.json()).catch(() => []),
+  ]).then(([cats, cuentas]) => {
+    // Populate category selector
+    const sel = document.getElementById("inp-cat");
+    cats.sort().forEach(c => {
+      const o = document.createElement("option");
+      o.value = o.textContent = c;
+      sel.appendChild(o);
+    });
+
+    // Resolve currency from the matching account
+    const cuenta = cuentas.find(c => c.fuente === fuente);
+    if (cuenta && (cuenta.moneda === "ARS" || cuenta.moneda === "USD")) {
+      moneda = cuenta.moneda;
+      document.getElementById("inp-mon").value = moneda;
+      document.getElementById("field-moneda").style.display = "none";
+    }
+    // If not found (scraper fuente) or MULTI → keep selector visible
+  });
 
   function setTipo(t) {
     tipo = t;
@@ -376,7 +387,10 @@
     const fecha = document.getElementById("inp-fecha").value;
     const cat   = document.getElementById("inp-cat").value;
     const desc  = document.getElementById("inp-desc").value.trim();
-    const mon   = document.getElementById("inp-mon").value;
+    // Si el selector está visible el usuario puede cambiarlo; si está oculto usamos la variable resuelta
+    const mon   = document.getElementById("field-moneda").style.display === "none"
+                  ? moneda
+                  : document.getElementById("inp-mon").value;
 
     if (!fuente)               { showErr("No se especificó la cuenta. Usá un shortcut configurado."); return; }
     if (!fecha)                { showErr("Ingresá la fecha."); return; }
