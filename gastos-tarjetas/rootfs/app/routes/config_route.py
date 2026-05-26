@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Body, Request
 from auth import require_auth
 from user_config import read_user_config, write_user_config
 
@@ -51,7 +51,7 @@ def get_pwa_shortcuts(request: Request):
 
 
 @router.put("/config/pwa-shortcuts")
-def put_pwa_shortcuts(body: list, request: Request):
+def put_pwa_shortcuts(request: Request, body: list = Body(...)):
     require_auth(request)
     shortcuts = []
     for sc in body:
