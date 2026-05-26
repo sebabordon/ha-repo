@@ -1,3 +1,7 @@
+## 0.3.1
+
+- **Fix build**: bump de versión para forzar rebuild limpio de la imagen Docker tras el fix de playwright/apscheduler.
+
 ## 0.3.0
 
 - **Scrapers web — infraestructura completa**: nuevo sistema de scraping diario de movimientos bancarios vía Playwright. Incluye scheduler (APScheduler), tabla de staging `movimientos_raw`, tabla de estado `scraper_status` y motor de conciliación automática contra los PDF ya importados.
