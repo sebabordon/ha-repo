@@ -28,10 +28,11 @@ COPY requirements.txt .
 # Paso 1: dependencias del proyecto desde el índice de HA (wheels pre-compilados para musl/aarch64)
 RUN pip3 install --break-system-packages -r requirements.txt
 
-# Paso 2: playwright y apscheduler no están en el índice de HA; se instalan desde PyPI.
-# PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 evita que playwright intente descargar Chromium propio
-# (usamos el Chromium del sistema instalado por apk en el paso anterior).
-RUN pip3 install --break-system-packages \
+# Paso 2: playwright y apscheduler no están en el índice de HA.
+# PIP_CONFIG_FILE=/dev/null ignora el pip.conf del sistema (que incluye el índice de HA
+# como extra-index-url y puede devolver respuestas vacías para playwright, confundiendo
+# a pip con "from versions: none"). Con /dev/null de config, solo se usa PyPI puro.
+RUN PIP_CONFIG_FILE=/dev/null pip3 install --break-system-packages \
     --index-url https://pypi.org/simple \
     "playwright>=1.44.0,<2.0" \
     "apscheduler>=3.10,<4"

@@ -1,3 +1,7 @@
+## 0.3.2
+
+- **Fix build**: `PIP_CONFIG_FILE=/dev/null` para ignorar el pip.conf del sistema en el paso de instalación de playwright/apscheduler. El índice de HA devuelve una respuesta vacía para playwright que confunde a pip con "from versions: none" incluso cuando PyPI está accesible.
+
 ## 0.3.1
 
 - **Fix build**: bump de versión para forzar rebuild limpio de la imagen Docker tras el fix de playwright/apscheduler.
