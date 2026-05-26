@@ -1,3 +1,7 @@
+## 0.2.81
+
+- **Fix Interfaz — botones y preview fuera del sub-tab**: un `</div>` sobrante cerraba prematuramente el panel `cfg-tab-ui`, dejando los botones "Guardar/Restablecer" y la vista previa de colores visibles en todo el tab Config en lugar de solo dentro del sub-tab Interfaz.
+
 ## 0.2.80
 
 - **Interfaz — color de acento personalizable**: nuevo picker "Color de acento" cubre navbar, botones primarios, chips activos y botón de scroll. Implementado como CSS custom property `--color-accent`; todos los usos previos de `#16213e` en el CSS ahora referencian la variable.
