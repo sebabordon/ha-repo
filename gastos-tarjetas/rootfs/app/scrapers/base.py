@@ -1,19 +1,29 @@
 """
-Clase base para todos los scrapers de bancos.
+Clase base para scrapers bancarios — usa Selenium + Chromium del sistema.
+
+Por qué Selenium en lugar de Playwright:
+  Playwright solo publica wheels para manylinux (glibc). La imagen base de HA
+  usa Alpine Linux (musl libc), que es incompatible con manylinux. Selenium es
+  py3-none-any (pure Python); el browser lo provee chromium-chromedriver via apk.
 
 Flujo de cada run():
-  1. Cargar session de /data/sessions/{fuente}.json (si existe)
-  2. Llamar check_session() → si falla, llamar do_login()
-  3. Llamar scrape() para obtener movimientos y saldos
-  4. Guardar session actualizada en disco
-  5. Registrar resultado en scraper_status
+  1. Crear WebDriver con Chromium headless
+  2. Restaurar sesión (cookies + localStorage) desde /data/sessions/{fuente}.json
+  3. check_session() → si falla, do_login()
+  4. scrape() para obtener movimientos y saldos
+  5. Guardar sesión actualizada
+  6. Registrar resultado en scraper_status
 
-Las subclases implementan check_session / do_login / scrape.
+Selenium es síncrono; run() envuelve _run_sync() en un thread pool para mantener
+la interfaz async del scheduler sin bloquear el event loop de FastAPI.
 """
 
+import asyncio
+import json
 import logging
 import os
 import re
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -24,9 +34,12 @@ logger = logging.getLogger(__name__)
 _DATA_DIR     = os.environ.get("DATA_DIR", "/data")
 _SESSIONS_DIR = os.path.join(_DATA_DIR, "sessions")
 
-# User-agent genérico que no levanta sospechas en portales bancarios
+# Binarios del sistema (seteados como ENV en el Dockerfile)
+_CHROMIUM_BIN    = os.environ.get("CHROMIUM_BIN",    "/usr/bin/chromium-browser")
+_CHROMEDRIVER_BIN = os.environ.get("CHROMEDRIVER_BIN", "/usr/bin/chromedriver")
+
 _UA = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
@@ -41,8 +54,8 @@ class MovimientoRaw:
     monto:         float          # positivo = egreso (igual que gastos)
     moneda:        str = "ARS"
     fecha_proceso: Optional[str] = None
-    tarjeta:       Optional[str] = None   # etiqueta libre, ej. "Platinum Credit"
-    raw_data:      Optional[dict] = None  # datos originales del scraper (debug)
+    tarjeta:       Optional[str] = None
+    raw_data:      Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {
@@ -61,8 +74,6 @@ class MovimientoRaw:
 class ScraperResult:
     fuente:          str
     movimientos:     list[MovimientoRaw] = field(default_factory=list)
-    # saldos: {fuente_producto: {"saldo_ars": float, "saldo_usd": float}}
-    # ej. {"bbva_mc": {"saldo_ars": 45000.0}, "bbva_cuenta": {"saldo_ars": 120000.0}}
     saldos:          dict = field(default_factory=dict)
     error:           Optional[str] = None
     session_expired: bool = False
@@ -75,12 +86,14 @@ class BaseScraper(ABC):
     Clase base abstracta para scrapers bancarios.
 
     Subclases deben definir:
-      fuente: str   — identificador primario (usado para el archivo de sesión)
-      nombre: str   — nombre legible para logs y UI
+      fuente: str           — identificador (usado para el archivo de sesión)
+      nombre: str           — nombre legible
+      login_origin: str     — dominio raíz del banco (para restaurar cookies)
     """
 
-    fuente: str = ""
-    nombre: str = ""
+    fuente:        str = ""
+    nombre:        str = ""
+    login_origin:  str = ""   # ej. "https://www.bbva.com.ar"
 
     def __init__(self):
         os.makedirs(_SESSIONS_DIR, exist_ok=True)
@@ -93,101 +106,169 @@ class BaseScraper(ABC):
         return os.path.exists(self.session_path)
 
     def clear_session(self) -> None:
-        """Elimina la sesión guardada. Úsalo cuando el banco invalida la cookie."""
         if self._has_session():
             os.remove(self.session_path)
             logger.info("[%s] Sesión eliminada.", self.fuente)
 
-    # ── Entrada principal ──────────────────────────────────────────────────────
+    # ── WebDriver factory ─────────────────────────────────────────────────────
+
+    def _create_driver(self):
+        """Crea y devuelve un WebDriver configurado con Chromium headless."""
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+
+        opts = Options()
+        opts.add_argument("--headless=new")
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--disable-gpu")
+        opts.add_argument(f"--user-agent={_UA}")
+        opts.add_argument("--window-size=1280,800")
+        opts.add_argument("--disable-blink-features=AutomationControlled")
+        opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+        opts.add_experimental_option("useAutomationExtension", False)
+
+        if os.path.exists(_CHROMIUM_BIN):
+            opts.binary_location = _CHROMIUM_BIN
+
+        service = Service(
+            executable_path=_CHROMEDRIVER_BIN
+            if os.path.exists(_CHROMEDRIVER_BIN)
+            else "chromedriver"
+        )
+        driver = webdriver.Chrome(service=service, options=opts)
+        driver.set_page_load_timeout(30)
+        driver.implicitly_wait(0)   # usamos waits explícitos
+        return driver
+
+    # ── Sesión (cookies + localStorage) ──────────────────────────────────────
+
+    def _save_session(self, driver) -> None:
+        """Serializa cookies y localStorage a disco."""
+        try:
+            cookies = driver.get_cookies()
+            try:
+                ls = driver.execute_script(
+                    "try { return Object.fromEntries(Object.entries(localStorage)); }"
+                    " catch(e) { return {}; }"
+                ) or {}
+            except Exception:
+                ls = {}
+            state = {"cookies": cookies, "localStorage": ls}
+            with open(self.session_path, "w") as f:
+                json.dump(state, f)
+            logger.info("[%s] Sesión guardada (%d cookies).", self.fuente, len(cookies))
+        except Exception as exc:
+            logger.error("[%s] Error guardando sesión: %s", self.fuente, exc)
+
+    def _restore_session(self, driver) -> None:
+        """
+        Carga la sesión guardada en el driver.
+        Hay que estar en el dominio correcto antes de agregar cookies,
+        por eso primero navegamos a login_origin.
+        """
+        if not self._has_session():
+            return
+        try:
+            with open(self.session_path) as f:
+                state = json.load(f)
+
+            driver.get(self.login_origin)
+            time.sleep(1)
+
+            for cookie in state.get("cookies", []):
+                # Selenium no acepta cookies con el campo 'sameSite' inválido
+                cookie.pop("sameSite", None)
+                try:
+                    driver.add_cookie(cookie)
+                except Exception:
+                    pass  # cookie de subdominio o formato inválido — no es fatal
+
+            ls = state.get("localStorage", {})
+            if ls:
+                driver.execute_script(
+                    "Object.entries(arguments[0]).forEach(([k,v]) => {"
+                    "  try { localStorage.setItem(k, v); } catch(e) {}"
+                    "});",
+                    ls,
+                )
+            logger.debug("[%s] Sesión restaurada.", self.fuente)
+        except Exception as exc:
+            logger.warning("[%s] Error restaurando sesión: %s", self.fuente, exc)
+
+    # ── Entrada principal (async → thread pool) ───────────────────────────────
 
     async def run(self, config: dict) -> ScraperResult:
         """
-        Punto de entrada del scheduler.
-        Maneja el ciclo completo: sesión → login → scraping → persistencia.
+        Punto de entrada async del scheduler.
+        Selenium es síncrono; lo corremos en un thread pool para no bloquear
+        el event loop de FastAPI/APScheduler.
         """
         from scrapers_db import upsert_scraper_status
 
         now_iso = datetime.utcnow().isoformat()
         upsert_scraper_status(self.fuente, estado="running", ultimo_run=now_iso)
 
-        try:
-            result = await self._run_internal(config)
-        except Exception as exc:
-            logger.exception("[%s] Error inesperado: %s", self.fuente, exc)
-            result = ScraperResult(fuente=self.fuente, error=str(exc))
+        loop   = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, self._run_sync, config)
 
-        # Actualizar estado final
         if result.error:
             estado = "session_expired" if result.session_expired else "error"
-            upsert_scraper_status(
-                self.fuente,
-                estado=estado,
-                error_msg=result.error,
-            )
+            upsert_scraper_status(self.fuente, estado=estado, error_msg=result.error)
         else:
             upsert_scraper_status(
                 self.fuente,
                 estado="ok",
-                ultimo_ok=now_iso,
+                ultimo_ok=datetime.utcnow().isoformat(),
                 error_msg=None,
             )
-            # Actualizar saldos en la tabla cuentas
             self._persist_saldos(result.saldos)
 
         return result
 
-    async def _run_internal(self, config: dict) -> ScraperResult:
-        from playwright.async_api import async_playwright
+    def _run_sync(self, config: dict) -> ScraperResult:
+        """Núcleo síncrono: crea driver, restaura sesión, loguea si es necesario, scrapea."""
+        driver = None
+        try:
+            driver = self._create_driver()
 
-        chromium_path = os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
-
-        async with async_playwright() as p:
-            launch_opts: dict = {"headless": True, "args": ["--no-sandbox"]}
-            if chromium_path:
-                launch_opts["executable_path"] = chromium_path
-
-            browser = await p.chromium.launch(**launch_opts)
-
-            # Intentar restaurar sesión desde disco
-            context_opts: dict = {
-                "viewport":   {"width": 1280, "height": 800},
-                "user_agent": _UA,
-            }
+            # Intentar restaurar sesión y verificar validez
             if self._has_session():
-                context_opts["storage_state"] = self.session_path
+                self._restore_session(driver)
+                session_ok = self.check_session(driver)
+            else:
+                session_ok = False
 
-            context = await browser.new_context(**context_opts)
-            page    = await context.new_page()
+            if not session_ok:
+                logger.info("[%s] Sesión inválida o inexistente — iniciando login…", self.fuente)
+                self.do_login(driver, config)
 
-            try:
-                # Validar o hacer login
-                logged_in = self._has_session() and await self.check_session(page)
-                if not logged_in:
-                    logger.info("[%s] Sesión inválida o inexistente — iniciando login…", self.fuente)
-                    await self.do_login(page, config)
+            result = self.scrape(driver, config)
 
-                result = await self.scrape(page, config)
+            # Persistir sesión actualizada
+            self._save_session(driver)
 
-                # Persistir sesión actualizada
-                await context.storage_state(path=self.session_path)
-                logger.info(
-                    "[%s] OK — %d movimientos, saldos: %s",
-                    self.fuente, len(result.movimientos), result.saldos,
-                )
-                return result
+            logger.info(
+                "[%s] OK — %d movimientos, saldos: %s",
+                self.fuente, len(result.movimientos), result.saldos,
+            )
+            return result
 
-            finally:
-                await context.close()
-                await browser.close()
+        except Exception as exc:
+            logger.exception("[%s] Error en scraper: %s", self.fuente, exc)
+            return ScraperResult(fuente=self.fuente, error=str(exc))
+        finally:
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
 
-    # ── Persistencia de saldos ─────────────────────────────────────────────────
+    # ── Persistencia de saldos ────────────────────────────────────────────────
 
     @staticmethod
     def _persist_saldos(saldos: dict) -> None:
-        """
-        Actualiza cuentas.saldo / saldo_usd para cada fuente con saldo scrapeado.
-        saldos = {fuente: {"saldo_ars": float, "saldo_usd": float}}
-        """
         try:
             from scrapers_db import _conn
             with _conn() as conn:
@@ -208,93 +289,120 @@ class BaseScraper(ABC):
         except Exception as exc:
             logger.error("Error al persistir saldos: %s", exc)
 
-    # ── Métodos abstractos ─────────────────────────────────────────────────────
+    # ── Métodos abstractos ────────────────────────────────────────────────────
 
     @abstractmethod
-    async def check_session(self, page) -> bool:
+    def check_session(self, driver) -> bool:
         """
         Navega a una URL protegida y devuelve True si la sesión sigue activa.
-        Debe resolver en < 15 segundos.
+        Debe ser síncrono (no async). Timeout razonable: ~15 s.
         """
 
     @abstractmethod
-    async def do_login(self, page, config: dict) -> None:
-        """
-        Login completo con las credenciales del config.
-        Lanza excepción si falla.
-        """
+    def do_login(self, driver, config: dict) -> None:
+        """Login completo con credenciales del config. Lanza excepción si falla."""
 
     @abstractmethod
-    async def scrape(self, page, config: dict) -> ScraperResult:
-        """
-        Con sesión activa, raspa todos los productos del banco.
-        Devuelve movimientos y saldos.
-        """
+    def scrape(self, driver, config: dict) -> ScraperResult:
+        """Con sesión activa, raspa todos los productos. Devuelve movimientos y saldos."""
 
-    # ── Helpers compartidos ────────────────────────────────────────────────────
+    # ── Helpers de Selenium ───────────────────────────────────────────────────
+
+    @staticmethod
+    def wait_for(driver, css_selector: str, timeout: int = 15):
+        """Espera a que aparezca un elemento CSS. Lanza TimeoutException si no aparece."""
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        return WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, css_selector))
+        )
+
+    @staticmethod
+    def wait_for_any(driver, selectors: list[str], timeout: int = 15):
+        """
+        Espera a que aparezca CUALQUIERA de los selectores CSS dados.
+        Devuelve el texto del selector que matcheó primero.
+        """
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+
+        combined = ", ".join(selectors)
+
+        def any_present(d):
+            for sel in selectors:
+                try:
+                    el = d.find_element(By.CSS_SELECTOR, sel)
+                    if el:
+                        return sel
+                except Exception:
+                    pass
+            return False
+
+        return WebDriverWait(driver, timeout).until(any_present)
+
+    @staticmethod
+    def find(driver, css_selector: str):
+        """Busca un elemento CSS. Devuelve el elemento o None si no existe."""
+        from selenium.webdriver.common.by import By
+        try:
+            return driver.find_element(By.CSS_SELECTOR, css_selector)
+        except Exception:
+            return None
+
+    @staticmethod
+    def find_all(driver, css_selector: str) -> list:
+        """Devuelve todos los elementos que matchean el selector CSS."""
+        from selenium.webdriver.common.by import By
+        try:
+            return driver.find_elements(By.CSS_SELECTOR, css_selector)
+        except Exception:
+            return []
+
+    # ── Helpers de parsing ────────────────────────────────────────────────────
 
     @staticmethod
     def parse_amount(text: str) -> float:
         """
-        Parsea un importe en formato argentino a float.
+        Parsea importe en formato argentino a float.
         Positivo = egreso, negativo = crédito/ingreso.
 
         Ejemplos:
           "1.234,56"   → 1234.56
           "$ 1.234,56" → 1234.56
           "-100,00"    → -100.0
-          "1234.56"    → 1234.56  (formato US, sin puntos miles)
-          "CR 500,00"  → -500.0   (CR/Cr = crédito)
+          "CR 500,00"  → -500.0
         """
         if not text:
             return 0.0
         t = text.strip()
-
-        # Crédito explícito (CR, Cr, cr)
         is_credit = bool(re.search(r"\bCR\b", t, re.IGNORECASE))
-
-        # Remover símbolos de moneda y etiquetas
         t = re.sub(r"(CR|USD|US\$|\$|ARS)", "", t, flags=re.IGNORECASE).strip()
-
-        # Signo
         negative = t.startswith("-")
         t = t.lstrip("+-").strip()
-
-        # Detectar formato: si tiene coma Y punto, ver cuál va último
         has_dot   = "." in t
         has_comma = "," in t
-
         if has_dot and has_comma:
             if t.rfind(",") > t.rfind("."):
-                # 1.234,56 → formato AR
                 t = t.replace(".", "").replace(",", ".")
             else:
-                # 1,234.56 → formato US
                 t = t.replace(",", "")
         elif has_comma:
-            # 1234,56 → decimal con coma
             t = t.replace(",", ".")
-        # else: ya es float puro
-
         try:
             val = float(t)
         except ValueError:
             return 0.0
-
         if negative or is_credit:
             val = -val
         return val
 
     @staticmethod
     def parse_date_ar(text: str) -> Optional[str]:
-        """
-        Parsea fechas en formato DD/MM/YYYY o DD/MM/YY a ISO YYYY-MM-DD.
-        Devuelve None si no puede parsear.
-        """
+        """Parsea DD/MM/YYYY o DD/MM/YY a ISO YYYY-MM-DD. Devuelve None si falla."""
         if not text:
             return None
-        text = text.strip()
-        m = re.match(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$", text)
+        m = re.match(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$", text.strip())
         if not m:
             return None
         day, month, year = m.group(1), m.group(2), m.group(3)
@@ -302,7 +410,6 @@ class BaseScraper(ABC):
             year = "20" + year
         try:
             from datetime import date
-            d = date(int(year), int(month), int(day))
-            return d.isoformat()
+            return date(int(year), int(month), int(day)).isoformat()
         except ValueError:
             return None

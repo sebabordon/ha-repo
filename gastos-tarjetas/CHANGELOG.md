@@ -1,3 +1,11 @@
+## 0.3.3
+
+- **Fix build definitivo — reemplazo Playwright → Selenium**: la causa raíz era que Playwright solo publica wheels `manylinux_2_17_aarch64` (glibc), incompatibles con Alpine Linux (musl libc). No existe wheel de Playwright para musllinux. Selenium es `py3-none-any` (pure Python) y usa el ChromeDriver del sistema (`apk add chromium-chromedriver`), sin dependencias de plataforma.
+- **Dockerfile**: agrega `chromium-chromedriver` al paso apk; elimina el step separado de pip y las variables de entorno de Playwright; setea `CHROMIUM_BIN` y `CHROMEDRIVER_BIN`.
+- **requirements.txt**: reemplaza `playwright` por `selenium==4.44.0` y `apscheduler==3.11.2` (ambos pure Python, sin problemas en musl/Alpine).
+- **scrapers/base.py**: reescrito para Selenium WebDriver síncrono; `run()` mantiene la interfaz async envolviendo el código en `run_in_executor`; gestión de sesión via cookies + localStorage en JSON (reemplaza `storage_state` de Playwright).
+- **scrapers/galicia.py**: flujo TOTP reescrito con `threading.Event` (en lugar de `asyncio.Queue`) ya que Selenium corre en un thread.
+
 ## 0.3.2
 
 - **Fix build**: `PIP_CONFIG_FILE=/dev/null` para ignorar el pip.conf del sistema en el paso de instalación de playwright/apscheduler. El índice de HA devuelve una respuesta vacía para playwright que confunde a pip con "from versions: none" incluso cuando PyPI está accesible.
