@@ -126,7 +126,6 @@ async def serve_quick(request: Request):
     """Formulario rápido de carga de gastos (abierto desde shortcuts PWA)."""
     user = request.session.get("user")
     if not user:
-        prefix = request.headers.get("X-Ingress-Path", "")
         return _redirect(request, "/auth/login")
     return FileResponse("static/quick.html")
 
