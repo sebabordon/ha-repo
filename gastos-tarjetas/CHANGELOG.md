@@ -1,3 +1,7 @@
+## 0.2.83
+
+- **Fix — dropdown flotante de categoría en formulario "Nuevo movimiento"**: el campo Categoría del panel "+ Movimiento" tenía el mismo problema de truncado que la tabla de gastos (usaba `<datalist>` nativo). Ahora también usa el dropdown flotante con nombres completos. Escape limpia el campo y cierra el dropdown.
+
 ## 0.2.82
 
 - **Gastos — autocomplete de categoría con dropdown flotante**: reemplaza el `<datalist>` nativo del campo categoría en la tabla de gastos por un dropdown personalizado que flota encima del contenido. El ancho mínimo es 220 px (o el ancho del input si es mayor), por lo que nombres largos como "Impuestos Especiales" se muestran completos sin truncarse. El filtro es por substring (no solo prefijo). Las flechas ↑↓ navegan la lista; Enter selecciona y guarda; clic en un ítem selecciona.

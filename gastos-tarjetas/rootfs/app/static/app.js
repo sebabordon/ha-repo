@@ -1232,14 +1232,14 @@ function _renderGastos() {
 // ── Gastos-table category autocomplete ───────────────────────────────────────
 // Custom floating dropdown so full category names are always readable,
 // and Escape always cancels (restores the original value).
-function _setupCatAC(input, origCat, saveBtn, gastoId) {
+function _setupCatAC(input, origCat, saveBtn = null, gastoId = null) {
   let acEl  = null;
   let acIdx = -1;
 
   function _notifyChange() {
     const changed = input.value !== origCat;
     input.classList.toggle("dirty", changed);
-    saveBtn.classList.toggle("btn-dirty", changed);
+    if (saveBtn) saveBtn.classList.toggle("btn-dirty", changed);
   }
 
   function _showAC() {
@@ -1304,7 +1304,7 @@ function _setupCatAC(input, origCat, saveBtn, gastoId) {
         if (item) { input.value = item.dataset.val; _notifyChange(); }
       }
       _hideAC();
-      saveCategoria(gastoId, saveBtn);
+      if (gastoId !== null) saveCategoria(gastoId, saveBtn);
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
       if (!acEl) _showAC();
@@ -1381,6 +1381,7 @@ document.getElementById("nm-cuenta").addEventListener("change", function() {
 });
 
 document.getElementById("nm-fecha").value = new Date().toISOString().slice(0, 10);
+_setupCatAC(document.getElementById("nm-cat"), "");  // floating dropdown for new-mov form
 
 document.getElementById("btn-new-mov").addEventListener("click", async () => {
   const panel = document.getElementById("new-mov-panel");
