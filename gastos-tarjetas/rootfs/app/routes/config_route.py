@@ -43,6 +43,28 @@ def apply_user_rules_endpoint(request: Request):
     return {"asignados": count}
 
 
+@router.get("/config/pwa-shortcuts")
+def get_pwa_shortcuts(request: Request):
+    require_auth(request)
+    cfg = read_user_config()
+    return cfg.get("pwa_shortcuts", [])
+
+
+@router.put("/config/pwa-shortcuts")
+def put_pwa_shortcuts(body: list, request: Request):
+    require_auth(request)
+    shortcuts = []
+    for sc in body:
+        fuente = str(sc.get("fuente", "")).strip()
+        label  = str(sc.get("label", "")).strip()
+        if fuente and label:
+            shortcuts.append({"fuente": fuente, "label": label})
+    cfg = read_user_config()
+    cfg["pwa_shortcuts"] = shortcuts
+    write_user_config(cfg)
+    return {"ok": True}
+
+
 @router.post("/config/usuarios/rename-db")
 def rename_usuario_in_db(body: dict, request: Request):
     """Rename a persona in all existing gastos rows (called after UI rename)."""

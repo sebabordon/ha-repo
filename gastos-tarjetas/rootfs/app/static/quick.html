@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Gasto Rápido</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#16213e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gastos">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent: #16213e;
+      --accent-light: #0f3460;
+      --bg: #f0f2f5;
+      --card: #fff;
+      --text: #1a1a2e;
+      --muted: #64748b;
+      --border: #cbd5e1;
+      --success-bg: #d1fae5;
+      --success-text: #065f46;
+      --error-bg: #fee2e2;
+      --error-text: #b91c1c;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--accent);
+      color: #fff;
+      padding: max(env(safe-area-inset-top), 12px) 1rem 12px;
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+
+    header a {
+      color: rgba(255,255,255,.75);
+      text-decoration: none;
+      font-size: .85rem;
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .header-fuente {
+      font-size: .75rem;
+      opacity: .7;
+      font-weight: 400;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem 1rem max(env(safe-area-inset-bottom), 1.5rem);
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+    }
+
+    label {
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    input, select, textarea {
+      font: inherit;
+      font-size: 1rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: .65rem .9rem;
+      background: var(--card);
+      color: var(--text);
+      width: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
+      transition: border-color .15s;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent);
+    }
+
+    /* Big monto input */
+    #inp-monto {
+      font-size: 2rem;
+      font-weight: 700;
+      text-align: right;
+      letter-spacing: -.02em;
+      padding: .5rem .9rem;
+      border-radius: 10px;
+    }
+
+    /* tipo toggle */
+    .tipo-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .5rem;
+    }
+
+    .tipo-btn {
+      border: 1.5px solid var(--border);
+      background: var(--card);
+      border-radius: 8px;
+      padding: .55rem;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: all .15s;
+      color: var(--muted);
+    }
+
+    .tipo-btn.active-egreso {
+      background: #fee2e2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+    }
+
+    .tipo-btn.active-ingreso {
+      background: #d1fae5;
+      border-color: #6ee7b7;
+      color: #065f46;
+    }
+
+    .btn-save {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: .9rem 1rem;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      transition: background .15s;
+    }
+
+    .btn-save:active { background: var(--accent-light); }
+
+    .btn-save:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    /* success screen */
+    #screen-ok {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.25rem;
+      text-align: center;
+      width: 100%;
+      max-width: 420px;
+    }
+
+    .ok-icon {
+      font-size: 4rem;
+      line-height: 1;
+    }
+
+    .ok-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+
+    .ok-subtitle {
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .ok-actions {
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+      width: 100%;
+    }
+
+    .btn-again {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: .8rem 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .btn-home {
+      background: transparent;
+      color: var(--accent);
+      border: 1.5px solid var(--accent);
+      border-radius: 10px;
+      padding: .75rem 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      text-decoration: none;
+      display: block;
+      text-align: center;
+    }
+
+    .msg {
+      border-radius: 8px;
+      padding: .6rem .9rem;
+      font-size: .9rem;
+      display: none;
+    }
+
+    .msg.err {
+      display: block;
+      background: var(--error-bg);
+      color: var(--error-text);
+    }
+
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right .75rem center;
+      padding-right: 2.5rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="/" id="back-link">← Inicio</a>
+  <div class="header-title">
+    Gasto rápido
+    <div class="header-fuente" id="fuente-label"></div>
+  </div>
+</header>
+
+<main>
+  <!-- ── Formulario ── -->
+  <div class="card" id="screen-form">
+
+    <div class="field">
+      <label>Monto</label>
+      <input id="inp-monto" type="number" inputmode="decimal" min="0.01" step="0.01"
+             placeholder="0,00" autofocus>
+    </div>
+
+    <div class="field">
+      <label>Tipo</label>
+      <div class="tipo-row">
+        <button class="tipo-btn active-egreso" id="btn-egreso" onclick="setTipo('egreso')">− Egreso</button>
+        <button class="tipo-btn" id="btn-ingreso" onclick="setTipo('ingreso')">+ Ingreso</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Fecha</label>
+      <input id="inp-fecha" type="date">
+    </div>
+
+    <div class="field">
+      <label>Categoría</label>
+      <select id="inp-cat">
+        <option value="">Sin categoría</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Descripción <span style="font-weight:400;text-transform:none">(opcional)</span></label>
+      <input id="inp-desc" type="text" placeholder="Descripción del gasto" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>Moneda</label>
+      <select id="inp-mon">
+        <option value="ARS">ARS $</option>
+        <option value="USD">USD</option>
+      </select>
+    </div>
+
+    <div id="msg-err" class="msg err"></div>
+
+    <button class="btn-save" id="btn-save" onclick="guardar()">Guardar gasto</button>
+  </div>
+
+  <!-- ── Pantalla de éxito ── -->
+  <div id="screen-ok">
+    <div class="ok-icon">✓</div>
+    <div class="ok-title">¡Guardado!</div>
+    <div class="ok-subtitle" id="ok-detail"></div>
+    <div class="ok-actions">
+      <button class="btn-again" onclick="resetForm()">Cargar otro</button>
+      <a class="btn-home" href="/">Volver a inicio</a>
+    </div>
+  </div>
+</main>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const fuente = params.get("fuente") || "";
+  let   tipo   = "egreso";
+
+  // Header
+  document.getElementById("fuente-label").textContent = fuente.toUpperCase().replace(/_/g, " ");
+
+  // Default date = today
+  document.getElementById("inp-fecha").value = new Date().toISOString().slice(0, 10);
+
+  // Load categories
+  fetch("/api/categorias")
+    .then(r => r.json())
+    .then(cats => {
+      const sel = document.getElementById("inp-cat");
+      cats.sort().forEach(c => {
+        const o = document.createElement("option");
+        o.value = o.textContent = c;
+        sel.appendChild(o);
+      });
+    })
+    .catch(() => {});  // non-fatal
+
+  function setTipo(t) {
+    tipo = t;
+    document.getElementById("btn-egreso").className  = "tipo-btn" + (t === "egreso"  ? " active-egreso"  : "");
+    document.getElementById("btn-ingreso").className = "tipo-btn" + (t === "ingreso" ? " active-ingreso" : "");
+  }
+
+  function showErr(msg) {
+    const el = document.getElementById("msg-err");
+    el.textContent = msg;
+    el.className = "msg err";
+  }
+
+  function hideErr() {
+    document.getElementById("msg-err").className = "msg";
+  }
+
+  async function guardar() {
+    hideErr();
+    const monto = parseFloat(document.getElementById("inp-monto").value);
+    const fecha = document.getElementById("inp-fecha").value;
+    const cat   = document.getElementById("inp-cat").value;
+    const desc  = document.getElementById("inp-desc").value.trim();
+    const mon   = document.getElementById("inp-mon").value;
+
+    if (!fuente)               { showErr("No se especificó la cuenta. Usá un shortcut configurado."); return; }
+    if (!fecha)                { showErr("Ingresá la fecha."); return; }
+    if (isNaN(monto) || monto <= 0) { showErr("Ingresá un monto válido mayor a cero."); return; }
+
+    const btn = document.getElementById("btn-save");
+    btn.disabled = true;
+    btn.textContent = "Guardando…";
+
+    try {
+      const res = await fetch("/api/movimientos-rapidos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fuente, fecha, descripcion: desc, monto, moneda: mon, categoria: cat || null, tipo }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showErr(err.detail || "Error al guardar. Intentá de nuevo.");
+        return;
+      }
+
+      const fmt = new Intl.NumberFormat("es-AR", { minimumFractionDigits: 2 }).format(monto);
+      const fuenteLabel = fuente.toUpperCase().replace(/_/g, " ");
+      document.getElementById("ok-detail").textContent =
+        `${tipo === "egreso" ? "−" : "+"} ${mon} ${fmt} en ${fuenteLabel}` + (cat ? ` · ${cat}` : "");
+
+      document.getElementById("screen-form").style.display = "none";
+      document.getElementById("screen-ok").style.display   = "flex";
+    } catch (e) {
+      showErr("Error de red. Revisá la conexión.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Guardar gasto";
+    }
+  }
+
+  function resetForm() {
+    document.getElementById("inp-monto").value = "";
+    document.getElementById("inp-desc").value  = "";
+    document.getElementById("inp-fecha").value = new Date().toISOString().slice(0, 10);
+    setTipo("egreso");
+    document.getElementById("screen-ok").style.display   = "none";
+    document.getElementById("screen-form").style.display = "";
+    document.getElementById("inp-monto").focus();
+  }
+
+  // Keyboard shortcut: Enter on monto → guardar
+  document.getElementById("inp-monto").addEventListener("keydown", e => {
+    if (e.key === "Enter") guardar();
+  });
+</script>
+</body>
+</html>

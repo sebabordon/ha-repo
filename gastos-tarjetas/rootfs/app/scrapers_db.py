@@ -141,6 +141,33 @@ def get_scraper_status(fuente: str) -> Optional[dict]:
 
 # ── movimientos_raw ───────────────────────────────────────────────────────────
 
+def insert_movimiento_raw_single(m: dict) -> int:
+    """
+    Inserta un único movimiento y devuelve su ID.
+    Útil para entradas manuales donde se necesita el ID para follow-up.
+    """
+    now = datetime.utcnow().isoformat()
+    with _conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO movimientos_raw
+               (fuente, tarjeta, fecha, fecha_proceso, descripcion, monto, moneda,
+                scraped_at, estado, raw_data)
+               VALUES (?,?,?,?,?,?,?,?,'new',?)""",
+            (
+                m["fuente"],
+                m.get("tarjeta"),
+                m["fecha"],
+                m.get("fecha_proceso"),
+                m["descripcion"],
+                str(m["monto"]),
+                m.get("moneda", "ARS"),
+                now,
+                json.dumps(m.get("raw_data")) if m.get("raw_data") else None,
+            ),
+        )
+        return cur.lastrowid
+
+
 def insert_movimientos_raw(movimientos: list[dict]) -> int:
     """
     Inserta una tanda de movimientos scrapeados.

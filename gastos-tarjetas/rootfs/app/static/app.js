@@ -123,7 +123,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    loadCharts();
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); renderUiSettings(); renderScrapersConfig(); }
+    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); renderUiSettings(); renderScrapersConfig(); renderPwaShortcuts(); }
   });
 });
 
@@ -3474,6 +3474,92 @@ async function submitTotpCode(banco) {
   } catch (e) {
     if (msgEl) { msgEl.style.color = "#b91c1c"; msgEl.textContent = "✗ " + e.message; }
   }
+}
+
+// ── PWA Shortcuts config ──────────────────────────────────────────────────────
+
+const _FUENTES_CONOCIDAS = [
+  { fuente: "amex",        label: "AMEX" },
+  { fuente: "bbva_mc",     label: "BBVA Mastercard" },
+  { fuente: "bbva_visa",   label: "BBVA Visa" },
+  { fuente: "bbva_cuenta", label: "BBVA Cuenta" },
+  { fuente: "galicia_mc",  label: "Galicia Mastercard" },
+  { fuente: "mercadopago", label: "MercadoPago" },
+];
+
+let _pwaShortcuts = [];     // [{fuente, label}, ...]
+let _cuentasManuales = [];  // cuentas manuales del usuario
+
+async function renderPwaShortcuts() {
+  try {
+    const [scRes, cRes] = await Promise.all([
+      fetch(`${BASE}/api/config/pwa-shortcuts`),
+      fetch(`${BASE}/api/cuentas`),
+    ]);
+    _pwaShortcuts    = scRes.ok ? await scRes.json() : [];
+    const allCuentas = cRes.ok ? await cRes.json() : [];
+    _cuentasManuales = allCuentas.filter(c => c.tipo === "manual");
+  } catch {
+    _pwaShortcuts = [];
+  }
+  _renderPwaShortcutsList();
+}
+
+function _allFuenteOptions() {
+  const opts = [..._FUENTES_CONOCIDAS];
+  for (const c of _cuentasManuales) {
+    if (!opts.find(o => o.fuente === c.fuente)) {
+      opts.push({ fuente: c.fuente, label: c.nombre });
+    }
+  }
+  return opts;
+}
+
+function _renderPwaShortcutsList() {
+  const container = document.getElementById("pwa-shortcuts-list");
+  if (!container) return;
+  if (!_pwaShortcuts.length) {
+    container.innerHTML = `<p style="color:var(--text-muted);font-style:italic;font-size:.85rem">Sin shortcuts configurados.</p>`;
+    return;
+  }
+  const opts = _allFuenteOptions();
+  container.innerHTML = _pwaShortcuts.map((sc, idx) => `
+    <div style="display:flex;align-items:center;gap:.5rem">
+      <select onchange="_pwaShortcutChange(${idx},'fuente',this.value)" style="flex:1;padding:.35rem .5rem;font-size:.85rem;border:1px solid #ccc;border-radius:4px">
+        ${opts.map(o => `<option value="${escHtml(o.fuente)}" ${o.fuente===sc.fuente?"selected":""}>${escHtml(o.label)}</option>`).join("")}
+      </select>
+      <input type="text" value="${escHtml(sc.label)}" placeholder="Nombre del shortcut"
+        oninput="_pwaShortcutChange(${idx},'label',this.value)"
+        style="flex:1;padding:.35rem .5rem;font-size:.85rem;border:1px solid #ccc;border-radius:4px">
+      <button class="btn btn-sm btn-danger" onclick="_removePwaShortcut(${idx})" style="padding:.3rem .6rem">✕</button>
+    </div>
+  `).join("");
+}
+
+function _pwaShortcutChange(idx, field, value) {
+  if (_pwaShortcuts[idx]) _pwaShortcuts[idx][field] = value;
+}
+
+function _removePwaShortcut(idx) {
+  _pwaShortcuts.splice(idx, 1);
+  _renderPwaShortcutsList();
+}
+
+function addPwaShortcut() {
+  const opts = _allFuenteOptions();
+  const first = opts[0] || { fuente: "amex", label: "AMEX" };
+  _pwaShortcuts.push({ fuente: first.fuente, label: first.label });
+  _renderPwaShortcutsList();
+}
+
+async function savePwaShortcuts() {
+  const res = await fetch(`${BASE}/api/config/pwa-shortcuts`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(_pwaShortcuts),
+  });
+  if (res.ok) showToast("Shortcuts guardados. Recargá la PWA para verlos.", "ok", 4000);
+  else        showToast("Error al guardar shortcuts.", "err");
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

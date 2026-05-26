@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, PlainTextResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -73,9 +73,62 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/manifest.json")
-async def serve_manifest():
-    """PWA manifest — served from root so scope covers the whole app."""
-    return FileResponse("static/manifest.json", media_type="application/manifest+json")
+async def serve_manifest(request: Request):
+    """PWA manifest dinámico — incluye shortcuts del usuario si está logueado."""
+    shortcuts = []
+    user = request.session.get("user")
+    if user and user.get("email"):
+        try:
+            from user_config import read_user_config
+            cfg = read_user_config()
+            for sc in cfg.get("pwa_shortcuts", []):
+                fuente = sc.get("fuente", "")
+                label  = sc.get("label", fuente)
+                if fuente:
+                    shortcuts.append({
+                        "name":        label,
+                        "url":         f"/quick?fuente={fuente}",
+                        "description": f"Cargar gasto {label}",
+                    })
+        except Exception:
+            pass
+
+    manifest = {
+        "name":             "Gastos",
+        "short_name":       "Gastos",
+        "description":      "Gestor de gastos de tarjetas",
+        "start_url":        "/",
+        "display":          "standalone",
+        "background_color": "#16213e",
+        "theme_color":      "#16213e",
+        "icons": [
+            {
+                "src":     "/static/icono-sb.png",
+                "sizes":   "1024x1024",
+                "type":    "image/png",
+                "purpose": "any maskable",
+            },
+            {
+                "src":   "/static/icono-sb.svg",
+                "sizes": "any",
+                "type":  "image/svg+xml",
+            },
+        ],
+    }
+    if shortcuts:
+        manifest["shortcuts"] = shortcuts
+
+    return JSONResponse(manifest, media_type="application/manifest+json")
+
+
+@app.get("/quick")
+async def serve_quick(request: Request):
+    """Formulario rápido de carga de gastos (abierto desde shortcuts PWA)."""
+    user = request.session.get("user")
+    if not user:
+        prefix = request.headers.get("X-Ingress-Path", "")
+        return _redirect(request, "/auth/login")
+    return FileResponse("static/quick.html")
 
 
 @app.get("/sw.js")

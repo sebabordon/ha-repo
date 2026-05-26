@@ -39,6 +39,16 @@ class ImportarRequest(BaseModel):
     categoria: Optional[str] = None
 
 
+class MovimientoRapidoRequest(BaseModel):
+    fuente: str
+    fecha: str
+    descripcion: str = ""
+    monto: float
+    moneda: str = "ARS"
+    categoria: Optional[str] = None
+    tipo: str = "egreso"  # "egreso" | "ingreso"
+
+
 # ── Estado de scrapers ─────────────────────────────────────────────────────────
 
 @router.get("/scrapers/status")
@@ -222,6 +232,60 @@ def ignorar_pendiente(raw_id: int, request: Request):
         raise HTTPException(404, f"Movimiento raw {raw_id} no encontrado")
     update_movimiento_raw(raw_id, "ignored")
     return {"ok": True}
+
+
+# ── Movimiento rápido (desde shortcut PWA) ───────────────────────────────────
+
+@router.post("/movimientos-rapidos")
+def crear_movimiento_rapido(body: MovimientoRapidoRequest, request: Request):
+    """
+    Inserta un movimiento en movimientos_raw con estado='new', corre
+    conciliación y, si queda 'unmatched', lo importa automáticamente a gastos.
+    """
+    require_auth(request)
+    from scrapers_db import insert_movimiento_raw_single, get_movimiento_raw, importar_a_gastos
+    from conciliacion import run_conciliation
+
+    # Signo: egreso = positivo, ingreso = negativo
+    monto = abs(body.monto) if body.tipo == "egreso" else -abs(body.monto)
+    desc  = body.descripcion.strip() or f"Movimiento {body.fuente}"
+
+    raw_data: dict = {"manual_quick": True}
+    if body.categoria:
+        raw_data["categoria"] = body.categoria
+
+    raw_id = insert_movimiento_raw_single({
+        "fuente":      body.fuente,
+        "fecha":       body.fecha,
+        "descripcion": desc,
+        "monto":       monto,
+        "moneda":      body.moneda,
+        "raw_data":    raw_data,
+    })
+
+    # Conciliar — puede matchear con un PDF ya importado
+    run_conciliation(fuente=body.fuente)
+
+    # Si sigue sin match, importar directamente a gastos
+    gasto_id = None
+    raw = get_movimiento_raw(raw_id)
+    if raw and raw["estado"] == "unmatched":
+        cat = body.categoria
+        if not cat:
+            try:
+                from categorizer import categorize
+                cat = categorize(desc)
+            except Exception:
+                pass
+        gasto_id = importar_a_gastos(raw_id, categoria=cat)
+        if gasto_id and cat:
+            try:
+                from db import update_categoria
+                update_categoria(gasto_id, cat)
+            except Exception:
+                pass
+
+    return {"ok": True, "raw_id": raw_id, "gasto_id": gasto_id}
 
 
 # ── Conciliación manual ────────────────────────────────────────────────────────

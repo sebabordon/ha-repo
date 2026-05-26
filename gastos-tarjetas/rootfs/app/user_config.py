@@ -22,6 +22,7 @@ _DEFAULT_CONFIG: dict = {
         "mercadopago": "Titular",
     },
     "reglas_usuario": [],
+    "pwa_shortcuts": [],
 }
 
 
@@ -38,6 +39,8 @@ def read_user_config() -> dict:
                 data["fuente_usuario"] = dict(_DEFAULT_CONFIG["fuente_usuario"])
             if "reglas_usuario" not in data:
                 data["reglas_usuario"] = []
+            if "pwa_shortcuts" not in data:
+                data["pwa_shortcuts"] = []
             return data
         except Exception:
             pass

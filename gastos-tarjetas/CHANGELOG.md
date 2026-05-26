@@ -1,3 +1,13 @@
+## 0.3.6
+
+- **PWA Shortcuts — formulario rápido de gastos**: desde iOS/Android, al mantener presionado el ícono de la app instalada aparecen shortcuts configurables por el usuario. Cada shortcut abre `/quick?fuente=<fuente>`, una página standalone ultra-simple con campo de monto numérico (teclado decimal en iOS), fecha pre-completada con hoy, selector de categoría, descripción opcional y tipo egreso/ingreso.
+- **Carga rápida con conciliación automática**: al guardar, el movimiento se inserta en `movimientos_raw` con `estado='new'` y se corre la conciliación. Si matchea con un PDF ya importado queda vinculado; si es nuevo (unmatched) se importa automáticamente a `gastos` con la categoría elegida.
+- **Nuevo helper `scrapers_db.insert_movimiento_raw_single`**: inserta un único movimiento y devuelve su ID — necesario para el follow-up post-conciliación del formulario rápido.
+- **Nuevo endpoint `POST /api/movimientos-rapidos`**: recibe `{fuente, fecha, descripcion, monto, moneda, categoria, tipo}`, ejecuta el flujo completo inserción → conciliación → auto-importación si corresponde.
+- **Manifest dinámico**: `/manifest.json` ahora se genera server-side. Si el usuario está logueado incluye sus shortcuts en el campo `shortcuts` del manifest; si no, devuelve el manifest base sin shortcuts.
+- **Configuración de shortcuts en la UI**: nueva sección "Shortcuts de la PWA" al final de Config → Interfaz. Permite agregar, renombrar y eliminar shortcuts; las fuentes disponibles incluyen bancos conocidos y cuentas manuales del usuario. Guardado en `user_config.json` del usuario.
+- **Nueva clave `pwa_shortcuts` en `user_config.json`**: lista de `{fuente, label}` que define los shortcuts del manifest. Retrocompatible — si no existe se asume lista vacía.
+
 ## 0.3.5
 
 - **Credenciales de scrapers en la UI**: nuevo sub-tab "Scrapers" en Config. Cada banco (AMEX, BBVA, Galicia, MercadoPago) tiene su propia card con toggle habilitado/deshabilitado, campos de credenciales, hora de ejecución diaria y botones de acción (Guardar, Ejecutar ahora, Borrar sesión). Para Galicia muestra además el área de código TOTP.
