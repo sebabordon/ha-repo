@@ -1,3 +1,9 @@
+## 0.3.6.1
+
+- **Fix 422 en guardar shortcuts**: `PUT /api/config/pwa-shortcuts` fallaba con 422 porque FastAPI no infiere JSON body para parámetros `list`; corregido con `Body(...)`.
+- **Shortcuts al tope del tab Interfaz**: la sección "Shortcuts de la PWA" ahora aparece al principio del sub-tab, sin necesidad de scrollear.
+- **Moneda automática en formulario rápido**: `/quick` llama a `/api/cuentas` y si la cuenta tiene moneda fija (ARS o USD) oculta el selector; para fuentes de scraper o cuentas MULTI lo mantiene visible.
+
 ## 0.3.6
 
 - **PWA Shortcuts — formulario rápido de gastos**: desde iOS/Android, al mantener presionado el ícono de la app instalada aparecen shortcuts configurables por el usuario. Cada shortcut abre `/quick?fuente=<fuente>`, una página standalone ultra-simple con campo de monto numérico (teclado decimal en iOS), fecha pre-completada con hoy, selector de categoría, descripción opcional y tipo egreso/ingreso.
