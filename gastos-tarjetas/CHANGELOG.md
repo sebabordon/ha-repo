@@ -1,3 +1,9 @@
+## 0.3.4
+
+- **Scraper AMEX — implementación real**: reemplaza el stub anterior con lógica completa calibrada contra los HTML reales del portal (`samples/Amex Table.html`). Implementa `check_session` (navega al portal legacy y verifica `div#middleContentHeader`), `do_login` (maneja el flow React con soporte para pantallas de usuario/contraseña separadas), y `scrape` (parsea las dos tarjetas por sorted_index 0/1 y las secciones `txnsCard{N}` por cardholder).
+- **Scraper AMEX — parser de tabla**: extrae fecha desde texto DD-MM-YYYY o desde el timestamp en ms del atributo `id` de la celda; detecta filas ARS vs USD por la clase `dollarText` en el `<tr>`; mapea las 6 columnas de la tabla (ARS pagos/cargos + USD pagos/cargos) a `monto` positivo (egreso) o negativo (crédito); nuevo helper `_parse_usd_amount` para el formato argentino `U$S 1.234,56`.
+- **Scraper AMEX — saldo**: lee `td#colOSBalance` para extraer saldo ARS y USD del período actual.
+
 ## 0.3.3
 
 - **Fix build definitivo — reemplazo Playwright → Selenium**: la causa raíz era que Playwright solo publica wheels `manylinux_2_17_aarch64` (glibc), incompatibles con Alpine Linux (musl libc). No existe wheel de Playwright para musllinux. Selenium es `py3-none-any` (pure Python) y usa el ChromeDriver del sistema (`apk add chromium-chromedriver`), sin dependencias de plataforma.

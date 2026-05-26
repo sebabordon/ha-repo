@@ -1,19 +1,54 @@
 """
 Scraper AMEX Argentina — Selenium.
 
-Un login → dos tarjetas (Platinum Credit Card + Platinum Card) → fuente 'amex'.
-Sin OTP. El campo `tarjeta` en movimientos_raw distingue cuál es cuál.
+Flujo:
+  1. Login en www.americanexpress.com/es-ar/account/login  (React SPA)
+  2. Navegar al portal legacy global.americanexpress.com   (JSP server-side)
+  3. Para cada producto de tarjeta (sorted_index 0 y 1):
+       • Cargar la página de movimientos
+       • Parsear secciones txnsCard0 / txnsCard1 / txnsCard2  (por cardholder)
+       • Extraer fecha, descripción, monto, moneda
+
+Estructura de la tabla de movimientos (ver samples/Amex Table.html):
+  col 0 — fecha          <td id="{timestamp_ms}" class="inline_trans3">
+  col 1 — descripción    <td class='desc'>
+  col 2 — ARS pagos      <td class='amountPadding ar_bgroundcolor'>
+  col 3 — ARS cargos     <td class='amountPadding'>
+  col 4 — USD pagos      <td class='amountPadding ar_bgroundcolor'>
+  col 5 — USD cargos     <td class='amountPadding'>
+
+Filas en USD tienen la clase CSS adicional 'dollarText' en el <tr>.
 """
 
 import logging
+import re
 import time
+from datetime import datetime, timezone
 
 from .base import BaseScraper, MovimientoRaw, ScraperResult
 
 logger = logging.getLogger(__name__)
 
 _LOGIN_URL = "https://www.americanexpress.com/es-ar/account/login"
-_ACCOUNT   = "https://www.americanexpress.com/es-ar/account/activity"
+
+_ACCOUNT_SUMMARY = (
+    "https://global.americanexpress.com/myca/intl/acctsumm/canlac/"
+    "accountSummary.do?request_type=&Face=es_AR"
+)
+
+_STATEMENT_URL = (
+    "https://global.americanexpress.com/myca/intl/estatement/canlac/"
+    "statement.do?request_type=&Face=es_AR&BPIndex=0&sorted_index={idx}"
+)
+
+# sorted_index → código interno de tarjeta (almacenado en movimientos_raw.tarjeta)
+_CARD_PRODUCTS = [
+    {"idx": "0", "tarjeta": "platinum_card",   "nombre": "The Platinum Card"},
+    {"idx": "1", "tarjeta": "platinum_credit", "nombre": "The Platinum Credit Card"},
+]
+
+# Non-breaking space que Selenium devuelve cuando el HTML tiene &nbsp;
+_NBSP = "\xa0"
 
 
 class AmexScraper(BaseScraper):
@@ -21,100 +56,314 @@ class AmexScraper(BaseScraper):
     nombre       = "AMEX Argentina"
     login_origin = "https://www.americanexpress.com"
 
-    # Nombres de tarjeta tal como aparecen en el portal AMEX
-    # TODO: verificar strings exactos en el portal real
-    _TARJETAS = ["Platinum Credit Card", "Platinum Card"]
+    # ── Verificación de sesión ────────────────────────────────────────────────
 
     def check_session(self, driver) -> bool:
+        """
+        Navega al portal legacy. Si hay sesión activa llega a la página de
+        account summary (div#middleContentHeader). Si no, redirige al login.
+        """
         try:
-            driver.get(_ACCOUNT)
+            driver.get(_ACCOUNT_SUMMARY)
             time.sleep(3)
-            # TODO: selector de elemento que solo aparece logueado
-            el = self.find(driver,
-                "[data-module-name='axp-member-greeting'], "
-                ".user-account-module, [data-testid='axp-greeting'], "
-                ".account-summary"
+            el = self.find(
+                driver,
+                "div#middleContentHeader, div#summaryWrap, "
+                "select#cardAccount, div#leftNav",
             )
             return el is not None
         except Exception as exc:
-            logger.debug("[amex] check_session: %s", exc)
+            logger.debug("[amex] check_session error: %s", exc)
             return False
 
-    def do_login(self, driver, config: dict) -> None:
-        driver.get(_LOGIN_URL)
-        time.sleep(2)
+    # ── Login ─────────────────────────────────────────────────────────────────
 
-        # ── Usuario ────────────────────────────────────────────────────────────
-        # TODO: verificar selector
-        user_el = self.wait_for(driver,
-            "input[id='eliloUserID'], input[name='login'], "
-            "input[type='email'], input[autocomplete='username']",
-            timeout=15,
+    def do_login(self, driver, config: dict) -> None:
+        """
+        Login en la SPA React de AMEX AR.
+
+        La página renderiza los inputs ~2-3 s después de la carga inicial.
+        Algunos flows muestran usuario y contraseña en pantallas separadas
+        (botón «Continuar» entre ambas); este código lo maneja.
+        """
+        driver.get(_LOGIN_URL)
+
+        # ── Usuario ───────────────────────────────────────────────────────────
+        user_el = self.wait_for(
+            driver,
+            "input#eliloUserID, input[name='eliloUserID'], "
+            "input[type='email'][autocomplete='username']",
+            timeout=20,
         )
         user_el.clear()
         user_el.send_keys(config["usuario"])
         time.sleep(0.5)
 
-        # TODO: ¿AMEX separa usuario y contraseña en dos pantallas?
-        cont = self.find(driver, "button#loginSubmit, input[type='submit']")
-        if cont:
-            try:
-                cont.click()
+        # ── Botón «Continuar» (si el flow separa usuario y contraseña) ────────
+        pwd_visible = self.find(
+            driver,
+            "input#eliloPassword, input[name='eliloPassword'], "
+            "input[type='password']",
+        )
+        if not pwd_visible:
+            cont_btn = self.find(
+                driver,
+                "button#loginSubmit, button[type='submit']",
+            )
+            if cont_btn:
+                cont_btn.click()
                 time.sleep(2)
-            except Exception:
-                pass
 
-        # ── Contraseña ─────────────────────────────────────────────────────────
-        # TODO: verificar selector
-        pass_el = self.wait_for(driver,
-            "input[id='eliloPassword'], input[type='password'], "
-            "input[autocomplete='current-password']",
-            timeout=10,
+        # ── Contraseña ────────────────────────────────────────────────────────
+        pass_el = self.wait_for(
+            driver,
+            "input#eliloPassword, input[name='eliloPassword'], "
+            "input[type='password']",
+            timeout=15,
         )
         pass_el.clear()
         pass_el.send_keys(config["password"])
         time.sleep(0.5)
 
-        # ── Submit ─────────────────────────────────────────────────────────────
-        # TODO: verificar selector
-        submit = self.wait_for(driver, "button#loginSubmit, button[type='submit']", timeout=10)
+        # ── Submit ────────────────────────────────────────────────────────────
+        submit = self.wait_for(
+            driver,
+            "button#loginSubmit, button[type='submit'], input[type='submit']",
+            timeout=10,
+        )
         submit.click()
 
-        # Esperar dashboard post-login
-        # TODO: verificar selector
-        self.wait_for(driver,
-            "[data-module-name='axp-member-greeting'], .account-summary",
-            timeout=30,
+        # ── Esperar portal post-login ─────────────────────────────────────────
+        # Puede llegar al portal legacy (JSP) o al dashboard moderno (React)
+        self.wait_for(
+            driver,
+            # Portal legacy
+            "div#middleContentHeader, div#leftNav, select#cardAccount, "
+            # Dashboard moderno (fallback)
+            "div[data-module-name='axp-account-summary'], "
+            "[data-testid='account-summary']",
+            timeout=45,
         )
-        logger.info("[amex] Login OK")
+        logger.info("[amex] Login exitoso")
+
+    # ── Scrape principal ──────────────────────────────────────────────────────
 
     def scrape(self, driver, config: dict) -> ScraperResult:
         movimientos: list[MovimientoRaw] = []
-        saldos: dict = {}
+        saldo_ars_total = 0.0
+        saldo_usd_total = 0.0
 
-        for tarjeta_nombre in self._TARJETAS:
+        for producto in _CARD_PRODUCTS:
+            url = _STATEMENT_URL.format(idx=producto["idx"])
             try:
-                movs, saldo = self._scrape_tarjeta(driver, tarjeta_nombre)
+                movs, s_ars, s_usd = self._scrape_producto(
+                    driver, url, producto["tarjeta"], producto["nombre"]
+                )
                 movimientos.extend(movs)
-                if saldo is not None:
-                    prev = saldos.get("amex", {})
-                    saldos["amex"] = {"saldo_ars": (prev.get("saldo_ars") or 0.0) + saldo}
+                saldo_ars_total += s_ars
+                saldo_usd_total += s_usd
             except Exception as exc:
-                logger.error("[amex] Error scrapeando '%s': %s", tarjeta_nombre, exc)
+                logger.error(
+                    "[amex] Error scrapeando '%s': %s", producto["nombre"], exc,
+                    exc_info=True,
+                )
+
+        saldos: dict = {}
+        if saldo_ars_total or saldo_usd_total:
+            saldos["amex"] = {}
+            if saldo_ars_total:
+                saldos["amex"]["saldo_ars"] = saldo_ars_total
+            if saldo_usd_total:
+                saldos["amex"]["saldo_usd"] = saldo_usd_total
 
         return ScraperResult(fuente="amex", movimientos=movimientos, saldos=saldos)
 
-    def _scrape_tarjeta(
-        self, driver, tarjeta_nombre: str
-    ) -> tuple[list[MovimientoRaw], float | None]:
-        """
-        TODO: navegar a la tarjeta y extraer movimientos + saldo.
+    # ── Scrape de un producto de tarjeta ──────────────────────────────────────
 
-        Pasos típicos en AMEX:
-          1. Selector de tarjeta (dropdown o pestañas con nombres/números)
-          2. Navegar a sección "Actividad reciente"
-          3. Saldo (total a pagar del período actual)
-          4. Filas ARS y USD (AMEX suele separar los cargos por moneda)
+    def _scrape_producto(
+        self,
+        driver,
+        url: str,
+        tarjeta: str,
+        nombre: str,
+    ) -> tuple[list[MovimientoRaw], float, float]:
         """
-        logger.warning("[amex] _scrape_tarjeta('%s') — TODO: implementar", tarjeta_nombre)
-        return [], None
+        Carga la página de movimientos para un sorted_index y parsea todas las
+        secciones txnsCard.
+
+        Devuelve (movimientos, saldo_ars, saldo_usd).
+        """
+        from selenium.webdriver.common.by import By
+
+        driver.get(url)
+
+        # Esperar que cargue la sección de transacciones
+        self.wait_for(driver, "div#txnsSection, div#statementWrap", timeout=25)
+        time.sleep(1)   # breve pausa para que JS termine de actualizar el DOM
+
+        movimientos: list[MovimientoRaw] = []
+
+        # ── Saldo actual ──────────────────────────────────────────────────────
+        saldo_ars = 0.0
+        saldo_usd = 0.0
+        try:
+            saldo_el = self.find(driver, "td#colOSBalance")
+            if saldo_el:
+                for line in saldo_el.text.strip().split("\n"):
+                    line = line.strip()
+                    if line.startswith("$"):
+                        saldo_ars = abs(self.parse_amount(line))
+                    elif "U$S" in line or "U$" in line:
+                        saldo_usd = abs(self._parse_usd_amount(line))
+        except Exception as exc:
+            logger.warning("[amex] No se pudo leer saldo de %s: %s", nombre, exc)
+
+        # ── Nombres de cardholders desde el selector ──────────────────────────
+        cardholder_map: dict[str, str] = {}
+        try:
+            for opt in driver.find_elements(By.CSS_SELECTOR, "#cardAccount option"):
+                val = opt.get_attribute("value") or ""
+                if val not in ("", "all"):
+                    cardholder_map[val] = opt.text.strip()
+        except Exception:
+            pass
+
+        # ── Secciones por cardholder ──────────────────────────────────────────
+        card_divs = driver.find_elements(By.CSS_SELECTOR, "div[id^='txnsCard']")
+        for card_div in card_divs:
+            div_id    = card_div.get_attribute("id") or ""
+            card_idx  = div_id.replace("txnsCard", "")
+            cardholder = cardholder_map.get(card_idx, f"card_{card_idx}")
+
+            rows = card_div.find_elements(
+                By.CSS_SELECTOR, "tr.tableStandardText.pagebreak"
+            )
+            for row in rows:
+                mov = self._parse_row(row, tarjeta, cardholder)
+                if mov:
+                    movimientos.append(mov)
+
+        logger.info(
+            "[amex] %s (%s) → %d movimientos, saldo ARS=%.2f USD=%.2f",
+            nombre, tarjeta, len(movimientos), saldo_ars, saldo_usd,
+        )
+        return movimientos, saldo_ars, saldo_usd
+
+    # ── Parseo de fila de transacción ─────────────────────────────────────────
+
+    def _parse_row(
+        self, row, tarjeta: str, cardholder: str
+    ) -> MovimientoRaw | None:
+        """
+        Parsea una fila <tr class='tableStandardText pagebreak'>.
+
+        Columnas (0-indexed):
+          0 → fecha      (texto DD-MM-YYYY, o id = timestamp en ms)
+          1 → descripción
+          2 → ARS pago   (crédito → monto negativo)
+          3 → ARS cargo  (egreso → monto positivo)
+          4 → USD pago   (crédito → monto negativo)
+          5 → USD cargo  (egreso → monto positivo)
+
+        Las filas USD llevan la clase CSS 'dollarText' en el <tr>.
+        """
+        from selenium.webdriver.common.by import By
+
+        try:
+            cells = row.find_elements(By.TAG_NAME, "td")
+            if len(cells) < 6:
+                return None
+
+            # ── Fecha ─────────────────────────────────────────────────────────
+            fecha_text = cells[0].text.strip()
+            if fecha_text:
+                fecha_iso = self.parse_date_ar(fecha_text)
+            else:
+                # Fallback: el atributo id de la celda es un timestamp en ms
+                ts_attr = cells[0].get_attribute("id") or ""
+                if ts_attr.isdigit():
+                    dt = datetime.fromtimestamp(int(ts_attr) / 1000, tz=timezone.utc)
+                    fecha_iso = dt.strftime("%Y-%m-%d")
+                else:
+                    return None
+            if not fecha_iso:
+                return None
+
+            # ── Descripción ───────────────────────────────────────────────────
+            desc = cells[1].text.strip().replace(_NBSP, " ").strip()
+            if not desc:
+                return None
+
+            # ── Moneda y monto ────────────────────────────────────────────────
+            is_dollar = "dollarText" in (row.get_attribute("class") or "")
+
+            if is_dollar:
+                txt_pago  = _clean(cells[4].text)
+                txt_cargo = _clean(cells[5].text)
+                if txt_cargo:
+                    monto  =  abs(self._parse_usd_amount(txt_cargo))   # egreso
+                elif txt_pago:
+                    monto  = -abs(self._parse_usd_amount(txt_pago))    # crédito
+                else:
+                    return None
+                moneda = "USD"
+            else:
+                txt_pago  = _clean(cells[2].text)
+                txt_cargo = _clean(cells[3].text)
+                if txt_cargo:
+                    monto  =  abs(self.parse_amount(txt_cargo))        # egreso
+                elif txt_pago:
+                    monto  = -abs(self.parse_amount(txt_pago))         # crédito
+                else:
+                    return None
+                moneda = "ARS"
+
+            return MovimientoRaw(
+                fuente      = "amex",
+                fecha       = fecha_iso,
+                descripcion = desc,
+                monto       = monto,
+                moneda      = moneda,
+                tarjeta     = tarjeta,
+                raw_data    = {"cardholder": cardholder},
+            )
+
+        except Exception as exc:
+            logger.warning("[amex] Error parseando fila: %s", exc)
+            return None
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _parse_usd_amount(text: str) -> float:
+        """
+        Convierte importes USD del portal AMEX a float.
+
+        El portal usa la notación argentina 'U$S' (no 'US$'):
+          'U$S 20,00'      →  20.0
+          'U$S 5.469,31'   →  5469.31
+          'U$S 897,66'     →  897.66
+        """
+        if not text:
+            return 0.0
+        # Remover prefijo de moneda y espacios
+        t = re.sub(r"U\$S\s*|US\$\s*|U\$\s*|\$\s*", "", text.strip(),
+                   flags=re.IGNORECASE).strip()
+        # Formato argentino: punto = miles, coma = decimal
+        if "." in t and "," in t:
+            t = t.replace(".", "").replace(",", ".")
+        elif "," in t:
+            t = t.replace(",", ".")
+        try:
+            return float(t)
+        except ValueError:
+            return 0.0
+
+
+# ── Helpers de módulo ─────────────────────────────────────────────────────────
+
+def _clean(text: str) -> str:
+    """
+    Limpia el texto de una celda: elimina &nbsp; y espacios; devuelve '' si vacío.
+    """
+    return text.replace(_NBSP, "").strip() if text else ""
