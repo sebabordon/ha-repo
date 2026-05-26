@@ -298,6 +298,7 @@
         <button class="cfg-tab" data-cfgtab="reglas">Reglas</button>
         <button class="cfg-tab" data-cfgtab="personas">Personas</button>
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
+        <button class="cfg-tab" data-cfgtab="scrapers">Scrapers</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
         <button class="cfg-tab cfg-tab-danger" data-cfgtab="borrar">⚠ Borrar</button>
       </div>
@@ -401,6 +402,19 @@
           Las <strong>manuales</strong> permiten cargar movimientos a mano.
         </p>
         <div id="cuentas-list"></div>
+      </div>
+
+      <!-- ── Sub-tab: Scrapers ─────────────────────────────────────── -->
+      <div id="cfg-tab-scrapers" class="cfg-tab-content">
+        <p class="rules-hint" style="margin-bottom:1rem">
+          Configurá las credenciales de acceso para cada banco. Los datos se guardan
+          en tu directorio de usuario en el servidor. Las contraseñas <strong>no se
+          muestran</strong> una vez guardadas; para cambiarlas escribí la nueva y guardá.
+        </p>
+        <div id="scrapers-config-list">
+          <!-- Generado por JS: renderScrapersConfig() -->
+          <p style="color:var(--text-muted);font-style:italic">Cargando…</p>
+        </div>
       </div>
 
       <!-- ── Sub-tab: Interfaz ─────────────────────────────────────── -->

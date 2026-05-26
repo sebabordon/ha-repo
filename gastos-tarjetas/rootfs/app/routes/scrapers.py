@@ -9,7 +9,11 @@ POST /api/scrapers/pendientes/{id}/importar  → importar a gastos
 POST /api/scrapers/pendientes/{id}/ignorar   → marcar como ignored
 POST /api/scrapers/galicia/session-setup  → iniciar flujo TOTP Galicia
 POST /api/scrapers/galicia/totp           → enviar código TOTP
-GET  /api/scrapers/config-status          → si scrapers.yaml existe y tiene config
+GET  /api/scrapers/config-status          → si hay scrapers configurados
+GET  /api/scrapers/credentials            → credenciales del usuario (passwords ocultos)
+PUT  /api/scrapers/credentials/{banco}    → guardar/actualizar credenciales de un banco
+GET  /api/scrapers/banks                  → definición de bancos (campos, labels, etc.)
+POST /api/scrapers/scheduler/reload       → recargar el scheduler tras guardar credenciales
 """
 
 import logging
@@ -59,12 +63,81 @@ def scrapers_jobs(request: Request):
 @router.get("/scrapers/config-status")
 def scrapers_config_status(request: Request):
     require_auth(request)
-    from scrapers_config import is_configured, get_all_enabled_scrapers
-    enabled = get_all_enabled_scrapers()
+    from scraper_credentials import find_all_enabled_configs, creds_for_api
+    configs  = find_all_enabled_configs()
+    enabled  = list({e["banco"] for e in configs})
+    api_data = creds_for_api()   # usa el data_dir del usuario logueado
+    user_enabled = [b for b, v in api_data.items() if v.get("enabled")]
     return {
-        "configured": is_configured(),
-        "bancos_habilitados": list(enabled.keys()),
+        "configured":        bool(enabled or user_enabled),
+        "bancos_habilitados": user_enabled,
     }
+
+
+# ── Credenciales por usuario ───────────────────────────────────────────────────
+
+@router.get("/scrapers/banks")
+def get_banks_definition(request: Request):
+    """Devuelve la definición estática de bancos (campos, labels, etc.)."""
+    require_auth(request)
+    from scraper_credentials import BANKS
+    # Devolver solo metadatos, sin datos de usuario
+    return {
+        banco: {
+            "nombre": defn["nombre"],
+            "schedule_default": defn["schedule"],
+            "totp": defn.get("totp", False),
+            "campos": defn["campos"],
+        }
+        for banco, defn in BANKS.items()
+    }
+
+
+@router.get("/scrapers/credentials")
+def get_credentials(request: Request):
+    """
+    Devuelve la configuración de scrapers del usuario logueado.
+    Los campos de tipo 'password' siempre vienen vacíos; se indica si hay
+    una contraseña guardada con 'has_password': true.
+    """
+    require_auth(request)
+    from scraper_credentials import creds_for_api
+    return creds_for_api()
+
+
+@router.put("/scrapers/credentials/{banco}")
+def put_credentials(banco: str, body: dict, request: Request):
+    """
+    Guarda/actualiza las credenciales de un banco para el usuario logueado.
+    Si un campo de contraseña viene vacío, se mantiene el valor existente.
+    Después de guardar recarga el scheduler para aplicar los cambios.
+    """
+    require_auth(request)
+    from scraper_credentials import BANKS, set_bank_config
+    from scraper_scheduler import reload_scheduler
+
+    if banco not in BANKS:
+        raise HTTPException(400, f"Banco desconocido: {banco}. Opciones: {list(BANKS)}")
+
+    # Validar que enabled sea bool y schedule tenga formato HH:MM
+    if "schedule" in body:
+        import re
+        if not re.match(r"^\d{1,2}:\d{2}$", str(body["schedule"])):
+            raise HTTPException(400, "schedule debe tener formato HH:MM")
+
+    set_bank_config(banco, body)
+    reload_scheduler()
+
+    return {"ok": True, "banco": banco}
+
+
+@router.post("/scrapers/scheduler/reload")
+def scheduler_reload(request: Request):
+    """Recarga el scheduler (por si se editó scrapers.yaml a mano)."""
+    require_auth(request)
+    from scraper_scheduler import reload_scheduler
+    reload_scheduler()
+    return {"ok": True}
 
 
 # ── Trigger manual ─────────────────────────────────────────────────────────────
@@ -162,40 +235,47 @@ def run_conciliacion(request: Request, fuente: Optional[str] = None):
     return result
 
 
-# ── Galicia: flujo TOTP ────────────────────────────────────────────────────────
+# ── Flujo TOTP (Galicia y cualquier banco con totp=True) ─────────────────────
 
-@router.post("/scrapers/galicia/session-setup")
-async def galicia_session_setup(request: Request):
+@router.post("/scrapers/{banco}/session-setup")
+async def banco_session_setup(banco: str, request: Request):
     """
-    Inicia el flujo interactivo de sesión Galicia.
-    El browser hace login hasta la pantalla de TOTP y espera.
-    Devuelve request_id para enviarlo con el código.
+    Inicia el flujo interactivo de sesión con TOTP para un banco.
+    Actualmente solo Galicia lo usa, pero la arquitectura lo soporta genéricamente.
     """
     require_auth(request)
-    from scrapers_config import get_scraper_config
-    config = get_scraper_config("galicia")
+    from scraper_credentials import get_bank_config, BANKS
+    bank_def = BANKS.get(banco, {})
+    if not bank_def.get("totp"):
+        raise HTTPException(400, f"{banco} no usa flujo TOTP interactivo.")
+
+    config = get_bank_config(banco)
     if not config:
-        raise HTTPException(400, "Galicia no está habilitado en scrapers.yaml")
+        raise HTTPException(400, f"{banco} no está habilitado. Configurá las credenciales primero.")
 
-    from scrapers.galicia import GaliciaScraper
-    scraper    = GaliciaScraper()
+    # Cargar el scraper correspondiente
+    from scraper_scheduler import _load_scraper
+    scraper = _load_scraper(banco)
+    if not hasattr(scraper, "start_session_setup"):
+        raise HTTPException(500, f"El scraper de {banco} no implementa start_session_setup.")
+
     request_id = await scraper.start_session_setup(config)
-
     return {
         "status":     "waiting_totp",
         "request_id": request_id,
-        "message":    "El browser está esperando el código TOTP. "
-                      "Revisá tu mail o app de Galicia y enviá el código.",
+        "message":    "El browser está esperando el código. Ingresalo en la UI.",
     }
 
 
-@router.post("/scrapers/galicia/totp")
-async def galicia_totp(body: TotpRequest, request: Request):
+@router.post("/scrapers/{banco}/totp")
+async def banco_totp(banco: str, body: TotpRequest, request: Request):
     """Envía el código TOTP al browser que está esperando."""
     require_auth(request)
-    from scrapers.galicia import GaliciaScraper
-    scraper = GaliciaScraper()
-    ok      = await scraper.submit_totp_code(body.request_id, body.code)
+    from scraper_scheduler import _load_scraper
+    scraper = _load_scraper(banco)
+    if not hasattr(scraper, "submit_totp_code"):
+        raise HTTPException(500, f"El scraper de {banco} no implementa submit_totp_code.")
+    ok = await scraper.submit_totp_code(body.request_id, body.code)
     if not ok:
         raise HTTPException(404, "No hay sesión pendiente con ese request_id (¿ya expiró?)")
     return {"status": "code_submitted", "message": "Código enviado. La sesión se guardará en segundos."}

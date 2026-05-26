@@ -1,3 +1,13 @@
+## 0.3.5
+
+- **Credenciales de scrapers en la UI**: nuevo sub-tab "Scrapers" en Config. Cada banco (AMEX, BBVA, Galicia, MercadoPago) tiene su propia card con toggle habilitado/deshabilitado, campos de credenciales, hora de ejecución diaria y botones de acción (Guardar, Ejecutar ahora, Borrar sesión). Para Galicia muestra además el área de código TOTP.
+- **Almacenamiento por usuario**: las credenciales se guardan en `{data_dir}/scraper_credentials.json` (en el directorio de cada usuario autenticado). No se necesita más crear `/data/scrapers.yaml` a mano.
+- **Seguridad de contraseñas en la API**: el endpoint GET `/api/scrapers/credentials` nunca devuelve contraseñas; indica si hay una guardada con `has_password: true`. Al hacer PUT, un campo vacío conserva la contraseña existente.
+- **Nuevo módulo `scraper_credentials.py`**: define los campos de cada banco, operaciones de lectura/escritura por usuario, y `find_all_enabled_configs()` que escanea todos los directorios de usuario para el scheduler.
+- **Scheduler actualizado**: lee desde `scraper_credentials.py` (no más `scrapers_config.py`), setea el ContextVar de `userctx` antes de cada job para que las operaciones de DB usen el directorio correcto.
+- **`scrapers_db._find_db_path()`**: simplificado — usa el ContextVar de `userctx` directamente (seteado por el scheduler o por la request HTTP activa).
+- **Endpoints TOTP generalizados**: `/api/scrapers/{banco}/session-setup` y `/api/scrapers/{banco}/totp` reemplazan los hardcodeados de Galicia; cualquier banco con `totp: True` puede usarlos.
+
 ## 0.3.4
 
 - **Scraper AMEX — implementación real**: reemplaza el stub anterior con lógica completa calibrada contra los HTML reales del portal (`samples/Amex Table.html`). Implementa `check_session` (navega al portal legacy y verifica `div#middleContentHeader`), `do_login` (maneja el flow React con soporte para pantallas de usuario/contraseña separadas), y `scrape` (parsea las dos tarjetas por sorted_index 0/1 y las secciones `txnsCard{N}` por cardholder).

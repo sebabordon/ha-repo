@@ -1,16 +1,15 @@
 """
 Acceso directo a la DB para el servicio de scraping (background job).
 
-No usa el ContextVar de userctx porque no hay request HTTP activo.
-Determina la DB correcta buscando la del owner_email configurado en
-scrapers.yaml, o por escaneo de /data/*/gastos.db, o la raíz como fallback.
+Usa el ContextVar de userctx cuando está disponible (jobs con contexto de usuario
+seteado por el scheduler). Si no hay contexto, escanea /data/*/gastos.db como
+fallback para mantener compatibilidad.
 """
 
 import glob
 import json
 import logging
 import os
-import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -23,20 +22,19 @@ _DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 def _find_db_path() -> str:
     """
-    Localiza la DB del usuario propietario.
+    Localiza la DB del usuario activo.
+
     Orden de prioridad:
-    1. scrapers.yaml → owner_email → /data/{safe_email}/gastos.db
-    2. primer subdirectorio de /data/ que tenga gastos.db
+    1. ContextVar de userctx (seteado por el scheduler o por requests HTTP)
+    2. Primer subdirectorio de /data/ que tenga gastos.db
     3. /data/gastos.db (fallback raíz)
     """
+    # Si hay un contexto de usuario activo, usarlo directamente
     try:
-        from scrapers_config import get_owner_email
-        email = get_owner_email()
-        if email:
-            safe = re.sub(r"[^a-zA-Z0-9._-]", "_", email.lower())
-            candidate = os.path.join(_DATA_DIR, safe, "gastos.db")
-            if os.path.exists(candidate):
-                return candidate
+        from userctx import get_data_dir, _user_data_dir
+        data_dir = _user_data_dir.get()
+        if data_dir:
+            return os.path.join(data_dir, "gastos.db")
     except Exception:
         pass
 

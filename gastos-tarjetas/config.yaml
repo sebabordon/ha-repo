@@ -1,6 +1,6 @@
 name: "Gastos"
 description: "Parsea y categoriza gastos de AMEX, Mastercard, Visa y MercadoLibre Argentina"
-version: "0.3.4"
+version: "0.3.5"
 slug: "gastos_tarjetas"
 init: false
 arch:

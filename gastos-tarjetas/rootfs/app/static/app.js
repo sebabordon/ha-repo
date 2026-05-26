@@ -123,7 +123,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    loadCharts();
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); renderUiSettings(); }
+    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); renderUiSettings(); renderScrapersConfig(); }
   });
 });
 
@@ -137,7 +137,10 @@ function switchCfgTab(id) {
   if (panel) panel.classList.add("active");
 }
 document.querySelectorAll(".cfg-tab").forEach(tab => {
-  tab.addEventListener("click", () => switchCfgTab(tab.dataset.cfgtab));
+  tab.addEventListener("click", () => {
+    switchCfgTab(tab.dataset.cfgtab);
+    if (tab.dataset.cfgtab === "scrapers") renderScrapersConfig();
+  });
 });
 
 // ── Config inner-accordion (expandable sections within sub-tabs) ──────────────
@@ -3210,6 +3213,268 @@ document.getElementById("btn-apply-user-rules")?.addEventListener("click", async
     }
   } finally { btn.disabled = false; btn.textContent = "Reaplicar a todos"; }
 });
+
+// ── Scrapers config ───────────────────────────────────────────────────────────
+// Estado local de las credenciales (se carga desde la API, nunca incluye passwords reales)
+let _scraperCreds = {};
+let _scraperStatuses = {};
+
+async function renderScrapersConfig() {
+  const container = document.getElementById("scrapers-config-list");
+  if (!container) return;
+
+  // Cargar credenciales y estado en paralelo
+  try {
+    const [credsRes, statusRes] = await Promise.all([
+      fetch(`${BASE}/api/scrapers/credentials`),
+      fetch(`${BASE}/api/scrapers/status`),
+    ]);
+    _scraperCreds    = credsRes.ok    ? await credsRes.json()    : {};
+    const statuses   = statusRes.ok   ? await statusRes.json()   : [];
+    _scraperStatuses = Object.fromEntries(statuses.map(s => [s.fuente, s]));
+  } catch (e) {
+    container.innerHTML = `<p style="color:#b91c1c">Error cargando configuración: ${escHtml(e.message)}</p>`;
+    return;
+  }
+
+  container.innerHTML = "";
+  for (const [banco, data] of Object.entries(_scraperCreds)) {
+    container.appendChild(_buildScraperCard(banco, data));
+  }
+}
+
+function _buildScraperCard(banco, data) {
+  const st      = _scraperStatuses[banco] || {};
+  const enabled = data.enabled || false;
+
+  // ── Badge de estado ──────────────────────────────────────────────────
+  const badgeClass = {
+    ok:      "scraper-status-ok",
+    error:   "scraper-status-error",
+    running: "scraper-status-running",
+    session_expired: "scraper-status-error",
+  }[st.estado] || "scraper-status-idle";
+
+  const badgeText = {
+    ok:              "✓ OK",
+    error:           "✗ Error",
+    running:         "⟳ Corriendo",
+    session_expired: "⚠ Sesión expirada",
+    idle:            "Sin correr",
+  }[st.estado] || "Sin correr";
+
+  // ── Campos ─────────────────────────────────────────────────────────────
+  const fieldsHtml = (data.campos || []).map(campo => {
+    const val = (data[campo.key] || "");
+    const hasPwd = campo.type === "password" && data[`has_${campo.key}`];
+    const placeholder = campo.type === "password"
+      ? (hasPwd ? "••••••••  (guardada — dejá vacío para no cambiar)" : "Nueva contraseña")
+      : (campo.hint ? campo.hint : "");
+    const hintHtml = campo.hint && campo.type !== "password"
+      ? `<span class="field-hint">${escHtml(campo.hint)}</span>` : "";
+    const hasPwdHtml = hasPwd
+      ? `<span class="has-pwd-note">✓ Contraseña guardada</span>` : "";
+    return `
+      <div class="scraper-field">
+        <label for="scr-${banco}-${campo.key}">${escHtml(campo.label)}</label>
+        <input id="scr-${banco}-${campo.key}"
+               type="${campo.type === 'password' ? 'password' : 'text'}"
+               value="${campo.type === 'password' ? '' : escHtml(val)}"
+               placeholder="${escHtml(placeholder)}"
+               autocomplete="${campo.type === 'password' ? 'new-password' : 'off'}">
+        ${hintHtml}${hasPwdHtml}
+      </div>`;
+  }).join("");
+
+  // ── TOTP (solo Galicia) ────────────────────────────────────────────────
+  const totpHtml = data.totp ? `
+    <div class="scraper-totp-area" id="totp-area-${banco}">
+      <label>Código de verificación (TOTP / email)</label>
+      <p style="font-size:.82rem;color:#92400e;margin-bottom:.5rem">
+        Primero hacé click en "Iniciar sesión" — el servidor abrirá el browser,
+        completará usuario y contraseña y te pedirá el código de verificación aquí.
+      </p>
+      <div class="scraper-totp-row">
+        <input id="totp-input-${banco}" type="text" maxlength="8"
+               placeholder="123456" inputmode="numeric">
+        <button class="btn btn-sm btn-primary" onclick="submitTotpCode('${banco}')">Enviar código</button>
+      </div>
+      <p id="totp-msg-${banco}" style="font-size:.8rem;margin-top:.4rem"></p>
+    </div>` : "";
+
+  // ── Card completa ──────────────────────────────────────────────────────
+  const card = document.createElement("div");
+  card.className = "scraper-card";
+  card.id = `scraper-card-${banco}`;
+  card.innerHTML = `
+    <div class="scraper-card-header" onclick="_toggleScraperCard('${banco}')">
+      <label class="scraper-toggle" onclick="event.stopPropagation()">
+        <input type="checkbox" id="scr-${banco}-enabled"
+               ${enabled ? "checked" : ""}
+               onchange="_toggleScraperEnabled('${banco}', this.checked)">
+        <span class="scraper-toggle-slider"></span>
+      </label>
+      <span class="scraper-name">${escHtml(data.nombre || banco)}</span>
+      <span class="scraper-status-badge ${badgeClass}">${badgeText}</span>
+      <span style="font-size:.8rem;color:#999;margin-left:auto">▼</span>
+    </div>
+    <div class="scraper-card-body ${enabled ? 'open' : ''}" id="scraper-body-${banco}">
+      <div class="scraper-fields">
+        ${fieldsHtml}
+        <div class="scraper-field">
+          <label for="scr-${banco}-schedule">Hora de ejecución diaria</label>
+          <input id="scr-${banco}-schedule" type="time"
+                 value="${escHtml(data.schedule || '07:00')}">
+        </div>
+      </div>
+      ${totpHtml}
+      <div class="scraper-actions">
+        <button class="btn btn-primary btn-sm" onclick="saveScraperConfig('${banco}')">
+          Guardar
+        </button>
+        <button class="btn btn-sm" onclick="runScraperNow('${banco}')" id="btn-run-${banco}">
+          ▶ Ejecutar ahora
+        </button>
+        ${data.totp ? `<button class="btn btn-sm" onclick="startTotpSetup('${banco}')" id="btn-totp-${banco}">
+          🔑 Iniciar sesión TOTP
+        </button>` : ""}
+        <button class="btn btn-sm" style="color:#b91c1c" onclick="deleteScraperSession('${banco}')">
+          🗑 Borrar sesión
+        </button>
+        <span class="scraper-save-msg" id="save-msg-${banco}"></span>
+      </div>
+      ${st.error_msg ? `<p style="font-size:.8rem;color:#b91c1c;margin-top:.5rem">
+        Último error: ${escHtml(st.error_msg)}</p>` : ""}
+      ${st.ultimo_ok ? `<p style="font-size:.78rem;color:#888;margin-top:.25rem">
+        Último OK: ${escHtml(st.ultimo_ok.replace('T',' ').slice(0,16))}</p>` : ""}
+    </div>`;
+  return card;
+}
+
+function _toggleScraperCard(banco) {
+  const body = document.getElementById(`scraper-body-${banco}`);
+  if (body) body.classList.toggle("open");
+}
+
+function _toggleScraperEnabled(banco, checked) {
+  // Abrir/cerrar el cuerpo de la card según el toggle
+  const body = document.getElementById(`scraper-body-${banco}`);
+  if (body) {
+    if (checked) body.classList.add("open");
+    else body.classList.remove("open");
+  }
+}
+
+async function saveScraperConfig(banco) {
+  const data = _scraperCreds[banco] || {};
+  const campos = data.campos || [];
+
+  // Leer valores del form
+  const body = { enabled: document.getElementById(`scr-${banco}-enabled`)?.checked || false };
+  for (const campo of campos) {
+    const el = document.getElementById(`scr-${banco}-${campo.key}`);
+    if (el) body[campo.key] = el.value;
+  }
+  const schedEl = document.getElementById(`scr-${banco}-schedule`);
+  if (schedEl) body.schedule = schedEl.value;
+
+  const msgEl = document.getElementById(`save-msg-${banco}`);
+  if (msgEl) { msgEl.className = "scraper-save-msg"; msgEl.textContent = ""; }
+
+  try {
+    const res = await fetch(`${BASE}/api/scrapers/credentials/${banco}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
+      throw new Error(err.detail || "Error al guardar");
+    }
+    if (msgEl) { msgEl.className = "scraper-save-msg ok"; msgEl.textContent = "✓ Guardado"; }
+    // Refrescar la tarjeta después de guardar para actualizar has_password
+    setTimeout(renderScrapersConfig, 800);
+  } catch (e) {
+    if (msgEl) { msgEl.className = "scraper-save-msg error"; msgEl.textContent = "✗ " + e.message; }
+  }
+}
+
+async function runScraperNow(banco) {
+  const btn = document.getElementById(`btn-run-${banco}`);
+  if (btn) { btn.disabled = true; btn.textContent = "⟳ Corriendo…"; }
+  try {
+    const res  = await fetch(`${BASE}/api/scrapers/${banco}/run`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`✓ ${banco}: ${data.movimientos ?? 0} movimientos nuevos`, "ok");
+    } else {
+      showToast(`✗ ${banco}: ${data.detail || "Error"}`, "err", 0);
+    }
+    // Refrescar estado
+    setTimeout(renderScrapersConfig, 1000);
+  } catch (e) {
+    showToast(`✗ Error: ${e.message}`, "err", 0);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "▶ Ejecutar ahora"; }
+  }
+}
+
+async function deleteScraperSession(banco) {
+  if (!confirm(`¿Borrar la sesión guardada de ${banco}? Se volverá a hacer login en el próximo run.`)) return;
+  const res  = await fetch(`${BASE}/api/scrapers/${banco}/session`, { method: "DELETE" });
+  const data = await res.json();
+  showToast(data.message || "Sesión eliminada", res.ok ? "ok" : "err");
+}
+
+// ── TOTP (Galicia) ─────────────────────────────────────────────────────────────
+let _totpRequestId = {};
+
+async function startTotpSetup(banco) {
+  const btn = document.getElementById(`btn-totp-${banco}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Iniciando…"; }
+  try {
+    const res  = await fetch(`${BASE}/api/scrapers/${banco}/session-setup`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Error");
+    _totpRequestId[banco] = data.request_id;
+    // Mostrar área de TOTP
+    const area = document.getElementById(`totp-area-${banco}`);
+    if (area) area.classList.add("open");
+    document.getElementById(`totp-input-${banco}`)?.focus();
+    showToast("Browser iniciado — esperando código TOTP", "ok", 5000);
+  } catch (e) {
+    showToast(`✗ ${e.message}`, "err", 0);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🔑 Iniciar sesión TOTP"; }
+  }
+}
+
+async function submitTotpCode(banco) {
+  const code = document.getElementById(`totp-input-${banco}`)?.value?.trim();
+  if (!code) { showToast("Ingresá el código primero", "err"); return; }
+  const requestId = _totpRequestId[banco];
+  if (!requestId) { showToast("Primero iniciá la sesión TOTP", "err"); return; }
+
+  const msgEl = document.getElementById(`totp-msg-${banco}`);
+  try {
+    const res  = await fetch(`${BASE}/api/scrapers/${banco}/totp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: requestId, code }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Error");
+    if (msgEl) { msgEl.style.color = "#166534"; msgEl.textContent = "✓ " + data.message; }
+    // Ocultar área después de éxito
+    setTimeout(() => {
+      const area = document.getElementById(`totp-area-${banco}`);
+      if (area) area.classList.remove("open");
+      delete _totpRequestId[banco];
+    }, 3000);
+  } catch (e) {
+    if (msgEl) { msgEl.style.color = "#b91c1c"; msgEl.textContent = "✗ " + e.message; }
+  }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {

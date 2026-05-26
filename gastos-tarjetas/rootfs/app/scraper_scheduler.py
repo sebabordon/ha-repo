@@ -1,11 +1,15 @@
 """
 Scheduler de scrapers bancarios (APScheduler + asyncio).
 
-Arranca junto con la app FastAPI. Lee scrapers.yaml y programa un job
-diario por cada banco habilitado. También expone funciones para trigger manual.
+Arranca junto con la app FastAPI. Lee las credenciales por usuario desde
+/data/*/scraper_credentials.json y programa un job diario por cada scraper
+habilitado.
+
+Cada job setea el user-context de userctx antes de correr para que todas las
+operaciones de DB apunten al directorio correcto del usuario.
 
 Integración en main.py:
-    from scraper_scheduler import start_scheduler, run_scraper_now
+    from scraper_scheduler import start_scheduler
     @app.on_event("startup")
     async def on_startup():
         init_db()
@@ -14,6 +18,7 @@ Integración en main.py:
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -24,8 +29,6 @@ logger = logging.getLogger(__name__)
 
 _scheduler: Optional[AsyncIOScheduler] = None
 
-# Registro de scrapers disponibles — se importan aquí para no cargar Playwright
-# en el arranque: solo se instancian cuando hay config habilitado.
 _SCRAPER_CLASSES = {
     "amex":        "scrapers.amex:AmexScraper",
     "bbva":        "scrapers.bbva:BbvaScraper",
@@ -35,125 +38,153 @@ _SCRAPER_CLASSES = {
 
 
 def _load_scraper(banco: str):
-    """Importa e instancia el scraper para un banco dado."""
     spec = _SCRAPER_CLASSES.get(banco)
     if not spec:
         raise ValueError(f"Scraper desconocido: {banco}")
     module_path, class_name = spec.rsplit(":", 1)
     import importlib
     module = importlib.import_module(module_path)
-    cls = getattr(module, class_name)
-    return cls()
+    return getattr(module, class_name)()
 
 
-async def _run_scraper_job(banco: str) -> None:
+def _email_from_data_dir(data_dir: str) -> str | None:
     """
-    Job que corre el scraper de un banco y luego la conciliación.
-    Se ejecuta en el event loop del scheduler.
+    Intenta derivar el email del usuario desde su directorio.
+    Busca el archivo user_config.json o, si no existe, devuelve None
+    (el contexto se establecerá via set_user_dir_context).
     """
-    from scrapers_config import get_scraper_config
+    # No hay un archivo de email canónico, pero podemos setear el dir directamente
+    return None
+
+
+async def _run_scraper_job(banco: str, data_dir: str) -> None:
+    """
+    Job que corre el scraper de un banco en el contexto del usuario dado.
+    """
+    from scraper_credentials import get_bank_config
     from conciliacion import run_conciliation
     from scrapers_db import insert_movimientos_raw, upsert_scraper_status
 
-    config = get_scraper_config(banco)
-    if not config:
-        logger.info("[scheduler] %s deshabilitado, saltando.", banco)
-        return
+    # Setear contexto de usuario para que DB y archivos apunten al dir correcto
+    from userctx import _user_data_dir
+    token = _user_data_dir.set(data_dir)
 
-    logger.info("[scheduler] Iniciando scraper: %s", banco)
     try:
-        scraper = _load_scraper(banco)
-        result  = await scraper.run(config)
-    except Exception as exc:
-        logger.exception("[scheduler] Error cargando/ejecutando scraper %s: %s", banco, exc)
-        upsert_scraper_status(banco, estado="error", error_msg=str(exc))
-        return
+        config = get_bank_config(banco, data_dir)
+        if not config:
+            logger.info("[scheduler] %s en %s deshabilitado, saltando.", banco, data_dir)
+            return
 
-    if result.error:
-        logger.warning("[scheduler] %s terminó con error: %s", banco, result.error)
-        return
+        logger.info("[scheduler] Iniciando scraper: %s (usuario: %s)", banco, data_dir)
+        try:
+            scraper = _load_scraper(banco)
+            result  = await scraper.run(config)
+        except Exception as exc:
+            logger.exception("[scheduler] Error ejecutando scraper %s: %s", banco, exc)
+            upsert_scraper_status(banco, estado="error", error_msg=str(exc))
+            return
 
-    # Persistir movimientos en staging
-    if result.movimientos:
-        dicts = [m.to_dict() for m in result.movimientos]
-        count = insert_movimientos_raw(dicts)
-        logger.info("[scheduler] %s: %d movimientos insertados en staging.", banco, count)
-    else:
-        logger.info("[scheduler] %s: 0 movimientos (stub o sin actividad).", banco)
+        if result.error:
+            logger.warning("[scheduler] %s terminó con error: %s", banco, result.error)
+            return
 
-    # Conciliar contra gastos existentes
-    conc_result = run_conciliation(fuente=banco)
-    logger.info("[scheduler] Conciliación %s: %s", banco, conc_result)
+        if result.movimientos:
+            dicts = [m.to_dict() for m in result.movimientos]
+            count = insert_movimientos_raw(dicts)
+            logger.info("[scheduler] %s: %d movimientos insertados.", banco, count)
+        else:
+            logger.info("[scheduler] %s: sin movimientos nuevos.", banco)
+
+        conc = run_conciliation(fuente=banco)
+        logger.info("[scheduler] Conciliación %s: %s", banco, conc)
+
+    finally:
+        _user_data_dir.reset(token)
 
 
 def start_scheduler() -> None:
     """
-    Lee scrapers.yaml y programa jobs diarios para cada banco habilitado.
-    Debe llamarse una sola vez al arranque de la app.
+    Escanea /data/*/scraper_credentials.json y programa un job diario
+    por cada scraper habilitado. No-op si no hay credenciales configuradas.
     """
     global _scheduler
 
-    from scrapers_config import get_all_enabled_scrapers
+    from scraper_credentials import find_all_enabled_configs
 
-    enabled = get_all_enabled_scrapers()
-    if not enabled:
-        logger.info("[scheduler] scrapers.yaml no encontrado o sin scrapers habilitados. "
-                    "Crear /data/scrapers.yaml para activar.")
+    configs = find_all_enabled_configs()
+    if not configs:
+        logger.info(
+            "[scheduler] No hay scrapers configurados. "
+            "Configurá las credenciales en Config → Scrapers."
+        )
         return
 
     _scheduler = AsyncIOScheduler(timezone="America/Argentina/Buenos_Aires")
 
-    for banco, cfg in enabled.items():
+    for entry in configs:
+        banco    = entry["banco"]
+        data_dir = entry["data_dir"]
+        cfg      = entry["config"]
         schedule_str = cfg.get("schedule", "07:00")
+
         try:
             hour, minute = schedule_str.split(":")
         except ValueError:
-            logger.warning("[scheduler] Horario inválido para %s: '%s' → usando 07:00", banco, schedule_str)
+            logger.warning("[scheduler] Horario inválido para %s: '%s' → 07:00",
+                           banco, schedule_str)
             hour, minute = "7", "0"
 
+        job_id = f"scraper_{banco}_{os.path.basename(data_dir)}"
         trigger = CronTrigger(hour=int(hour), minute=int(minute))
         _scheduler.add_job(
             _run_scraper_job,
             trigger=trigger,
-            args=[banco],
-            id=f"scraper_{banco}",
+            args=[banco, data_dir],
+            id=job_id,
             name=f"Scraper {banco}",
             replace_existing=True,
-            misfire_grace_time=3600,  # 1h de gracia si el RPi estaba apagado
+            misfire_grace_time=3600,
         )
         logger.info(
-            "[scheduler] Programado %s a las %s:%s (hora AR).",
-            banco, hour.zfill(2), minute.zfill(2),
+            "[scheduler] Programado %s @ %s:%s (dir: %s)",
+            banco, hour.zfill(2), minute.zfill(2), os.path.basename(data_dir),
         )
 
     _scheduler.start()
-    logger.info("[scheduler] Scheduler iniciado con %d jobs.", len(enabled))
+    logger.info("[scheduler] Iniciado con %d jobs.", len(configs))
 
 
 def stop_scheduler() -> None:
-    """Detiene el scheduler (llamar en shutdown de la app si es necesario)."""
     global _scheduler
     if _scheduler and _scheduler.running:
         _scheduler.shutdown(wait=False)
         _scheduler = None
 
 
-async def run_scraper_now(banco: str) -> dict:
+def reload_scheduler() -> None:
+    """Recarga los jobs del scheduler (llamar después de guardar credenciales)."""
+    stop_scheduler()
+    start_scheduler()
+
+
+async def run_scraper_now(banco: str, data_dir: str | None = None) -> dict:
     """
-    Trigger manual de un scraper. Corre inmediatamente (sin esperar el cron).
-    Devuelve dict con el resultado.
+    Trigger manual de un scraper. Usa el data_dir del usuario actual si no se
+    especifica (inferido desde userctx).
     """
-    from scrapers_config import get_scraper_config
+    from scraper_credentials import get_bank_config
     from conciliacion import run_conciliation
     from scrapers_db import insert_movimientos_raw, upsert_scraper_status
+    from userctx import get_data_dir
 
-    config = get_scraper_config(banco)
+    effective_dir = data_dir or get_data_dir()
+    config = get_bank_config(banco, effective_dir)
     if not config:
-        return {"ok": False, "error": f"Scraper '{banco}' no está habilitado en scrapers.yaml"}
+        return {"ok": False, "error": f"'{banco}' no está habilitado. Configurá las credenciales primero."}
 
     try:
-        scraper  = _load_scraper(banco)
-        result   = await scraper.run(config)
+        scraper = _load_scraper(banco)
+        result  = await scraper.run(config)
     except Exception as exc:
         msg = f"Error al ejecutar scraper: {exc}"
         logger.exception(msg)
@@ -170,25 +201,24 @@ async def run_scraper_now(banco: str) -> dict:
     conc = run_conciliation(fuente=banco)
 
     return {
-        "ok":             True,
-        "banco":          banco,
-        "movimientos":    inserted,
-        "conciliacion":   conc,
-        "saldos":         result.saldos,
-        "timestamp":      datetime.utcnow().isoformat(),
+        "ok":           True,
+        "banco":        banco,
+        "movimientos":  inserted,
+        "conciliacion": conc,
+        "saldos":       result.saldos,
+        "timestamp":    datetime.utcnow().isoformat(),
     }
 
 
 def get_scheduler_jobs() -> list[dict]:
-    """Devuelve info de los jobs programados (para la UI)."""
     if not _scheduler:
         return []
     jobs = []
     for job in _scheduler.get_jobs():
         nf = job.next_run_time
         jobs.append({
-            "id":           job.id,
-            "name":         job.name,
-            "next_run":     nf.isoformat() if nf else None,
+            "id":       job.id,
+            "name":     job.name,
+            "next_run": nf.isoformat() if nf else None,
         })
     return jobs
