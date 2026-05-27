@@ -1,3 +1,9 @@
+## 0.3.24
+
+- **Fix — ✕ en card de scraper ahora previene reimport**: `delete_movimiento_raw` ya no borra la fila; la marca como `'ignored'` (y sí borra el gasto vinculado si estaba importado). El sentinel `'ignored'` es detectado por la conciliación y por `_get_existing_payment_ids` → el scraper no vuelve a importar esa transacción.
+- **UI: raws `'ignored'` no se muestran en el panel de registros**: se filtran en el frontend antes de renderizar. Para el usuario son "borrados"; en la DB persisten como sentinel.
+- **Confirm dialog actualizado**: el mensaje ahora dice "Ignorar este registro" y aclara que el scraper no lo volverá a importar.
+
 ## 0.3.23
 
 - **Fix — gastos borrados no vuelven en el próximo run del scraper**: al borrar un gasto desde la UI, `delete_movimiento_manual` ahora marca el `movimiento_raw` vinculado como `'ignored'`. Esto aplica a todos los scrapers (AMEX, MP, etc.).

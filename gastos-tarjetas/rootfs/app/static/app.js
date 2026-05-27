@@ -3533,7 +3533,9 @@ async function _fetchScraperMovimientos(banco, el) {
   el.innerHTML = '<span style="font-size:.78rem;color:#94a3b8">Cargando…</span>';
   try {
     const res  = await fetch(`${BASE}/api/scrapers/movimientos-raw?fuente=${encodeURIComponent(banco)}&limit=100`);
-    const rows = res.ok ? await res.json() : [];
+    const allRows = res.ok ? await res.json() : [];
+    // 'ignored' = borrado por el usuario → no mostrar (existe solo como sentinel anti-reimport)
+    const rows = allRows.filter(r => r.estado !== 'ignored');
     if (!rows.length) {
       el.innerHTML = '<span style="font-size:.78rem;color:#94a3b8">Sin registros guardados.</span>';
       return;
@@ -3557,7 +3559,7 @@ async function _fetchScraperMovimientos(banco, el) {
 }
 
 async function deleteMovimientoRaw(rawId, banco) {
-  if (!confirm("¿Borrar este registro?\nSi fue importado a gastos, también se borrará el gasto.")) return;
+  if (!confirm("¿Ignorar este registro?\nSi fue importado a gastos, también se borrará el gasto.\nEl scraper no lo volverá a importar.")) return;
   try {
     const res = await fetch(`${BASE}/api/scrapers/movimientos-raw/${rawId}`, { method: "DELETE" });
     if (res.ok) {

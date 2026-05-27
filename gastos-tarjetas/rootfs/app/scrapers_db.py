@@ -290,8 +290,13 @@ def auto_import_unmatched(fuente: str) -> int:
 
 def delete_movimiento_raw(raw_id: int) -> dict:
     """
-    Elimina un movimiento_raw.
-    Si tenía estado='imported', también borra el gasto asociado de la tabla gastos.
+    "Borra" un movimiento_raw desde la UI del scraper.
+
+    En lugar de eliminar la fila, la marca como 'ignored' para que actúe
+    como sentinel: el scraper no volverá a importar la misma transacción
+    (se detecta por payment_id o por conciliación de raws ignorados).
+
+    Si el raw tenía estado='imported', también borra el gasto asociado.
     Devuelve {'deleted_raw': bool, 'deleted_gasto': bool, 'gasto_id': int|None}.
     """
     with _conn() as conn:
@@ -301,13 +306,18 @@ def delete_movimiento_raw(raw_id: int) -> dict:
         if not row:
             return {"deleted_raw": False, "deleted_gasto": False, "gasto_id": None}
 
-        gasto_id     = row["gasto_id"]
+        gasto_id      = row["gasto_id"]
         deleted_gasto = False
         if row["estado"] == "imported" and gasto_id:
             conn.execute("DELETE FROM gastos WHERE id=?", (gasto_id,))
             deleted_gasto = True
 
-        conn.execute("DELETE FROM movimientos_raw WHERE id=?", (raw_id,))
+        # Marcar como 'ignored' en lugar de borrar: el sentinel es necesario
+        # para que el scraper no reimporte la misma transacción en el próximo run.
+        conn.execute(
+            "UPDATE movimientos_raw SET estado='ignored', gasto_id=NULL WHERE id=?",
+            (raw_id,),
+        )
     return {"deleted_raw": True, "deleted_gasto": deleted_gasto, "gasto_id": gasto_id}
 
 
