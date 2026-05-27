@@ -370,14 +370,18 @@
   // Default date = today
   document.getElementById("inp-fecha").value = new Date().toISOString().slice(0, 10);
 
-  // Load categories + resolve account currency in parallel
+  // Load categories + specials + resolve account currency in parallel
   Promise.all([
     fetch("/api/categorias").then(r => r.json()).catch(() => []),
+    fetch("/api/categorias/especiales").then(r => r.json()).catch(() => ({ especiales: [] })),
     fetch("/api/cuentas").then(r => r.json()).catch(() => []),
-  ]).then(([cats, cuentas]) => {
+  ]).then(([cats, especialesResp, cuentas]) => {
+    const specialSet = new Set(especialesResp.especiales || []);
+    const filteredCats = cats.filter(c => !specialSet.has(c));
+
     // Populate category chiclets
     const grid = document.getElementById("cat-grid");
-    cats.sort().forEach(c => {
+    filteredCats.sort().forEach(c => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "cat-chip";
@@ -386,7 +390,7 @@
       grid.appendChild(btn);
     });
 
-    // Resolve currency from the matching account
+    // Resolve currency from the matching account (cuentas is now index 2)
     const cuenta = cuentas.find(c => c.fuente === fuente);
     if (cuenta && (cuenta.moneda === "ARS" || cuenta.moneda === "USD")) {
       moneda = cuenta.moneda;

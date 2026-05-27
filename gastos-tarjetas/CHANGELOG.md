@@ -1,3 +1,7 @@
+## 0.3.17
+
+- **Categorías especiales ocultas en formulario rápido**: los chiclets de categoría ya no muestran las categorías marcadas como especiales (Transferencia, Transferencia Intercuentas, y las marcadas con `especial: true` en rules.yaml). Se consulta `/api/categorias/especiales` en paralelo y se filtra antes de renderizar.
+
 ## 0.3.16
 
 - **Botón guardar integrado al campo monto**: el botón "Guardar gasto" se reemplazó por un botón cuadrado con tilde (✓) a la derecha del campo de monto. Elimina la necesidad de scrollear para guardar; mientras procesa muestra "…" y se deshabilita.
