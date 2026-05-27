@@ -1,3 +1,9 @@
+## 0.3.27
+
+- **Scraper MP — descripción `checkout_on`**: el campo `reason` de la API de MP devuelve códigos técnicos sin espacios (ej. `checkout_on`, `regular_payment`) que se filtraban por la lógica de prioridad y aparecían como nombre de la transacción. Ahora si `reason` no contiene espacios se descarta como código técnico y se usa `op_label` en su lugar. Se agrega `"checkout_on"` al dict de etiquetas → muestra `"Compra online"`.
+- **Panel de scraper — sort por `scraped_at DESC`**: la lista de registros ahora se ordena por cuándo fueron escaneados (más reciente primero) en lugar de por fecha de transacción. Así las entradas del último run siempre aparecen al tope, incluyendo cuotas con fechas futuras.
+- **Panel de scraper — indicador "Nuevo" y timestamp**: cada fila ahora muestra un punto azul `●` si es del último run del scraper, y la fecha de escaneo como sublínea bajo la fecha de transacción (ej. `5min`, `10:30`, `26/05`).
+
 ## 0.3.26
 
 - **Scraper MP — Q2: campo "Usuario"**: se agrega el campo opcional `usuario` a la configuración del scraper MercadoPago. El nombre configurado se guarda en `raw_data["usuario"]` de cada movimiento; al importar a `gastos` vía "Importar pendientes", `importar_a_gastos` lo extrae y lo inserta en la columna `gastos.usuario`. Permite distinguir de quién son los pagos de MP cuando hay más de un titular en el sistema.

@@ -407,9 +407,12 @@ class MercadoPagoScraper(BaseScraper):
             pass
 
         # Razón textual del pago
-        reason = (p.get("reason") or p.get("description") or "").strip()
+        # Descartar valores que son códigos técnicos sin espacios (ej. "checkout_on",
+        # "regular_payment") — en esos casos es mejor usar op_label de abajo.
+        _raw_reason = (p.get("reason") or p.get("description") or "").strip()
+        reason = _raw_reason if " " in _raw_reason else ""
 
-        # Tipo de operación como fallback
+        # Tipo de operación como fallback (o cuando reason es un código técnico)
         op_label = {
             "regular_payment":   "Pago",
             "money_transfer":    "Transferencia",
@@ -418,6 +421,7 @@ class MercadoPagoScraper(BaseScraper):
             "investment":        "Inversión",
             "pos_payment":       "Pago QR",
             "checkout_pro":      "Compra online",
+            "checkout_on":       "Compra online",
         }.get(p.get("operation_type", ""), "")
 
         # Mejor nombre comercial disponible

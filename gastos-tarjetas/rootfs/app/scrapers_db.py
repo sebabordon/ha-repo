@@ -223,7 +223,7 @@ def list_movimientos_raw(
         q += " AND estado=?"; params.append(estado)
     if fuente:
         q += " AND fuente=?"; params.append(fuente)
-    q += f" ORDER BY fecha DESC, id DESC LIMIT {int(limit)}"
+    q += f" ORDER BY scraped_at DESC, fecha DESC, id DESC LIMIT {int(limit)}"
     with _conn() as conn:
         rows = conn.execute(q, params).fetchall()
     return [dict(r) for r in rows]

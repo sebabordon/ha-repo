@@ -3540,14 +3540,46 @@ async function _fetchScraperMovimientos(banco, el) {
       el.innerHTML = '<span style="font-size:.78rem;color:#94a3b8">Sin registros guardados.</span>';
       return;
     }
+    // Detectar el scraped_at más reciente para marcar entradas "nuevas"
+    const latestScrapedAt = rows.reduce((max, r) => r.scraped_at > max ? r.scraped_at : max, "");
+    const nowMs = Date.now();
+
     el.innerHTML = rows.map(r => {
       const b      = _ESTADO_MOV[r.estado] || { cls: "", txt: r.estado };
       const monto  = Math.abs(r.monto).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const prefix = r.moneda === "USD" ? "U$S " : "$ ";
       const neg    = r.monto < 0;
+
+      // Nuevo = mismo scraped_at que la entrada más reciente
+      const isNew  = r.scraped_at && r.scraped_at === latestScrapedAt;
+
+      // Timestamp de scraped_at abreviado (va debajo de la fecha)
+      let scrapedLabel = "";
+      if (r.scraped_at) {
+        try {
+          const d = new Date(r.scraped_at + (r.scraped_at.endsWith("Z") ? "" : "Z"));
+          const diffMin = Math.round((nowMs - d.getTime()) / 60000);
+          if (diffMin < 1)         scrapedLabel = "ahora";
+          else if (diffMin < 60)   scrapedLabel = `${diffMin}min`;
+          else if (diffMin < 1440) scrapedLabel = d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+          else                     scrapedLabel = d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+        } catch(_) {}
+      }
+
+      // Fecha cell: fecha principal + scraped_at como sub-línea
+      const fechaCell = `<span class="scraper-mov-fecha">
+        ${escHtml(r.fecha)}
+        ${scrapedLabel ? `<span class="scraper-mov-scraped-time" title="Escaneado: ${escHtml(r.scraped_at || '')}">${escHtml(scrapedLabel)}</span>` : ''}
+      </span>`;
+
+      // Desc cell: punto azul "●" si es nuevo, luego descripción
+      const descCell = `<span class="scraper-mov-desc" title="${escHtml(r.descripcion)}">
+        ${isNew ? '<span class="scraper-mov-new-dot" title="Nuevo en el último run">●</span>' : ''}${escHtml(r.descripcion)}
+      </span>`;
+
       return `<div class="scraper-mov-row" id="mov-row-${r.id}">
-        <span class="scraper-mov-fecha">${escHtml(r.fecha)}</span>
-        <span class="scraper-mov-desc" title="${escHtml(r.descripcion)}">${escHtml(r.descripcion)}</span>
+        ${fechaCell}
+        ${descCell}
         <span class="scraper-mov-monto${neg ? " neg" : ""}">${prefix}${monto}</span>
         <span class="mov-estado-badge ${b.cls}">${b.txt}</span>
         <button class="btn-del-mov" onclick="deleteMovimientoRaw(${r.id},'${banco}')" title="Borrar">✕</button>
