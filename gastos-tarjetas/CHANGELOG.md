@@ -1,3 +1,7 @@
+## 0.3.13
+
+- **Fix — botón borrar en gastos del formulario rápido (2do intento)**: `COALESCE(c.tipo, CASE...)` retornaba `'auto'` cuando la fuente (ej. `mercadopago`) ya tenía fila en `cuentas` con `tipo='auto'` no-NULL, sin evaluar el CASE de `archivo_origen`. Corregido invirtiendo el orden: `CASE WHEN archivo_origen='manual' THEN 'manual' ELSE COALESCE(c.tipo,'auto') END` — el check de `archivo_origen` ahora tiene prioridad absoluta.
+
 ## 0.3.12
 
 - **Migración automática `quick_form_archivo_origen_v1`**: los gastos cargados con el formulario rápido antes del fix (que quedaron con `archivo_origen='scraper'`) se corrigen automáticamente al iniciar. Se identifican via `movimientos_raw.raw_data LIKE '%manual_quick%'` y se actualiza a `archivo_origen='manual'` para que el botón de borrar aparezca en la UI.

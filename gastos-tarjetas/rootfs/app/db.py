@@ -367,9 +367,9 @@ def list_gastos(
     excluir_especiales: bool = False,
 ) -> list[dict]:
     query = """SELECT g.*,
-                      COALESCE(c.tipo,
-                        CASE WHEN g.archivo_origen='manual' THEN 'manual' ELSE 'auto' END
-                      ) AS tipo
+                      CASE WHEN g.archivo_origen='manual' THEN 'manual'
+                           ELSE COALESCE(c.tipo, 'auto')
+                      END AS tipo
                FROM gastos g LEFT JOIN cuentas c ON g.fuente = c.fuente
                WHERE 1=1"""
     params: list = []
