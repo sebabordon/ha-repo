@@ -110,6 +110,12 @@ class GaliciaScraper(BaseScraper):
     def _scrape_mastercard(self, driver) -> tuple[list[MovimientoRaw], float | None]:
         """
         TODO: navegar a Galicia Mastercard y extraer movimientos + saldo.
+
+        IMPORTANTE al implementar: los MovimientoRaw deben usar fuente="galicia_mc"
+        (no "galicia") para que coincidan con los gastos importados desde PDF
+        (parser galicia_mc) y la conciliación funcione correctamente.
+        Ejemplo:
+            movs.append(MovimientoRaw(fuente="galicia_mc", fecha=..., ...))
         """
         logger.warning("[galicia] _scrape_mastercard — TODO: implementar")
         return [], None

@@ -311,6 +311,94 @@ def delete_movimiento_raw(raw_id: int) -> dict:
     return {"deleted_raw": True, "deleted_gasto": deleted_gasto, "gasto_id": gasto_id}
 
 
+def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
+    """
+    Elimina gastos scraper duplicados tras subir un PDF.
+
+    Cuando el scraper auto-importó transacciones de un período abierto y luego
+    se sube el PDF del mismo período (ya cerrado), existen duplicados en gastos:
+    uno con archivo_origen='scraper' y otro recién insertado desde el PDF.
+
+    Este función hace que el PDF "gane":
+      - Elimina el gasto con archivo_origen='scraper'
+      - Actualiza el movimiento_raw asociado a estado='matched' apuntando al PDF
+
+    Matching: mismo fuente+moneda, monto ±0.02, fecha ±5 días, descripción >60% similar.
+    Devuelve la cantidad de duplicados de scraper eliminados.
+    """
+    import difflib
+    from datetime import datetime, timedelta
+
+    if not pdf_records:
+        return 0
+
+    eliminated = 0
+
+    for rec in pdf_records:
+        try:
+            fecha_dt = datetime.fromisoformat(str(rec["fecha"]))
+        except Exception:
+            continue
+
+        date_from = (fecha_dt - timedelta(days=5)).strftime("%Y-%m-%d")
+        date_to   = (fecha_dt + timedelta(days=5)).strftime("%Y-%m-%d")
+        monto     = float(rec["monto"])
+        moneda    = rec.get("moneda", "ARS")
+        desc_pdf  = str(rec.get("descripcion", "")).lower().strip()
+
+        with _conn() as conn:
+            # El gasto PDF recién insertado (el más reciente que NO es del scraper)
+            pdf_gasto = conn.execute(
+                """SELECT id FROM gastos
+                   WHERE fuente=? AND moneda=?
+                     AND ABS(CAST(monto AS REAL) - ?) < 0.02
+                     AND fecha BETWEEN ? AND ?
+                     AND (archivo_origen IS NULL OR archivo_origen != 'scraper')
+                   ORDER BY id DESC LIMIT 1""",
+                (fuente, moneda, monto, date_from, date_to),
+            ).fetchone()
+            if not pdf_gasto:
+                continue
+            pdf_gasto_id = pdf_gasto["id"]
+
+            # Gastos con archivo_origen='scraper' que matcheen la misma transacción
+            scraper_candidates = conn.execute(
+                """SELECT g.id AS gasto_id, g.descripcion, m.id AS raw_id
+                   FROM gastos g
+                   JOIN movimientos_raw m ON m.gasto_id = g.id
+                   WHERE g.fuente=? AND g.moneda=?
+                     AND ABS(CAST(g.monto AS REAL) - ?) < 0.02
+                     AND g.fecha BETWEEN ? AND ?
+                     AND g.archivo_origen = 'scraper'
+                     AND m.estado = 'imported'
+                     AND g.id != ?""",
+                (fuente, moneda, monto, date_from, date_to, pdf_gasto_id),
+            ).fetchall()
+
+            for sc in scraper_candidates:
+                ratio = difflib.SequenceMatcher(
+                    None,
+                    str(sc["descripcion"]).lower().strip(),
+                    desc_pdf,
+                ).ratio()
+                if ratio < 0.60:
+                    continue
+
+                # PDF gana: borrar gasto scraper, raw pasa a matched
+                conn.execute("DELETE FROM gastos WHERE id=?", (sc["gasto_id"],))
+                conn.execute(
+                    "UPDATE movimientos_raw SET estado='matched', gasto_id=? WHERE id=?",
+                    (pdf_gasto_id, sc["raw_id"]),
+                )
+                eliminated += 1
+                logger.info(
+                    "[consolidate] %s: scraper gasto id=%d eliminado → raw id=%d matched con PDF gasto id=%d (score=%.2f)",
+                    fuente, sc["gasto_id"], sc["raw_id"], pdf_gasto_id, ratio,
+                )
+
+    return eliminated
+
+
 def importar_a_gastos(
     raw_id: int,
     categoria: Optional[str] = None,

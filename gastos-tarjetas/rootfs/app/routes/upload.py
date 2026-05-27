@@ -1,9 +1,12 @@
 import io
+import logging
 from collections import Counter
 
 from fastapi import APIRouter, File, Form, UploadFile, Request, HTTPException
 
 from auth import require_auth
+
+logger = logging.getLogger(__name__)
 from categorizer import categorize
 from db import insert_gastos, upsert_cuenta_saldo, _CC_FUENTES
 from parsers import PARSERS
@@ -147,6 +150,18 @@ async def upload_file(
     }
     count = insert_gastos(records, import_info=import_info)
 
+    # ── Deduplicar contra gastos ya importados por el scraper ─────────────────
+    # Si el scraper ya auto-importó transacciones del período que acaba de cerrarse,
+    # el PDF recién subido genera duplicados. Eliminamos la versión del scraper
+    # (el PDF es el resumen oficial) y actualizamos los movimientos_raw a 'matched'.
+    _SCRAPER_FUENTES = frozenset({"amex", "bbva_mc", "bbva_visa"})
+    deduped = 0
+    if fuente in _SCRAPER_FUENTES:
+        from scrapers_db import consolidate_scraper_duplicates
+        deduped = consolidate_scraper_duplicates(fuente, records)
+        if deduped:
+            logger.info("[upload] %s: %d duplicado(s) de scraper consolidados.", fuente, deduped)
+
     # Auto-update balance if the parser detected one
     saldo = getattr(PARSERS[fuente], "saldo_final", None)
     if saldo is not None:
@@ -155,4 +170,6 @@ async def upload_file(
     result: dict = {"importados": count, "total_parseados": len(gastos)}
     if ajuste_ars is not None:
         result["ajuste_resumen_ars"] = ajuste_ars
+    if deduped:
+        result["scraper_duplicados_eliminados"] = deduped
     return result
