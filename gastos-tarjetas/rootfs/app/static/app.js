@@ -3534,8 +3534,9 @@ async function _fetchScraperMovimientos(banco, el) {
   try {
     const res  = await fetch(`${BASE}/api/scrapers/movimientos-raw?fuente=${encodeURIComponent(banco)}&limit=100`);
     const allRows = res.ok ? await res.json() : [];
-    // 'ignored' = borrado por el usuario → no mostrar (existe solo como sentinel anti-reimport)
-    const rows = allRows.filter(r => r.estado !== 'ignored');
+    // Mostrar todos los estados, incluyendo 'ignored' (sentinel anti-reimport).
+    // El usuario puede borrarlos definitivamente desde acá si necesita limpiar la DB.
+    const rows = allRows;
     if (!rows.length) {
       el.innerHTML = '<span style="font-size:.78rem;color:#94a3b8">Sin registros guardados.</span>';
       return;
@@ -3577,12 +3578,15 @@ async function _fetchScraperMovimientos(banco, el) {
         ${isNew ? '<span class="scraper-mov-new-dot" title="Nuevo en el último run">●</span>' : ''}${escHtml(r.descripcion)}
       </span>`;
 
-      return `<div class="scraper-mov-row" id="mov-row-${r.id}">
+      const isIgnored   = r.estado === 'ignored';
+      const delTitle    = isIgnored ? "Borrar definitivamente (quita el sentinel)" : "Ignorar / borrar";
+      const rowExtraClass = isIgnored ? " scraper-mov-row-ignored" : "";
+      return `<div class="scraper-mov-row${rowExtraClass}" id="mov-row-${r.id}">
         ${fechaCell}
         ${descCell}
         <span class="scraper-mov-monto${neg ? " neg" : ""}">${prefix}${monto}</span>
         <span class="mov-estado-badge ${b.cls}">${b.txt}</span>
-        <button class="btn-del-mov" onclick="deleteMovimientoRaw(${r.id},'${banco}')" title="Borrar">✕</button>
+        <button class="btn-del-mov" onclick="deleteMovimientoRaw(${r.id},'${banco}',${isIgnored})" title="${delTitle}">✕</button>
       </div>`;
     }).join("");
   } catch(e) {
@@ -3590,8 +3594,11 @@ async function _fetchScraperMovimientos(banco, el) {
   }
 }
 
-async function deleteMovimientoRaw(rawId, banco) {
-  if (!confirm("¿Ignorar este registro?\nSi fue importado a gastos, también se borrará el gasto.\nEl scraper no lo volverá a importar.")) return;
+async function deleteMovimientoRaw(rawId, banco, isIgnored = false) {
+  const msg = isIgnored
+    ? "¿Borrar definitivamente este registro?\nSe eliminará de la base de datos y el scraper podrá volver a importarlo."
+    : "¿Ignorar este registro?\nSi fue importado a gastos, también se borrará el gasto.\nEl scraper no lo volverá a importar.";
+  if (!confirm(msg)) return;
   try {
     const res = await fetch(`${BASE}/api/scrapers/movimientos-raw/${rawId}`, { method: "DELETE" });
     if (res.ok) {

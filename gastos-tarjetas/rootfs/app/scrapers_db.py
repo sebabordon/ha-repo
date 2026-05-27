@@ -324,8 +324,9 @@ def delete_movimiento_raw(raw_id: int) -> dict:
         except Exception:
             pass
 
-        if is_manual_quick:
-            # Hard delete: no necesita sentinel
+        if is_manual_quick or row["estado"] == "ignored":
+            # Hard delete: /quick no necesita sentinel; 'ignored' ya es un sentinel
+            # que el usuario quiere eliminar explícitamente (limpieza manual).
             conn.execute("DELETE FROM movimientos_raw WHERE id=?", (raw_id,))
         else:
             # Soft delete: sentinel 'ignored' → scraper no reimporta

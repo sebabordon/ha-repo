@@ -1488,6 +1488,19 @@ tbody tr:hover { background: #fafbff; }
 .mov-estado-ignored   { background: #f1f5f9; color: #94a3b8; }
 
 /* Delete button in row */
+/* Filas con estado 'ignored' (sentinels anti-reimport) */
+.scraper-mov-row-ignored {
+  opacity: .45;
+}
+.scraper-mov-row-ignored .scraper-mov-desc {
+  text-decoration: line-through;
+  text-decoration-color: #94a3b8;
+}
+.scraper-mov-row-ignored:hover {
+  opacity: .75;
+  background: #fef9f9;
+}
+
 /* Punto azul que indica que el registro es del último run del scraper */
 .scraper-mov-new-dot {
   color: #3b82f6;

@@ -1,3 +1,9 @@
+## 0.3.29
+
+- **Panel scraper — mostrar entradas `ignored`**: los registros con estado `ignored` (sentinels anti-reimport) ahora se muestran en el panel, con opacidad reducida y descripción tachada para distinguirlos de los activos.
+- **Panel scraper — hard delete de `ignored`**: al presionar ✕ sobre un registro `ignored`, se borra completamente de la DB (ya no queda sentinel). El confirm advierte que el scraper podrá volver a importarlo. Permite limpiar manualmente entradas viejas o incorrectas.
+- **`delete_movimiento_raw`: hard delete si ya es `ignored`**: si el estado actual es `ignored`, la función borra la fila directamente (el usuario está eliminando el sentinel a propósito).
+
 ## 0.3.28
 
 - **Scraper MP — excluir pagos con tarjeta de crédito**: los pagos con `payment_type_id == "credit_card"` se omiten completamente. Esos cargos ya figuran en el resumen de la tarjeta (AMEX, BBVA, etc.) y se importan vía PDF; traerlos también desde MP generaría duplicados. El log del run muestra cuántos se omitieron por este motivo. Se elimina el código de split de cuotas agregado en 0.3.26 (ya no es necesario).
