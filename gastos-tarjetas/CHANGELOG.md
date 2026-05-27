@@ -1,3 +1,7 @@
+## 0.3.33
+
+- **Fix debug log MP — salida real en el run log**: `logger.debug()` no aparece en el log del add-on de HA porque el handler raíz filtra en INFO. Se corrigió para usar `log_fn()` cuando `debug=True`, así los mensajes `[dbg] NUEVO/YA-EXISTE/OMITIDO-CC/SIN-DATOS` aparecen en el log del run (visible en el panel de scraper y en Supervisión → Add-ons → Gastos → Log). Se elimina el `logger.setLevel(DEBUG)` que no tenía efecto.
+
 ## 0.3.32
 
 - **Config scraper — soporte de campos checkbox**: el formulario de configuración de scrapers ahora renderiza campos de tipo `checkbox` (tilde). El valor se guarda como booleano y se envía correctamente al backend.

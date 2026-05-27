@@ -21,6 +21,29 @@ unless the changes are deployed separately.
    Every session that produces a commit must end with a push — GitHub must
    never lag behind the local repo.
 
+## Implementation quality (MANDATORY)
+
+Before committing any feature, mentally trace the **full path** from the code
+change to what the user actually sees/gets. If that path is broken, the feature
+is not done — fix it first, then commit.
+
+Concrete examples of what this means:
+
+- **Logging**: `logger.debug()` does NOT appear in the HA add-on Log tab because
+  the root handler is at INFO level. If the goal is "user sees per-payment
+  detail in the log", use `log_fn()` (appends to the run log shown in the panel)
+  or `logger.info()`. Never use `logger.debug()` for output the user is supposed
+  to read.
+- **UI controls**: a checkbox/button/field that triggers behaviour must be wired
+  end-to-end: definition in `scraper_credentials.py` → rendered in `app.js` →
+  value saved via `saveScraperConfig` → read in the scraper's `run()`. All four
+  steps must exist before committing.
+- **API fields**: if you add a field to `raw_data`, also add its label to the JS
+  subtitle renderer if it's meant to be visible in the panel.
+
+In short: **don't commit half-implementations**. A feature is done when it works,
+not when the code that should make it work exists.
+
 ## Security
 
 - NEVER commit anything inside `samples/` — those files contain real personal

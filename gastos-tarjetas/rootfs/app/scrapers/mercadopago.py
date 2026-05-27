@@ -79,9 +79,7 @@ class MercadoPagoScraper(BaseScraper):
         # Usuario default para etiquetar gastos importados
         self._default_usuario = (config.get("usuario") or "").strip()
 
-        # Debug logging opcional: activa nivel DEBUG en este módulo si el usuario lo pide
-        if config.get("debug_log"):
-            logger.setLevel(logging.DEBUG)
+        debug_log = bool(config.get("debug_log"))
 
         dias = int(config.get("dias") or _DIAS_DEFAULT)
         headers = {
@@ -106,7 +104,7 @@ class MercadoPagoScraper(BaseScraper):
 
                 # 3. Egresos e ingresos
                 movimientos, stats = await self._fetch_all(
-                    client, user_id, dias, existing_ids, _l
+                    client, user_id, dias, existing_ids, _l, debug_log
                 )
                 _l(
                     f"Nuevos: {stats['egresos']} egresos, "
@@ -164,6 +162,7 @@ class MercadoPagoScraper(BaseScraper):
         dias: int,
         existing_ids: set,
         log_fn,
+        debug: bool = False,
     ) -> tuple[list[MovimientoRaw], dict]:
         """Trae egresos (payer) e ingresos (collector) del período."""
         # dias=1 → sólo hoy (ART); dias=2 → ayer y hoy; etc.
@@ -181,7 +180,7 @@ class MercadoPagoScraper(BaseScraper):
         ]:
             log_fn(f"Consultando {label} (últimos {dias} días) …")
             page_movs, skipped = await self._paginate(
-                client, user_id, role, since, until, sign, existing_ids, log_fn
+                client, user_id, role, since, until, sign, existing_ids, log_fn, debug
             )
             movimientos.extend(page_movs)
             stats[label]      = len(page_movs)
@@ -199,6 +198,7 @@ class MercadoPagoScraper(BaseScraper):
         sign: int,
         existing_ids: set,
         log_fn,
+        debug: bool = False,
     ) -> tuple[list[MovimientoRaw], int]:
         """Pagina /v1/payments/search y convierte resultados."""
         movs:       list[MovimientoRaw] = []
@@ -236,18 +236,14 @@ class MercadoPagoScraper(BaseScraper):
                 # en el resumen de la tarjeta y se importan vía PDF.
                 if pay_type == "credit_card":
                     cc_skipped += 1
-                    logger.debug(
-                        "[mp] OMITIDO-CC  id=%-12s type=%-15s op=%-20s amt=%10.2f  reason=%s",
-                        pid, pay_type, op_type, amount, reason,
-                    )
+                    if debug:
+                        log_fn(f"  [dbg] OMITIDO-CC  id={pid} type={pay_type} op={op_type} amt={amount:.2f} reason={reason}")
                     continue
 
                 if pid and pid in existing_ids:
                     skipped += 1
-                    logger.debug(
-                        "[mp] YA-EXISTE   id=%-12s type=%-15s op=%-20s amt=%10.2f  reason=%s",
-                        pid, pay_type, op_type, amount, reason,
-                    )
+                    if debug:
+                        log_fn(f"  [dbg] YA-EXISTE   id={pid} type={pay_type} op={op_type} amt={amount:.2f} reason={reason}")
                     continue
 
                 mov = self._payment_to_movimiento(payment, sign)
@@ -255,15 +251,11 @@ class MercadoPagoScraper(BaseScraper):
                     movs.append(mov)
                     if pid:
                         existing_ids.add(pid)
-                    logger.debug(
-                        "[mp] NUEVO       id=%-12s type=%-15s op=%-20s amt=%10.2f  reason=%s",
-                        pid, pay_type, op_type, amount, reason,
-                    )
+                    if debug:
+                        log_fn(f"  [dbg] NUEVO       id={pid} type={pay_type} op={op_type} amt={amount:.2f} reason={reason}")
                 else:
-                    logger.debug(
-                        "[mp] SIN-DATOS   id=%-12s type=%-15s op=%-20s amt=%10.2f  reason=%s",
-                        pid, pay_type, op_type, amount, reason,
-                    )
+                    if debug:
+                        log_fn(f"  [dbg] SIN-DATOS   id={pid} type={pay_type} op={op_type} amt={amount:.2f} reason={reason}")
 
             total  = data.get("paging", {}).get("total", 0)
             offset += len(results)
