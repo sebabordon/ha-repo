@@ -248,10 +248,12 @@ class AmexScraper(BaseScraper):
                 _l(f"[{nombre}] Texto saldo: {raw_saldo!r}")
                 for line in raw_saldo.split("\n"):
                     line = line.strip()
-                    if line.startswith("$"):
-                        saldo_ars = abs(self.parse_amount(line))
-                    elif "U$S" in line or "U$" in line:
+                    # USD primero (U$S) para no confundir con el '$' de ARS
+                    if "U$S" in line or "U$" in line:
                         saldo_usd = abs(self._parse_usd_amount(line))
+                    elif "$" in line:
+                        # Handles both '$2.932.743,58' and '-$132,70'
+                        saldo_ars = abs(self.parse_amount(line))
             else:
                 _l(f"[{nombre}] ⚠ No se encontró td#colOSBalance (saldo)")
         except Exception as exc:
@@ -276,30 +278,50 @@ class AmexScraper(BaseScraper):
         card_divs = driver.find_elements(By.CSS_SELECTOR, "div[id^='txnsCard']")
         _l(f"[{nombre}] Secciones div[id^='txnsCard'] encontradas: {len(card_divs)}")
 
-        if not card_divs:
-            # Diagnóstico adicional: ¿qué hay en el DOM?
+        if card_divs:
+            # Vista de estado de cuenta cerrado — hay un div por cardholder
+            for card_div in card_divs:
+                div_id     = card_div.get_attribute("id") or ""
+                card_idx   = div_id.replace("txnsCard", "")
+                cardholder = cardholder_map.get(card_idx, f"card_{card_idx}")
+
+                rows = card_div.find_elements(
+                    By.CSS_SELECTOR, "tr.tableStandardText.pagebreak"
+                )
+                _l(f"[{nombre}] {div_id} (cardholder={cardholder!r}): {len(rows)} filas")
+                parsed_ok = 0
+                for row in rows:
+                    mov = self._parse_row(row, tarjeta, cardholder)
+                    if mov:
+                        movimientos.append(mov)
+                        parsed_ok += 1
+                _l(f"[{nombre}] {div_id}: {parsed_ok}/{len(rows)} filas parseadas")
+        else:
+            # Vista "Últimos Movimientos" (período abierto) — filas directamente
+            # bajo div#txnsSection sin el wrapper txnsCard por cardholder.
             txns_section = self.find(driver, "div#txnsSection")
-            _l(f"[{nombre}] div#txnsSection presente = {txns_section is not None}")
-            all_divs = driver.find_elements(By.CSS_SELECTOR, "div[id]")
-            txns_ids = [d.get_attribute("id") for d in all_divs if (d.get_attribute("id") or "").startswith("txns")]
-            _l(f"[{nombre}] IDs que empiezan con 'txns': {txns_ids[:10]}")
-
-        for card_div in card_divs:
-            div_id    = card_div.get_attribute("id") or ""
-            card_idx  = div_id.replace("txnsCard", "")
-            cardholder = cardholder_map.get(card_idx, f"card_{card_idx}")
-
-            rows = card_div.find_elements(
-                By.CSS_SELECTOR, "tr.tableStandardText.pagebreak"
-            )
-            _l(f"[{nombre}] {div_id} (cardholder={cardholder!r}): {len(rows)} filas")
-            parsed_ok = 0
-            for row in rows:
-                mov = self._parse_row(row, tarjeta, cardholder)
-                if mov:
-                    movimientos.append(mov)
-                    parsed_ok += 1
-            _l(f"[{nombre}] {div_id}: {parsed_ok}/{len(rows)} filas parseadas correctamente")
+            _l(f"[{nombre}] Fallback: div#txnsSection presente = {txns_section is not None}")
+            if txns_section:
+                rows = txns_section.find_elements(
+                    By.CSS_SELECTOR, "tr.tableStandardText.pagebreak"
+                )
+                _l(f"[{nombre}] Fallback: {len(rows)} filas en div#txnsSection")
+                # Cardholder: primer titular del selector (o vacío si "Todas")
+                default_ch = next(iter(cardholder_map.values()), "")
+                parsed_ok = 0
+                for row in rows:
+                    mov = self._parse_row(row, tarjeta, default_ch)
+                    if mov:
+                        movimientos.append(mov)
+                        parsed_ok += 1
+                _l(f"[{nombre}] Fallback: {parsed_ok}/{len(rows)} filas parseadas")
+            else:
+                all_divs = driver.find_elements(By.CSS_SELECTOR, "div[id]")
+                txns_ids = [
+                    d.get_attribute("id") for d in all_divs
+                    if (d.get_attribute("id") or "").startswith("txns")
+                ]
+                _l(f"[{nombre}] ⚠ Sin txnsSection. IDs con prefijo 'txns': {txns_ids[:10]}")
 
         _l(f"[{nombre}] Total movimientos: {len(movimientos)}")
         return movimientos, saldo_ars, saldo_usd

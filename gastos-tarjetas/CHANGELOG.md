@@ -2,6 +2,8 @@
 
 - **Fix — gastos del formulario rápido ahora se pueden borrar**: los gastos cargados desde `/quick` quedaban con `archivo_origen='scraper'` y `tipo='auto'`, ocultando el botón de borrar. Ahora se insertan con `archivo_origen='manual'`; `list_gastos` los trata como `tipo='manual'` y `delete_gasto_manual` los acepta.
 - **Fix — ícono de iOS dice el nombre correcto**: al agregar `/quick?fuente=mercadopago&label=MercadoPago` al inicio de iOS, el ícono ahora dice "MercadoPago" en vez de "Gastos". La página sirve su propio manifest (`/manifest-quick.json`) con `name` y `short_name` iguales al label de la cuenta, en lugar de heredar el manifest principal.
+- **Fix AMEX — "Últimos Movimientos" (período abierto) devolvía 0 registros**: el portal redirige a una vista sin `div[id^='txnsCard']`; se agrega fallback que busca `tr.tableStandardText.pagebreak` directamente bajo `div#txnsSection`.
+- **Fix AMEX — saldo negativo (`-$132,70`) se parseaba como 0**: la condición `startswith("$")` fallaba con el prefijo `-$`. Se invierte el orden de chequeo (USD primero) y se usa `"$" in line` para ARS.
 
 ## 0.3.9
 
