@@ -3348,9 +3348,25 @@ function _buildScraperCard(banco, data) {
       ${st.ultimo_ok ? `<p style="font-size:.78rem;color:#888;margin-top:.25rem">
         Último OK: ${escHtml(st.ultimo_ok.replace('T',' ').slice(0,16))}</p>` : ""}
       ${st.last_log ? `<details class="scraper-log-details">
-        <summary>📋 Detalle del último run</summary>
-        <pre class="scraper-log-pre">${escHtml(st.last_log)}</pre>
+        <summary>
+          <span>📋 Detalle del último run</span>
+          <button class="btn-copy-log" id="copy-log-btn-${banco}"
+                  onclick="event.stopPropagation();copyScraperLog('${banco}')"
+                  title="Copiar al portapapeles">⎘ Copiar</button>
+        </summary>
+        <pre class="scraper-log-pre" id="scraper-log-pre-${banco}">${escHtml(st.last_log)}</pre>
       </details>` : ""}
+      <details class="scraper-movs-details" id="movs-details-${banco}">
+        <summary onclick="loadScraperMovimientos('${banco}')">
+          <span>📦 Registros ingresados</span>
+          <button class="btn-refresh-movs" id="btn-refresh-movs-${banco}"
+                  onclick="event.stopPropagation();refreshScraperMovimientos('${banco}')"
+                  title="Actualizar lista">↻</button>
+        </summary>
+        <div id="movs-list-${banco}" class="scraper-movs-list">
+          <span style="font-size:.78rem;color:#94a3b8">Abrí para ver los registros.</span>
+        </div>
+      </details>
     </div>`;
   return card;
 }
@@ -3428,6 +3444,94 @@ async function deleteScraperSession(banco) {
   const res  = await fetch(`${BASE}/api/scrapers/${banco}/session`, { method: "DELETE" });
   const data = await res.json();
   showToast(data.message || "Sesión eliminada", res.ok ? "ok" : "err");
+}
+
+// ── Log de diagnóstico ────────────────────────────────────────────────────────
+
+function copyScraperLog(banco) {
+  const pre = document.getElementById(`scraper-log-pre-${banco}`);
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    const btn = document.getElementById(`copy-log-btn-${banco}`);
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = "✓ Copiado";
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
+  }).catch(() => showToast("No se pudo copiar", "err"));
+}
+
+// ── Registros ingresados (movimientos_raw) ─────────────────────────────────────
+
+const _ESTADO_MOV = {
+  new:       { cls: "mov-estado-new",       txt: "Nuevo"      },
+  matched:   { cls: "mov-estado-matched",   txt: "Conciliado" },
+  unmatched: { cls: "mov-estado-unmatched", txt: "Sin match"  },
+  imported:  { cls: "mov-estado-imported",  txt: "Importado"  },
+  ignored:   { cls: "mov-estado-ignored",   txt: "Ignorado"   },
+};
+
+async function loadScraperMovimientos(banco) {
+  const details = document.getElementById(`movs-details-${banco}`);
+  const el      = document.getElementById(`movs-list-${banco}`);
+  if (!el || !details) return;
+  if (details.open) return;          // clicking to close — do nothing
+  if (details.dataset.loaded === "1") return;   // already loaded
+  details.dataset.loaded = "1";
+  await _fetchScraperMovimientos(banco, el);
+}
+
+async function refreshScraperMovimientos(banco) {
+  const details = document.getElementById(`movs-details-${banco}`);
+  const el      = document.getElementById(`movs-list-${banco}`);
+  if (!el) return;
+  if (details) details.dataset.loaded = "0";
+  if (details && !details.open) details.open = true;
+  details.dataset.loaded = "1";
+  await _fetchScraperMovimientos(banco, el);
+}
+
+async function _fetchScraperMovimientos(banco, el) {
+  el.innerHTML = '<span style="font-size:.78rem;color:#94a3b8">Cargando…</span>';
+  try {
+    const res  = await fetch(`${BASE}/api/scrapers/movimientos-raw?fuente=${encodeURIComponent(banco)}&limit=100`);
+    const rows = res.ok ? await res.json() : [];
+    if (!rows.length) {
+      el.innerHTML = '<span style="font-size:.78rem;color:#94a3b8">Sin registros guardados.</span>';
+      return;
+    }
+    el.innerHTML = rows.map(r => {
+      const b      = _ESTADO_MOV[r.estado] || { cls: "", txt: r.estado };
+      const monto  = Math.abs(r.monto).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const prefix = r.moneda === "USD" ? "U$S " : "$ ";
+      const neg    = r.monto < 0;
+      return `<div class="scraper-mov-row" id="mov-row-${r.id}">
+        <span class="scraper-mov-fecha">${escHtml(r.fecha)}</span>
+        <span class="scraper-mov-desc" title="${escHtml(r.descripcion)}">${escHtml(r.descripcion)}</span>
+        <span class="scraper-mov-monto${neg ? " neg" : ""}">${prefix}${monto}</span>
+        <span class="mov-estado-badge ${b.cls}">${b.txt}</span>
+        <button class="btn-del-mov" onclick="deleteMovimientoRaw(${r.id},'${banco}')" title="Borrar">✕</button>
+      </div>`;
+    }).join("");
+  } catch(e) {
+    el.innerHTML = `<span style="font-size:.78rem;color:#b91c1c">Error: ${escHtml(e.message)}</span>`;
+  }
+}
+
+async function deleteMovimientoRaw(rawId, banco) {
+  if (!confirm("¿Borrar este registro?\nSi fue importado a gastos, también se borrará el gasto.")) return;
+  try {
+    const res = await fetch(`${BASE}/api/scrapers/movimientos-raw/${rawId}`, { method: "DELETE" });
+    if (res.ok) {
+      const row = document.getElementById(`mov-row-${rawId}`);
+      if (row) { row.style.opacity = "0"; setTimeout(() => row.remove(), 200); }
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(`✗ ${d.detail || "Error al borrar"}`, "err");
+    }
+  } catch(e) {
+    showToast(`✗ ${e.message}`, "err");
+  }
 }
 
 // ── TOTP (Galicia) ─────────────────────────────────────────────────────────────

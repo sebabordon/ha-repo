@@ -237,6 +237,20 @@ def ignorar_pendiente(raw_id: int, request: Request):
     return {"ok": True}
 
 
+@router.delete("/scrapers/movimientos-raw/{raw_id}")
+def delete_raw_movimiento(raw_id: int, request: Request):
+    """
+    Borra un movimiento_raw. Si estaba en estado 'imported' también elimina
+    el gasto asociado de la tabla gastos.
+    """
+    require_auth(request)
+    from scrapers_db import delete_movimiento_raw
+    result = delete_movimiento_raw(raw_id)
+    if not result["deleted_raw"]:
+        raise HTTPException(404, f"Movimiento raw {raw_id} no encontrado")
+    return {"ok": True, **result}
+
+
 # ── Movimiento rápido (desde shortcut PWA) ───────────────────────────────────
 
 @router.post("/movimientos-rapidos")

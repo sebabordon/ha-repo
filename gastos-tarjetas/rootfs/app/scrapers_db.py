@@ -260,6 +260,29 @@ def get_movimiento_raw(raw_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def delete_movimiento_raw(raw_id: int) -> dict:
+    """
+    Elimina un movimiento_raw.
+    Si tenía estado='imported', también borra el gasto asociado de la tabla gastos.
+    Devuelve {'deleted_raw': bool, 'deleted_gasto': bool, 'gasto_id': int|None}.
+    """
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT estado, gasto_id FROM movimientos_raw WHERE id=?", (raw_id,)
+        ).fetchone()
+        if not row:
+            return {"deleted_raw": False, "deleted_gasto": False, "gasto_id": None}
+
+        gasto_id     = row["gasto_id"]
+        deleted_gasto = False
+        if row["estado"] == "imported" and gasto_id:
+            conn.execute("DELETE FROM gastos WHERE id=?", (gasto_id,))
+            deleted_gasto = True
+
+        conn.execute("DELETE FROM movimientos_raw WHERE id=?", (raw_id,))
+    return {"deleted_raw": True, "deleted_gasto": deleted_gasto, "gasto_id": gasto_id}
+
+
 def importar_a_gastos(
     raw_id: int,
     categoria: Optional[str] = None,

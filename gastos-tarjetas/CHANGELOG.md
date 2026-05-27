@@ -2,6 +2,10 @@
 
 - **Migración automática `quick_form_archivo_origen_v1`**: los gastos cargados con el formulario rápido antes del fix (que quedaron con `archivo_origen='scraper'`) se corrigen automáticamente al iniciar. Se identifican via `movimientos_raw.raw_data LIKE '%manual_quick%'` y se actualiza a `archivo_origen='manual'` para que el botón de borrar aparezca en la UI.
 - **Formulario rápido autocontenido**: se eliminaron el link "← Inicio" del header y el botón "Volver a inicio" de la pantalla de éxito. La página queda sin navegación externa, pensada para usarse como ícono standalone desde el home screen.
+- **Registros ingresados en la card de scraper**: cada card tiene un panel colapsable "📦 Registros ingresados" con los últimos 100 `movimientos_raw` del banco (fecha, descripción, monto, badge de estado). Carga lazy al abrir, botón ↻ para refrescar.
+- **Borrar movimiento_raw desde la UI**: botón ✕ por fila; si el movimiento estaba `imported` también borra el gasto asociado.
+- **Botón "Copiar log"**: el panel "Detalle del último run" tiene un botón ⎘ Copiar al portapapeles.
+- **Nuevo endpoint `DELETE /api/scrapers/movimientos-raw/{id}`** + **`scrapers_db.delete_movimiento_raw`**: borrado en cascada (raw + gasto si aplica).
 
 ## 0.3.11
 

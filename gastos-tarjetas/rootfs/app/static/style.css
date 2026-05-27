@@ -1350,19 +1350,63 @@ tbody tr:hover { background: #fafbff; }
   text-align: center;
 }
 
-/* ── Log de diagnóstico del scraper ──────────────────────────────────────── */
-.scraper-log-details {
+/* ── Log de diagnóstico + registros del scraper ──────────────────────────── */
+.scraper-log-details,
+.scraper-movs-details {
   margin-top: .6rem;
 }
-.scraper-log-details summary {
+.scraper-log-details summary,
+.scraper-movs-details summary {
   cursor: pointer;
   font-size: .8rem;
   color: #64748b;
   user-select: none;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  list-style: none; /* quita el triángulo nativo en algunos browsers */
 }
-.scraper-log-details summary:hover {
-  color: #334155;
+.scraper-log-details summary::-webkit-details-marker,
+.scraper-movs-details summary::-webkit-details-marker { display: none; }
+.scraper-log-details summary::before,
+.scraper-movs-details summary::before {
+  content: "▶";
+  font-size: .65rem;
+  transition: transform .15s;
 }
+.scraper-log-details[open] summary::before,
+.scraper-movs-details[open] summary::before { transform: rotate(90deg); }
+.scraper-log-details summary:hover,
+.scraper-movs-details summary:hover { color: #334155; }
+
+/* Copy-log button */
+.btn-copy-log {
+  margin-left: auto;
+  font-size: .7rem;
+  padding: .1rem .4rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #64748b;
+  line-height: 1.4;
+}
+.btn-copy-log:hover { background: #e2e8f0; color: #1e293b; }
+
+/* Refresh-movs button */
+.btn-refresh-movs {
+  margin-left: auto;
+  font-size: .8rem;
+  padding: .1rem .35rem;
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+.btn-refresh-movs:hover { color: #334155; border-color: #cbd5e1; }
+
 .scraper-log-pre {
   font-size: .73rem;
   font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
@@ -1379,3 +1423,72 @@ tbody tr:hover { background: #fafbff; }
   border: 1px solid #e2e8f0;
   line-height: 1.5;
 }
+
+/* Lista de movimientos del último run */
+.scraper-movs-list {
+  margin-top: .4rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  overflow: hidden;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.scraper-mov-row {
+  display: grid;
+  grid-template-columns: 5.8rem 1fr 7rem 5.5rem 1.6rem;
+  gap: .2rem .45rem;
+  align-items: center;
+  padding: .3rem .5rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: .76rem;
+  transition: opacity .2s;
+}
+.scraper-mov-row:last-child { border-bottom: none; }
+.scraper-mov-row:hover { background: #f8fafc; }
+.scraper-mov-fecha {
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.scraper-mov-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1e293b;
+}
+.scraper-mov-monto {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+}
+.scraper-mov-monto.neg { color: #16a34a; }
+
+/* Estado badges */
+.mov-estado-badge {
+  font-size: .68rem;
+  padding: .1rem .3rem;
+  border-radius: 4px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+.mov-estado-new       { background: #e2e8f0; color: #475569; }
+.mov-estado-matched   { background: #dcfce7; color: #166534; }
+.mov-estado-unmatched { background: #fef3c7; color: #92400e; }
+.mov-estado-imported  { background: #dbeafe; color: #1e40af; }
+.mov-estado-ignored   { background: #f1f5f9; color: #94a3b8; }
+
+/* Delete button in row */
+.btn-del-mov {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: .75rem;
+  color: #cbd5e1;
+  padding: .1rem .2rem;
+  line-height: 1;
+  border-radius: 3px;
+}
+.btn-del-mov:hover { color: #ef4444; background: #fee2e2; }
