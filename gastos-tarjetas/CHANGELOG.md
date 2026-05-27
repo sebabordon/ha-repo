@@ -1,3 +1,7 @@
+## 0.3.15
+
+- **Selector de categoría tipo chiclets en formulario rápido**: reemplaza el `<select>` por una grilla de 2 columnas con botones tipo píldora. Tocar un chip lo selecciona (fondo oscuro); tocarlo de nuevo lo deselecciona. Si no se elige ninguno, el autocategorizador aplica reglas según la descripción ingresada.
+
 ## 0.3.14
 
 - **Auto-import de scraper a Gastos**: tras cada run (diario o manual), los movimientos que no matchean con ningún PDF (`unmatched`) se importan automáticamente a la tabla `gastos`. El toast del "Ejecutar ahora" muestra cuántos fueron scrapeados y cuántos importados.

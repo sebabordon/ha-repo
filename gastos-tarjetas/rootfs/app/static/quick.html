@@ -243,6 +243,41 @@
       background-position: right .75rem center;
       padding-right: 2.5rem;
     }
+
+    /* Category chiclets */
+    .cat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .4rem;
+    }
+
+    .cat-chip {
+      border: 1.5px solid var(--border);
+      background: var(--card);
+      border-radius: 20px;
+      padding: .38rem .55rem;
+      font-size: .78rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      transition: all .15s;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.3;
+    }
+
+    .cat-chip:active {
+      opacity: .7;
+    }
+
+    .cat-chip.selected {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -278,10 +313,8 @@
     </div>
 
     <div class="field">
-      <label>Categoría</label>
-      <select id="inp-cat">
-        <option value="">Sin categoría</option>
-      </select>
+      <label>Categoría <span style="font-weight:400;text-transform:none">(opcional)</span></label>
+      <div id="cat-grid" class="cat-grid"></div>
     </div>
 
     <div class="field">
@@ -316,8 +349,9 @@
 <script>
   const params = new URLSearchParams(location.search);
   const fuente = params.get("fuente") || "";
-  let   tipo   = "egreso";
-  let   moneda = "ARS";  // resolved after account lookup
+  let   tipo        = "egreso";
+  let   moneda      = "ARS";  // resolved after account lookup
+  let   selectedCat = "";     // currently selected category chiclet
 
   // Header
   document.getElementById("fuente-label").textContent = fuente.toUpperCase().replace(/_/g, " ");
@@ -330,12 +364,15 @@
     fetch("/api/categorias").then(r => r.json()).catch(() => []),
     fetch("/api/cuentas").then(r => r.json()).catch(() => []),
   ]).then(([cats, cuentas]) => {
-    // Populate category selector
-    const sel = document.getElementById("inp-cat");
+    // Populate category chiclets
+    const grid = document.getElementById("cat-grid");
     cats.sort().forEach(c => {
-      const o = document.createElement("option");
-      o.value = o.textContent = c;
-      sel.appendChild(o);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cat-chip";
+      btn.textContent = c;
+      btn.onclick = () => selectCat(c);
+      grid.appendChild(btn);
     });
 
     // Resolve currency from the matching account
@@ -347,6 +384,19 @@
     }
     // If not found (scraper fuente) or MULTI → keep selector visible
   });
+
+  function selectCat(c) {
+    // Toggle: click the same chip again to deselect
+    if (selectedCat === c) {
+      selectedCat = "";
+    } else {
+      selectedCat = c;
+    }
+    // Update chip visual state
+    document.querySelectorAll(".cat-chip").forEach(btn => {
+      btn.classList.toggle("selected", btn.textContent === selectedCat);
+    });
+  }
 
   function setTipo(t) {
     tipo = t;
@@ -368,7 +418,7 @@
     hideErr();
     const monto = parseFloat(document.getElementById("inp-monto").value);
     const fecha = document.getElementById("inp-fecha").value;
-    const cat   = document.getElementById("inp-cat").value;
+    const cat   = selectedCat;
     const desc  = document.getElementById("inp-desc").value.trim();
     // Si el selector está visible el usuario puede cambiarlo; si está oculto usamos la variable resuelta
     const mon   = document.getElementById("field-moneda").style.display === "none"
@@ -416,6 +466,9 @@
     document.getElementById("inp-desc").value  = "";
     document.getElementById("inp-fecha").value = new Date().toISOString().slice(0, 10);
     setTipo("egreso");
+    // Clear category selection
+    selectedCat = "";
+    document.querySelectorAll(".cat-chip").forEach(btn => btn.classList.remove("selected"));
     document.getElementById("screen-ok").style.display   = "none";
     document.getElementById("screen-form").style.display = "";
     document.getElementById("inp-monto").focus();
