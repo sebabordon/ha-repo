@@ -45,9 +45,15 @@ _PUNCT_RE  = re.compile(r"[^\w\s]")
 
 
 def _normalize(desc: str) -> str:
-    """Normaliza descripción para comparación: minúsculas, sin cuotas ni puntuación."""
+    """
+    Normaliza descripción para comparación: minúsculas, sin puntuación.
+
+    NO se eliminan los números de cuota (N/M): el tie-breaker en _score()
+    se encarga de penalizar matches entre cuotas distintas, y mantener el
+    "3/12" en la descripción normalizada beneficia la similitud cuando sí
+    coinciden (mismo N/M → más similitud).
+    """
     d = desc.lower().strip()
-    d = _CUOTA_RE.sub("", d)
     d = _PUNCT_RE.sub(" ", d)
     d = _SPACES_RE.sub(" ", d).strip()
     return d
@@ -81,9 +87,9 @@ def _score(raw: dict, candidate: dict) -> float:
     score = 0.35 * date_score + 0.65 * desc_score
 
     # Tie-breaker de cuotas: "TIENDA 3/12" jamás puede ser "TIENDA 1/12".
-    # _normalize() ya stripea el N/M para el SequenceMatcher, así que sin
-    # este chequeo descripciones idénticas con distinto número de cuota
-    # podrían false-matchear (mismo monto, misma fecha original, misma desc base).
+    # _normalize() conserva el N/M en la descripción, así que el SequenceMatcher
+    # ya penaliza cuotas distintas; este chequeo lo hace explícito y definitivo
+    # para el caso en que el monto y la base del nombre sean idénticos.
     m_raw  = _CUOTA_RE.search(raw["descripcion"])
     m_cand = _CUOTA_RE.search(candidate["descripcion"])
     if m_raw and m_cand and m_raw.group(1) != m_cand.group(1):

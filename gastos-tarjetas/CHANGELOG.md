@@ -1,3 +1,7 @@
+## 0.3.21
+
+- **Conciliación: `_normalize()` ya no elimina el número de cuota (N/M)**: ahora que el tie-breaker en `_score()` hace imposible el match entre cuotas distintas, eliminar `3/12` de la descripción antes de comparar sólo restaba precisión. Con el N/M preservado, `TIENDA 3/12` vs `TIENDA 3/12` obtiene mayor similitud que `TIENDA 3/12` vs `TIENDA` (PDF sin cuota explícita).
+
 ## 0.3.20
 
 - **Cuotas: guardar N/M en raw_data (AMEX scraper)**: `_parse_row` detecta el patrón `N/M` (ej. `3/12`) en la descripción y lo guarda en `raw_data["cuota"]`. Disponible para la UI y para futuras reglas.
