@@ -228,6 +228,20 @@ def _run_migrations(conn):
         """)
         conn.execute("INSERT INTO db_migrations (name) VALUES ('normalize_signs_v1')")
 
+    if "quick_form_archivo_origen_v1" not in done:
+        # v0.3.12: gastos insertados por el formulario rápido (/quick) quedaban con
+        # archivo_origen='scraper' (antes del fix). Los identificamos via movimientos_raw
+        # que tienen raw_data con 'manual_quick' y gasto_id vinculado.
+        conn.execute("""
+            UPDATE gastos SET archivo_origen = 'manual'
+            WHERE id IN (
+                SELECT gasto_id FROM movimientos_raw
+                WHERE raw_data LIKE '%manual_quick%'
+                  AND gasto_id IS NOT NULL
+            )
+        """)
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('quick_form_archivo_origen_v1')")
+
     if "fix_importaciones_cantidad_v1" not in done:
         # v0.2.43: SELECT changes() after executemany() returns 1 (last row only).
         # Recalculate cantidad for all import batches from actual gastos counts.

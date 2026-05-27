@@ -1,3 +1,8 @@
+## 0.3.12
+
+- **Migración automática `quick_form_archivo_origen_v1`**: los gastos cargados con el formulario rápido antes del fix (que quedaron con `archivo_origen='scraper'`) se corrigen automáticamente al iniciar. Se identifican via `movimientos_raw.raw_data LIKE '%manual_quick%'` y se actualiza a `archivo_origen='manual'` para que el botón de borrar aparezca en la UI.
+- **Formulario rápido autocontenido**: se eliminaron el link "← Inicio" del header y el botón "Volver a inicio" de la pantalla de éxito. La página queda sin navegación externa, pensada para usarse como ícono standalone desde el home screen.
+
 ## 0.3.11
 
 - **Íconos SVG por banco en el formulario rápido**: cada `/quick?fuente=X` ahora muestra un ícono generado dinámicamente con los colores y siglas del banco (AMEX azul, MercadoPago celeste, BBVA marino, Galicia rojo). El endpoint `/quick-icon/{fuente}.svg` genera el SVG en el servidor; el `/manifest-quick.json` lo referencia para que el ícono correcto aparezca al agregar al inicio de iOS/Android. Fuentes sin ícono dedicado usan el color de acento con los primeros 4 caracteres de la fuente.
