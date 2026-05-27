@@ -150,26 +150,63 @@ async def serve_quick(request: Request, fuente: str = "", label: str = ""):
 
 @app.get("/manifest-quick.json")
 async def serve_manifest_quick(fuente: str = "", label: str = ""):
-    """Manifest mínimo para las páginas /quick — con el nombre de la cuenta."""
+    """Manifest mínimo para las páginas /quick — con el nombre e ícono de la cuenta."""
     title = label.strip() or fuente.upper().replace("_", " ") or "Gasto rápido"
+    style  = _FUENTE_ICON_STYLES.get(fuente, _FUENTE_ICON_STYLES["__default__"])
     manifest = {
         "name":             title,
         "short_name":       title,
         "description":      f"Cargar gasto {title}",
         "start_url":        f"/quick?fuente={fuente}&label={label}",
         "display":          "standalone",
-        "background_color": "#16213e",
-        "theme_color":      "#16213e",
+        "background_color": style["bg"],
+        "theme_color":      style["bg"],
         "icons": [
             {
-                "src":     "/static/icono-sb.png",
-                "sizes":   "1024x1024",
-                "type":    "image/png",
+                "src":     f"/quick-icon/{fuente}.svg",
+                "sizes":   "any",
+                "type":    "image/svg+xml",
                 "purpose": "any maskable",
             },
         ],
     }
     return JSONResponse(manifest, media_type="application/manifest+json")
+
+
+# ── Paleta de íconos por fuente ────────────────────────────────────────────────
+_FUENTE_ICON_STYLES: dict[str, dict] = {
+    "amex":        {"bg": "#016FD0", "lines": ["AMEX"],          "fg": "#FFFFFF"},
+    "mercadopago": {"bg": "#009EE3", "lines": ["MP"],            "fg": "#FFFFFF"},
+    "bbva_mc":     {"bg": "#004481", "lines": ["BBVA", "MC"],    "fg": "#FFFFFF"},
+    "bbva_visa":   {"bg": "#004481", "lines": ["BBVA", "VISA"],  "fg": "#FFFFFF"},
+    "bbva_cuenta": {"bg": "#004481", "lines": ["BBVA", "CTA"],   "fg": "#FFFFFF"},
+    "galicia_mc":  {"bg": "#E31837", "lines": ["GAL", "MC"],     "fg": "#FFFFFF"},
+    "__default__": {"bg": "#16213e", "lines": [],                "fg": "#FFFFFF"},
+}
+
+
+@app.get("/quick-icon/{fuente}.svg")
+async def quick_icon_svg(fuente: str):
+    """Genera un ícono SVG con el color y sigla del banco."""
+    style = _FUENTE_ICON_STYLES.get(fuente, _FUENTE_ICON_STYLES["__default__"])
+    bg, fg = style["bg"], style["fg"]
+    lines  = style["lines"] or [fuente[:4].upper()]
+
+    # Dos líneas → fuente más chica y posicionadas arriba/abajo del centro
+    if len(lines) == 1:
+        text_els = f'<text x="256" y="310" text-anchor="middle" font-family="system-ui,sans-serif" font-size="180" font-weight="800" fill="{fg}" letter-spacing="-4">{lines[0]}</text>'
+    else:
+        text_els = (
+            f'<text x="256" y="240" text-anchor="middle" font-family="system-ui,sans-serif" font-size="150" font-weight="800" fill="{fg}" letter-spacing="-3">{lines[0]}</text>'
+            f'<text x="256" y="390" text-anchor="middle" font-family="system-ui,sans-serif" font-size="130" font-weight="700" fill="{fg}" opacity="0.85" letter-spacing="-2">{lines[1]}</text>'
+        )
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="90" fill="{bg}"/>
+  {text_els}
+</svg>"""
+    return PlainTextResponse(svg, media_type="image/svg+xml",
+                             headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/sw.js")

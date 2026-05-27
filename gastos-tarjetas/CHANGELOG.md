@@ -1,3 +1,7 @@
+## 0.3.11
+
+- **Íconos SVG por banco en el formulario rápido**: cada `/quick?fuente=X` ahora muestra un ícono generado dinámicamente con los colores y siglas del banco (AMEX azul, MercadoPago celeste, BBVA marino, Galicia rojo). El endpoint `/quick-icon/{fuente}.svg` genera el SVG en el servidor; el `/manifest-quick.json` lo referencia para que el ícono correcto aparezca al agregar al inicio de iOS/Android. Fuentes sin ícono dedicado usan el color de acento con los primeros 4 caracteres de la fuente.
+
 ## 0.3.10
 
 - **Fix — gastos del formulario rápido ahora se pueden borrar**: los gastos cargados desde `/quick` quedaban con `archivo_origen='scraper'` y `tipo='auto'`, ocultando el botón de borrar. Ahora se insertan con `archivo_origen='manual'`; `list_gastos` los trata como `tipo='manual'` y `delete_gasto_manual` los acepta.
