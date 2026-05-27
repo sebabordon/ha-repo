@@ -213,11 +213,11 @@ def importar_pendiente(raw_id: int, body: ImportarRequest, request: Request):
     if new_id is None:
         raise HTTPException(409, "No se pudo importar (ya procesado o no encontrado)")
 
-    # Aplicar categorización automática al nuevo gasto
+    # Aplicar categorización automática al nuevo gasto (solo reglas, sync-safe)
     try:
-        from categorizer import categorize
+        from categorizer import categorize_by_rules
         from db import update_categoria
-        cat = categorize(raw["descripcion"])
+        cat = categorize_by_rules(raw["descripcion"])
         if cat:
             update_categoria(new_id, cat)
     except Exception as exc:
@@ -302,8 +302,8 @@ def crear_movimiento_rapido(body: MovimientoRapidoRequest, request: Request):
         cat = body.categoria
         if not cat:
             try:
-                from categorizer import categorize
-                cat = categorize(desc)
+                from categorizer import categorize_by_rules
+                cat = categorize_by_rules(desc)
             except Exception:
                 pass
         gasto_id = importar_a_gastos(raw_id, categoria=cat, archivo_origen="manual")

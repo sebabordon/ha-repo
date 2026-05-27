@@ -272,22 +272,18 @@ def auto_import_unmatched(fuente: str) -> int:
 
     imported = 0
     for raw in rows:
+        # Usar solo categorización por reglas (sync). La función `categorize`
+        # es async (llama a LLMs) y no se puede await desde un contexto sync.
         cat = None
         try:
-            from categorizer import categorize
-            cat = categorize(raw["descripcion"])
+            from categorizer import categorize_by_rules
+            cat = categorize_by_rules(raw["descripcion"])
         except Exception:
             pass
 
         gasto_id = importar_a_gastos(raw["id"], categoria=cat, archivo_origen="scraper")
         if gasto_id:
             imported += 1
-            if cat:
-                try:
-                    from db import update_categoria
-                    update_categoria(gasto_id, cat)
-                except Exception:
-                    pass
 
     return imported
 

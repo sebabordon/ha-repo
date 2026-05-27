@@ -1,6 +1,7 @@
 ## 0.3.17
 
 - **Categorías especiales ocultas en formulario rápido**: los chiclets de categoría ya no muestran las categorías marcadas como especiales (Transferencia, Transferencia Intercuentas, y las marcadas con `especial: true` en rules.yaml). Se consulta `/api/categorias/especiales` en paralelo y se filtra antes de renderizar.
+- **Fix — 500 "type 'coroutine' is not supported" al ejecutar scraper**: `categorize()` es `async def` (llama LLMs vía httpx) y se llamaba sin `await` en tres lugares síncronos, pasando un objeto coroutine a SQLite como parámetro. Corregido reemplazando todas las llamadas por `categorize_by_rules()` (sync) en `scrapers_db.auto_import_unmatched`, `routes/scrapers.importar_pendiente` y `routes/scrapers.crear_movimiento_rapido`.
 
 ## 0.3.16
 
