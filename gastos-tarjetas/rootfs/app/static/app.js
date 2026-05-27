@@ -3338,6 +3338,10 @@ function _buildScraperCard(banco, data) {
         ${data.totp ? `<button class="btn btn-sm" onclick="startTotpSetup('${banco}')" id="btn-totp-${banco}">
           🔑 Iniciar sesión TOTP
         </button>` : ""}
+        <button class="btn btn-sm" onclick="importUnmatched('${banco}')" id="btn-import-${banco}"
+                title="Importar a Gastos todos los movimientos que no matchearon con PDFs">
+          ⬆ Importar pendientes
+        </button>
         <button class="btn btn-sm" style="color:#b91c1c" onclick="deleteScraperSession('${banco}')">
           🗑 Borrar sesión
         </button>
@@ -3426,7 +3430,12 @@ async function runScraperNow(banco) {
     const res  = await fetch(`${BASE}/api/scrapers/${banco}/run`, { method: "POST" });
     const data = await res.json();
     if (res.ok) {
-      showToast(`✓ ${banco}: ${data.movimientos ?? 0} movimientos nuevos`, "ok");
+      const mov = data.movimientos ?? 0;
+      const imp = data.auto_imported ?? 0;
+      const msg = imp > 0
+        ? `✓ ${banco}: ${mov} scrapeados, ${imp} importados a Gastos`
+        : `✓ ${banco}: ${mov} movimientos (${imp} importados)`;
+      showToast(msg, "ok");
     } else {
       showToast(`✗ ${banco}: ${data.detail || "Error"}`, "err", 0);
     }
@@ -3436,6 +3445,35 @@ async function runScraperNow(banco) {
     showToast(`✗ Error: ${e.message}`, "err", 0);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "▶ Ejecutar ahora"; }
+  }
+}
+
+async function importUnmatched(banco) {
+  const btn = document.getElementById(`btn-import-${banco}`);
+  if (btn) { btn.disabled = true; btn.textContent = "⟳ Importando…"; }
+  try {
+    const res  = await fetch(`${BASE}/api/scrapers/${banco}/import-unmatched`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(
+        data.imported > 0
+          ? `✓ ${data.imported} movimientos importados a Gastos`
+          : "Sin movimientos pendientes",
+        "ok"
+      );
+      if (data.imported > 0) {
+        // Refrescar la lista de registros y recargar tabla principal si está visible
+        const details = document.getElementById(`movs-details-${banco}`);
+        if (details) { details.dataset.loaded = "0"; }
+        if (typeof loadData === "function") loadData();
+      }
+    } else {
+      showToast(`✗ ${data.detail || "Error"}`, "err");
+    }
+  } catch(e) {
+    showToast(`✗ ${e.message}`, "err");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "⬆ Importar pendientes"; }
   }
 }
 

@@ -98,8 +98,48 @@ async def _run_scraper_job(banco: str, data_dir: str) -> None:
         conc = run_conciliation(fuente=banco)
         logger.info("[scheduler] Conciliación %s: %s", banco, conc)
 
+        # Auto-importar los movimientos que no matchearon con ningún PDF
+        imported = _auto_import_unmatched(banco)
+        if imported:
+            logger.info("[scheduler] %s: %d movimientos auto-importados a gastos.", banco, imported)
+
     finally:
         _user_data_dir.reset(token)
+
+
+def _auto_import_unmatched(banco: str) -> int:
+    """
+    Importa a la tabla `gastos` todos los movimientos_raw de `banco` que quedaron
+    en estado 'unmatched' después de la conciliación.
+    Intenta categorizar cada uno con el categorizador automático.
+    Devuelve la cantidad importada.
+    """
+    from scrapers_db import list_movimientos_raw, importar_a_gastos
+
+    unmatched = list_movimientos_raw(estado="unmatched", fuente=banco)
+    if not unmatched:
+        return 0
+
+    imported = 0
+    for raw in unmatched:
+        cat = None
+        try:
+            from categorizer import categorize
+            cat = categorize(raw["descripcion"])
+        except Exception:
+            pass
+
+        gasto_id = importar_a_gastos(raw["id"], categoria=cat, archivo_origen="scraper")
+        if gasto_id:
+            imported += 1
+            if cat:
+                try:
+                    from db import update_categoria
+                    update_categoria(gasto_id, cat)
+                except Exception:
+                    pass
+
+    return imported
 
 
 def start_scheduler() -> None:
@@ -200,13 +240,17 @@ async def run_scraper_now(banco: str, data_dir: str | None = None) -> dict:
 
     conc = run_conciliation(fuente=banco)
 
+    # Auto-importar los que no matchearon
+    auto_imported = _auto_import_unmatched(banco)
+
     return {
-        "ok":           True,
-        "banco":        banco,
-        "movimientos":  inserted,
-        "conciliacion": conc,
-        "saldos":       result.saldos,
-        "timestamp":    datetime.utcnow().isoformat(),
+        "ok":            True,
+        "banco":         banco,
+        "movimientos":   inserted,
+        "auto_imported": auto_imported,
+        "conciliacion":  conc,
+        "saldos":        result.saldos,
+        "timestamp":     datetime.utcnow().isoformat(),
     }
 
 

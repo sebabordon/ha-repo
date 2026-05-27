@@ -1,3 +1,10 @@
+## 0.3.14
+
+- **Auto-import de scraper a Gastos**: tras cada run (diario o manual), los movimientos que no matchean con ningún PDF (`unmatched`) se importan automáticamente a la tabla `gastos`. El toast del "Ejecutar ahora" muestra cuántos fueron scrapeados y cuántos importados.
+- **Nuevo botón "⬆ Importar pendientes"** en la card de scraper: importa de una sola vez todos los `unmatched` existentes (útil para lotes anteriores al auto-import).
+- **Nuevo endpoint `POST /api/scrapers/{banco}/import-unmatched`**: llama a `_auto_import_unmatched` con categorización automática.
+- **`_auto_import_unmatched(banco)`**: función reutilizada por el scheduler diario, el trigger manual y el botón de la UI.
+
 ## 0.3.13
 
 - **Fix — botón borrar en gastos del formulario rápido (2do intento)**: `COALESCE(c.tipo, CASE...)` retornaba `'auto'` cuando la fuente (ej. `mercadopago`) ya tenía fila en `cuentas` con `tipo='auto'` no-NULL, sin evaluar el CASE de `archivo_origen`. Corregido invirtiendo el orden: `CASE WHEN archivo_origen='manual' THEN 'manual' ELSE COALESCE(c.tipo,'auto') END` — el check de `archivo_origen` ahora tiene prioridad absoluta.
