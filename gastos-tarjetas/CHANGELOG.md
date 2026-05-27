@@ -1,3 +1,9 @@
+## 0.3.20
+
+- **Cuotas: guardar N/M en raw_data (AMEX scraper)**: `_parse_row` detecta el patrón `N/M` (ej. `3/12`) en la descripción y lo guarda en `raw_data["cuota"]`. Disponible para la UI y para futuras reglas.
+- **Cuotas: tie-breaker en conciliación**: `_score()` en `conciliacion.py` ahora retorna `0.0` si raw y candidato tienen distinto número de cuota — evita que `TIENDA 3/12` matchee con `TIENDA 1/12` (mismo monto, misma desc base, pero distinta cuota).
+- **Cuotas: tie-breaker en dedup PDF upload**: `consolidate_scraper_duplicates()` aplica el mismo chequeo antes del SequenceMatcher.
+
 ## 0.3.19
 
 - **Deduplicación scraper → PDF (AMEX / BBVA)**: cuando se sube un PDF de una fuente que también tiene scraper activo (`amex`, `bbva_mc`, `bbva_visa`), el upload detecta y elimina automáticamente los gastos duplicados que el scraper había auto-importado del mismo período. El PDF es la fuente de verdad: el gasto del scraper se borra, el `movimiento_raw` pasa a `matched` apuntando al gasto del PDF. Matching por fuente+moneda, monto±0.02, fecha±5 días y descripción >60% similar. Si se eliminaron duplicados, la respuesta incluye `scraper_duplicados_eliminados`.

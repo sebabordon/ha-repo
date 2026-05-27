@@ -327,7 +327,10 @@ def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
     Devuelve la cantidad de duplicados de scraper eliminados.
     """
     import difflib
+    import re
     from datetime import datetime, timedelta
+
+    _CUOTA_RE = re.compile(r"\b(\d{1,2}/\d{1,3})\b")
 
     if not pdf_records:
         return 0
@@ -345,6 +348,7 @@ def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
         monto     = float(rec["monto"])
         moneda    = rec.get("moneda", "ARS")
         desc_pdf  = str(rec.get("descripcion", "")).lower().strip()
+        cuota_pdf = _CUOTA_RE.search(desc_pdf)
 
         with _conn() as conn:
             # El gasto PDF recién insertado (el más reciente que NO es del scraper)
@@ -376,11 +380,14 @@ def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
             ).fetchall()
 
             for sc in scraper_candidates:
-                ratio = difflib.SequenceMatcher(
-                    None,
-                    str(sc["descripcion"]).lower().strip(),
-                    desc_pdf,
-                ).ratio()
+                desc_sc   = str(sc["descripcion"]).lower().strip()
+                cuota_sc  = _CUOTA_RE.search(desc_sc)
+
+                # Tie-breaker: si ambos tienen N/M y son distintos → no es el mismo gasto
+                if cuota_sc and cuota_pdf and cuota_sc.group(1) != cuota_pdf.group(1):
+                    continue
+
+                ratio = difflib.SequenceMatcher(None, desc_sc, desc_pdf).ratio()
                 if ratio < 0.60:
                     continue
 

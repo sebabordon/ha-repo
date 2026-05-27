@@ -50,6 +50,9 @@ _CARD_PRODUCTS = [
 # Non-breaking space que Selenium devuelve cuando el HTML tiene &nbsp;
 _NBSP = "\xa0"
 
+# Detecta el número de cuota en la descripción: "3/12", "01/6", "03/24", etc.
+_CUOTA_RE = re.compile(r"\b(\d{1,2}/\d{1,3})\b")
+
 
 class AmexScraper(BaseScraper):
     fuente       = "amex"
@@ -395,6 +398,11 @@ class AmexScraper(BaseScraper):
                     return None
                 moneda = "ARS"
 
+            raw_data: dict = {"cardholder": cardholder}
+            cuota_m = _CUOTA_RE.search(desc)
+            if cuota_m:
+                raw_data["cuota"] = cuota_m.group(1)   # e.g. "3/12"
+
             return MovimientoRaw(
                 fuente      = "amex",
                 fecha       = fecha_iso,
@@ -402,7 +410,7 @@ class AmexScraper(BaseScraper):
                 monto       = monto,
                 moneda      = moneda,
                 tarjeta     = tarjeta,
-                raw_data    = {"cardholder": cardholder},
+                raw_data    = raw_data,
             )
 
         except Exception as exc:

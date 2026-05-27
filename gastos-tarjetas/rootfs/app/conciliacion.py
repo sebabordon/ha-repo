@@ -39,7 +39,7 @@ DATE_WINDOW_DAYS     = 5      # ventana de días alrededor de la fecha del raw
 
 # ── Normalización de descripciones ────────────────────────────────────────────
 
-_CUOTA_RE  = re.compile(r"\b\d{1,2}/\d{2,3}\b")          # "1/12", "03/24"
+_CUOTA_RE  = re.compile(r"\b(\d{1,2}/\d{1,3})\b")         # "1/12", "03/24", "3/6"
 _SPACES_RE = re.compile(r"\s+")
 _PUNCT_RE  = re.compile(r"[^\w\s]")
 
@@ -78,7 +78,18 @@ def _score(raw: dict, candidate: dict) -> float:
 
     # Ponderación: descripción pesa más que fecha porque los bancos
     # a veces registran fechas distintas (compra vs proceso)
-    return 0.35 * date_score + 0.65 * desc_score
+    score = 0.35 * date_score + 0.65 * desc_score
+
+    # Tie-breaker de cuotas: "TIENDA 3/12" jamás puede ser "TIENDA 1/12".
+    # _normalize() ya stripea el N/M para el SequenceMatcher, así que sin
+    # este chequeo descripciones idénticas con distinto número de cuota
+    # podrían false-matchear (mismo monto, misma fecha original, misma desc base).
+    m_raw  = _CUOTA_RE.search(raw["descripcion"])
+    m_cand = _CUOTA_RE.search(candidate["descripcion"])
+    if m_raw and m_cand and m_raw.group(1) != m_cand.group(1):
+        return 0.0   # distinto número de cuota → imposible ser el mismo gasto
+
+    return score
 
 
 # ── Entrada principal ─────────────────────────────────────────────────────────
