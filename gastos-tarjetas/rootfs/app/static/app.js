@@ -3573,13 +3573,47 @@ async function _fetchScraperMovimientos(banco, el) {
         ${scrapedLabel ? `<span class="scraper-mov-scraped-time" title="Escaneado: ${escHtml(r.scraped_at || '')}">${escHtml(scrapedLabel)}</span>` : ''}
       </span>`;
 
-      // Desc cell: punto azul "●" si es nuevo, luego descripción
+      // Subtitle con detalles del raw_data (tipo de pago y operación)
+      let rawSubtitle = "";
+      try {
+        const rd = r.raw_data ? (typeof r.raw_data === "string" ? JSON.parse(r.raw_data) : r.raw_data) : {};
+        const typeLabels = {
+          "account_money": "Billetera",
+          "debit_card":    "Débito",
+          "credit_card":   "Crédito",
+          "ticket":        "Ticket/cupón",
+          "atm":           "ATM",
+          "digital_currency": "Cripto",
+        };
+        const opLabels = {
+          "regular_payment":   "Pago",
+          "money_transfer":    "Transferencia",
+          "recurring_payment": "Pago recurrente",
+          "account_fund":      "Carga de saldo",
+          "investment":        "Inversión",
+          "pos_payment":       "Pago QR",
+          "checkout_pro":      "Compra online",
+          "checkout_on":       "Compra online",
+        };
+        const parts = [];
+        if (rd.payment_type_id) parts.push(typeLabels[rd.payment_type_id] || rd.payment_type_id);
+        if (rd.operation_type)  parts.push(opLabels[rd.operation_type]  || rd.operation_type);
+        if (rd.payment_id)      parts.push(`#${rd.payment_id}`);
+        if (parts.length) rawSubtitle = parts.join(" · ");
+      } catch(_) {}
+
+      // Desc cell: punto azul "●" si es nuevo, luego descripción + subtitle
       const descCell = `<span class="scraper-mov-desc" title="${escHtml(r.descripcion)}">
-        ${isNew ? '<span class="scraper-mov-new-dot" title="Nuevo en el último run">●</span>' : ''}${escHtml(r.descripcion)}
+        ${isNew ? '<span class="scraper-mov-new-dot" title="Nuevo en el último run">●</span>' : ''}${escHtml(r.descripcion)}${rawSubtitle ? `<span class="scraper-mov-raw-sub">${escHtml(rawSubtitle)}</span>` : ''}
       </span>`;
 
       const isIgnored   = r.estado === 'ignored';
-      const delTitle    = isIgnored ? "Borrar definitivamente (quita el sentinel)" : "Ignorar / borrar";
+      const isMp        = banco === 'mercadopago';
+      const delTitle    = isIgnored
+        ? "Borrar definitivamente (quita el sentinel)"
+        : isMp
+          ? "Borrar (el scraper lo reimportará la próxima vez)"
+          : "Ignorar (el scraper no lo reimportará)";
       const rowExtraClass = isIgnored ? " scraper-mov-row-ignored" : "";
       return `<div class="scraper-mov-row${rowExtraClass}" id="mov-row-${r.id}">
         ${fechaCell}
@@ -3595,9 +3629,15 @@ async function _fetchScraperMovimientos(banco, el) {
 }
 
 async function deleteMovimientoRaw(rawId, banco, isIgnored = false) {
-  const msg = isIgnored
-    ? "¿Borrar definitivamente este registro?\nSe eliminará de la base de datos y el scraper podrá volver a importarlo."
-    : "¿Ignorar este registro?\nSi fue importado a gastos, también se borrará el gasto.\nEl scraper no lo volverá a importar.";
+  const isMp = banco === 'mercadopago';
+  let msg;
+  if (isIgnored) {
+    msg = "¿Borrar definitivamente este registro?\nSe eliminará de la base de datos y el scraper podrá volver a importarlo.";
+  } else if (isMp) {
+    msg = "¿Borrar este registro?\nSi tiene un gasto vinculado también se borrará.\nEl scraper lo volverá a importar en el próximo run.";
+  } else {
+    msg = "¿Ignorar este registro?\nSi fue importado a gastos, también se borrará el gasto.\nEl scraper no lo volverá a importar.";
+  }
   if (!confirm(msg)) return;
   try {
     const res = await fetch(`${BASE}/api/scrapers/movimientos-raw/${rawId}`, { method: "DELETE" });

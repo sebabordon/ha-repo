@@ -305,7 +305,8 @@ def delete_movimiento_raw(raw_id: int) -> dict:
     """
     with _conn() as conn:
         row = conn.execute(
-            "SELECT estado, gasto_id, raw_data FROM movimientos_raw WHERE id=?", (raw_id,)
+            "SELECT fuente, estado, gasto_id, raw_data FROM movimientos_raw WHERE id=?",
+            (raw_id,),
         ).fetchone()
         if not row:
             return {"deleted_raw": False, "deleted_gasto": False, "gasto_id": None}
@@ -324,12 +325,18 @@ def delete_movimiento_raw(raw_id: int) -> dict:
         except Exception:
             pass
 
-        if is_manual_quick or row["estado"] == "ignored":
-            # Hard delete: /quick no necesita sentinel; 'ignored' ya es un sentinel
-            # que el usuario quiere eliminar explícitamente (limpieza manual).
+        # MercadoPago tiene dedup propio vía payment_id en _get_existing_payment_ids,
+        # no necesita el sentinel 'ignored'. Un solo ✕ limpia completamente la fila
+        # y permite que el scraper vuelva a importar en el próximo run.
+        #
+        # AMEX / BBVA / Galicia dependen del sentinel 'ignored' (conciliation fallback)
+        # para no reimportar entradas eliminadas → soft delete ahí.
+        is_mp = row["fuente"] == "mercadopago"
+
+        if is_manual_quick or row["estado"] == "ignored" or is_mp:
             conn.execute("DELETE FROM movimientos_raw WHERE id=?", (raw_id,))
         else:
-            # Soft delete: sentinel 'ignored' → scraper no reimporta
+            # Soft delete: sentinel 'ignored' → scraper no reimporta (AMEX/BBVA/Galicia)
             conn.execute(
                 "UPDATE movimientos_raw SET estado='ignored', gasto_id=NULL WHERE id=?",
                 (raw_id,),

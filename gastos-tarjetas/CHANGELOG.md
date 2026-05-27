@@ -1,3 +1,9 @@
+## 0.3.30
+
+- **`delete_movimiento_raw` — hard delete para MP en un solo click**: las entradas de MercadoPago se borran completamente con un solo ✕ (el gasto vinculado también se elimina si existe). No se crea sentinel `ignored` porque MP ya deduplica vía `payment_id` en `_get_existing_payment_ids`. Esto rompe el ciclo confuso de "✕ → ignored → ✕ de nuevo" que se necesitaba antes. El scraper reimporta en el próximo run; AMEX/BBVA/Galicia siguen con soft-delete para mantener su sentinel.
+- **Panel scraper — subtitle con tipo de pago**: bajo la descripción de cada fila se muestra una línea pequeña con `payment_type_id` traducido (Billetera, Débito, etc.), `operation_type` traducido y `payment_id`. Permite ver de qué tipo es cada movimiento sin abrir la DB.
+- **Tooltips del ✕ diferenciados**: el tooltip del botón ✕ indica explícitamente si el borrado permitirá o impedirá la reimportación (comportamiento diferente para MP vs otros scrapers).
+
 ## 0.3.29
 
 - **Panel scraper — mostrar entradas `ignored`**: los registros con estado `ignored` (sentinels anti-reimport) ahora se muestran en el panel, con opacidad reducida y descripción tachada para distinguirlos de los activos.
