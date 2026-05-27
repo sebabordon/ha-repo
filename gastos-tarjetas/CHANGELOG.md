@@ -1,6 +1,7 @@
 ## 0.3.15
 
 - **Selector de categoría tipo chiclets en formulario rápido**: reemplaza el `<select>` por una grilla de 2 columnas con botones tipo píldora. Tocar un chip lo selecciona (fondo oscuro); tocarlo de nuevo lo deselecciona. Si no se elige ninguno, el autocategorizador aplica reglas según la descripción ingresada.
+- **Fix — "Importar pendientes" daba "string did not match pattern"**: la función `_auto_import_unmatched` vivía en `scraper_scheduler.py` y al importarla desde el route handler causaba un error de validación de ruta. Se movió a `scrapers_db.py` como `auto_import_unmatched` (función pública) y se renombró el endpoint de `/import-unmatched` a `/importar-pendientes` para evitar ambigüedades con el path parser de Starlette.
 
 ## 0.3.14
 

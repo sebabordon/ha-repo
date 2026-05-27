@@ -3452,7 +3452,7 @@ async function importUnmatched(banco) {
   const btn = document.getElementById(`btn-import-${banco}`);
   if (btn) { btn.disabled = true; btn.textContent = "⟳ Importando…"; }
   try {
-    const res  = await fetch(`${BASE}/api/scrapers/${banco}/import-unmatched`, { method: "POST" });
+    const res  = await fetch(`${BASE}/api/scrapers/${banco}/importar-pendientes`, { method: "POST" });
     const data = await res.json();
     if (res.ok) {
       showToast(

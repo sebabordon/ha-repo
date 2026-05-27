@@ -237,15 +237,15 @@ def ignorar_pendiente(raw_id: int, request: Request):
     return {"ok": True}
 
 
-@router.post("/scrapers/{banco}/import-unmatched")
-def import_unmatched(banco: str, request: Request):
+@router.post("/scrapers/{banco}/importar-pendientes")
+def importar_pendientes_banco(banco: str, request: Request):
     """
     Importa a gastos todos los movimientos_raw 'unmatched' del banco.
     Útil para importar lotes previos al auto-import automático.
     """
     require_auth(request)
-    from scraper_scheduler import _auto_import_unmatched
-    n = _auto_import_unmatched(banco)
+    from scrapers_db import auto_import_unmatched
+    n = auto_import_unmatched(banco)
     return {"ok": True, "imported": n}
 
 

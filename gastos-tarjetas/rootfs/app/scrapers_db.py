@@ -260,6 +260,38 @@ def get_movimiento_raw(raw_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def auto_import_unmatched(fuente: str) -> int:
+    """
+    Importa a `gastos` todos los movimientos_raw de `fuente` con estado
+    'unmatched'. Intenta categorizar automáticamente cada uno.
+    Devuelve la cantidad importada.
+    """
+    rows = list_movimientos_raw(estado="unmatched", fuente=fuente)
+    if not rows:
+        return 0
+
+    imported = 0
+    for raw in rows:
+        cat = None
+        try:
+            from categorizer import categorize
+            cat = categorize(raw["descripcion"])
+        except Exception:
+            pass
+
+        gasto_id = importar_a_gastos(raw["id"], categoria=cat, archivo_origen="scraper")
+        if gasto_id:
+            imported += 1
+            if cat:
+                try:
+                    from db import update_categoria
+                    update_categoria(gasto_id, cat)
+                except Exception:
+                    pass
+
+    return imported
+
+
 def delete_movimiento_raw(raw_id: int) -> dict:
     """
     Elimina un movimiento_raw.
