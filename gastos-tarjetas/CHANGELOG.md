@@ -1,3 +1,7 @@
+## 0.3.25
+
+- **Borrado de /quick: hard delete, no sentinel**: al borrar un gasto ingresado con el formulario rápido (`raw_data.manual_quick = true`), tanto el raw como el gasto se eliminan completamente de la DB. No tiene sentido guardar un sentinel para algo que el usuario ingresó a mano. Si el scraper encuentra la misma transacción real en la API, la importa normalmente (comportamiento correcto). Solo los raws del scraper (no manuales) conservan el comportamiento de soft delete (`'ignored'`).
+
 ## 0.3.24
 
 - **Fix — ✕ en card de scraper ahora previene reimport**: `delete_movimiento_raw` ya no borra la fila; la marca como `'ignored'` (y sí borra el gasto vinculado si estaba importado). El sentinel `'ignored'` es detectado por la conciliación y por `_get_existing_payment_ids` → el scraper no vuelve a importar esa transacción.

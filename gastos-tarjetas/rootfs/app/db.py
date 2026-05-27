@@ -920,13 +920,27 @@ def delete_movimiento_manual(gasto_id: int, fuente: str) -> bool:
         conn.execute("DELETE FROM gastos WHERE id=? AND fuente=?", (gasto_id, fuente))
         changed = bool(conn.execute("SELECT changes()").fetchone()[0])
         if changed:
-            # Marcar el movimiento_raw vinculado como 'ignored' para que el
-            # scraper no vuelva a importar este gasto en el próximo run.
-            # movimientos_raw vive en la misma DB → podemos actualizarlo aquí.
-            conn.execute(
-                "UPDATE movimientos_raw SET estado='ignored' WHERE gasto_id=?",
-                (gasto_id,),
-            )
+            # Actualizar el movimiento_raw vinculado según su origen:
+            # - /quick (manual_quick): borrar completamente (no hay razón para guardar sentinel)
+            # - scraper: marcar 'ignored' para que no reimporte en el próximo run
+            raw_row = conn.execute(
+                "SELECT id, raw_data FROM movimientos_raw WHERE gasto_id=?", (gasto_id,)
+            ).fetchone()
+            if raw_row:
+                import json as _json
+                is_manual_quick = False
+                try:
+                    rd = _json.loads(raw_row["raw_data"]) if raw_row["raw_data"] else {}
+                    is_manual_quick = bool(rd.get("manual_quick"))
+                except Exception:
+                    pass
+                if is_manual_quick:
+                    conn.execute("DELETE FROM movimientos_raw WHERE id=?", (raw_row["id"],))
+                else:
+                    conn.execute(
+                        "UPDATE movimientos_raw SET estado='ignored', gasto_id=NULL WHERE id=?",
+                        (raw_row["id"],),
+                    )
     if changed:
         recalc_cuenta_saldo(fuente)
     return changed

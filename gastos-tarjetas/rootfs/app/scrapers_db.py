@@ -290,18 +290,22 @@ def auto_import_unmatched(fuente: str) -> int:
 
 def delete_movimiento_raw(raw_id: int) -> dict:
     """
-    "Borra" un movimiento_raw desde la UI del scraper.
+    Borra o ignora un movimiento_raw desde la UI del scraper.
 
-    En lugar de eliminar la fila, la marca como 'ignored' para que actúe
-    como sentinel: el scraper no volverá a importar la misma transacción
-    (se detecta por payment_id o por conciliación de raws ignorados).
+    - Entradas manuales /quick (raw_data contiene "manual_quick"):
+      se borran completamente. No tiene sentido guardar un sentinel para
+      algo que el usuario ingresó a mano.
+
+    - Entradas del scraper:
+      se marcan como 'ignored' (soft delete). La fila queda como sentinel
+      para que el scraper no reimporte la misma transacción en el próximo run.
 
     Si el raw tenía estado='imported', también borra el gasto asociado.
     Devuelve {'deleted_raw': bool, 'deleted_gasto': bool, 'gasto_id': int|None}.
     """
     with _conn() as conn:
         row = conn.execute(
-            "SELECT estado, gasto_id FROM movimientos_raw WHERE id=?", (raw_id,)
+            "SELECT estado, gasto_id, raw_data FROM movimientos_raw WHERE id=?", (raw_id,)
         ).fetchone()
         if not row:
             return {"deleted_raw": False, "deleted_gasto": False, "gasto_id": None}
@@ -312,12 +316,23 @@ def delete_movimiento_raw(raw_id: int) -> dict:
             conn.execute("DELETE FROM gastos WHERE id=?", (gasto_id,))
             deleted_gasto = True
 
-        # Marcar como 'ignored' en lugar de borrar: el sentinel es necesario
-        # para que el scraper no reimporte la misma transacción en el próximo run.
-        conn.execute(
-            "UPDATE movimientos_raw SET estado='ignored', gasto_id=NULL WHERE id=?",
-            (raw_id,),
-        )
+        # ¿Es entrada manual de /quick?
+        is_manual_quick = False
+        try:
+            rd = json.loads(row["raw_data"]) if row["raw_data"] else {}
+            is_manual_quick = bool(rd.get("manual_quick"))
+        except Exception:
+            pass
+
+        if is_manual_quick:
+            # Hard delete: no necesita sentinel
+            conn.execute("DELETE FROM movimientos_raw WHERE id=?", (raw_id,))
+        else:
+            # Soft delete: sentinel 'ignored' → scraper no reimporta
+            conn.execute(
+                "UPDATE movimientos_raw SET estado='ignored', gasto_id=NULL WHERE id=?",
+                (raw_id,),
+            )
     return {"deleted_raw": True, "deleted_gasto": deleted_gasto, "gasto_id": gasto_id}
 
 
