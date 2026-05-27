@@ -1,3 +1,7 @@
+## 0.3.18
+
+- **Bump de versión**: 0.3.17 ya estaba tomado por otra sesión concurrente; se sube a 0.3.18 para evitar conflicto de instalación en HA.
+
 ## 0.3.17
 
 - **Categorías especiales ocultas en formulario rápido**: los chiclets de categoría ya no muestran las categorías marcadas como especiales (Transferencia, Transferencia Intercuentas, y las marcadas con `especial: true` en rules.yaml). Se consulta `/api/categorias/especiales` en paralelo y se filtra antes de renderizar.
