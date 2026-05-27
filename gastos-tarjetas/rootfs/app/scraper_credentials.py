@@ -89,6 +89,14 @@ BANKS: dict[str, dict] = {
                 "hint":     "Generalo en mercadopago.com.ar/developers/panel → tu app → Credenciales de producción",
             },
             {
+                "key":         "usuario",
+                "label":       "Usuario (nombre)",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "Titular",
+                "hint":        "Nombre del titular para etiquetar los gastos importados (ej. Titular, Juan)",
+            },
+            {
                 "key":         "dias",
                 "label":       "Días a consultar",
                 "type":        "text",

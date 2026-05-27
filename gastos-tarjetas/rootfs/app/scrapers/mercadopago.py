@@ -17,8 +17,15 @@ Endpoints usados:
   GET /v1/payments/search?payer.id=…    → pagos realizados (egresos)
   GET /v1/payments/search?collector.id=… → cobros recibidos (ingresos)
   GET /v1/account/balance               → saldo disponible
+
+Cuotas con tarjeta de crédito (Q4):
+  Cuando payment_type_id == "credit_card" e installments > 1, el pago se divide
+  en N entradas individuales (una por cuota mensual) para que la conciliación
+  pueda cruzarlas contra los débitos del resumen de tarjeta.
+  Cada cuota lleva raw_data.payment_id = "{id}_c{i}" (ej. "123456_c2").
 """
 
+import calendar
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -31,9 +38,18 @@ from scrapers_db import upsert_scraper_status
 
 logger = logging.getLogger(__name__)
 
-_BASE        = "https://api.mercadopago.com"
+_BASE         = "https://api.mercadopago.com"
 _DIAS_DEFAULT = 60    # días hacia atrás a consultar si no se configura otro valor
 _PAGE_SIZE    = 50    # máximo que acepta la API
+
+
+def _add_months(dt: datetime, months: int) -> datetime:
+    """Suma `months` meses a un datetime sin dependencias externas."""
+    month = dt.month - 1 + months
+    year  = dt.year + month // 12
+    month = month % 12 + 1
+    day   = min(dt.day, calendar.monthrange(year, month)[1])
+    return dt.replace(year=year, month=month, day=day)
 
 
 class MercadoPagoScraper(BaseScraper):
@@ -58,6 +74,9 @@ class MercadoPagoScraper(BaseScraper):
             err = "No hay access_token configurado para MercadoPago."
             upsert_scraper_status(self.fuente, estado="error", error_msg=err)
             return ScraperResult(fuente=self.fuente, error=err, log_lines=log)
+
+        # Usuario default para etiquetar gastos importados (Q2)
+        self._default_usuario = (config.get("usuario") or "").strip()
 
         dias = int(config.get("dias") or _DIAS_DEFAULT)
         headers = {
@@ -101,12 +120,12 @@ class MercadoPagoScraper(BaseScraper):
             )
             upsert_scraper_status(
                 self.fuente,
-                estado           = "ok",
-                ultimo_ok        = now_iso,
-                error_msg        = None,
+                estado             = "ok",
+                ultimo_ok          = now_iso,
+                error_msg          = None,
                 movimientos_nuevos = len(movimientos),
-                saldo_ars        = saldos.get("mercadopago", {}).get("saldo_ars"),
-                last_log         = "\n".join(log),
+                saldo_ars          = saldos.get("mercadopago", {}).get("saldo_ars"),
+                last_log           = "\n".join(log),
             )
             return result
 
@@ -159,7 +178,7 @@ class MercadoPagoScraper(BaseScraper):
                 client, user_id, role, since, until, sign, existing_ids, log_fn
             )
             movimientos.extend(page_movs)
-            stats[label]  = len(page_movs)
+            stats[label]      = len(page_movs)
             stats["skipped"] += skipped
 
         return movimientos, stats
@@ -200,15 +219,31 @@ class MercadoPagoScraper(BaseScraper):
                 break
 
             for payment in results:
-                pid = payment.get("id")
-                if pid and pid in existing_ids:
-                    skipped += 1
-                    continue
-                mov = self._payment_to_movimiento(payment, sign)
-                if mov:
-                    movs.append(mov)
-                    if pid:
-                        existing_ids.add(pid)   # evitar duplicados dentro de la misma tanda
+                pid          = payment.get("id")
+                installments = int(payment.get("installments", 1) or 1)
+                pay_type     = payment.get("payment_type_id", "")
+                # Pagos con tarjeta en cuotas → dividir en N entradas individuales (Q4)
+                is_cc_plan   = installments > 1 and pay_type == "credit_card"
+
+                if is_cc_plan:
+                    first_key = f"{pid}_c1" if pid else None
+                    if first_key and first_key in existing_ids:
+                        skipped += 1
+                        continue
+                    new_movs = self._split_installments(payment, sign)
+                    movs.extend(new_movs)
+                    # Registrar todos los sub-IDs para dedup intra-run
+                    for i in range(1, installments + 1):
+                        existing_ids.add(f"{pid}_c{i}")
+                else:
+                    if pid and pid in existing_ids:
+                        skipped += 1
+                        continue
+                    mov = self._payment_to_movimiento(payment, sign)
+                    if mov:
+                        movs.append(mov)
+                        if pid:
+                            existing_ids.add(pid)
 
             total  = data.get("paging", {}).get("total", 0)
             offset += len(results)
@@ -222,13 +257,12 @@ class MercadoPagoScraper(BaseScraper):
 
     def _payment_to_movimiento(self, p: dict, sign: int) -> Optional[MovimientoRaw]:
         """
-        Convierte un objeto payment de la API en MovimientoRaw.
+        Convierte un objeto payment de la API en un único MovimientoRaw.
 
         sign = +1  → egreso  (user pagó  → monto positivo en nuestra convención)
         sign = -1  → ingreso (user cobró → monto negativo)
         """
         try:
-            # Fecha: usar date_approved si existe, si no date_created
             fecha_str = (p.get("date_approved") or p.get("date_created") or "")[:10]
             if not fecha_str or len(fecha_str) < 10:
                 return None
@@ -244,14 +278,7 @@ class MercadoPagoScraper(BaseScraper):
             if not desc:
                 return None
 
-            raw_data = {
-                "payment_id":     p.get("id"),
-                "operation_type": p.get("operation_type"),
-                "payment_method": p.get("payment_method_id"),
-                "installments":   p.get("installments"),   # cuotas de tarjeta (si aplica)
-                "status_detail":  p.get("status_detail"),
-            }
-
+            raw_data = self._build_raw_data(p)
             return MovimientoRaw(
                 fuente      = "mercadopago",
                 fecha       = fecha_str,
@@ -264,16 +291,113 @@ class MercadoPagoScraper(BaseScraper):
             logger.warning("[mp] Error convirtiendo payment id=%s: %s", p.get("id"), exc)
             return None
 
-    def _build_description(self, p: dict) -> str:
+    def _split_installments(self, p: dict, sign: int) -> list[MovimientoRaw]:
         """
-        Construye una descripción legible a partir del objeto payment.
+        Divide un pago en cuotas de tarjeta en N MovimientoRaw individuales (Q4).
 
-        Prioridad:
-          1. Nombre del ítem en additional_info (e.g. nombre del comercio en QR)
-          2. reason / description del pago
-          3. Etiqueta del tipo de operación
+        Cada entrada representa una cuota mensual con:
+          - monto      = total / N  (redondeado a 2 decimales)
+          - fecha      = fecha_aprobación + (i-1) meses
+          - descripcion = "BASE i/N"
+          - raw_data.payment_id = "{id}_c{i}"  (único por cuota)
+
+        Esto permite que la conciliación cruce cada cuota contra la línea
+        correspondiente del resumen de tarjeta de crédito.
         """
-        # Nombre del comercio / ítem (QR, e-commerce)
+        try:
+            fecha_str = (p.get("date_approved") or p.get("date_created") or "")[:10]
+            if not fecha_str or len(fecha_str) < 10:
+                return []
+
+            monto_total = float(p.get("transaction_amount", 0))
+            if monto_total <= 0:
+                return []
+
+            n      = int(p.get("installments", 1) or 1)
+            moneda = "USD" if p.get("currency_id") == "USD" else "ARS"
+            pid    = p.get("id")
+
+            base_desc = self._build_description_base(p)
+            if not base_desc:
+                return []
+
+            monto_cuota = round(monto_total / n * sign, 2)
+            fecha_base  = datetime.strptime(fecha_str, "%Y-%m-%d")
+
+            movs: list[MovimientoRaw] = []
+            for i in range(1, n + 1):
+                fecha_cuota     = _add_months(fecha_base, i - 1)
+                fecha_cuota_str = fecha_cuota.strftime("%Y-%m-%d")
+                desc_cuota      = f"{base_desc} {i}/{n}"
+
+                raw_data = self._build_raw_data(p)
+                raw_data["payment_id"] = f"{pid}_c{i}"
+                raw_data["cuota_num"]  = i
+                # Eliminar sufijo "(N cuotas)" de raw_data ya no aplica aquí
+                raw_data.pop("installments_label", None)
+
+                movs.append(MovimientoRaw(
+                    fuente      = "mercadopago",
+                    fecha       = fecha_cuota_str,
+                    descripcion = desc_cuota,
+                    monto       = monto_cuota,
+                    moneda      = moneda,
+                    raw_data    = raw_data,
+                ))
+            return movs
+        except Exception as exc:
+            logger.warning(
+                "[mp] Error dividiendo cuotas para payment id=%s: %s", p.get("id"), exc
+            )
+            return []
+
+    def _build_raw_data(self, p: dict) -> dict:
+        """Construye el diccionario raw_data con todos los campos relevantes (Q3)."""
+        raw_data: dict = {
+            "payment_id":      p.get("id"),
+            "operation_type":  p.get("operation_type"),
+            "payment_method":  p.get("payment_method_id"),
+            "payment_type_id": p.get("payment_type_id"),
+            "installments":    p.get("installments"),
+            "status_detail":   p.get("status_detail"),
+            "collector_id":    p.get("collector_id"),
+        }
+        # Punto de interacción (QR/POS)
+        poi = p.get("point_of_interaction") or {}
+        poi_type = poi.get("type", "")
+        if poi_type:
+            raw_data["poi_type"] = poi_type
+            biz = poi.get("business_info") or {}
+            poi_name = (biz.get("sub_unit") or biz.get("unit") or "").strip()
+            if poi_name:
+                raw_data["poi_name"] = poi_name
+
+        # Usuario default (Q2)
+        default_usuario = getattr(self, "_default_usuario", "")
+        if default_usuario:
+            raw_data["usuario"] = default_usuario
+
+        return raw_data
+
+    def _build_description_base(self, p: dict) -> str:
+        """
+        Construye la descripción base sin sufijo de cuotas.
+
+        Prioridad de nombre del comercio (Q3):
+          1. point_of_interaction.business_info.sub_unit / unit  (QR/POS)
+          2. additional_info.items[0].title                       (e-commerce)
+          3. reason / description del pago
+          4. Etiqueta del tipo de operación
+        """
+        # Nombre del negocio desde el punto de interacción (QR/POS)
+        poi_name = ""
+        try:
+            biz      = (p.get("point_of_interaction") or {}).get("business_info") or {}
+            poi_name = (biz.get("sub_unit") or biz.get("unit") or "").strip()
+        except Exception:
+            pass
+
+        # Nombre del ítem en additional_info (e-commerce / link de pago)
         merchant = ""
         try:
             items = (p.get("additional_info") or {}).get("items") or []
@@ -296,15 +420,13 @@ class MercadoPagoScraper(BaseScraper):
             "checkout_pro":      "Compra online",
         }.get(p.get("operation_type", ""), "")
 
-        # Cuotas de tarjeta si aplica
-        installments = p.get("installments", 1) or 1
-        cuota_suffix = f" ({installments} cuotas)" if installments > 1 else ""
+        # Mejor nombre comercial disponible
+        best_name = poi_name or merchant or ""
 
-        # Construir descripción
-        if merchant and reason and merchant.lower() not in reason.lower():
-            base = f"{merchant} — {reason}"
-        elif merchant:
-            base = merchant
+        if best_name and reason and best_name.lower() not in reason.lower():
+            base = f"{best_name} — {reason}"
+        elif best_name:
+            base = best_name
         elif reason:
             base = reason
         elif op_label:
@@ -312,7 +434,18 @@ class MercadoPagoScraper(BaseScraper):
         else:
             base = "MercadoPago"
 
-        return base + cuota_suffix
+        return base
+
+    def _build_description(self, p: dict) -> str:
+        """Descripción completa; agrega sufijo "(N cuotas)" para pagos no-CC en cuotas."""
+        base         = self._build_description_base(p)
+        installments = int(p.get("installments", 1) or 1)
+        pay_type     = p.get("payment_type_id", "")
+        # Solo agregar sufijo para cuotas que NO son tarjeta de crédito
+        # (las CC se dividen en entradas separadas por _split_installments)
+        if installments > 1 and pay_type != "credit_card":
+            base += f" ({installments} cuotas)"
+        return base
 
     # ── Saldo ─────────────────────────────────────────────────────────────────
 
@@ -351,6 +484,8 @@ def _get_existing_payment_ids(dias: int) -> set:
     Devuelve el conjunto de payment_id ya almacenados en movimientos_raw
     para 'mercadopago' dentro del período consultado.
     Evita insertar duplicados en runs consecutivos.
+
+    Incluye tanto IDs simples (int) como sub-IDs de cuotas (str "{id}_c{i}").
     """
     from datetime import datetime, timedelta
     from scrapers_db import _conn

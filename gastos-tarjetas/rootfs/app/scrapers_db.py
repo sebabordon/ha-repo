@@ -449,11 +449,22 @@ def importar_a_gastos(
         if not raw:
             return None
 
+        # Extraer usuario del raw_data si el scraper lo guardó
+        usuario = None
+        if raw["raw_data"]:
+            try:
+                rd = json.loads(raw["raw_data"])
+                u = (rd.get("usuario") or "").strip()
+                if u:
+                    usuario = u
+            except Exception:
+                pass
+
         cur = conn.execute(
             """INSERT INTO gastos
                (fecha, descripcion, monto, moneda, fuente,
-                categoria, categoria_fuente, archivo_origen)
-               VALUES (?,?,?,?,?,?,?,?)""",
+                categoria, categoria_fuente, archivo_origen, usuario)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (
                 raw["fecha"],
                 raw["descripcion"],
@@ -463,6 +474,7 @@ def importar_a_gastos(
                 categoria or None,
                 "regla" if categoria else None,
                 archivo_origen,
+                usuario,
             ),
         )
         new_id = cur.lastrowid

@@ -1,3 +1,9 @@
+## 0.3.26
+
+- **Scraper MP — Q2: campo "Usuario"**: se agrega el campo opcional `usuario` a la configuración del scraper MercadoPago. El nombre configurado se guarda en `raw_data["usuario"]` de cada movimiento; al importar a `gastos` vía "Importar pendientes", `importar_a_gastos` lo extrae y lo inserta en la columna `gastos.usuario`. Permite distinguir de quién son los pagos de MP cuando hay más de un titular en el sistema.
+- **Scraper MP — Q3: descripción más rica**: `_build_description_base` ahora prioriza `point_of_interaction.business_info.sub_unit` / `.unit` (nombre del comercio en pagos QR/POS) por sobre `additional_info.items[0].title`. También se guardan más campos en `raw_data`: `payment_type_id`, `collector_id`, `poi_type` y `poi_name` (nombre del comercio QR cuando está disponible).
+- **Scraper MP — Q4: cuotas de tarjeta divididas en N entradas**: cuando `payment_type_id == "credit_card"` e `installments > 1`, el pago se divide en N `MovimientoRaw` individuales (una por cuota mensual). Cada cuota tiene `monto = total/N`, `fecha` desplazada un mes por cuota, y descripción `"COMERCIO i/N"` (ej. `"Frávega 2/6"`). Esto permite que la conciliación cruce cada cuota contra la línea correspondiente del resumen de tarjeta. La deduplicación usa sub-IDs `"{payment_id}_c{i}"` para detectar cuotas ya importadas en runs anteriores.
+
 ## 0.3.25
 
 - **Borrado de /quick: hard delete, no sentinel**: al borrar un gasto ingresado con el formulario rápido (`raw_data.manual_quick = true`), tanto el raw como el gasto se eliminan completamente de la DB. No tiene sentido guardar un sentinel para algo que el usuario ingresó a mano. Si el scraper encuentra la misma transacción real en la API, la importa normalmente (comportamiento correcto). Solo los raws del scraper (no manuales) conservan el comportamiento de soft delete (`'ignored'`).
