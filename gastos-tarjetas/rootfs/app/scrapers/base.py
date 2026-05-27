@@ -77,6 +77,8 @@ class ScraperResult:
     saldos:          dict = field(default_factory=dict)
     error:           Optional[str] = None
     session_expired: bool = False
+    # Líneas de diagnóstico legibles — se guardan en scraper_status.last_log
+    log_lines:       list[str] = field(default_factory=list)
 
 
 # ── Clase base ─────────────────────────────────────────────────────────────────
@@ -213,15 +215,20 @@ class BaseScraper(ABC):
         loop   = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, self._run_sync, config)
 
+        last_log = "\n".join(result.log_lines) if result.log_lines else None
+
         if result.error:
             estado = "session_expired" if result.session_expired else "error"
-            upsert_scraper_status(self.fuente, estado=estado, error_msg=result.error)
+            upsert_scraper_status(
+                self.fuente, estado=estado, error_msg=result.error, last_log=last_log,
+            )
         else:
             upsert_scraper_status(
                 self.fuente,
                 estado="ok",
                 ultimo_ok=datetime.utcnow().isoformat(),
                 error_msg=None,
+                last_log=last_log,
             )
             self._persist_saldos(result.saldos)
 
@@ -230,24 +237,42 @@ class BaseScraper(ABC):
     def _run_sync(self, config: dict) -> ScraperResult:
         """Núcleo síncrono: crea driver, restaura sesión, loguea si es necesario, scrapea."""
         driver = None
+        log: list[str] = []
+
+        def _log(msg: str) -> None:
+            logger.info("[%s] %s", self.fuente, msg)
+            log.append(msg)
+
         try:
+            _log("Iniciando WebDriver…")
             driver = self._create_driver()
 
             # Intentar restaurar sesión y verificar validez
-            if self._has_session():
+            has_session = self._has_session()
+            _log(f"Sesión guardada en disco: {'sí' if has_session else 'no'}")
+
+            if has_session:
+                _log("Restaurando cookies desde sesión guardada…")
                 self._restore_session(driver)
+                _log("Verificando validez de sesión…")
                 session_ok = self.check_session(driver)
+                _log(f"Sesión válida: {'sí' if session_ok else 'no — se hará login'}")
             else:
                 session_ok = False
+                _log("Sin sesión previa — se hará login")
 
             if not session_ok:
-                logger.info("[%s] Sesión inválida o inexistente — iniciando login…", self.fuente)
+                _log("Iniciando login…")
                 self.do_login(driver, config)
+                _log("Login completado")
 
+            _log("Iniciando scraping de movimientos…")
             result = self.scrape(driver, config)
+            result.log_lines = log + result.log_lines
 
             # Persistir sesión actualizada
             self._save_session(driver)
+            _log(f"Sesión guardada. Movimientos encontrados: {len(result.movimientos)}")
 
             logger.info(
                 "[%s] OK — %d movimientos, saldos: %s",
@@ -257,7 +282,8 @@ class BaseScraper(ABC):
 
         except Exception as exc:
             logger.exception("[%s] Error en scraper: %s", self.fuente, exc)
-            return ScraperResult(fuente=self.fuente, error=str(exc))
+            log.append(f"ERROR: {exc}")
+            return ScraperResult(fuente=self.fuente, error=str(exc), log_lines=log)
         finally:
             if driver:
                 try:

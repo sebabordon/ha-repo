@@ -83,9 +83,14 @@ def _ensure_scraper_tables(conn: sqlite3.Connection) -> None:
             error_msg           TEXT,
             saldo_ars           REAL,
             saldo_usd           REAL,
-            movimientos_nuevos  INTEGER DEFAULT 0
+            movimientos_nuevos  INTEGER DEFAULT 0,
+            last_log            TEXT
         )
     """)
+    # Migración: agregar last_log si la tabla ya existe sin esa columna
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(scraper_status)").fetchall()}
+    if "last_log" not in cols:
+        conn.execute("ALTER TABLE scraper_status ADD COLUMN last_log TEXT")
 
     # Pre-cargar filas para los 4 bancos conocidos
     for f in ("amex", "bbva", "galicia", "mercadopago"):

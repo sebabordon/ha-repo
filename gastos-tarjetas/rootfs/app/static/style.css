@@ -1349,3 +1349,33 @@ tbody tr:hover { background: #fafbff; }
   letter-spacing: .15em;
   text-align: center;
 }
+
+/* ── Log de diagnóstico del scraper ──────────────────────────────────────── */
+.scraper-log-details {
+  margin-top: .6rem;
+}
+.scraper-log-details summary {
+  cursor: pointer;
+  font-size: .8rem;
+  color: #64748b;
+  user-select: none;
+}
+.scraper-log-details summary:hover {
+  color: #334155;
+}
+.scraper-log-pre {
+  font-size: .73rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
+  background: #f1f5f9;
+  color: #1e293b;
+  padding: .5rem .65rem;
+  border-radius: 5px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: .35rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  line-height: 1.5;
+}

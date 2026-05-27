@@ -3347,6 +3347,10 @@ function _buildScraperCard(banco, data) {
         Último error: ${escHtml(st.error_msg)}</p>` : ""}
       ${st.ultimo_ok ? `<p style="font-size:.78rem;color:#888;margin-top:.25rem">
         Último OK: ${escHtml(st.ultimo_ok.replace('T',' ').slice(0,16))}</p>` : ""}
+      ${st.last_log ? `<details class="scraper-log-details">
+        <summary>📋 Detalle del último run</summary>
+        <pre class="scraper-log-pre">${escHtml(st.last_log)}</pre>
+      </details>` : ""}
     </div>`;
   return card;
 }

@@ -64,12 +64,20 @@ class AmexScraper(BaseScraper):
         account summary (div#middleContentHeader). Si no, redirige al login.
         """
         try:
+            logger.info("[amex] check_session: navegando al portal legacy")
             driver.get(_ACCOUNT_SUMMARY)
             time.sleep(3)
+            current_url = driver.current_url
+            logger.info("[amex] check_session: URL tras navegación = %s", current_url[:100])
             el = self.find(
                 driver,
                 "div#middleContentHeader, div#summaryWrap, "
                 "select#cardAccount, div#leftNav",
+            )
+            logger.info(
+                "[amex] check_session: elemento portal encontrado = %s%s",
+                el is not None,
+                f" (title={driver.title[:60]!r})" if not el else "",
             )
             return el is not None
         except Exception as exc:
@@ -86,15 +94,18 @@ class AmexScraper(BaseScraper):
         Algunos flows muestran usuario y contraseña en pantallas separadas
         (botón «Continuar» entre ambas); este código lo maneja.
         """
+        logger.info("[amex] do_login: navegando a %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
 
         # ── Usuario ───────────────────────────────────────────────────────────
+        logger.info("[amex] do_login: esperando campo de usuario…")
         user_el = self.wait_for(
             driver,
             "input#eliloUserID, input[name='eliloUserID'], "
             "input[type='email'][autocomplete='username']",
             timeout=20,
         )
+        logger.info("[amex] do_login: campo usuario encontrado, ingresando datos")
         user_el.clear()
         user_el.send_keys(config["usuario"])
         time.sleep(0.5)
@@ -105,22 +116,26 @@ class AmexScraper(BaseScraper):
             "input#eliloPassword, input[name='eliloPassword'], "
             "input[type='password']",
         )
+        logger.info("[amex] do_login: contraseña visible en pantalla inicial = %s", pwd_visible is not None)
         if not pwd_visible:
             cont_btn = self.find(
                 driver,
                 "button#loginSubmit, button[type='submit']",
             )
             if cont_btn:
+                logger.info("[amex] do_login: haciendo click en Continuar (flow 2 pantallas)")
                 cont_btn.click()
                 time.sleep(2)
 
         # ── Contraseña ────────────────────────────────────────────────────────
+        logger.info("[amex] do_login: esperando campo de contraseña…")
         pass_el = self.wait_for(
             driver,
             "input#eliloPassword, input[name='eliloPassword'], "
             "input[type='password']",
             timeout=15,
         )
+        logger.info("[amex] do_login: campo contraseña encontrado, ingresando")
         pass_el.clear()
         pass_el.send_keys(config["password"])
         time.sleep(0.5)
@@ -131,6 +146,7 @@ class AmexScraper(BaseScraper):
             "button#loginSubmit, button[type='submit'], input[type='submit']",
             timeout=10,
         )
+        logger.info("[amex] do_login: haciendo click en Submit, esperando portal…")
         submit.click()
 
         # ── Esperar portal post-login ─────────────────────────────────────────
@@ -144,6 +160,7 @@ class AmexScraper(BaseScraper):
             "[data-testid='account-summary']",
             timeout=45,
         )
+        logger.info("[amex] do_login: portal cargado, URL = %s", driver.current_url[:100])
         logger.info("[amex] Login exitoso")
 
     # ── Scrape principal ──────────────────────────────────────────────────────
@@ -152,21 +169,21 @@ class AmexScraper(BaseScraper):
         movimientos: list[MovimientoRaw] = []
         saldo_ars_total = 0.0
         saldo_usd_total = 0.0
+        log_lines: list[str] = []
 
         for producto in _CARD_PRODUCTS:
             url = _STATEMENT_URL.format(idx=producto["idx"])
             try:
                 movs, s_ars, s_usd = self._scrape_producto(
-                    driver, url, producto["tarjeta"], producto["nombre"]
+                    driver, url, producto["tarjeta"], producto["nombre"], log_lines
                 )
                 movimientos.extend(movs)
                 saldo_ars_total += s_ars
                 saldo_usd_total += s_usd
             except Exception as exc:
-                logger.error(
-                    "[amex] Error scrapeando '%s': %s", producto["nombre"], exc,
-                    exc_info=True,
-                )
+                msg = f"Error scrapeando '{producto['nombre']}': {exc}"
+                logger.error("[amex] %s", msg, exc_info=True)
+                log_lines.append(f"✗ {msg}")
 
         saldos: dict = {}
         if saldo_ars_total or saldo_usd_total:
@@ -176,7 +193,7 @@ class AmexScraper(BaseScraper):
             if saldo_usd_total:
                 saldos["amex"]["saldo_usd"] = saldo_usd_total
 
-        return ScraperResult(fuente="amex", movimientos=movimientos, saldos=saldos)
+        return ScraperResult(fuente="amex", movimientos=movimientos, saldos=saldos, log_lines=log_lines)
 
     # ── Scrape de un producto de tarjeta ──────────────────────────────────────
 
@@ -186,19 +203,37 @@ class AmexScraper(BaseScraper):
         url: str,
         tarjeta: str,
         nombre: str,
+        log: list | None = None,
     ) -> tuple[list[MovimientoRaw], float, float]:
         """
         Carga la página de movimientos para un sorted_index y parsea todas las
         secciones txnsCard.
 
         Devuelve (movimientos, saldo_ars, saldo_usd).
+        log es una lista compartida donde se acumulan líneas de diagnóstico.
         """
         from selenium.webdriver.common.by import By
 
+        if log is None:
+            log = []
+
+        def _l(msg: str) -> None:
+            logger.info("[amex] %s", msg)
+            log.append(msg)
+
+        _l(f"[{nombre}] Navegando a statement URL (sorted_index={url[-1:]})")
         driver.get(url)
 
         # Esperar que cargue la sección de transacciones
-        self.wait_for(driver, "div#txnsSection, div#statementWrap", timeout=25)
+        try:
+            self.wait_for(driver, "div#txnsSection, div#statementWrap", timeout=25)
+            _l(f"[{nombre}] URL cargada: {driver.current_url[:100]}")
+        except Exception as exc:
+            _l(f"[{nombre}] ⚠ Timeout esperando div#txnsSection / div#statementWrap: {exc}")
+            _l(f"[{nombre}] URL actual: {driver.current_url[:100]}")
+            _l(f"[{nombre}] Título de página: {driver.title[:80]!r}")
+            return [], 0.0, 0.0
+
         time.sleep(1)   # breve pausa para que JS termine de actualizar el DOM
 
         movimientos: list[MovimientoRaw] = []
@@ -209,27 +244,46 @@ class AmexScraper(BaseScraper):
         try:
             saldo_el = self.find(driver, "td#colOSBalance")
             if saldo_el:
-                for line in saldo_el.text.strip().split("\n"):
+                raw_saldo = saldo_el.text.strip()
+                _l(f"[{nombre}] Texto saldo: {raw_saldo!r}")
+                for line in raw_saldo.split("\n"):
                     line = line.strip()
                     if line.startswith("$"):
                         saldo_ars = abs(self.parse_amount(line))
                     elif "U$S" in line or "U$" in line:
                         saldo_usd = abs(self._parse_usd_amount(line))
+            else:
+                _l(f"[{nombre}] ⚠ No se encontró td#colOSBalance (saldo)")
         except Exception as exc:
-            logger.warning("[amex] No se pudo leer saldo de %s: %s", nombre, exc)
+            _l(f"[{nombre}] ⚠ Error leyendo saldo: {exc}")
+
+        _l(f"[{nombre}] Saldo ARS={saldo_ars:.2f} USD={saldo_usd:.2f}")
 
         # ── Nombres de cardholders desde el selector ──────────────────────────
         cardholder_map: dict[str, str] = {}
         try:
-            for opt in driver.find_elements(By.CSS_SELECTOR, "#cardAccount option"):
+            opts = driver.find_elements(By.CSS_SELECTOR, "#cardAccount option")
+            _l(f"[{nombre}] Opciones en #cardAccount: {len(opts)}")
+            for opt in opts:
                 val = opt.get_attribute("value") or ""
                 if val not in ("", "all"):
                     cardholder_map[val] = opt.text.strip()
-        except Exception:
-            pass
+            _l(f"[{nombre}] Cardholders: {cardholder_map}")
+        except Exception as exc:
+            _l(f"[{nombre}] ⚠ Error leyendo cardholders: {exc}")
 
         # ── Secciones por cardholder ──────────────────────────────────────────
         card_divs = driver.find_elements(By.CSS_SELECTOR, "div[id^='txnsCard']")
+        _l(f"[{nombre}] Secciones div[id^='txnsCard'] encontradas: {len(card_divs)}")
+
+        if not card_divs:
+            # Diagnóstico adicional: ¿qué hay en el DOM?
+            txns_section = self.find(driver, "div#txnsSection")
+            _l(f"[{nombre}] div#txnsSection presente = {txns_section is not None}")
+            all_divs = driver.find_elements(By.CSS_SELECTOR, "div[id]")
+            txns_ids = [d.get_attribute("id") for d in all_divs if (d.get_attribute("id") or "").startswith("txns")]
+            _l(f"[{nombre}] IDs que empiezan con 'txns': {txns_ids[:10]}")
+
         for card_div in card_divs:
             div_id    = card_div.get_attribute("id") or ""
             card_idx  = div_id.replace("txnsCard", "")
@@ -238,15 +292,16 @@ class AmexScraper(BaseScraper):
             rows = card_div.find_elements(
                 By.CSS_SELECTOR, "tr.tableStandardText.pagebreak"
             )
+            _l(f"[{nombre}] {div_id} (cardholder={cardholder!r}): {len(rows)} filas")
+            parsed_ok = 0
             for row in rows:
                 mov = self._parse_row(row, tarjeta, cardholder)
                 if mov:
                     movimientos.append(mov)
+                    parsed_ok += 1
+            _l(f"[{nombre}] {div_id}: {parsed_ok}/{len(rows)} filas parseadas correctamente")
 
-        logger.info(
-            "[amex] %s (%s) → %d movimientos, saldo ARS=%.2f USD=%.2f",
-            nombre, tarjeta, len(movimientos), saldo_ars, saldo_usd,
-        )
+        _l(f"[{nombre}] Total movimientos: {len(movimientos)}")
         return movimientos, saldo_ars, saldo_usd
 
     # ── Parseo de fila de transacción ─────────────────────────────────────────

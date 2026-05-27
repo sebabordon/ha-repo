@@ -1,3 +1,10 @@
+## 0.3.9
+
+- **Diagnóstico de scrapers en la UI**: cada card de scraper ahora muestra un panel colapsable "Detalle del último run" con las líneas de diagnóstico del scraper. Incluye URL navegada, si se encontraron los elementos esperados, cuántas secciones txnsCard y filas se encontraron y cuántas se parsearon correctamente — facilita detectar por qué un run devuelve 0 movimientos.
+- **Logs detallados en AMEX**: `check_session`, `do_login` y `_scrape_producto` ahora emiten logs granulares (URL actual post-navegación, si el portal legacy cargó, si el campo usuario/contraseña fue encontrado, cantidad de secciones y filas por cardholder, errores de parse individuales).
+- **`ScraperResult.log_lines`**: nuevo campo en el dataclass que acumula líneas de diagnóstico del scraper; se propaga de `_scrape_producto` → `scrape` → `_run_sync` → `scraper_status.last_log`.
+- **`scraper_status.last_log`**: nueva columna en la tabla (con migración automática si la BD ya existe) que persiste el log del último run para mostrarlo en la UI.
+
 ## 0.3.8
 
 - **Fix — guardar credenciales de scraper crasheaba con "no running event loop"**: `PUT /api/scrapers/credentials/{banco}` y `POST /api/scrapers/scheduler/reload` eran endpoints `def` síncronos, por lo que FastAPI los ejecutaba en un thread pool sin event loop. `AsyncIOScheduler.start()` llama internamente a `asyncio.get_running_loop()` y fallaba con `RuntimeError`. Fix: ambos endpoints ahora son `async def`.
