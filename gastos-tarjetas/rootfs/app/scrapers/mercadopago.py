@@ -361,7 +361,8 @@ def _get_existing_payment_ids(dias: int) -> set:
         with _conn() as conn:
             rows = conn.execute(
                 "SELECT raw_data FROM movimientos_raw "
-                "WHERE fuente='mercadopago' AND fecha >= ?",
+                "WHERE fuente='mercadopago' AND fecha >= ? "
+                "AND estado IN ('new','imported','matched','ignored')",
                 (since,),
             ).fetchall()
         for row in rows:

@@ -919,6 +919,14 @@ def delete_movimiento_manual(gasto_id: int, fuente: str) -> bool:
     with _conn() as conn:
         conn.execute("DELETE FROM gastos WHERE id=? AND fuente=?", (gasto_id, fuente))
         changed = bool(conn.execute("SELECT changes()").fetchone()[0])
+        if changed:
+            # Marcar el movimiento_raw vinculado como 'ignored' para que el
+            # scraper no vuelva a importar este gasto en el próximo run.
+            # movimientos_raw vive en la misma DB → podemos actualizarlo aquí.
+            conn.execute(
+                "UPDATE movimientos_raw SET estado='ignored' WHERE gasto_id=?",
+                (gasto_id,),
+            )
     if changed:
         recalc_cuenta_saldo(fuente)
     return changed

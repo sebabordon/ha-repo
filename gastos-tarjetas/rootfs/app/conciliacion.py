@@ -174,6 +174,43 @@ def _conciliar_uno(raw: dict, db_path: str) -> None:
         conn.close()
 
     if not candidates:
+        # Fallback: si existe un raw 'ignored' con mismas características, el
+        # usuario borró explícitamente esa transacción → ignorar este también.
+        # Cubre entradas de /quick sin payment_id que fueron borradas y luego
+        # reaparecen desde el scraper API.
+        conn2 = sqlite3.connect(db_path)
+        conn2.row_factory = sqlite3.Row
+        try:
+            ignored_match = conn2.execute(
+                """
+                SELECT id FROM movimientos_raw
+                WHERE fuente  = ?
+                  AND moneda  = ?
+                  AND ABS(CAST(monto AS REAL) - ?) < 0.02
+                  AND fecha BETWEEN ? AND ?
+                  AND estado  = 'ignored'
+                  AND id     != ?
+                """,
+                (
+                    raw["fuente"],
+                    raw["moneda"],
+                    float(raw["monto"]),
+                    date_from,
+                    date_to,
+                    raw["id"],
+                ),
+            ).fetchone()
+        finally:
+            conn2.close()
+
+        if ignored_match:
+            logger.debug(
+                "Conciliación: raw id=%d ignorado (coincide con raw id=%d previamente borrado)",
+                raw["id"], ignored_match["id"],
+            )
+            update_movimiento_raw(raw["id"], "ignored")
+            return
+
         update_movimiento_raw(raw["id"], "unmatched")
         return
 

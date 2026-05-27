@@ -1,3 +1,9 @@
+## 0.3.23
+
+- **Fix — gastos borrados no vuelven en el próximo run del scraper**: al borrar un gasto desde la UI, `delete_movimiento_manual` ahora marca el `movimiento_raw` vinculado como `'ignored'`. Esto aplica a todos los scrapers (AMEX, MP, etc.).
+- **Conciliación: fallback para entradas /quick borradas (sin payment_id)**: si un nuevo raw no tiene candidatos en `gastos`, `_conciliar_uno` busca un raw `'ignored'` con mismas características (fuente+moneda+monto±0.02+fecha±5d). Si lo encuentra, el nuevo raw también se marca `'ignored'`. Evita que transacciones cargadas con /quick, borradas, y luego traídas por el scraper API vuelvan a aparecer.
+- **Scraper MP: `_get_existing_payment_ids` incluye raws `'ignored'`**: los payment_ids de entradas ignoradas también se consideran "ya vistos" para no reinsertar por esa vía.
+
 ## 0.3.22
 
 - **Scraper MercadoPago reescrito: Selenium → API REST**: ya no requiere usuario/contraseña ni browser. Usa el Access Token personal de la cuenta (`mercadopago.com.ar/developers/panel → Credenciales de producción`). Consulta `/v1/payments/search` como payer (egresos) y como collector (ingresos) con paginación, y `/v1/account/balance` para el saldo. Deduplicación por `payment_id` en `raw_data` para evitar reinsertar pagos ya conocidos en runs consecutivos.
