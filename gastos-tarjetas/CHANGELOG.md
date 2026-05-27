@@ -1,3 +1,7 @@
+## 0.3.8
+
+- **Fix — guardar credenciales de scraper crasheaba con "no running event loop"**: `PUT /api/scrapers/credentials/{banco}` y `POST /api/scrapers/scheduler/reload` eran endpoints `def` síncronos, por lo que FastAPI los ejecutaba en un thread pool sin event loop. `AsyncIOScheduler.start()` llama internamente a `asyncio.get_running_loop()` y fallaba con `RuntimeError`. Fix: ambos endpoints ahora son `async def`.
+
 ## 0.3.7
 
 - **Guía de instalación iOS en la UI**: la sección "Accesos rápidos" (Config → Interfaz) ahora muestra un panel "Instalar en iOS" con un link por cada acceso configurado. El usuario abre el link en Safari y usa Compartir → Agregar al inicio; el ícono queda con el nombre correcto de la cuenta.

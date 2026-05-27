@@ -116,11 +116,14 @@ def get_credentials(request: Request):
 
 
 @router.put("/scrapers/credentials/{banco}")
-def put_credentials(banco: str, body: dict, request: Request):
+async def put_credentials(banco: str, body: dict, request: Request):
     """
     Guarda/actualiza las credenciales de un banco para el usuario logueado.
     Si un campo de contraseña viene vacío, se mantiene el valor existente.
     Después de guardar recarga el scheduler para aplicar los cambios.
+
+    Debe ser async: AsyncIOScheduler.start() llama a asyncio.get_running_loop()
+    y necesita estar en el event loop (no en un thread pool).
     """
     require_auth(request)
     from scraper_credentials import BANKS, set_bank_config
@@ -129,7 +132,7 @@ def put_credentials(banco: str, body: dict, request: Request):
     if banco not in BANKS:
         raise HTTPException(400, f"Banco desconocido: {banco}. Opciones: {list(BANKS)}")
 
-    # Validar que enabled sea bool y schedule tenga formato HH:MM
+    # Validar formato HH:MM del schedule
     if "schedule" in body:
         import re
         if not re.match(r"^\d{1,2}:\d{2}$", str(body["schedule"])):
@@ -142,8 +145,8 @@ def put_credentials(banco: str, body: dict, request: Request):
 
 
 @router.post("/scrapers/scheduler/reload")
-def scheduler_reload(request: Request):
-    """Recarga el scheduler (por si se editó scrapers.yaml a mano)."""
+async def scheduler_reload(request: Request):
+    """Recarga el scheduler (útil tras editar credenciales desde otra interfaz)."""
     require_auth(request)
     from scraper_scheduler import reload_scheduler
     reload_scheduler()
