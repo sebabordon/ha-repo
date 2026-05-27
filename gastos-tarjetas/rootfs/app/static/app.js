@@ -3267,13 +3267,27 @@ function _buildScraperCard(banco, data) {
   const fieldsHtml = (data.campos || []).map(campo => {
     const val = (data[campo.key] || "");
     const hasPwd = campo.type === "password" && data[`has_${campo.key}`];
+    const hintHtml = campo.hint
+      ? `<span class="field-hint">${escHtml(campo.hint)}</span>` : "";
+
+    if (campo.type === "checkbox") {
+      const checked = data[campo.key] ? "checked" : "";
+      return `
+        <div class="scraper-field scraper-field-checkbox">
+          <label>
+            <input id="scr-${banco}-${campo.key}" type="checkbox" ${checked}>
+            ${escHtml(campo.label)}
+          </label>
+          ${hintHtml}
+        </div>`;
+    }
+
     const placeholder = campo.type === "password"
       ? (hasPwd ? "••••••••  (guardada — dejá vacío para no cambiar)" : "Nueva contraseña")
-      : (campo.hint ? campo.hint : "");
-    const hintHtml = campo.hint && campo.type !== "password"
-      ? `<span class="field-hint">${escHtml(campo.hint)}</span>` : "";
+      : (campo.placeholder || "");
     const hasPwdHtml = hasPwd
       ? `<span class="has-pwd-note">✓ Contraseña guardada</span>` : "";
+    const hintHtmlFiltered = campo.type !== "password" ? hintHtml : "";
     return `
       <div class="scraper-field">
         <label for="scr-${banco}-${campo.key}">${escHtml(campo.label)}</label>
@@ -3282,7 +3296,7 @@ function _buildScraperCard(banco, data) {
                value="${campo.type === 'password' ? '' : escHtml(val)}"
                placeholder="${escHtml(placeholder)}"
                autocomplete="${campo.type === 'password' ? 'new-password' : 'off'}">
-        ${hintHtml}${hasPwdHtml}
+        ${hintHtmlFiltered}${hasPwdHtml}
       </div>`;
   }).join("");
 
@@ -3397,7 +3411,7 @@ async function saveScraperConfig(banco) {
   const body = { enabled: document.getElementById(`scr-${banco}-enabled`)?.checked || false };
   for (const campo of campos) {
     const el = document.getElementById(`scr-${banco}-${campo.key}`);
-    if (el) body[campo.key] = el.value;
+    if (el) body[campo.key] = campo.type === "checkbox" ? el.checked : el.value;
   }
   const schedEl = document.getElementById(`scr-${banco}-schedule`);
   if (schedEl) body.schedule = schedEl.value;

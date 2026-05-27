@@ -104,6 +104,13 @@ BANKS: dict[str, dict] = {
                 "placeholder": "60",
                 "hint":        "1 = solo hoy, 2 = hoy y ayer, N = últimos N días (default: 60)",
             },
+            {
+                "key":         "debug_log",
+                "label":       "Log de debug",
+                "type":        "checkbox",
+                "required":    False,
+                "hint":        "Registra cada pago procesado (id, tipo, operación, monto). Visible en Supervisión → Add-ons → Gastos → Log.",
+            },
         ],
     },
 }
@@ -212,8 +219,10 @@ def creds_for_api(data_dir: str | None = None) -> dict:
         for campo in bank_def["campos"]:
             key = campo["key"]
             if campo["type"] == "password":
-                row[key]               = ""               # nunca devolver la contraseña
-                row[f"has_{key}"]      = bool(stored.get(key))
+                row[key]          = ""               # nunca devolver la contraseña
+                row[f"has_{key}"] = bool(stored.get(key))
+            elif campo["type"] == "checkbox":
+                row[key] = bool(stored.get(key, False))
             else:
                 row[key] = stored.get(key, "")
 

@@ -1305,6 +1305,25 @@ tbody tr:hover { background: #fafbff; }
   color: #15803d;
   margin-top: .2rem;
 }
+.scraper-field-checkbox {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.scraper-field-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .88rem;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+}
+.scraper-field-checkbox input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
 .scraper-actions {
   display: flex;
   flex-wrap: wrap;

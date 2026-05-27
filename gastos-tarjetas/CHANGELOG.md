@@ -1,3 +1,8 @@
+## 0.3.32
+
+- **Config scraper — soporte de campos checkbox**: el formulario de configuración de scrapers ahora renderiza campos de tipo `checkbox` (tilde). El valor se guarda como booleano y se envía correctamente al backend.
+- **Config MP — tilde "Log de debug"**: nuevo campo opcional en la config de MercadoPago. Si está tildado, activa el nivel `DEBUG` del logger del módulo durante ese run. Los mensajes por pago (`NUEVO`, `YA-EXISTE`, `OMITIDO-CC`, `SIN-DATOS`) aparecen en Supervisión → Add-ons → Gastos → Log. Se puede tildar puntualmente para diagnosticar y destildar después.
+
 ## 0.3.31
 
 - **Scraper MP — rango de fechas en zona Argentina**: el período consultado ahora se calcula en UTC-3 fijo (sin DST). `dias=1` trae solo el día de hoy desde las 00:00 ART; `dias=2` agrega ayer; y así sucesivamente. Antes se usaba UTC, lo que podía dejar fuera transacciones de las últimas horas del día local.

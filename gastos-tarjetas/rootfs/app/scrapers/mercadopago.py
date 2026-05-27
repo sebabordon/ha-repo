@@ -76,8 +76,12 @@ class MercadoPagoScraper(BaseScraper):
             upsert_scraper_status(self.fuente, estado="error", error_msg=err)
             return ScraperResult(fuente=self.fuente, error=err, log_lines=log)
 
-        # Usuario default para etiquetar gastos importados (Q2)
+        # Usuario default para etiquetar gastos importados
         self._default_usuario = (config.get("usuario") or "").strip()
+
+        # Debug logging opcional: activa nivel DEBUG en este módulo si el usuario lo pide
+        if config.get("debug_log"):
+            logger.setLevel(logging.DEBUG)
 
         dias = int(config.get("dias") or _DIAS_DEFAULT)
         headers = {
