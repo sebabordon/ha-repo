@@ -352,7 +352,10 @@ def list_gastos(
     import_id: Optional[int] = None,
     excluir_especiales: bool = False,
 ) -> list[dict]:
-    query = """SELECT g.*, COALESCE(c.tipo,'auto') AS tipo
+    query = """SELECT g.*,
+                      COALESCE(c.tipo,
+                        CASE WHEN g.archivo_origen='manual' THEN 'manual' ELSE 'auto' END
+                      ) AS tipo
                FROM gastos g LEFT JOIN cuentas c ON g.fuente = c.fuente
                WHERE 1=1"""
     params: list = []
@@ -384,10 +387,16 @@ def list_gastos(
 
 
 def delete_gasto_manual(gasto_id: int) -> bool:
-    """Delete a gasto only if it belongs to a manual cuenta."""
+    """
+    Borra un gasto si pertenece a una cuenta manual O si fue ingresado
+    manualmente vía el formulario rápido (archivo_origen='manual').
+    """
     gasto = get_gasto(gasto_id)
     if not gasto:
         return False
+    # Permitir borrado si la cuenta es manual O si el gasto fue cargado a mano
+    if gasto.get("archivo_origen") == "manual":
+        return delete_movimiento_manual(gasto_id, gasto["fuente"])
     with _conn() as conn:
         row = conn.execute("SELECT tipo FROM cuentas WHERE fuente=?", (gasto["fuente"],)).fetchone()
     if not row or row[0] != "manual":

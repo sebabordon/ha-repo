@@ -280,7 +280,7 @@ def crear_movimiento_rapido(body: MovimientoRapidoRequest, request: Request):
                 cat = categorize(desc)
             except Exception:
                 pass
-        gasto_id = importar_a_gastos(raw_id, categoria=cat)
+        gasto_id = importar_a_gastos(raw_id, categoria=cat, archivo_origen="manual")
         if gasto_id and cat:
             try:
                 from db import update_categoria

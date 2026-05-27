@@ -140,7 +140,36 @@ async def serve_quick(request: Request, fuente: str = "", label: str = ""):
         f'content="{title}"',
         1,  # solo el primer apple-mobile-web-app-title
     )
+    # Apunta al manifest específico del formulario rápido (con el nombre correcto)
+    html = html.replace(
+        'href="/manifest.json"',
+        f'href="/manifest-quick.json?fuente={fuente}&label={label}"',
+    )
     return HTMLResponse(html)
+
+
+@app.get("/manifest-quick.json")
+async def serve_manifest_quick(fuente: str = "", label: str = ""):
+    """Manifest mínimo para las páginas /quick — con el nombre de la cuenta."""
+    title = label.strip() or fuente.upper().replace("_", " ") or "Gasto rápido"
+    manifest = {
+        "name":             title,
+        "short_name":       title,
+        "description":      f"Cargar gasto {title}",
+        "start_url":        f"/quick?fuente={fuente}&label={label}",
+        "display":          "standalone",
+        "background_color": "#16213e",
+        "theme_color":      "#16213e",
+        "icons": [
+            {
+                "src":     "/static/icono-sb.png",
+                "sizes":   "1024x1024",
+                "type":    "image/png",
+                "purpose": "any maskable",
+            },
+        ],
+    }
+    return JSONResponse(manifest, media_type="application/manifest+json")
 
 
 @app.get("/sw.js")

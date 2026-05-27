@@ -260,10 +260,15 @@ def get_movimiento_raw(raw_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def importar_a_gastos(raw_id: int, categoria: Optional[str] = None) -> Optional[int]:
+def importar_a_gastos(
+    raw_id: int,
+    categoria: Optional[str] = None,
+    archivo_origen: str = "scraper",
+) -> Optional[int]:
     """
     Mueve un movimiento_raw (unmatched) a la tabla gastos.
     Devuelve el nuevo gasto_id, o None si el raw_id no existe / ya fue procesado.
+    Pasar archivo_origen='manual' para que el gasto sea borrable desde la UI.
     """
     with _conn() as conn:
         raw = conn.execute(
@@ -286,7 +291,7 @@ def importar_a_gastos(raw_id: int, categoria: Optional[str] = None) -> Optional[
                 raw["fuente"],
                 categoria or None,
                 "regla" if categoria else None,
-                "scraper",
+                archivo_origen,
             ),
         )
         new_id = cur.lastrowid
