@@ -27,7 +27,7 @@ Pagos con tarjeta de crédito (payment_type_id == "credit_card"):
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
@@ -40,6 +40,17 @@ logger = logging.getLogger(__name__)
 _BASE         = "https://api.mercadopago.com"
 _DIAS_DEFAULT = 60    # días hacia atrás a consultar si no se configura otro valor
 _PAGE_SIZE    = 50    # máximo que acepta la API
+
+# Argentina no tiene horario de verano → UTC-3 fijo
+_ART = timezone(timedelta(hours=-3))
+
+# Códigos técnicos que puede devolver la API en reason/description; los filtramos
+# para no usarlos como nombre del comercio.
+_TECHNICAL_CODES = frozenset({
+    "debit_card", "credit_card", "prepaid_card", "account_money", "ticket",
+    "bank_transfer", "atm", "checkout_on", "checkout_pro", "regular_payment",
+    "money_transfer", "money_outflows", "pos_payment", "partition_transfer",
+})
 
 
 class MercadoPagoScraper(BaseScraper):
@@ -151,10 +162,11 @@ class MercadoPagoScraper(BaseScraper):
         log_fn,
     ) -> tuple[list[MovimientoRaw], dict]:
         """Trae egresos (payer) e ingresos (collector) del período."""
-        since = (datetime.now(timezone.utc) - timedelta(days=dias)).strftime(
-            "%Y-%m-%dT00:00:00.000-00:00"
-        )
-        until = datetime.now(timezone.utc).strftime("%Y-%m-%dT23:59:59.999-00:00")
+        # dias=1 → sólo hoy (ART); dias=2 → ayer y hoy; etc.
+        today_art  = datetime.now(_ART).date()
+        since_date = today_art - timedelta(days=dias - 1)
+        since = f"{since_date}T00:00:00.000-03:00"
+        until = f"{today_art}T23:59:59.999-03:00"
 
         movimientos: list[MovimientoRaw] = []
         stats = {"egresos": 0, "ingresos": 0, "skipped": 0}
@@ -212,21 +224,42 @@ class MercadoPagoScraper(BaseScraper):
             for payment in results:
                 pid      = payment.get("id")
                 pay_type = payment.get("payment_type_id", "")
+                op_type  = payment.get("operation_type", "")
+                amount   = payment.get("transaction_amount", 0)
+                reason   = (payment.get("reason") or payment.get("description") or "")[:30]
 
                 # Excluir pagos con tarjeta de crédito: esos cargos ya aparecen
                 # en el resumen de la tarjeta y se importan vía PDF.
                 if pay_type == "credit_card":
                     cc_skipped += 1
+                    logger.debug(
+                        "[mp] OMITIDO-CC  id=%-12s type=%-15s op=%-20s amt=%10.2f  reason=%s",
+                        pid, pay_type, op_type, amount, reason,
+                    )
                     continue
 
                 if pid and pid in existing_ids:
                     skipped += 1
+                    logger.debug(
+                        "[mp] YA-EXISTE   id=%-12s type=%-15s op=%-20s amt=%10.2f  reason=%s",
+                        pid, pay_type, op_type, amount, reason,
+                    )
                     continue
+
                 mov = self._payment_to_movimiento(payment, sign)
                 if mov:
                     movs.append(mov)
                     if pid:
                         existing_ids.add(pid)
+                    logger.debug(
+                        "[mp] NUEVO       id=%-12s type=%-15s op=%-20s amt=%10.2f  reason=%s",
+                        pid, pay_type, op_type, amount, reason,
+                    )
+                else:
+                    logger.debug(
+                        "[mp] SIN-DATOS   id=%-12s type=%-15s op=%-20s amt=%10.2f  reason=%s",
+                        pid, pay_type, op_type, amount, reason,
+                    )
 
             total  = data.get("paging", {}).get("total", 0)
             offset += len(results)
@@ -258,11 +291,11 @@ class MercadoPagoScraper(BaseScraper):
             moneda      = "USD" if p.get("currency_id") == "USD" else "ARS"
             monto_final = round(monto * sign, 2)
 
-            desc = self._build_description(p)
+            desc = self._build_description(p, sign)
             if not desc:
                 return None
 
-            raw_data = self._build_raw_data(p)
+            raw_data = self._build_raw_data(p, sign)
             return MovimientoRaw(
                 fuente      = "mercadopago",
                 fecha       = fecha_str,
@@ -275,8 +308,8 @@ class MercadoPagoScraper(BaseScraper):
             logger.warning("[mp] Error convirtiendo payment id=%s: %s", p.get("id"), exc)
             return None
 
-    def _build_raw_data(self, p: dict) -> dict:
-        """Construye el diccionario raw_data con todos los campos relevantes (Q3)."""
+    def _build_raw_data(self, p: dict, sign: int = +1) -> dict:
+        """Construye el diccionario raw_data con todos los campos relevantes."""
         raw_data: dict = {
             "payment_id":      p.get("id"),
             "operation_type":  p.get("operation_type"),
@@ -286,6 +319,22 @@ class MercadoPagoScraper(BaseScraper):
             "status_detail":   p.get("status_detail"),
             "collector_id":    p.get("collector_id"),
         }
+
+        # Para ingresos (sign=-1): guardar nombre del pagador
+        if sign == -1:
+            payer = p.get("payer") or {}
+            first = (payer.get("first_name") or "").strip()
+            last  = (payer.get("last_name")  or "").strip()
+            nick  = (payer.get("nickname")   or "").strip()
+            payer_name = f"{first} {last}".strip() or nick
+            if payer_name:
+                raw_data["payer_name"] = payer_name
+
+        # Descriptor en extracto bancario (útil para identificar el comercio)
+        stmt_desc = (p.get("statement_descriptor") or "").strip()
+        if stmt_desc:
+            raw_data["statement_descriptor"] = stmt_desc
+
         # Punto de interacción (QR/POS)
         poi = p.get("point_of_interaction") or {}
         poi_type = poi.get("type", "")
@@ -303,17 +352,30 @@ class MercadoPagoScraper(BaseScraper):
 
         return raw_data
 
-    def _build_description_base(self, p: dict) -> str:
+    def _build_description_base(self, p: dict, sign: int = +1) -> str:
         """
         Construye la descripción base sin sufijo de cuotas.
 
-        Prioridad de nombre del comercio (Q3):
+        Prioridad (egresos, sign=+1):
           1. point_of_interaction.business_info.sub_unit / unit  (QR/POS)
-          2. additional_info.items[0].title                       (e-commerce)
-          3. reason / description del pago
-          4. Etiqueta del tipo de operación
+          2. additional_info.items[0].title  (e-commerce; filtrado si es código técnico)
+          3. reason / description  (filtrado si es código técnico)
+          4. statement_descriptor
+          5. Etiqueta del tipo de operación
+          6. "MercadoPago"
+
+        Para ingresos (sign=-1): se antepone el nombre del pagador.
         """
-        # Nombre del negocio desde el punto de interacción (QR/POS)
+        # ── Nombre del pagador (solo para ingresos) ────────────────────────────
+        payer_name = ""
+        if sign == -1:
+            payer = p.get("payer") or {}
+            first = (payer.get("first_name") or "").strip()
+            last  = (payer.get("last_name")  or "").strip()
+            nick  = (payer.get("nickname")   or "").strip()
+            payer_name = f"{first} {last}".strip() or nick
+
+        # ── Nombre del negocio desde el punto de interacción (QR/POS) ─────────
         poi_name = ""
         try:
             biz      = (p.get("point_of_interaction") or {}).get("business_info") or {}
@@ -321,34 +383,49 @@ class MercadoPagoScraper(BaseScraper):
         except Exception:
             pass
 
-        # Nombre del ítem en additional_info (e-commerce / link de pago)
+        # ── Nombre del ítem en additional_info (e-commerce / link de pago) ────
+        # Filtrar si es un código técnico de la API (ej. "debit_card", "checkout_on")
         merchant = ""
         try:
             items = (p.get("additional_info") or {}).get("items") or []
             if items:
-                merchant = (items[0].get("title") or "").strip()
+                candidate = (items[0].get("title") or "").strip()
+                if candidate and candidate not in _TECHNICAL_CODES:
+                    merchant = candidate
         except Exception:
             pass
 
-        # Razón textual del pago
-        # Descartar valores que son códigos técnicos sin espacios (ej. "checkout_on",
-        # "regular_payment") — en esos casos es mejor usar op_label de abajo.
+        # ── Razón textual del pago ─────────────────────────────────────────────
+        # Descartar si es un código técnico (sin espacios, ej. "checkout_on")
         _raw_reason = (p.get("reason") or p.get("description") or "").strip()
-        reason = _raw_reason if " " in _raw_reason else ""
+        reason = _raw_reason if (" " in _raw_reason and _raw_reason not in _TECHNICAL_CODES) else ""
 
-        # Tipo de operación como fallback (o cuando reason es un código técnico)
+        # ── Descriptor en extracto bancario (fallback adicional) ───────────────
+        stmt_desc = (p.get("statement_descriptor") or "").strip()
+
+        # ── Etiqueta legible del tipo de operación ─────────────────────────────
         op_label = {
-            "regular_payment":   "Pago",
-            "money_transfer":    "Transferencia",
-            "recurring_payment": "Pago recurrente",
-            "account_fund":      "Carga de saldo",
-            "investment":        "Inversión",
-            "pos_payment":       "Pago QR",
-            "checkout_pro":      "Compra online",
-            "checkout_on":       "Compra online",
+            "regular_payment":    "Pago",
+            "money_transfer":     "Transferencia",
+            "recurring_payment":  "Pago recurrente",
+            "account_fund":       "Carga de saldo",
+            "investment":         "Inversión",
+            "pos_payment":        "Pago QR",
+            "checkout_pro":       "Compra online",
+            "checkout_on":        "Compra online",
+            "money_outflows":     "Transferencia saliente",
+            "money_release":      "Liberación de fondos",
+            "partition_transfer": "Transferencia interna",
         }.get(p.get("operation_type", ""), "")
 
-        # Mejor nombre comercial disponible
+        # ── Para ingresos: anteponer el nombre del pagador ─────────────────────
+        if payer_name:
+            extra = poi_name or merchant or reason or stmt_desc or op_label or ""
+            if extra:
+                return f"{payer_name} — {extra}"
+            return payer_name
+
+        # ── Para egresos: mejor nombre comercial disponible ────────────────────
         best_name = poi_name or merchant or ""
 
         if best_name and reason and best_name.lower() not in reason.lower():
@@ -357,6 +434,8 @@ class MercadoPagoScraper(BaseScraper):
             base = best_name
         elif reason:
             base = reason
+        elif stmt_desc:
+            base = stmt_desc
         elif op_label:
             base = op_label
         else:
@@ -364,9 +443,9 @@ class MercadoPagoScraper(BaseScraper):
 
         return base
 
-    def _build_description(self, p: dict) -> str:
+    def _build_description(self, p: dict, sign: int = +1) -> str:
         """Descripción completa; agrega sufijo "(N cuotas)" si aplica."""
-        base         = self._build_description_base(p)
+        base         = self._build_description_base(p, sign)
         installments = int(p.get("installments", 1) or 1)
         # Los pagos CC ya son excluidos antes de llegar aquí; este sufijo aplica
         # a cuotas de otros medios (débito diferido, etc.) si existieran.
@@ -414,10 +493,9 @@ def _get_existing_payment_ids(dias: int) -> set:
 
     Incluye tanto IDs simples (int) como sub-IDs de cuotas (str "{id}_c{i}").
     """
-    from datetime import datetime, timedelta
     from scrapers_db import _conn
 
-    since = (datetime.utcnow() - timedelta(days=dias)).strftime("%Y-%m-%d")
+    since = (datetime.now(_ART).date() - timedelta(days=dias - 1)).strftime("%Y-%m-%d")
     ids: set = set()
     try:
         with _conn() as conn:

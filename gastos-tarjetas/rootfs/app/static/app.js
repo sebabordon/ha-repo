@@ -3586,14 +3586,17 @@ async function _fetchScraperMovimientos(banco, el) {
           "digital_currency": "Cripto",
         };
         const opLabels = {
-          "regular_payment":   "Pago",
-          "money_transfer":    "Transferencia",
-          "recurring_payment": "Pago recurrente",
-          "account_fund":      "Carga de saldo",
-          "investment":        "Inversión",
-          "pos_payment":       "Pago QR",
-          "checkout_pro":      "Compra online",
-          "checkout_on":       "Compra online",
+          "regular_payment":    "Pago",
+          "money_transfer":     "Transferencia",
+          "recurring_payment":  "Pago recurrente",
+          "account_fund":       "Carga de saldo",
+          "investment":         "Inversión",
+          "pos_payment":        "Pago QR",
+          "checkout_pro":       "Compra online",
+          "checkout_on":        "Compra online",
+          "money_outflows":     "Transf. saliente",
+          "money_release":      "Liberación fondos",
+          "partition_transfer": "Transf. interna",
         };
         const parts = [];
         if (rd.payment_type_id) parts.push(typeLabels[rd.payment_type_id] || rd.payment_type_id);

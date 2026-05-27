@@ -1,3 +1,12 @@
+## 0.3.31
+
+- **Scraper MP — rango de fechas en zona Argentina**: el período consultado ahora se calcula en UTC-3 fijo (sin DST). `dias=1` trae solo el día de hoy desde las 00:00 ART; `dias=2` agrega ayer; y así sucesivamente. Antes se usaba UTC, lo que podía dejar fuera transacciones de las últimas horas del día local.
+- **Scraper MP — descripciones más ricas**: `_build_description_base` recibe el signo de la transacción. Para ingresos (`sign=-1`) se antepone el nombre del pagador (`payer.first_name + last_name`). Se agrega `statement_descriptor` como fallback antes de "MercadoPago". Los títulos de ítems que son códigos técnicos (`_TECHNICAL_CODES`) se filtran para no aparecer como nombre de comercio.
+- **Scraper MP — nuevas etiquetas de operación**: `money_outflows` → "Transferencia saliente", `money_release` → "Liberación de fondos", `partition_transfer` → "Transferencia interna". Se agrega `payer_name` y `statement_descriptor` a `raw_data`.
+- **Scraper MP — debug logging por pago**: se registra a nivel `DEBUG` cada pago procesado con su `id`, `payment_type_id`, `operation_type`, `amount` y `reason` (30 chars), junto al resultado: `NUEVO`, `YA-EXISTE`, `OMITIDO-CC` o `SIN-DATOS`. Activar debug en HA (`logger.default: debug`) permite auditar exactamente qué trae la API.
+- **UI subtítulos**: se agregan traducciones para `money_outflows`, `money_release` y `partition_transfer` en los subtítulos del panel de scraper.
+- **Config MP — hint de `dias`**: se clarifica el significado (`1 = solo hoy, 2 = hoy y ayer, N = últimos N días`).
+
 ## 0.3.30
 
 - **`delete_movimiento_raw` — hard delete para MP en un solo click**: las entradas de MercadoPago se borran completamente con un solo ✕ (el gasto vinculado también se elimina si existe). No se crea sentinel `ignored` porque MP ya deduplica vía `payment_id` en `_get_existing_payment_ids`. Esto rompe el ciclo confuso de "✕ → ignored → ✕ de nuevo" que se necesitaba antes. El scraper reimporta en el próximo run; AMEX/BBVA/Galicia siguen con soft-delete para mantener su sentinel.

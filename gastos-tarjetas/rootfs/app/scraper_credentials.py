@@ -102,7 +102,7 @@ BANKS: dict[str, dict] = {
                 "type":        "text",
                 "required":    False,
                 "placeholder": "60",
-                "hint":        "Cuántos días hacia atrás buscar movimientos (default: 60)",
+                "hint":        "1 = solo hoy, 2 = hoy y ayer, N = últimos N días (default: 60)",
             },
         ],
     },
