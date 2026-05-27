@@ -18,14 +18,13 @@ Endpoints usados:
   GET /v1/payments/search?collector.id=… → cobros recibidos (ingresos)
   GET /v1/account/balance               → saldo disponible
 
-Cuotas con tarjeta de crédito (Q4):
-  Cuando payment_type_id == "credit_card" e installments > 1, el pago se divide
-  en N entradas individuales (una por cuota mensual) para que la conciliación
-  pueda cruzarlas contra los débitos del resumen de tarjeta.
-  Cada cuota lleva raw_data.payment_id = "{id}_c{i}" (ej. "123456_c2").
+Pagos con tarjeta de crédito (payment_type_id == "credit_card"):
+  Se EXCLUYEN. Esos cargos aparecen en el resumen de la tarjeta (AMEX, BBVA,
+  Galicia, etc.) y se importan vía PDF. Importarlos también desde MP sería
+  un duplicado. Solo se importan pagos desde billetera (account_money),
+  débito, transferencias, QR, etc.
 """
 
-import calendar
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -41,15 +40,6 @@ logger = logging.getLogger(__name__)
 _BASE         = "https://api.mercadopago.com"
 _DIAS_DEFAULT = 60    # días hacia atrás a consultar si no se configura otro valor
 _PAGE_SIZE    = 50    # máximo que acepta la API
-
-
-def _add_months(dt: datetime, months: int) -> datetime:
-    """Suma `months` meses a un datetime sin dependencias externas."""
-    month = dt.month - 1 + months
-    year  = dt.year + month // 12
-    month = month % 12 + 1
-    day   = min(dt.day, calendar.monthrange(year, month)[1])
-    return dt.replace(year=year, month=month, day=day)
 
 
 class MercadoPagoScraper(BaseScraper):
@@ -195,9 +185,10 @@ class MercadoPagoScraper(BaseScraper):
         log_fn,
     ) -> tuple[list[MovimientoRaw], int]:
         """Pagina /v1/payments/search y convierte resultados."""
-        movs:    list[MovimientoRaw] = []
-        skipped: int = 0
-        offset:  int = 0
+        movs:       list[MovimientoRaw] = []
+        skipped:    int = 0
+        cc_skipped: int = 0
+        offset:     int = 0
 
         while True:
             params = {
@@ -219,38 +210,31 @@ class MercadoPagoScraper(BaseScraper):
                 break
 
             for payment in results:
-                pid          = payment.get("id")
-                installments = int(payment.get("installments", 1) or 1)
-                pay_type     = payment.get("payment_type_id", "")
-                # Pagos con tarjeta en cuotas → dividir en N entradas individuales (Q4)
-                is_cc_plan   = installments > 1 and pay_type == "credit_card"
+                pid      = payment.get("id")
+                pay_type = payment.get("payment_type_id", "")
 
-                if is_cc_plan:
-                    first_key = f"{pid}_c1" if pid else None
-                    if first_key and first_key in existing_ids:
-                        skipped += 1
-                        continue
-                    new_movs = self._split_installments(payment, sign)
-                    movs.extend(new_movs)
-                    # Registrar todos los sub-IDs para dedup intra-run
-                    for i in range(1, installments + 1):
-                        existing_ids.add(f"{pid}_c{i}")
-                else:
-                    if pid and pid in existing_ids:
-                        skipped += 1
-                        continue
-                    mov = self._payment_to_movimiento(payment, sign)
-                    if mov:
-                        movs.append(mov)
-                        if pid:
-                            existing_ids.add(pid)
+                # Excluir pagos con tarjeta de crédito: esos cargos ya aparecen
+                # en el resumen de la tarjeta y se importan vía PDF.
+                if pay_type == "credit_card":
+                    cc_skipped += 1
+                    continue
+
+                if pid and pid in existing_ids:
+                    skipped += 1
+                    continue
+                mov = self._payment_to_movimiento(payment, sign)
+                if mov:
+                    movs.append(mov)
+                    if pid:
+                        existing_ids.add(pid)
 
             total  = data.get("paging", {}).get("total", 0)
             offset += len(results)
             if offset >= total or len(results) < _PAGE_SIZE:
                 break
 
-        log_fn(f"  → {len(movs)} nuevos ({skipped} ya existían)")
+        cc_note = f", {cc_skipped} tarjeta crédito omitidos" if cc_skipped else ""
+        log_fn(f"  → {len(movs)} nuevos ({skipped} ya existían{cc_note})")
         return movs, skipped
 
     # ── Conversión de pagos ───────────────────────────────────────────────────
@@ -290,66 +274,6 @@ class MercadoPagoScraper(BaseScraper):
         except Exception as exc:
             logger.warning("[mp] Error convirtiendo payment id=%s: %s", p.get("id"), exc)
             return None
-
-    def _split_installments(self, p: dict, sign: int) -> list[MovimientoRaw]:
-        """
-        Divide un pago en cuotas de tarjeta en N MovimientoRaw individuales (Q4).
-
-        Cada entrada representa una cuota mensual con:
-          - monto      = total / N  (redondeado a 2 decimales)
-          - fecha      = fecha_aprobación + (i-1) meses
-          - descripcion = "BASE i/N"
-          - raw_data.payment_id = "{id}_c{i}"  (único por cuota)
-
-        Esto permite que la conciliación cruce cada cuota contra la línea
-        correspondiente del resumen de tarjeta de crédito.
-        """
-        try:
-            fecha_str = (p.get("date_approved") or p.get("date_created") or "")[:10]
-            if not fecha_str or len(fecha_str) < 10:
-                return []
-
-            monto_total = float(p.get("transaction_amount", 0))
-            if monto_total <= 0:
-                return []
-
-            n      = int(p.get("installments", 1) or 1)
-            moneda = "USD" if p.get("currency_id") == "USD" else "ARS"
-            pid    = p.get("id")
-
-            base_desc = self._build_description_base(p)
-            if not base_desc:
-                return []
-
-            monto_cuota = round(monto_total / n * sign, 2)
-            fecha_base  = datetime.strptime(fecha_str, "%Y-%m-%d")
-
-            movs: list[MovimientoRaw] = []
-            for i in range(1, n + 1):
-                fecha_cuota     = _add_months(fecha_base, i - 1)
-                fecha_cuota_str = fecha_cuota.strftime("%Y-%m-%d")
-                desc_cuota      = f"{base_desc} {i}/{n}"
-
-                raw_data = self._build_raw_data(p)
-                raw_data["payment_id"] = f"{pid}_c{i}"
-                raw_data["cuota_num"]  = i
-                # Eliminar sufijo "(N cuotas)" de raw_data ya no aplica aquí
-                raw_data.pop("installments_label", None)
-
-                movs.append(MovimientoRaw(
-                    fuente      = "mercadopago",
-                    fecha       = fecha_cuota_str,
-                    descripcion = desc_cuota,
-                    monto       = monto_cuota,
-                    moneda      = moneda,
-                    raw_data    = raw_data,
-                ))
-            return movs
-        except Exception as exc:
-            logger.warning(
-                "[mp] Error dividiendo cuotas para payment id=%s: %s", p.get("id"), exc
-            )
-            return []
 
     def _build_raw_data(self, p: dict) -> dict:
         """Construye el diccionario raw_data con todos los campos relevantes (Q3)."""
@@ -441,13 +365,12 @@ class MercadoPagoScraper(BaseScraper):
         return base
 
     def _build_description(self, p: dict) -> str:
-        """Descripción completa; agrega sufijo "(N cuotas)" para pagos no-CC en cuotas."""
+        """Descripción completa; agrega sufijo "(N cuotas)" si aplica."""
         base         = self._build_description_base(p)
         installments = int(p.get("installments", 1) or 1)
-        pay_type     = p.get("payment_type_id", "")
-        # Solo agregar sufijo para cuotas que NO son tarjeta de crédito
-        # (las CC se dividen en entradas separadas por _split_installments)
-        if installments > 1 and pay_type != "credit_card":
+        # Los pagos CC ya son excluidos antes de llegar aquí; este sufijo aplica
+        # a cuotas de otros medios (débito diferido, etc.) si existieran.
+        if installments > 1:
             base += f" ({installments} cuotas)"
         return base
 

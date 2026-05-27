@@ -1,3 +1,7 @@
+## 0.3.28
+
+- **Scraper MP — excluir pagos con tarjeta de crédito**: los pagos con `payment_type_id == "credit_card"` se omiten completamente. Esos cargos ya figuran en el resumen de la tarjeta (AMEX, BBVA, etc.) y se importan vía PDF; traerlos también desde MP generaría duplicados. El log del run muestra cuántos se omitieron por este motivo. Se elimina el código de split de cuotas agregado en 0.3.26 (ya no es necesario).
+
 ## 0.3.27
 
 - **Scraper MP — descripción `checkout_on`**: el campo `reason` de la API de MP devuelve códigos técnicos sin espacios (ej. `checkout_on`, `regular_payment`) que se filtraban por la lógica de prioridad y aparecían como nombre de la transacción. Ahora si `reason` no contiene espacios se descarta como código técnico y se usa `op_label` en su lugar. Se agrega `"checkout_on"` al dict de etiquetas → muestra `"Compra online"`.
