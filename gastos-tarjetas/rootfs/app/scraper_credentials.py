@@ -81,8 +81,21 @@ BANKS: dict[str, dict] = {
         "nombre":   "MercadoPago",
         "schedule": "07:45",
         "campos": [
-            {"key": "usuario",  "label": "Usuario (email / teléfono)", "type": "text",     "required": True},
-            {"key": "password", "label": "Contraseña",                 "type": "password", "required": True},
+            {
+                "key":      "access_token",
+                "label":    "Access Token",
+                "type":     "password",
+                "required": True,
+                "hint":     "Generalo en mercadopago.com.ar/developers/panel → tu app → Credenciales de producción",
+            },
+            {
+                "key":         "dias",
+                "label":       "Días a consultar",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "60",
+                "hint":        "Cuántos días hacia atrás buscar movimientos (default: 60)",
+            },
         ],
     },
 }

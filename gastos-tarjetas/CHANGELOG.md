@@ -1,3 +1,9 @@
+## 0.3.22
+
+- **Scraper MercadoPago reescrito: Selenium → API REST**: ya no requiere usuario/contraseña ni browser. Usa el Access Token personal de la cuenta (`mercadopago.com.ar/developers/panel → Credenciales de producción`). Consulta `/v1/payments/search` como payer (egresos) y como collector (ingresos) con paginación, y `/v1/account/balance` para el saldo. Deduplicación por `payment_id` en `raw_data` para evitar reinsertar pagos ya conocidos en runs consecutivos.
+- **Credenciales MP**: se reemplazan los campos `usuario`/`password` por `access_token` (tipo password, enmascarado en UI) y `dias` opcional (default 60).
+- **Descripción de pagos MP**: prioriza nombre del comercio de `additional_info.items`, luego `reason`/`description`, luego etiqueta del `operation_type`. Si la compra fue en cuotas, agrega `(N cuotas)` al final.
+
 ## 0.3.21
 
 - **Conciliación: `_normalize()` ya no elimina el número de cuota (N/M)**: ahora que el tie-breaker en `_score()` hace imposible el match entre cuotas distintas, eliminar `3/12` de la descripción antes de comparar sólo restaba precisión. Con el N/M preservado, `TIENDA 3/12` vs `TIENDA 3/12` obtiene mayor similitud que `TIENDA 3/12` vs `TIENDA` (PDF sin cuota explícita).
