@@ -117,8 +117,17 @@
       border-color: var(--accent);
     }
 
+    /* Monto row: input + save button side by side */
+    .monto-row {
+      display: flex;
+      gap: .5rem;
+      align-items: stretch;
+    }
+
     /* Big monto input */
     #inp-monto {
+      flex: 1;
+      min-width: 0;
       font-size: 2rem;
       font-weight: 700;
       text-align: right;
@@ -126,6 +135,27 @@
       padding: .5rem .9rem;
       border-radius: 10px;
     }
+
+    /* Square checkmark save button */
+    .btn-check {
+      flex-shrink: 0;
+      width: 3.4rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .15s;
+      -webkit-appearance: none;
+    }
+
+    .btn-check:active  { background: var(--accent-light); }
+    .btn-check:disabled { opacity: .5; cursor: not-allowed; }
 
     /* tipo toggle */
     .tipo-row {
@@ -157,26 +187,6 @@
       background: #d1fae5;
       border-color: #6ee7b7;
       color: #065f46;
-    }
-
-    .btn-save {
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      padding: .9rem 1rem;
-      font-size: 1.05rem;
-      font-weight: 700;
-      cursor: pointer;
-      width: 100%;
-      transition: background .15s;
-    }
-
-    .btn-save:active { background: var(--accent-light); }
-
-    .btn-save:disabled {
-      opacity: .5;
-      cursor: not-allowed;
     }
 
     /* success screen */
@@ -295,8 +305,11 @@
 
     <div class="field">
       <label>Monto</label>
-      <input id="inp-monto" type="number" inputmode="decimal" min="0.01" step="0.01"
-             placeholder="0,00" autofocus>
+      <div class="monto-row">
+        <input id="inp-monto" type="number" inputmode="decimal" min="0.01" step="0.01"
+               placeholder="0,00" autofocus>
+        <button class="btn-check" id="btn-save" type="button" onclick="guardar()">✓</button>
+      </div>
     </div>
 
     <div class="field">
@@ -331,8 +344,6 @@
     </div>
 
     <div id="msg-err" class="msg err"></div>
-
-    <button class="btn-save" id="btn-save" onclick="guardar()">Guardar gasto</button>
   </div>
 
   <!-- ── Pantalla de éxito ── -->
@@ -431,7 +442,7 @@
 
     const btn = document.getElementById("btn-save");
     btn.disabled = true;
-    btn.textContent = "Guardando…";
+    btn.textContent = "…";
 
     try {
       const res = await fetch("/api/movimientos-rapidos", {
@@ -457,7 +468,7 @@
       showErr("Error de red. Revisá la conexión.");
     } finally {
       btn.disabled = false;
-      btn.textContent = "Guardar gasto";
+      btn.textContent = "✓";
     }
   }
 
