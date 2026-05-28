@@ -1,3 +1,7 @@
+## 0.3.36
+
+- **Fix scraper MP — fecha incorrecta para pagos con tarjeta prepaga**: el scraper usaba `date_approved` (fecha de liquidación) como fecha del movimiento. Para tarjetas prepaga (y otras con ciclo T+1), la liquidación ocurre al día siguiente de la transacción, desplazando la fecha un día. Ahora se usa `date_created` (momento de la transacción, igual a lo que muestra la app de MP), con `date_approved` como fallback si `date_created` no estuviera disponible.
+
 ## 0.3.35
 
 - **Scraper MP — reglas de descripción explícitas**: `_build_description_base` ahora aplica reglas fijas antes de la lógica genérica: (1) `partition_transfer` → "Transferencia desde Reserva" (ingreso) o "Transferencia hacia Reserva" (egreso); (2) `account_money + money_transfer` → "Transferencia: {reason}" (ej. "Transferencia: Varios"); (3) `account_money + regular_payment` → `reason` directo (ej. "Merpago*grupolarg", "Express av dorrego 851"). El resto sigue con la lógica genérica (poi_name → merchant → reason → stmt_desc → op_label).

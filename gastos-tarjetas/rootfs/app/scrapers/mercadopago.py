@@ -289,7 +289,10 @@ class MercadoPagoScraper(BaseScraper):
         sign = -1  → ingreso (user cobró → monto negativo)
         """
         try:
-            fecha_str = (p.get("date_approved") or p.get("date_created") or "")[:10]
+            # Usar date_created (momento de la transacción, lo que muestra la app MP).
+            # date_approved es la fecha de liquidación: para tarjeta prepaga es T+1,
+            # lo que desplazaba la fecha un día hacia adelante.
+            fecha_str = (p.get("date_created") or p.get("date_approved") or "")[:10]
             if not fecha_str or len(fecha_str) < 10:
                 return None
 
