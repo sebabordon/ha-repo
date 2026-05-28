@@ -43,6 +43,7 @@ import logging
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from .base import BaseScraper, MovimientoRaw, ScraperResult
 
@@ -649,7 +650,11 @@ class BbvaScraper(BaseScraper):
                 break
 
             log_fn(f"  Página desde={ultimo}: {len(batch)} movimientos (API total={count})")
-            all_movs.extend(self._parse_batch(batch))
+            # Diagnóstico: loguear keys del primer movimiento para confirmar
+            # qué campos trae la API (útil para refinar detección de signo).
+            if batch and ultimo == 0:
+                log_fn(f"    [debug] keys del primer mov: {sorted(batch[0].keys())}")
+            all_movs.extend(self._parse_batch(batch, log_fn))
 
             # Si devolvió menos de _PAGE_SIZE, no hay más páginas
             if len(batch) < _PAGE_SIZE:
@@ -661,17 +666,75 @@ class BbvaScraper(BaseScraper):
 
     # ── parsing de un batch ───────────────────────────────────────────────────
 
-    def _parse_batch(self, batch: list[dict]) -> list[MovimientoRaw]:
+    @staticmethod
+    def _detect_sign(mov: dict, mov_older: Optional[dict], importe_signed: float) -> tuple[int, str]:
+        """
+        Detecta el signo de un movimiento BBVA.
+        Devuelve (sign, reason) donde sign ∈ {+1 egreso, -1 ingreso}.
+
+        Estrategia (en orden de confiabilidad):
+          1. Campo explícito de naturaleza/signo en la API (BBVA suele traer
+             alguno de estos: naturalezaMovimiento, naturaleza, signo, tipoSigno,
+             codigoSigno, "C"/"D" para crédito/débito).
+          2. Comparación de saldos: saldo_actual > saldo_anterior → ingreso.
+             Requiere que `mov_older` (el movimiento siguiente en el batch
+             newest-first, o sea el inmediatamente anterior en el tiempo) tenga
+             un campo saldo válido.
+          3. Signo del importe: si BBVA devuelve `importe` ya firmado
+             (negativo para egresos), respetar ese signo.
+          4. Default egreso (caso peor — sólo si todo lo demás falla).
+        """
+        # 1. Naturaleza / signo explícito
+        for k in ("naturalezaMovimiento", "naturaleza", "signo", "tipoSigno",
+                  "codigoSigno", "tipoNaturaleza", "indicadorMovimiento"):
+            v = mov.get(k)
+            if v is None or v == "":
+                continue
+            s = str(v).strip().upper()
+            if s in ("C", "CR", "CREDITO", "CRÉDITO", "CREDIT", "+", "1", "I"):
+                return (-1, f"{k}={v}")
+            if s in ("D", "DB", "DEBITO", "DÉBITO", "DEBIT", "-", "0", "E"):
+                return (+1, f"{k}={v}")
+
+        # 2. Comparación de saldos con el inmediatamente anterior en el tiempo
+        if mov_older is not None:
+            try:
+                saldo_actual = BbvaScraper._safe_parse_amount(mov.get("saldo"))
+                saldo_anterior = BbvaScraper._safe_parse_amount(mov_older.get("saldo"))
+                if saldo_actual is not None and saldo_anterior is not None:
+                    if saldo_actual > saldo_anterior:
+                        return (-1, "saldo↑")
+                    elif saldo_actual < saldo_anterior:
+                        return (+1, "saldo↓")
+            except Exception:
+                pass
+
+        # 3. Importe firmado por la API
+        if importe_signed < 0:
+            return (+1, "importe<0")
+        if importe_signed > 0:
+            # Importe positivo es ambiguo (puede ser cualquiera).  En algunos
+            # endpoints BBVA usa importe>0 siempre.  No es señal confiable.
+            pass
+
+        # 4. Default
+        return (+1, "default")
+
+    @staticmethod
+    def _safe_parse_amount(v) -> Optional[float]:
+        if v is None or v == "":
+            return None
+        try:
+            return BbvaScraper.parse_amount(str(v))
+        except Exception:
+            return None
+
+    def _parse_batch(self, batch: list[dict], log_fn=None) -> list[MovimientoRaw]:
         """
         Convierte un batch de movimientos BBVA a MovimientoRaw.
+        El array llega newest-first.  Ver `_detect_sign` para la lógica del signo.
 
-        El array llega newest-first.  El signo se deduce comparando saldos:
-          saldo[i]  >  saldo[i+1]  →  ingreso (sign = −1)
-          saldo[i]  <  saldo[i+1]  →  egreso  (sign = +1)
-          saldo[i] ==  saldo[i+1]  →  egreso  (default)
-          último elemento (sin siguiente)  →  egreso  (default)
-
-        monto se guarda con el signo de la convención del proyecto:
+        Convención de monto:
           monto > 0 = egreso   (plata que sale)
           monto < 0 = ingreso  (plata que entra)
         """
@@ -682,39 +745,36 @@ class BbvaScraper(BaseScraper):
             if not fecha:
                 continue
 
-            importe_str = str(mov.get("importe", "0") or "0")
-            saldo_str   = str(mov.get("saldo",   "0") or "0")
-            importe_abs = abs(self.parse_amount(importe_str))
-            saldo_val   = self.parse_amount(saldo_str)
+            importe_str    = str(mov.get("importe", "0") or "0")
+            importe_signed = self.parse_amount(importe_str)
+            importe_abs    = abs(importe_signed)
 
-            # Signo por diferencia de saldos (newest-first)
-            if i + 1 < len(batch):
-                saldo_prev = self.parse_amount(
-                    str(batch[i + 1].get("saldo", "0") or "0")
-                )
-                if saldo_val > saldo_prev:
-                    sign = -1   # saldo subió → ingreso
-                elif saldo_val < saldo_prev:
-                    sign = +1   # saldo bajó  → egreso
-                else:
-                    sign = +1   # sin cambio   → default egreso
-            else:
-                sign = +1       # sin referencia → default egreso
-
+            # mov_older = el siguiente en el array newest-first (= movimiento
+            # inmediatamente anterior en el tiempo, su saldo es el "antes" del
+            # actual).  Para el último mov del batch, no hay older disponible.
+            mov_older = batch[i + 1] if i + 1 < len(batch) else None
+            sign, reason = self._detect_sign(mov, mov_older, importe_signed)
             monto = importe_abs * sign
+
+            if log_fn:
+                log_fn(
+                    f"    mov fecha={fecha} importe={importe_abs:.2f} "
+                    f"saldo={mov.get('saldo')} → sign={sign:+d} ({reason})"
+                )
 
             concepto = (mov.get("concepto") or "").strip()
             canal    = (mov.get("canal")    or "").strip()
             desc     = concepto or canal or "Movimiento BBVA"
 
             raw_data = {
-                "saldo":                  saldo_str,
+                "saldo":                  mov.get("saldo"),
                 "canal":                  canal or None,
                 "numero_operacion":       mov.get("numeroOperacion") or None,
                 "referencia":             mov.get("referencia")      or None,
                 "clave_concepto":         mov.get("claveConcepto")   or None,
                 "codigo_tipo_movimiento": mov.get("codigoTipoMovimiento") or None,
                 "tiene_detalle":          mov.get("tieneDetalle"),
+                "sign_reason":            reason,
             }
             # Limpiar None para no inflar el raw_data
             raw_data = {k: v for k, v in raw_data.items() if v is not None}

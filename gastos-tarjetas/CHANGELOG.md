@@ -1,3 +1,12 @@
+## 0.3.63
+
+- **Fix detección de signo en movimientos BBVA — usar campos explícitos antes que diferencia de saldos**: la lógica anterior comparaba `saldo[i]` con `saldo[i+1]` para deducir si era ingreso/egreso, pero como el batch viene newest-first, el movimiento **más viejo** del batch no tiene `saldo[i+1]` para comparar — entonces siempre defaulteaba a egreso, incluso si era un ingreso. Síntoma: cuenta con 2 movimientos donde el más viejo era ingreso aparecía con signo invertido. **Nueva estrategia en `_detect_sign`** (en orden de confiabilidad):
+  1. Campo explícito en la API: `naturalezaMovimiento`, `naturaleza`, `signo`, `tipoSigno`, `codigoSigno`, `tipoNaturaleza`, `indicadorMovimiento` con valores tipo `C/D`, `+/-`, `1/0`, `I/E`, `CREDITO/DEBITO`, etc.
+  2. Comparación de saldos (la lógica anterior — sigue siendo correcta cuando hay `mov_older`).
+  3. Si `importe` viene firmado por BBVA (`importe < 0` → egreso), usar ese signo.
+  4. Default egreso (último recurso).
+- **Diagnóstico**: el log del scraper ahora imprime los keys del primer movimiento de cada batch (`[debug] keys del primer mov: [...]`) para confirmar qué campos trae BBVA, y por cada movimiento muestra `sign={+1/-1} ({reason})` con el motivo de la decisión (`naturaleza=C`, `saldo↑`, `importe<0`, `default`). Esto permite afinar la detección si BBVA usa campos distintos a los probados. Se guarda también `sign_reason` en `raw_data` para auditoría posterior.
+
 ## 0.3.62
 
 - **Fix UI "Sin registros guardados" — `list_movimientos_raw` expande banco→fuentes**: la sección "📦 Registros ingresados" en cada tab de banco mostraba "Sin registros guardados" aún cuando había filas en `movimientos_raw`. La UI llamaba `/api/scrapers/movimientos-raw?fuente=bbva` con el banco como filtro, pero las filas tenían `fuente='bbva_cuenta'`. Mismo bug que arreglamos en el scheduler en v0.3.57, ahora también en el query del backend. Nuevo helper `fuentes_for_banco(banco)` con el mapping `{"bbva": ["bbva","bbva_cuenta","bbva_visa","bbva_mc"], "amex": ["amex"], "galicia": ["galicia","galicia_mc"], "mercadopago": ["mercadopago"]}` — si el filtro `fuente` recibido es una banco-key conocida, se expande; si es una fuente específica devuelve `[fuente]` (compatibilidad). Usado en:
