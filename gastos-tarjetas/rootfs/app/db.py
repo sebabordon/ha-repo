@@ -253,6 +253,35 @@ def _run_migrations(conn):
         """)
         conn.execute("INSERT INTO db_migrations (name) VALUES ('fix_importaciones_cantidad_v1')")
 
+    if "dedup_scraper_gastos_v1" not in done:
+        # v0.3.61: bug en v0.3.55→0.3.57 dejó duplicados en `gastos` cuando un
+        # scraper corría dos veces (las filas atascadas en movimientos_raw con
+        # estado='new' por el mismatch banco/fuente se reimportaban junto con
+        # las nuevas).  Encontrar gastos con la misma (fuente, fecha, monto,
+        # descripcion, moneda) que provengan del scraper (archivo_origen='scraper')
+        # y mantener sólo el de menor id; del resto, borrar el gasto y eliminar
+        # la fila vinculada en movimientos_raw.
+        dups = conn.execute("""
+            SELECT fuente, fecha, monto, descripcion, moneda,
+                   GROUP_CONCAT(id, ',') AS ids
+            FROM gastos
+            WHERE archivo_origen = 'scraper'
+            GROUP BY fuente, fecha, CAST(monto AS REAL), descripcion, moneda
+            HAVING COUNT(*) > 1
+        """).fetchall()
+        deleted = 0
+        for row in dups:
+            ids = [int(x) for x in str(row[5]).split(",") if x]
+            ids.sort()
+            keep, drop = ids[0], ids[1:]
+            for did in drop:
+                conn.execute("DELETE FROM gastos WHERE id=?", (did,))
+                conn.execute(
+                    "DELETE FROM movimientos_raw WHERE gasto_id=?", (did,)
+                )
+                deleted += 1
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_scraper_gastos_v1')")
+
 
 @contextmanager
 def _conn():

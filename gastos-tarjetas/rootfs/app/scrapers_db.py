@@ -178,38 +178,86 @@ def insert_movimientos_raw(movimientos: list[dict]) -> int:
     Inserta una tanda de movimientos scrapeados.
     Cada dict debe tener: fuente, fecha, descripcion, monto, moneda.
     Campos opcionales: tarjeta, fecha_proceso, raw_data.
-    Devuelve cantidad insertada.
+
+    DEDUP: si ya existe una fila con misma (fuente, fecha, monto, descripción,
+    moneda) en cualquier estado (new/unmatched/matched/imported/ignored), se
+    skipea — el scraper es idempotente, correr 2 veces el mismo día no debería
+    crear duplicados.  Si el scraper tiene un identificador único en raw_data
+    (ej. numero_operacion para BBVA, payment_id para MP), se usa eso en lugar
+    del descriptor para mejor precisión.
+
+    Devuelve cantidad de filas EFECTIVAMENTE insertadas (excluye duplicados).
     """
     if not movimientos:
         return 0
     now = datetime.utcnow().isoformat()
-    rows = [
-        {
-            "fuente":        m["fuente"],
-            "tarjeta":       m.get("tarjeta"),
-            "fecha":         m["fecha"],
-            "fecha_proceso": m.get("fecha_proceso"),
-            "descripcion":   m["descripcion"],
-            "monto":         str(m["monto"]),
-            "moneda":        m.get("moneda", "ARS"),
-            "scraped_at":    now,
-            "raw_data":      json.dumps(m.get("raw_data")) if m.get("raw_data") else None,
-        }
-        for m in movimientos
-    ]
+
+    inserted = 0
     with _conn() as conn:
-        before = conn.execute("SELECT total_changes()").fetchone()[0]
-        conn.executemany(
-            """INSERT INTO movimientos_raw
-               (fuente, tarjeta, fecha, fecha_proceso, descripcion, monto, moneda,
-                scraped_at, estado, raw_data)
-               VALUES
-               (:fuente, :tarjeta, :fecha, :fecha_proceso, :descripcion, :monto, :moneda,
-                :scraped_at, 'new', :raw_data)""",
-            rows,
-        )
-        count = conn.execute("SELECT total_changes()").fetchone()[0] - before
-    return count
+        for m in movimientos:
+            fuente = m["fuente"]
+            fecha  = m["fecha"]
+            monto  = str(m["monto"])
+            desc   = m["descripcion"]
+            moneda = m.get("moneda", "ARS")
+            raw    = m.get("raw_data") or {}
+
+            # Identificador único del scraper si existe (BBVA: numero_operacion,
+            # MP: payment_id, etc.).  Buscar por ese ID es más preciso que por
+            # descriptor + monto.
+            scraper_uid = None
+            for k in ("numero_operacion", "payment_id", "operation_id", "transaction_id"):
+                v = raw.get(k) if isinstance(raw, dict) else None
+                if v:
+                    scraper_uid = (k, str(v))
+                    break
+
+            existing = None
+            if scraper_uid:
+                # Buscar por scraper UID dentro de raw_data (LIKE JSON match)
+                k, v = scraper_uid
+                like = f'%"{k}": "{v}"%'
+                like2 = f'%"{k}":"{v}"%'
+                existing = conn.execute(
+                    """SELECT id FROM movimientos_raw
+                       WHERE fuente = ? AND (raw_data LIKE ? OR raw_data LIKE ?)
+                       LIMIT 1""",
+                    (fuente, like, like2),
+                ).fetchone()
+
+            if not existing:
+                # Fallback: dedup por descriptor (fuente + fecha + monto + descripción + moneda)
+                existing = conn.execute(
+                    """SELECT id FROM movimientos_raw
+                       WHERE fuente = ? AND fecha = ? AND moneda = ?
+                         AND CAST(monto AS REAL) = CAST(? AS REAL)
+                         AND descripcion = ?
+                       LIMIT 1""",
+                    (fuente, fecha, moneda, monto, desc),
+                ).fetchone()
+
+            if existing:
+                continue   # ya estaba — skipear
+
+            conn.execute(
+                """INSERT INTO movimientos_raw
+                   (fuente, tarjeta, fecha, fecha_proceso, descripcion, monto, moneda,
+                    scraped_at, estado, raw_data)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)""",
+                (
+                    fuente,
+                    m.get("tarjeta"),
+                    fecha,
+                    m.get("fecha_proceso"),
+                    desc,
+                    monto,
+                    moneda,
+                    now,
+                    json.dumps(raw) if raw else None,
+                ),
+            )
+            inserted += 1
+    return inserted
 
 
 def list_movimientos_raw(
