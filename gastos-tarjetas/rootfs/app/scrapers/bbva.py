@@ -1,17 +1,23 @@
 """
-Scraper BBVA Argentina — híbrido Selenium + httpx.
+Scraper BBVA Argentina — todas las requests API se hacen DESDE el browser real.
 
-Estrategia de login (confirmada por análisis HAR):
+Estrategia (confirmada por análisis HAR + iteración):
   1. Selenium carga la página de login → Akamai Bot Manager inicializa cookies
      anti-bot en el browser real (no se puede replicar sin un browser verdadero).
-  2. httpx extrae esas cookies y llama directamente a la API REST de login:
+  2. Todas las llamadas a la API se hacen vía `execute_async_script` con
+     `fetch()` dentro de Chrome — Akamai valida fingerprint del cliente HTTP
+     (TLS, headers, JA3, etc.) y rechaza httpx con 403 incluso teniendo las
+     cookies correctas.  fetch() pasa porque corre en el mismo browser que
+     generó las cookies.
+  3. Login en dos pasos:
        POST /login/prelogin   → devuelve redirect URL con sessionIdLN
        POST /login/postlogin  → establece la sesión definitiva
   No se interactúa con el formulario HTML (web components Lit/Spherica que
   son extremadamente difíciles de automatizar en modo headless).
 
 API base: https://online.bbva.com.ar/fnetcore/servicios/
-Auth:     cookies de sesión de postlogin (jsessionid + otras).
+Auth:     cookies de sesión de postlogin (jsessionid + otras), persistidas
+          por _save_session().
 
 Credenciales:
   usuario     → número de DNI
@@ -32,12 +38,11 @@ Detección de signo (importe siempre positivo en la API):
   Último movimiento del batch (sin siguiente) → default egreso.
 """
 
+import json as _json
 import logging
 import re
 import time
 from datetime import datetime, timedelta, timezone
-
-import httpx
 
 from .base import BaseScraper, MovimientoRaw, ScraperResult
 
@@ -51,14 +56,6 @@ _ART = timezone(timedelta(hours=-3))
 
 _DIAS_DEFAULT = 60
 _PAGE_SIZE    = 10   # BBVA devuelve 10 movimientos por llamada (confirmado por HAR)
-
-_HEADERS = {
-    "Accept":           "application/json, text/plain, */*",
-    "Accept-Language":  "es-AR,es;q=0.9",
-    "Content-Type":     "application/json;charset=UTF-8",
-    "Origin":           "https://online.bbva.com.ar",
-    "Referer":          "https://online.bbva.com.ar/",
-}
 
 # versionFront: versión del bundle del login, enviada en el payload de prelogin.
 # Valor confirmado por HAR del 2026-05-27.  Se intenta extraer del HTML en
@@ -78,17 +75,84 @@ class BbvaScraper(BaseScraper):
     # ── Helpers internos ──────────────────────────────────────────────────────
 
     def _driver_cookies(self, driver) -> dict[str, str]:
-        """Extrae las cookies del WebDriver como dict plano para httpx."""
+        """Extrae las cookies del WebDriver (útil para _save_session y diagnóstico)."""
         return {c["name"]: c["value"] for c in driver.get_cookies()}
 
-    def _make_client(self, cookies: dict[str, str]) -> httpx.Client:
-        """httpx.Client preconfigurado con headers y cookies de sesión."""
-        return httpx.Client(
-            headers=_HEADERS,
-            cookies=cookies,
-            timeout=30,
-            follow_redirects=True,
-        )
+    def _api_request(
+        self,
+        driver,
+        path: str,
+        method: str = "GET",
+        json_body: dict | None = None,
+        timeout: int = 30,
+    ) -> dict:
+        """
+        Hace una request a la API REST de BBVA desde DENTRO del browser real
+        (via fetch + execute_async_script), NO desde httpx.
+
+        Motivo: Akamai Bot Manager hace fingerprinting del cliente HTTP (TLS,
+        headers, JA3, etc.) y rechaza httpx con HTTP 403 incluso teniendo las
+        cookies correctas.  fetch() corre dentro de Chrome y por lo tanto tiene
+        el fingerprint válido que generó las cookies de Akamai en primer lugar.
+
+        Returns: dict con {"status": int, "body": str, "json": dict|None}
+        """
+        url = f"{_API_BASE}{path}?ts={_ts()}"
+        body_str = _json.dumps(json_body) if json_body is not None else None
+
+        js = """
+        var url    = arguments[0];
+        var method = arguments[1];
+        var body   = arguments[2];
+        var cb     = arguments[arguments.length - 1];
+
+        var opts = {
+            method: method,
+            headers: {
+                'Accept':          'application/json, text/plain, */*',
+                'Accept-Language': 'es-AR,es;q=0.9'
+            },
+            credentials: 'include'
+        };
+        if (body !== null) {
+            opts.headers['Content-Type'] = 'application/json;charset=UTF-8';
+            opts.body = body;
+        }
+
+        fetch(url, opts)
+            .then(function(r) {
+                return r.text().then(function(t) {
+                    cb({status: r.status, body: t});
+                });
+            })
+            .catch(function(e) {
+                cb({status: 0, body: 'fetch error: ' + String(e)});
+            });
+        """
+
+        try:
+            driver.set_script_timeout(timeout + 5)
+        except Exception:
+            pass
+
+        try:
+            result = driver.execute_async_script(js, url, method, body_str)
+        except Exception as exc:
+            logger.warning("[bbva] _api_request execute_async_script error: %s", exc)
+            return {"status": 0, "body": f"execute_async_script error: {exc}", "json": None}
+
+        if not isinstance(result, dict):
+            return {"status": 0, "body": f"invalid result: {result!r}", "json": None}
+
+        status = int(result.get("status", 0) or 0)
+        body   = str(result.get("body", "") or "")
+        parsed = None
+        try:
+            parsed = _json.loads(body) if body else None
+        except Exception:
+            parsed = None
+
+        return {"status": status, "body": body, "json": parsed}
 
     def _extract_version_front(self, driver) -> str:
         """
@@ -245,23 +309,27 @@ class BbvaScraper(BaseScraper):
 
     def check_session(self, driver) -> bool:
         """
-        Extrae las cookies del driver y llama a datosperfil.
-        No navega la SPA — sólo necesitamos las cookies para la API REST.
+        Verifica si la sesión sigue activa llamando a datosperfil DESDE el browser.
+
+        Requiere que _restore_session() ya haya navegado al login_origin (lo hace
+        antes de inyectar cookies) — así fetch() corre con same-origin a la API.
         """
-        cookies = self._driver_cookies(driver)
-        if not cookies:
-            return False
+        # Si el driver está en about:blank (sin navegación), primero cargar el dominio
         try:
-            with self._make_client(cookies) as client:
-                resp = client.get(
-                    f"{_API_BASE}/cliente/datosperfil",
-                    params={"ts": _ts()},
-                )
-            if resp.status_code == 200:
-                data = resp.json()
-                return bool(data.get("result"))
+            cur = driver.current_url or ""
+            if "bbva.com.ar" not in cur:
+                driver.get(_LOGIN_URL)
+                time.sleep(3)
+        except Exception:
+            pass
+
+        try:
+            resp = self._api_request(driver, "/cliente/datosperfil")
+            logger.info("[bbva] check_session HTTP %d", resp["status"])
+            if resp["status"] == 200 and resp["json"]:
+                return bool(resp["json"].get("result"))
         except Exception as exc:
-            logger.info("[bbva] check_session: %s", exc)
+            logger.info("[bbva] check_session error: %s", exc)
         return False
 
     # ── do_login ──────────────────────────────────────────────────────────────
@@ -300,14 +368,17 @@ class BbvaScraper(BaseScraper):
         time.sleep(6)   # tiempo para que los scripts de Akamai completen
         self._dump_page_state(driver)
 
-        version_front   = self._extract_version_front(driver)
-        cookies_akamai  = self._driver_cookies(driver)
+        version_front  = self._extract_version_front(driver)
+        cookies_akamai = self._driver_cookies(driver)
         logger.info(
             "[bbva] Akamai cookies (%d): %s  |  versionFront: %s",
             len(cookies_akamai), sorted(cookies_akamai.keys()), version_front,
         )
 
-        # ── Paso 2: POST prelogin ─────────────────────────────────────────────
+        # ── Paso 2: POST prelogin (vía fetch del browser, NO httpx) ───────────
+        # Akamai hace fingerprinting del cliente HTTP y rechaza httpx con 403.
+        # fetch() dentro de Chrome pasa la validación porque es el mismo browser
+        # que generó las cookies _abck/bm_sz.
         prelogin_payload = {
             "documento": {
                 "numeroDocumento": dni,
@@ -324,38 +395,29 @@ class BbvaScraper(BaseScraper):
             "rememberData": False,
         }
 
-        with self._make_client(cookies_akamai) as client:
-            pre_resp = client.post(
-                f"{_API_BASE}/login/prelogin",
-                params={"ts": _ts()},
-                json=prelogin_payload,
-            )
-
-        logger.info(
-            "[bbva] prelogin HTTP %d  body=%s",
-            pre_resp.status_code, pre_resp.text[:500],
+        pre = self._api_request(
+            driver, "/login/prelogin", method="POST", json_body=prelogin_payload,
         )
+        logger.info("[bbva] prelogin HTTP %d  body=%s", pre["status"], pre["body"][:500])
 
-        if pre_resp.status_code != 200:
+        if pre["status"] != 200:
             raise RuntimeError(
-                f"[bbva] prelogin HTTP {pre_resp.status_code}: {pre_resp.text[:300]}"
+                f"[bbva] prelogin HTTP {pre['status']}: {pre['body'][:300]}"
             )
 
         # ── Paso 3: parsear sessionIdLN y numeroClienteAltamira ───────────────
-        # La respuesta incluye una URL de redirect con el formato:
-        #   .../loginClementeApp2.html?TOKEN=/std/{numCliente}/0/{dni}//{sessionId}
-        pre_cookies   = dict(pre_resp.cookies)
-        all_cookies   = {**cookies_akamai, **pre_cookies}
-        pre_result    = (pre_resp.json().get("result") or {})
-
-        url_redirect  = ""
+        pre_result   = ((pre["json"] or {}).get("result") or {})
+        url_redirect = ""
         for k in ("urlRedirect", "redirectUrl", "url", "redirect", "loginUrl", "callbackUrl"):
             v = str(pre_result.get(k, "") or "")
             if v and ("fnetcore" in v or "login" in v.lower()):
                 url_redirect = v
                 break
 
-        logger.info("[bbva] url_redirect: %s", url_redirect[:150] if url_redirect else "(no detectado)")
+        logger.info(
+            "[bbva] url_redirect: %s",
+            url_redirect[:150] if url_redirect else "(no detectado)",
+        )
 
         session_id     = ""
         numero_cliente = ""
@@ -376,7 +438,7 @@ class BbvaScraper(BaseScraper):
             raise RuntimeError(
                 f"[bbva] prelogin OK pero no se pudo extraer sessionId. "
                 f"Campos en result: {list(pre_result.keys())}. "
-                f"Body: {pre_resp.text[:400]}"
+                f"Body: {pre['body'][:400]}"
             )
 
         logger.info(
@@ -401,54 +463,30 @@ class BbvaScraper(BaseScraper):
             "sessionIdLN":           session_id,
         }
 
-        with self._make_client(all_cookies) as client:
-            post_resp = client.post(
-                f"{_API_BASE}/login/postlogin",
-                params={"ts": _ts()},
-                json=postlogin_payload,
-            )
-
-        logger.info(
-            "[bbva] postlogin HTTP %d  body=%s",
-            post_resp.status_code, post_resp.text[:200],
+        post = self._api_request(
+            driver, "/login/postlogin", method="POST", json_body=postlogin_payload,
         )
-        post_cookies = dict(post_resp.cookies)
-        all_cookies  = {**all_cookies, **post_cookies}
+        logger.info("[bbva] postlogin HTTP %d  body=%s", post["status"], post["body"][:200])
+
+        if post["status"] != 200:
+            raise RuntimeError(
+                f"[bbva] postlogin HTTP {post['status']}: {post['body'][:300]}"
+            )
 
         # ── Paso 5: verificar sesión con datosperfil ──────────────────────────
-        # Inyectar todas las cookies en el driver para que _save_session() las persista
-        for name, value in all_cookies.items():
-            try:
-                driver.add_cookie({
-                    "name":   name,
-                    "value":  value,
-                    "domain": "online.bbva.com.ar",
-                    "path":   "/",
-                })
-            except Exception:
-                pass
+        perf = self._api_request(driver, "/cliente/datosperfil")
+        logger.info("[bbva] datosperfil HTTP %d", perf["status"])
 
-        with self._make_client(all_cookies) as client:
-            perf_resp = client.get(
-                f"{_API_BASE}/cliente/datosperfil",
-                params={"ts": _ts()},
-            )
-
-        logger.info("[bbva] datosperfil HTTP %d", perf_resp.status_code)
-
-        if perf_resp.status_code == 200:
-            perfil = (
-                (perf_resp.json().get("result") or {})
-                .get("perfilCliente", {})
-            )
+        if perf["status"] == 200 and perf["json"]:
+            perfil = ((perf["json"].get("result") or {}).get("perfilCliente", {}))
             nombre = perfil.get("nombre", "?")
             logger.info("[bbva] Login OK — usuario: %s", nombre)
             return
 
         raise RuntimeError(
-            f"[bbva] datosperfil HTTP {perf_resp.status_code} tras prelogin+postlogin. "
-            f"postlogin body: {post_resp.text[:200]}. "
-            f"datosperfil body: {perf_resp.text[:200]}"
+            f"[bbva] datosperfil HTTP {perf['status']} tras prelogin+postlogin. "
+            f"postlogin body: {post['body'][:200]}. "
+            f"datosperfil body: {perf['body'][:200]}"
         )
 
     # ── scrape ────────────────────────────────────────────────────────────────
@@ -460,51 +498,45 @@ class BbvaScraper(BaseScraper):
             logger.info("[bbva] %s", msg)
             log.append(msg)
 
-        dias    = int(config.get("dias") or _DIAS_DEFAULT)
-        cookies = self._driver_cookies(driver)
+        dias = int(config.get("dias") or _DIAS_DEFAULT)
 
         movimientos: list[MovimientoRaw] = []
         saldos: dict = {}
 
-        with self._make_client(cookies) as client:
-
-            # ── Obtener lista de cuentas ──────────────────────────────────────
-            resp = client.get(
-                f"{_API_BASE}/cliente/productos/cuentas",
-                params={"ts": _ts()},
+        # ── Obtener lista de cuentas (via fetch del browser) ──────────────────
+        cuentas_resp = self._api_request(driver, "/cliente/productos/cuentas")
+        if cuentas_resp["status"] != 200:
+            raise RuntimeError(
+                f"[bbva] cuentas HTTP {cuentas_resp['status']}: {cuentas_resp['body'][:200]}"
             )
-            if resp.status_code != 200:
-                raise RuntimeError(
-                    f"[bbva] cuentas HTTP {resp.status_code}: {resp.text[:200]}"
-                )
 
-            result = resp.json().get("result", {})
-            cajas  = result.get("cajasAhorro", [])
-            _log(f"Cuentas encontradas: {len(cajas)}")
+        result = (cuentas_resp["json"] or {}).get("result", {}) or {}
+        cajas  = result.get("cajasAhorro", []) or []
+        _log(f"Cuentas encontradas: {len(cajas)}")
 
-            today_art  = datetime.now(_ART).date()
-            since_date = today_art - timedelta(days=dias - 1)
-            fecha_desde = since_date.strftime("%d/%m/%Y")
-            fecha_hasta = today_art.strftime("%d/%m/%Y")
-            _log(f"Rango: {fecha_desde} → {fecha_hasta} ({dias} días)")
+        today_art   = datetime.now(_ART).date()
+        since_date  = today_art - timedelta(days=dias - 1)
+        fecha_desde = since_date.strftime("%d/%m/%Y")
+        fecha_hasta = today_art.strftime("%d/%m/%Y")
+        _log(f"Rango: {fecha_desde} → {fecha_hasta} ({dias} días)")
 
-            for cuenta in cajas:
-                id_prod   = cuenta.get("id", "")
-                alias     = cuenta.get("alias", id_prod)
-                saldo_raw = cuenta.get("saldo") or cuenta.get("importe") or ""
+        for cuenta in cajas:
+            id_prod   = cuenta.get("id", "")
+            alias     = cuenta.get("alias", id_prod)
+            saldo_raw = cuenta.get("saldo") or cuenta.get("importe") or ""
 
-                _log(f"Procesando cuenta: {alias} (id={id_prod})")
+            _log(f"Procesando cuenta: {alias} (id={id_prod})")
 
-                if saldo_raw:
-                    saldo_val = self.parse_amount(str(saldo_raw))
-                    saldos["bbva_cuenta"] = {"saldo_ars": saldo_val}
-                    _log(f"  Saldo actual: {saldo_raw}")
+            if saldo_raw:
+                saldo_val = self.parse_amount(str(saldo_raw))
+                saldos["bbva_cuenta"] = {"saldo_ars": saldo_val}
+                _log(f"  Saldo actual: {saldo_raw}")
 
-                movs = self._fetch_movimientos(
-                    client, id_prod, fecha_desde, fecha_hasta, _log
-                )
-                _log(f"  → {len(movs)} movimientos importados de {alias}")
-                movimientos.extend(movs)
+            movs = self._fetch_movimientos(
+                driver, id_prod, fecha_desde, fecha_hasta, _log,
+            )
+            _log(f"  → {len(movs)} movimientos importados de {alias}")
+            movimientos.extend(movs)
 
         return ScraperResult(
             fuente      = "bbva",
@@ -517,14 +549,14 @@ class BbvaScraper(BaseScraper):
 
     def _fetch_movimientos(
         self,
-        client: httpx.Client,
+        driver,
         id_producto: str,
         fecha_desde: str,
         fecha_hasta: str,
         log_fn,
     ) -> list[MovimientoRaw]:
         """
-        Pagina la API de movimientos hasta obtenerlos todos.
+        Pagina la API de movimientos hasta obtenerlos todos (vía fetch del browser).
 
         Primera llamada: payload completo con fechaDesde/fechaHasta.
         Llamadas siguientes: sólo idProducto + ultimoMovimientoMostrado (int).
@@ -536,36 +568,38 @@ class BbvaScraper(BaseScraper):
         while True:
             if ultimo == 0:
                 payload: dict = {
-                    "idProducto":              id_producto,
+                    "idProducto":               id_producto,
                     "ultimoMovimientoMostrado": "0",
-                    "filtro":                  False,
-                    "fechaDesde":              fecha_desde,
-                    "fechaHasta":              fecha_hasta,
-                    "importeDesde":            "",
-                    "importeHasta":            "",
-                    "codigoTipoMovimiento":    "",
-                    "idRubroMovimiento":       "",
+                    "filtro":                   False,
+                    "fechaDesde":               fecha_desde,
+                    "fechaHasta":               fecha_hasta,
+                    "importeDesde":             "",
+                    "importeHasta":             "",
+                    "codigoTipoMovimiento":     "",
+                    "idRubroMovimiento":        "",
                 }
             else:
                 payload = {
-                    "idProducto":              id_producto,
+                    "idProducto":               id_producto,
                     "ultimoMovimientoMostrado": ultimo,
                 }
 
-            resp = client.post(
-                f"{_API_BASE}/cliente/productos/cuentas/movimientos",
-                params={"ts": _ts()},
-                json=payload,
+            resp = self._api_request(
+                driver,
+                "/cliente/productos/cuentas/movimientos",
+                method="POST",
+                json_body=payload,
             )
-            if resp.status_code != 200:
+            if resp["status"] != 200:
                 log_fn(
-                    f"  movimientos HTTP {resp.status_code} — deteniendo paginación"
+                    f"  movimientos HTTP {resp['status']} — deteniendo paginación. "
+                    f"body: {resp['body'][:200]}"
                 )
                 break
 
-            data  = resp.json().get("result", {})
+            data  = (resp["json"] or {}).get("result", {}) or {}
             count = data.get("count", 0)
-            batch = data.get("movimientos", [])
+            batch = data.get("movimientos", []) or []
 
             if not batch:
                 break
