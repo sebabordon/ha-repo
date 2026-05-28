@@ -3252,19 +3252,27 @@ document.getElementById("btn-apply-user-rules")?.addEventListener("click", async
 let _scraperCreds = {};
 let _scraperStatuses = {};
 
+let _scraperJobs = {};   // banco → next_run ISO string
+
 async function renderScrapersConfig() {
   const container = document.getElementById("scrapers-config-list");
   if (!container) return;
 
-  // Cargar credenciales y estado en paralelo
+  // Cargar credenciales, estado y jobs del scheduler en paralelo
   try {
-    const [credsRes, statusRes] = await Promise.all([
+    const [credsRes, statusRes, jobsRes] = await Promise.all([
       fetch(`${BASE}/api/scrapers/credentials`),
       fetch(`${BASE}/api/scrapers/status`),
+      fetch(`${BASE}/api/scrapers/jobs`),
     ]);
     _scraperCreds    = credsRes.ok    ? await credsRes.json()    : {};
     const statuses   = statusRes.ok   ? await statusRes.json()   : [];
     _scraperStatuses = Object.fromEntries(statuses.map(s => [s.fuente, s]));
+    const jobs       = jobsRes.ok     ? await jobsRes.json()     : [];
+    // job.name = "Scraper mercadopago" → clave = "mercadopago"
+    _scraperJobs = Object.fromEntries(
+      jobs.map(j => [j.name.replace(/^Scraper\s+/i, ""), j.next_run])
+    );
   } catch (e) {
     container.innerHTML = `<p style="color:#b91c1c">Error cargando configuración: ${escHtml(e.message)}</p>`;
     return;
@@ -3396,8 +3404,11 @@ function _buildScraperCard(banco, data) {
       </div>
       ${st.error_msg ? `<p style="font-size:.8rem;color:#b91c1c;margin-top:.5rem">
         Último error: ${escHtml(st.error_msg)}</p>` : ""}
-      ${st.ultimo_ok ? `<p style="font-size:.78rem;color:#888;margin-top:.25rem">
-        Último OK: ${escHtml(st.ultimo_ok.replace('T',' ').slice(0,16))}</p>` : ""}
+      <div style="font-size:.78rem;color:#888;margin-top:.4rem;display:flex;flex-wrap:wrap;gap:.75rem">
+        ${st.ultimo_run ? `<span title="Cuándo arrancó el último run (puede haber sido exitoso o fallido)">▶ Último intento: ${escHtml(st.ultimo_run.replace('T',' ').slice(0,16))}</span>` : ""}
+        ${st.ultimo_ok  ? `<span title="Cuándo finalizó el último run exitoso" style="color:#16a34a">✓ Último OK: ${escHtml(st.ultimo_ok.replace('T',' ').slice(0,16))}</span>` : ""}
+        ${_scraperJobs[banco] ? `<span title="Próximo run programado por el scheduler" style="color:#2563eb">⏱ Próximo run: ${escHtml(new Date(_scraperJobs[banco]).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}))}</span>` : (st.estado !== 'idle' ? "" : `<span style="color:#f59e0b" title="El scheduler no tiene este banco programado — verificá las credenciales">⚠ No programado</span>`)}
+      </div>
       ${st.last_log ? `<details class="scraper-log-details">
         <summary>
           <span>📋 Detalle del último run</span>

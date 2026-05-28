@@ -20,4 +20,4 @@ elif ! python3 -c "import yaml; yaml.safe_load(open('${RULES_FILE}'))" 2>/dev/nu
 fi
 
 bashio::log.info "Starting Gastos on port 8000..."
-exec uvicorn main:app --host 0.0.0.0 --port 8000
+exec uvicorn main:app --host 0.0.0.0 --port 8000 --log-config /app/log_config.json
