@@ -1,3 +1,7 @@
+## 0.3.43
+
+- **Fix BBVA login — múltiples correcciones post-interacción**: (1) `_type_input()` estrategia 1 ahora usa `ActionChains.click(el).send_keys(val).perform()` en cadena en lugar de `element.send_keys()` separado — para Lit/Shadow DOM la diferencia es crítica: ActionChains manda keystrokes al elemento ENFOCADO en el browser, no al WebElement directamente, lo que evita que el componente ignore los valores. (2) `Origin`/`Referer` en `_HEADERS` corregidos de `www.bbva.com.ar` a `online.bbva.com.ar` (dominio real del homebanking) — el servidor podría rechazar llamadas API con origen incorrecto. (3) Se elimina `button[type='submit']` del selector de `btn_cont` para evitar que se dispare el submit final antes de llenar usuario y contraseña. (4) Diagnósticos post-submit mejorados: la URL actual, la lista de nombres de cookies y el HTTP status de `datosperfil` ahora aparecen en el log del panel (no solo en el log del sistema); si seguimos en la página de login tras el submit se lanza error descriptivo inmediatamente.
+
 ## 0.3.42
 
 - **Fix BBVA login — botón Submit no interactuable en web components**: el mismo problema de `ElementNotInteractableException` que afectaba a los campos de texto ahora se presentaba en el botón submit (y en el botón "Continuar"). Se agrega el helper `_click_element()` con dos estrategias: (1) ActionChains con scroll + move + click; (2) `element.click()` vía JS como fallback. Los dos botones del flujo de login (`btn_cont` y `submit_el`) ahora usan `_click_element()` en lugar de `.click()` directo.

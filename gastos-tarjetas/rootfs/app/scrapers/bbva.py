@@ -47,8 +47,8 @@ _HEADERS = {
     "Accept":           "application/json, text/plain, */*",
     "Accept-Language":  "es-AR,es;q=0.9",
     "Content-Type":     "application/json;charset=UTF-8",
-    "Origin":           "https://www.bbva.com.ar",
-    "Referer":          "https://www.bbva.com.ar/",
+    "Origin":           "https://online.bbva.com.ar",
+    "Referer":          "https://online.bbva.com.ar/",
 }
 
 # ── Selectores del formulario de login (confirmados por HAR bbvalogin.har) ───
@@ -167,13 +167,16 @@ class BbvaScraper(BaseScraper):
         """
         from selenium.webdriver.common.action_chains import ActionChains
 
-        # ── Estrategia 1: ActionChains ────────────────────────────────────────
+        # ── Estrategia 1: ActionChains encadenado (click + send_keys en una sola acción) ──
+        # send_keys() en ActionChains manda keystrokes al elemento ACTUALMENTE ENFOCADO
+        # en el browser, no al WebElement directamente.  Para Lit/Shadow DOM esto es
+        # la diferencia clave: element.send_keys() falla porque el WebElement no es
+        # "interactable", pero ActionChains.click(el).send_keys(val) enfoca primero y
+        # luego escribe via eventos de teclado reales.
         try:
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
             time.sleep(0.3)
-            ActionChains(driver).move_to_element(element).click().perform()
-            time.sleep(0.25)
-            element.send_keys(value)
+            ActionChains(driver).click(element).send_keys(value).perform()
             return
         except Exception as e1:
             logger.info("[bbva] _type_input estrategia 1 falló (%s), probando JS", e1)
@@ -349,11 +352,13 @@ class BbvaScraper(BaseScraper):
         self._type_input(driver, dni_el, dni)
         time.sleep(0.5)
 
-        # Botón "Continuar" / "Siguiente" (paso 1 → paso 2)
+        # Botón "Continuar" / "Siguiente" (paso 1 → paso 2).
+        # IMPORTANTE: no incluir button[type='submit'] acá — eso dispararía el
+        # submit final antes de llenar usuario y contraseña.
         btn_cont = self.find(driver,
             "#login-button, "
             "button[id*='continu' i], button[id*='next' i], "
-            "button[type='submit']"
+            "button[id*='siguiente' i], button[id*='accept' i]"
         )
         if btn_cont:
             try:
@@ -397,39 +402,62 @@ class BbvaScraper(BaseScraper):
         # BBVA tarda varios segundos en emitir el jsessionid definitivo
         time.sleep(10)
 
-        # ── Verificar sesión activa vía API ────────────────────────────────────
+        # ── Diagnóstico post-submit (visible en el panel de log) ──────────────
         try:
             driver.switch_to.default_content()
         except Exception:
             pass
 
+        post_url = driver.current_url
+        logger.info("[bbva-diag] URL post-login: %s", post_url)
+
         cookies = self._driver_cookies(driver)
-        logger.info("[bbva] cookies post-login: %d", len(cookies))
-
-        if cookies:
-            try:
-                with self._make_client(cookies) as client:
-                    resp = client.get(
-                        f"{_API_BASE}/cliente/datosperfil",
-                        params={"ts": _ts()},
-                    )
-                if resp.status_code == 200:
-                    perfil = (
-                        (resp.json().get("result") or {})
-                        .get("perfilCliente", {})
-                    )
-                    nombre = perfil.get("nombre", "?")
-                    logger.info("[bbva] Login OK — usuario: %s", nombre)
-                    return
-                else:
-                    logger.warning("[bbva] datosperfil HTTP %d post-login", resp.status_code)
-            except Exception as exc:
-                logger.info("[bbva] API post-login error: %s", exc)
-
-        raise RuntimeError(
-            "[bbva] Login completado pero la API no responde. "
-            "Verificá usuario (DNI), nombre de usuario y contraseña."
+        cookie_names = sorted(cookies.keys())
+        logger.info(
+            "[bbva] cookies post-login: %d → %s",
+            len(cookies), cookie_names,
         )
+
+        # Si seguimos en la página de login, el submit no funcionó
+        still_on_login = "login" in post_url.lower() or "fnetcore/login" in post_url
+        if still_on_login:
+            self._dump_page_state(driver)
+            raise RuntimeError(
+                f"[bbva] Submit no produjo redirección — seguimos en login page: {post_url}. "
+                "Revisá credenciales (DNI / usuario / contraseña) o mirá los logs [bbva-diag]."
+            )
+
+        if not cookies:
+            raise RuntimeError(
+                "[bbva] Login redirigió pero no hay cookies en el driver. "
+                f"URL actual: {post_url}"
+            )
+
+        # ── Verificar sesión activa vía API ────────────────────────────────────
+        try:
+            with self._make_client(cookies) as client:
+                resp = client.get(
+                    f"{_API_BASE}/cliente/datosperfil",
+                    params={"ts": _ts()},
+                )
+            logger.info("[bbva] datosperfil HTTP %d", resp.status_code)
+            if resp.status_code == 200:
+                perfil = (
+                    (resp.json().get("result") or {})
+                    .get("perfilCliente", {})
+                )
+                nombre = perfil.get("nombre", "?")
+                logger.info("[bbva] Login OK — usuario: %s", nombre)
+                return
+            else:
+                raise RuntimeError(
+                    f"[bbva] API datosperfil respondió HTTP {resp.status_code}. "
+                    f"Respuesta: {resp.text[:200]}"
+                )
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"[bbva] Error llamando datosperfil: {exc}") from exc
 
     # ── scrape ────────────────────────────────────────────────────────────────
 
