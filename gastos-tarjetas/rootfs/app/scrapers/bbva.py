@@ -87,6 +87,33 @@ class BbvaScraper(BaseScraper):
         """Extrae las cookies del WebDriver (útil para _save_session y diagnóstico)."""
         return {c["name"]: c["value"] for c in driver.get_cookies()}
 
+    def _fetch_url(self, driver, url: str, timeout: int = 30) -> dict:
+        """
+        Hace un GET fetch() a una URL arbitraria dentro del browser (sin navegar).
+        Útil para que el browser aplique las cookies Set-Cookie de la respuesta
+        sin arriesgar un crash del renderer por navegación de página.
+        Returns dict {status: int, body: str}.
+        """
+        js = """
+        var url = arguments[0];
+        var cb  = arguments[arguments.length - 1];
+        fetch(url, {method: 'GET', credentials: 'include'})
+            .then(function(r) { return r.text().then(function(t) { cb({status: r.status, body: t}); }); })
+            .catch(function(e) { cb({status: 0, body: 'fetch_url error: ' + String(e)}); });
+        """
+        try:
+            driver.set_script_timeout(timeout + 5)
+        except Exception:
+            pass
+        try:
+            result = driver.execute_async_script(js, url)
+        except Exception as exc:
+            logger.warning("[bbva] _fetch_url error: %s", exc)
+            return {"status": 0, "body": str(exc)}
+        if not isinstance(result, dict):
+            return {"status": 0, "body": f"invalid result: {result!r}"}
+        return {"status": int(result.get("status", 0) or 0), "body": str(result.get("body", "") or "")}
+
     def _api_request(
         self,
         driver,
@@ -94,6 +121,7 @@ class BbvaScraper(BaseScraper):
         method: str = "GET",
         json_body: dict | None = None,
         timeout: int = 30,
+        with_xsrf: bool = True,
     ) -> dict:
         """
         Hace una request a la API REST de BBVA desde DENTRO del browser real
@@ -110,10 +138,11 @@ class BbvaScraper(BaseScraper):
         body_str = _json.dumps(json_body) if json_body is not None else None
 
         js = """
-        var url    = arguments[0];
-        var method = arguments[1];
-        var body   = arguments[2];
-        var cb     = arguments[arguments.length - 1];
+        var url      = arguments[0];
+        var method   = arguments[1];
+        var body     = arguments[2];
+        var withXsrf = arguments[3];
+        var cb       = arguments[arguments.length - 1];
 
         var opts = {
             method: method,
@@ -126,6 +155,20 @@ class BbvaScraper(BaseScraper):
         if (body !== null) {
             opts.headers['Content-Type'] = 'application/json;charset=UTF-8';
             opts.body = body;
+        }
+
+        // Angular $http lee la cookie XSRF-TOKEN y la reenvía como X-XSRF-TOKEN.
+        // Solo lo incluimos en llamadas autenticadas (post-login); prelogin y
+        // postlogin no deben incluirlo porque el token de sesión aún no es válido.
+        if (withXsrf) {
+            var xsrf = null;
+            try {
+                document.cookie.split(';').forEach(function(c) {
+                    var p = c.trim();
+                    if (p.startsWith('XSRF-TOKEN=')) xsrf = decodeURIComponent(p.substring(11));
+                });
+            } catch(e) {}
+            if (xsrf) opts.headers['X-XSRF-TOKEN'] = xsrf;
         }
 
         fetch(url, opts)
@@ -145,7 +188,7 @@ class BbvaScraper(BaseScraper):
             pass
 
         try:
-            result = driver.execute_async_script(js, url, method, body_str)
+            result = driver.execute_async_script(js, url, method, body_str, with_xsrf)
         except Exception as exc:
             logger.warning("[bbva] _api_request execute_async_script error: %s", exc)
             return {"status": 0, "body": f"execute_async_script error: {exc}", "json": None}
@@ -377,7 +420,17 @@ class BbvaScraper(BaseScraper):
         # ── Paso 1: cargar página → Akamai inicializa cookies anti-bot ────────
         logger.info("[bbva] cargando login page para Akamai: %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
-        time.sleep(6)   # tiempo para que los scripts de Akamai completen
+        # Esperar a que los scripts de Akamai Y Adobe Analytics terminen de ejecutar.
+        # Sin cookies s_cc/s_visit (Adobe), Akamai bloquea prelogin con 403.
+        # Esperamos hasta 15 s en pasos de 1 s, o hasta que las cookies estén listas.
+        for _w in range(15):
+            time.sleep(1)
+            _ck = {c["name"] for c in driver.get_cookies()}
+            if "_abck" in _ck and "s_visit" in _ck:
+                logger.info("[bbva] Akamai+Adobe cookies listas tras %ds", _w + 1)
+                break
+        else:
+            logger.info("[bbva] timeout esperando cookies Akamai (continuando igual)")
         self._dump_page_state(driver)
 
         version_front  = self._extract_version_front(driver)
@@ -409,6 +462,7 @@ class BbvaScraper(BaseScraper):
 
         pre = self._api_request(
             driver, "/login/prelogin", method="POST", json_body=prelogin_payload,
+            with_xsrf=False,
         )
         logger.info("[bbva] prelogin HTTP %d  body=%s", pre["status"], pre["body"][:500])
 
@@ -447,11 +501,10 @@ class BbvaScraper(BaseScraper):
         )
 
         # ── Paso 4: postlogin directo (sin navegar a loginClementeApp2.html) ────
-        # Confirmado por HAR: postlogin solo requiere numeroClienteAltamira +
-        # sessionIdLN (128 chars [a-z0-9] aleatorio que el JS del frontend genera).
-        # Navegar a loginClementeApp2.html crashea el tab de Chromium headless
-        # porque la URL contiene el token authentication (~200 chars con ==SLASH==,
-        # +, = que confunden al parser de URLs del renderer).
+        # sessionIdLN: 128 chars [a-z0-9] aleatorio, mismo patrón que genera el
+        # JS del frontend.  No es necesario fetchear loginClementeApp2.html ya
+        # que esa página sólo lee el sessionIdLN de la URL y llama postlogin —
+        # lo hacemos directamente desde aquí.
         session_id_ln = _make_session_id_ln()
         postlogin_payload = {
             "documento": {
@@ -471,12 +524,27 @@ class BbvaScraper(BaseScraper):
         logger.info("[bbva] postlogin (sessionIdLN[:16]=%s…)", session_id_ln[:16])
         post = self._api_request(
             driver, "/login/postlogin", method="POST", json_body=postlogin_payload,
+            with_xsrf=False,
         )
         logger.info("[bbva] postlogin HTTP %d  body[:200]=%s", post["status"], post["body"][:200])
         if post["status"] != 200:
             raise RuntimeError(
                 f"[bbva] postlogin HTTP {post['status']}: {post['body'][:300]}"
             )
+        # Verificar statusCode en el body (BBVA usa HTTP 200 incluso para errores de aplicación)
+        post_result = (post["json"] or {})
+        if str(post_result.get("statusCode", "200")) != "200":
+            raise RuntimeError(
+                f"[bbva] postlogin error: {post_result.get('statusText', '')} "
+                f"(statusCode={post_result.get('statusCode')})"
+            )
+
+        # ── Paso 4b: obtenerTsec — establece cookie XSRF-TOKEN ────────────────
+        # Angular $http lee XSRF-TOKEN y lo reenvía como X-XSRF-TOKEN en cada
+        # request. Sin este paso la cookie no existe y datosperfil (y todo lo
+        # demás) devuelve 403 "Invalid CSRF Token 'null'".
+        tsec = self._api_request(driver, "/seguridad/cliente/obtenerTsec")
+        logger.info("[bbva] obtenerTsec HTTP %d  body=%s", tsec["status"], tsec["body"][:100])
 
         # ── Paso 5: verificar sesión con datosperfil ──────────────────────────
         perf = self._api_request(driver, "/cliente/datosperfil")
@@ -489,9 +557,8 @@ class BbvaScraper(BaseScraper):
             return
 
         raise RuntimeError(
-            f"[bbva] datosperfil HTTP {perf['status']} tras loginClemente. "
-            f"URL actual: {post_nav_url[:150]}. "
-            f"datosperfil body: {perf['body'][:200]}"
+            f"[bbva] datosperfil HTTP {perf['status']} tras postlogin. "
+            f"datosperfil body: {perf['body'][:300]}"
         )
 
     # ── scrape ────────────────────────────────────────────────────────────────
