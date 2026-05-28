@@ -51,6 +51,35 @@ _HEADERS = {
     "Referer":          "https://www.bbva.com.ar/",
 }
 
+# Selectores de DNI — en orden de probabilidad
+_DNI_SELECTORS = [
+    "input#documentNumberInput",
+    "input[name='documentNumber']",
+    "input[id*='document' i]:not([type='hidden'])",
+    "input[id*='dni' i]:not([type='hidden'])",
+    "input[placeholder*='documento' i]",
+    "input[placeholder*='DNI' i]",
+    "input[type='tel']",
+    "input[type='number']",
+    "input[type='text']",  # último recurso: primer input de texto
+]
+
+# Selectores de usuario BBVA
+_USER_SELECTORS = [
+    "input#username",
+    "input[name='username']",
+    "input[autocomplete='username']",
+    "input[placeholder*='usuario' i]",
+    "input[id*='user' i]:not([type='hidden'])",
+]
+
+# Selectores de contraseña
+_PASS_SELECTORS = [
+    "input[type='password']",
+    "input[name='password']",
+    "input[autocomplete='current-password']",
+]
+
 
 def _ts() -> str:
     """Cache-buster en milisegundos, igual que el frontend de BBVA."""
@@ -76,6 +105,84 @@ class BbvaScraper(BaseScraper):
             timeout=30,
             follow_redirects=True,
         )
+
+    def _find_across_frames(self, driver, selectors: list[str]):
+        """
+        Busca el primer elemento que matchee cualquiera de los selectores,
+        probando el frame actual primero y luego cada iframe del DOM.
+
+        Si lo encuentra en un iframe, el driver queda enfocado en ese iframe
+        (para que las interacciones siguientes funcionen en el mismo contexto).
+        Si no lo encuentra en ningún lado, resetea a default_content.
+
+        Returns: (element, in_frame: bool) o (None, False)
+        """
+        # Frame actual (default)
+        for sel in selectors:
+            el = self.find(driver, sel)
+            if el:
+                return el, False
+
+        # Cada iframe de primer nivel
+        iframes = driver.find_elements("css selector", "iframe")
+        for iframe in iframes:
+            try:
+                driver.switch_to.frame(iframe)
+                for sel in selectors:
+                    el = self.find(driver, sel)
+                    if el:
+                        return el, True          # dejamos el driver en este frame
+            except Exception:
+                pass
+            try:
+                driver.switch_to.default_content()
+            except Exception:
+                pass
+
+        try:
+            driver.switch_to.default_content()
+        except Exception:
+            pass
+        return None, False
+
+    def _dump_page_state(self, driver) -> None:
+        """
+        Emite al log (INFO) información diagnóstica de la página actual.
+        Útil para calibrar selectores cuando el login falla.
+        """
+        try:
+            logger.info("[bbva-diag] Título: %r", driver.title)
+            logger.info("[bbva-diag] URL: %s", driver.current_url)
+
+            inputs = driver.find_elements("css selector", "input")
+            logger.info("[bbva-diag] inputs en frame actual: %d", len(inputs))
+            for inp in inputs[:8]:
+                logger.info(
+                    "[bbva-diag]   <input id=%r type=%r name=%r placeholder=%r>",
+                    inp.get_attribute("id") or "",
+                    inp.get_attribute("type") or "",
+                    inp.get_attribute("name") or "",
+                    (inp.get_attribute("placeholder") or "")[:40],
+                )
+
+            iframes = driver.find_elements("css selector", "iframe")
+            logger.info("[bbva-diag] iframes encontrados: %d", len(iframes))
+            for idx, fr in enumerate(iframes[:6]):
+                src = (fr.get_attribute("src") or "")[:80]
+                fid = fr.get_attribute("id") or ""
+                logger.info("[bbva-diag]   iframe[%d] id=%r src=%r", idx, fid, src)
+
+            # Dump de los primeros 800 chars del body para ver la estructura
+            try:
+                body = driver.execute_script(
+                    "return document.body ? document.body.innerHTML.slice(0,800) : '(sin body)'"
+                )
+                logger.info("[bbva-diag] body[:800]: %s", body)
+            except Exception:
+                pass
+
+        except Exception as exc:
+            logger.info("[bbva-diag] error en dump: %s", exc)
 
     # ── check_session ─────────────────────────────────────────────────────────
 
@@ -106,72 +213,115 @@ class BbvaScraper(BaseScraper):
         """
         Login en la SPA de BBVA con Selenium.
 
-        BBVA muestra un formulario en dos pasos:
+        BBVA muestra un formulario en (al menos) dos pasos:
           Paso 1: tipo de documento (DNI) + número de documento → Continuar
           Paso 2: nombre de usuario + contraseña → Ingresar
 
-        El script espera la secuencia normal; si BBVA devuelve un error o una
-        pantalla inesperada lanzará TimeoutException (que el scheduler registra
-        como error de sesión).
+        El formulario puede estar en un iframe (patrón habitual en SPAs BBVA).
+        `_find_across_frames` detecta y cambia al iframe correcto automáticamente.
+        Si el login falla, se emite diagnóstico completo al log (inputs, iframes,
+        body HTML) para facilitar la calibración de selectores.
         """
         dni      = config["usuario"]
         username = config.get("tercer_dato", "")
         password = config["password"]
 
+        logger.info("[bbva] cargando login: %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
-        time.sleep(3)
+        time.sleep(6)   # SPA React + lazy-loading de micro-frontends
+
+        # ── Diagnóstico inicial ───────────────────────────────────────────────
+        self._dump_page_state(driver)
 
         # ── Paso 1: número de DNI ─────────────────────────────────────────────
-        # Selector confirmado por análisis del HTML de login de BBVA
-        dni_el = self.wait_for(driver, "input#documentNumberInput", timeout=20)
-        dni_el.clear()
+        dni_el, in_frame = self._find_across_frames(driver, _DNI_SELECTORS)
+        if in_frame:
+            logger.info("[bbva] campo DNI encontrado en iframe")
+
+        if dni_el is None:
+            # Estado extra: si estamos en un iframe, dumpeamos su contenido también
+            logger.warning(
+                "[bbva] No se encontró el campo DNI. "
+                "Revisá los logs [bbva-diag] para ver la estructura real de la página."
+            )
+            raise RuntimeError(
+                "[bbva] campo DNI no encontrado tras 6 s. "
+                "Mirá los mensajes [bbva-diag] en el log del add-on."
+            )
+
+        logger.info("[bbva] llenando DNI")
+        try:
+            dni_el.clear()
+        except Exception:
+            pass
         dni_el.send_keys(dni)
         time.sleep(0.5)
 
-        # Botón para continuar al paso 2 (puede llamarse "Continuar" o "Siguiente")
+        # Botón "Continuar" / "Siguiente" (paso 1 → paso 2)
         btn_cont = self.find(driver,
-            "#login-button, button[id*='continu' i], button[id*='next' i], "
+            "#login-button, "
+            "button[id*='continu' i], button[id*='next' i], "
             "button[type='submit']"
         )
         if btn_cont:
             try:
                 btn_cont.click()
-                time.sleep(2)
+                logger.info("[bbva] clic en botón continuar")
+                time.sleep(3)
             except Exception:
                 pass
 
         # ── Paso 2: usuario BBVA ──────────────────────────────────────────────
         if username:
-            user_el = self.find(driver,
-                "input#username, input[name='username'], "
-                "input[autocomplete='username'], "
-                "input[placeholder*='usuario' i]"
-            )
+            user_el, _ = self._find_across_frames(driver, _USER_SELECTORS)
             if user_el:
-                user_el.clear()
+                logger.info("[bbva] llenando usuario BBVA")
+                try:
+                    user_el.clear()
+                except Exception:
+                    pass
                 user_el.send_keys(username)
                 time.sleep(0.5)
+            else:
+                logger.warning("[bbva] campo de usuario no encontrado (puede no existir en esta pantalla)")
 
         # ── Paso 2: contraseña ────────────────────────────────────────────────
-        pass_el = self.wait_for(driver,
-            "input[type='password'], input[name='password'], "
-            "input[autocomplete='current-password']",
-            timeout=15,
-        )
-        pass_el.clear()
+        pass_el, _ = self._find_across_frames(driver, _PASS_SELECTORS)
+        if pass_el is None:
+            self._dump_page_state(driver)
+            raise RuntimeError(
+                "[bbva] campo de contraseña no encontrado. "
+                "Mirá los mensajes [bbva-diag] en el log del add-on."
+            )
+
+        logger.info("[bbva] llenando contraseña")
+        try:
+            pass_el.clear()
+        except Exception:
+            pass
         pass_el.send_keys(password)
         time.sleep(0.5)
 
         # Submit
-        submit = self.wait_for(driver, "button[type='submit']", timeout=10)
-        submit.click()
+        submit_el, _ = self._find_across_frames(driver, ["button[type='submit']"])
+        if submit_el is None:
+            raise RuntimeError("[bbva] botón Submit no encontrado")
 
-        # Esperar que la SPA termine de cargar y las cookies de sesión queden
-        # listas (BBVA tarda varios segundos en emitir el jsessionid definitivo)
+        submit_el.click()
+        logger.info("[bbva] submit enviado — esperando cookies de sesión")
+
+        # BBVA tarda varios segundos en emitir el jsessionid definitivo
         time.sleep(10)
 
-        # Verificar sesión activa vía API
+        # ── Verificar sesión activa vía API ────────────────────────────────────
+        try:
+            driver.switch_to.default_content()
+        except Exception:
+            pass
+
         cookies = self._driver_cookies(driver)
+        logger.info("[bbva] cookies post-login: %d", len(cookies))
+
         if cookies:
             try:
                 with self._make_client(cookies) as client:
@@ -187,8 +337,10 @@ class BbvaScraper(BaseScraper):
                     nombre = perfil.get("nombre", "?")
                     logger.info("[bbva] Login OK — usuario: %s", nombre)
                     return
+                else:
+                    logger.warning("[bbva] datosperfil HTTP %d post-login", resp.status_code)
             except Exception as exc:
-                logger.info("[bbva] API post-login: %s", exc)
+                logger.info("[bbva] API post-login error: %s", exc)
 
         raise RuntimeError(
             "[bbva] Login completado pero la API no responde. "
@@ -222,8 +374,8 @@ class BbvaScraper(BaseScraper):
                     f"[bbva] cuentas HTTP {resp.status_code}: {resp.text[:200]}"
                 )
 
-            result    = resp.json().get("result", {})
-            cajas     = result.get("cajasAhorro", [])
+            result = resp.json().get("result", {})
+            cajas  = result.get("cajasAhorro", [])
             _log(f"Cuentas encontradas: {len(cajas)}")
 
             today_art  = datetime.now(_ART).date()

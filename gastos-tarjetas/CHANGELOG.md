@@ -1,3 +1,7 @@
+## 0.3.39
+
+- **Fix BBVA login — detección de iframe y diagnóstico**: `input#documentNumberInput` no se encontraba porque el formulario de login de BBVA está dentro de un iframe (patrón habitual en SPAs). Se agrega `_find_across_frames()` que prueba el frame principal y luego cada iframe del DOM, dejando el contexto enfocado en el iframe correcto para las interacciones siguientes. Se agregan logs de diagnóstico (`[bbva-diag]`) que emiten título, URL, todos los inputs (id/type/name/placeholder) e iframes encontrados — visibles en Supervisión → Add-ons → Gastos → Log. El wait inicial se extiende a 6 s para dar tiempo al lazy-loading de React. Se agregan listas de selectores con fallbacks para DNI, usuario y contraseña.
+
 ## 0.3.38
 
 - **Scraper BBVA — implementación inicial de cuenta corriente/ahorro**: reemplaza el stub anterior con un scraper funcional usando un enfoque híbrido Selenium + httpx. Selenium realiza el login en la SPA (micro-frontend React); httpx hace todas las llamadas a la API REST (`https://online.bbva.com.ar/fnetcore/servicios/`) usando las cookies de sesión generadas por el login. Los movimientos se obtienen paginados de `/cliente/productos/cuentas/movimientos` (10 por página) dentro del rango de fechas configurado. El signo de cada movimiento (ingreso/egreso) se deduce comparando el saldo consecutivo en el array newest-first que devuelve la API.
