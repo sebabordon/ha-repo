@@ -1,32 +1,32 @@
 """
-Scraper BBVA Argentina — todas las requests API se hacen DESDE el browser real.
+Scraper BBVA Argentina — login NATURAL en browser + scraping vía API.
 
-Estrategia (confirmada por análisis HAR + iteración):
-  1. Selenium carga la página de login → Akamai Bot Manager inicializa cookies
-     anti-bot en el browser real (no se puede replicar sin un browser verdadero).
-  2. Todas las llamadas a la API se hacen vía `execute_async_script` con
-     `fetch()` dentro de Chrome — Akamai valida fingerprint del cliente HTTP
-     (TLS, headers, JA3, etc.) y rechaza httpx con 403 incluso teniendo las
-     cookies correctas.  fetch() pasa porque corre en el mismo browser que
-     generó las cookies.
-  3. Login en dos pasos:
-       POST /login/prelogin   → devuelve redirect URL con sessionIdLN
-       POST /login/postlogin  → establece la sesión definitiva
-  No se interactúa con el formulario HTML (web components Lit/Spherica que
-  son extremadamente difíciles de automatizar en modo headless).
+Estrategia:
+  1. LOGIN — interacción real con el formulario HTML:
+     - Selenium carga `login/index.html`
+     - Esperamos a que Akamai BotManager y Adobe Analytics seteen sus cookies
+     - Llenamos los 3 inputs (DNI, alias, password) con ActionChains (necesario
+       para los web components Lit/Spherica que envuelven los `<input>` nativos)
+     - Click en submit
+     - Esperamos a que el browser navegue fuera de `/login/` (BBVA hace todo
+       el flujo prelogin → loginClementeApp2.html → postlogin → fnetcore/
+       automáticamente, incluyendo Akamai sensor refresh, sessionIdLN, XSRF, etc.)
+     - Verificamos con `datosperfil` que la sesión esté activa.
+  2. SCRAPE — una vez logueados, todas las llamadas REST se hacen desde
+     dentro del browser vía `execute_async_script` + `fetch()`.  Akamai
+     acepta esas requests porque corren en el mismo browser que generó la
+     sesión.
 
 API base: https://online.bbva.com.ar/fnetcore/servicios/
-Auth:     cookies de sesión de postlogin (jsessionid + otras), persistidas
-          por _save_session().
+Auth:     cookies de sesión establecidas por el login natural, persistidas
+          por _save_session() para skipear el login en runs siguientes.
 
 Credenciales:
   usuario     → número de DNI
   tercer_dato → nombre de usuario BBVA (el alias configurado en homebanking)
   password    → contraseña / clave digital
 
-Endpoints:
-  POST /login/prelogin                            → primer paso de auth; devuelve sessionId
-  POST /login/postlogin                           → segundo paso; establece sesión
+Endpoints (post-login):
   GET  /cliente/datosperfil                       → verifica sesión; devuelve nombre
   GET  /cliente/productos/cuentas                 → lista de cuentas (cajasAhorro[])
   POST /cliente/productos/cuentas/movimientos     → movimientos paginados
@@ -41,8 +41,6 @@ Detección de signo (importe siempre positivo en la API):
 import json as _json
 import logging
 import re
-import secrets
-import string
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -69,13 +67,6 @@ def _ts() -> str:
     return str(int(time.time() * 1000))
 
 
-_SESSION_ID_LN_ALPHABET = string.ascii_lowercase + string.digits
-
-def _make_session_id_ln() -> str:
-    """Genera sessionIdLN de 128 chars [a-z0-9], igual al que produce el JS de loginClementeApp2."""
-    return ''.join(secrets.choice(_SESSION_ID_LN_ALPHABET) for _ in range(128))
-
-
 class BbvaScraper(BaseScraper):
     fuente       = "bbva"
     nombre       = "BBVA Argentina"
@@ -86,33 +77,6 @@ class BbvaScraper(BaseScraper):
     def _driver_cookies(self, driver) -> dict[str, str]:
         """Extrae las cookies del WebDriver (útil para _save_session y diagnóstico)."""
         return {c["name"]: c["value"] for c in driver.get_cookies()}
-
-    def _fetch_url(self, driver, url: str, timeout: int = 30) -> dict:
-        """
-        Hace un GET fetch() a una URL arbitraria dentro del browser (sin navegar).
-        Útil para que el browser aplique las cookies Set-Cookie de la respuesta
-        sin arriesgar un crash del renderer por navegación de página.
-        Returns dict {status: int, body: str}.
-        """
-        js = """
-        var url = arguments[0];
-        var cb  = arguments[arguments.length - 1];
-        fetch(url, {method: 'GET', credentials: 'include'})
-            .then(function(r) { return r.text().then(function(t) { cb({status: r.status, body: t}); }); })
-            .catch(function(e) { cb({status: 0, body: 'fetch_url error: ' + String(e)}); });
-        """
-        try:
-            driver.set_script_timeout(timeout + 5)
-        except Exception:
-            pass
-        try:
-            result = driver.execute_async_script(js, url)
-        except Exception as exc:
-            logger.warning("[bbva] _fetch_url error: %s", exc)
-            return {"status": 0, "body": str(exc)}
-        if not isinstance(result, dict):
-            return {"status": 0, "body": f"invalid result: {result!r}"}
-        return {"status": int(result.get("status", 0) or 0), "body": str(result.get("body", "") or "")}
 
     def _api_request(
         self,
@@ -388,41 +352,35 @@ class BbvaScraper(BaseScraper):
 
     def do_login(self, driver, config: dict) -> None:
         """
-        Login BBVA en dos pasos via API REST directa (NO interacción con formulario HTML).
+        Login BBVA via interacción NATURAL con el formulario (no API directa).
 
-        Estrategia confirmada por análisis HAR (2026-05-27):
+        Estrategia: dejamos que el browser real haga TODO el flujo de login —
+        Akamai, prelogin, navegación a loginClementeApp2.html, generación de
+        sessionIdLN, postlogin, obtenerTsec, etc.  Nosotros sólo:
+          1. Cargamos la página de login.
+          2. Esperamos a que Akamai/Adobe completen sus scripts (cookies presentes).
+          3. Llenamos los 3 inputs (DNI, usuario, password) usando ActionChains
+             (necesario para Lit/Shadow DOM web components).
+          4. Hacemos click en el botón submit.
+          5. Esperamos a que la URL deje de ser /login/index.html (el browser
+             navega a loginClementeApp2.html → /fnetcore/).
+          6. Verificamos con datosperfil que la sesión esté activa.
 
-          Paso 1 — Akamai:
-            Selenium carga la página de login.  El JS de Akamai Bot Manager
-            corre en el browser real y setea cookies anti-bot (_abck, bm_sz, etc.)
-            que el servidor valida en cada request.  Sin estas cookies las llamadas
-            API son rechazadas.
-
-          Paso 2 — prelogin:
-            POST /login/prelogin con { documento, usuario, claveDigital, versionFront }.
-            Respuesta 200: JSON con redirect URL que codifica sessionIdLN y
-            numeroClienteAltamira.
-
-          Paso 3 — postlogin directo:
-            Genera sessionIdLN aleatorio (128 chars [a-z0-9]).
-            POST /login/postlogin con { numeroClienteAltamira, sessionIdLN }.
-            Establece las cookies de sesión definitivas (jsessionid, etc.).
-            No se navega a loginClementeApp2.html porque la URL con el token
-            authentication crashea headless Chromium.
-
-          Paso 4 — verificar:
-            GET /cliente/datosperfil con las cookies combinadas.
+        Esto evita por completo los problemas de bypass de Akamai (que rechazaba
+        nuestras llamadas API hechas con fetch desde un contexto incorrecto),
+        las complicaciones de XSRF-TOKEN, la generación de sessionIdLN y
+        cualquier crash del renderer por URLs largas con ==SLASH==.
         """
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+
         dni      = config["usuario"]
         username = config.get("tercer_dato", "")
         password = config["password"]
 
-        # ── Paso 1: cargar página → Akamai inicializa cookies anti-bot ────────
-        logger.info("[bbva] cargando login page para Akamai: %s", _LOGIN_URL)
+        # ── Paso 1: cargar página y esperar Akamai+Adobe ──────────────────────
+        logger.info("[bbva] cargando login page: %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
-        # Esperar a que los scripts de Akamai Y Adobe Analytics terminen de ejecutar.
-        # Sin cookies s_cc/s_visit (Adobe), Akamai bloquea prelogin con 403.
-        # Esperamos hasta 15 s en pasos de 1 s, o hasta que las cookies estén listas.
         for _w in range(15):
             time.sleep(1)
             _ck = {c["name"] for c in driver.get_cookies()}
@@ -430,168 +388,80 @@ class BbvaScraper(BaseScraper):
                 logger.info("[bbva] Akamai+Adobe cookies listas tras %ds", _w + 1)
                 break
         else:
-            logger.info("[bbva] timeout esperando cookies Akamai (continuando igual)")
-        self._dump_page_state(driver)
+            logger.info("[bbva] timeout esperando cookies Akamai (continuando)")
 
-        version_front  = self._extract_version_front(driver)
-        cookies_akamai = self._driver_cookies(driver)
-        _abck_len = len(cookies_akamai.get("_abck", ""))
-        logger.info(
-            "[bbva] Akamai cookies (%d): %s  |  versionFront: %s  |  _abck len=%d",
-            len(cookies_akamai), sorted(cookies_akamai.keys()), version_front, _abck_len,
-        )
-
-        # ── Paso 2: POST prelogin (vía fetch del browser, NO httpx) ───────────
-        # Akamai hace fingerprinting del cliente HTTP y rechaza httpx con 403.
-        # fetch() dentro de Chrome pasa la validación porque es el mismo browser
-        # que generó las cookies _abck/bm_sz.
-        prelogin_payload = {
-            "documento": {
-                "numeroDocumento": dni,
-                "genero": "",
-                "tipoDocumento": {
-                    "codigoTipoDocumento": "0",
-                    "descripcionCorta": "DNI",
-                    "descripcion": "DNI",
-                },
-            },
-            "usuario":      username,
-            "claveDigital": password,
-            "versionFront": version_front,
-            "rememberData": False,
-        }
-
-        pre = self._api_request(
-            driver, "/login/prelogin", method="POST", json_body=prelogin_payload,
-            with_xsrf=False,
-        )
-        logger.info("[bbva] prelogin HTTP %d  body=%s", pre["status"], pre["body"][:500])
-
-        if pre["status"] != 200:
-            raise RuntimeError(
-                f"[bbva] prelogin HTTP {pre['status']}: {pre['body'][:300]}"
-            )
-
-        # ── Paso 3: validar loginOk y extraer authentication + numeroCliente ──
-        # La response real de prelogin (confirmada en producción) trae:
-        #   { loginOk, authentication, numeroClienteAltamira, codigoTipoIngreso, ... }
-        # El sessionIdLN del postlogin lo genera el frontend al navegar a
-        # loginClementeApp2.html (NO viene del servidor), así que dejamos al
-        # browser hacer ese paso por nosotros.
-        pre_result = ((pre["json"] or {}).get("result") or {})
-
-        if not pre_result.get("loginOk"):
-            raise RuntimeError(
-                f"[bbva] prelogin loginOk=false. Posibles credenciales inválidas. "
-                f"Body: {pre['body'][:300]}"
-            )
-
-        authentication = str(pre_result.get("authentication", "") or "")
-        numero_cliente = str(pre_result.get("numeroClienteAltamira", "") or "")
-
-        if not authentication or not numero_cliente:
-            raise RuntimeError(
-                f"[bbva] prelogin OK pero faltan datos (authentication o numeroClienteAltamira). "
-                f"Campos en result: {list(pre_result.keys())}"
-            )
-
-        logger.info(
-            "[bbva] authentication len=%d  numeroCliente=%s  marcaTipoUsuario=%s",
-            len(authentication), numero_cliente,
-            pre_result.get("marcaTipoUsuario", "?"),
-        )
-
-        # ── Paso 4: navegar a loginClementeApp2.html (sin query string) ─────────
-        # Akamai BotManager ejecuta sus scripts de sensor en cada navegación
-        # de página y actualiza el cookie `_abck`.  Postlogin se llama
-        # normalmente DESDE loginClementeApp2.html; si lo llamamos desde
-        # login/index.html (mismo contexto que prelogin), el `_abck` no fue
-        # actualizado y el servidor responde con statusCode:500.
-        #
-        # Solución: navegar a loginClementeApp2.html SIN query string (URL corta,
-        # sin token de authentication → no crashea headless Chrome), esperar a
-        # que Akamai actualice _abck, y luego llamar postlogin desde ese contexto.
-        # ── Paso 4a: navegar a loginClementeApp2.html para actualizar Akamai ────
-        # Akamai BotManager re-ejecuta sus scripts de sensor en cada navegación.
-        # Postlogin debe venir de ese contexto de página (Akamai `_abck` fresco
-        # + Referer correcto).  También el servidor BBVA puede requerir el GET a
-        # loginClementeApp2.html para registrar internamente la sesión previa al
-        # postlogin.
-        #
-        # Preferimos la URL COMPLETA (con el token de authentication) para que
-        # el servidor pueda validar la sesión; usamos window.location.href = url
-        # (en lugar de driver.get) porque es más resistente a crash del renderer.
-        # Fallback: URL base (sin token) si la navegación JS falla.
-        session_id_ln = _make_session_id_ln()
-        clemente_url_full = (
-            f"https://online.bbva.com.ar/fnetcore/loginClementeApp2.html"
-            f"?{authentication}=/std/{numero_cliente}/0/{dni}//{session_id_ln}"
-        )
-        clemente_url_base = "https://online.bbva.com.ar/fnetcore/loginClementeApp2.html"
-
-        # Intentar navegación JS con URL completa (el token de authentication
-        # no tiene slashes reales — usa ==SLASH== — por lo que driver.get falla
-        # pero window.location.href puede manejarlo mejor)
-        logger.info("[bbva] navegando a loginClementeApp2 vía JS (url len=%d)", len(clemente_url_full))
+        # ── Paso 2: localizar los 3 inputs del formulario ─────────────────────
+        # Selectores observados (estables — sin depender de los IDs auto-generados):
+        #   <input type='number' …>                  → DNI
+        #   <input type='password' name='username' …> → alias homebanking
+        #   <input type='password' name='password' …> → clave digital
         try:
-            driver.execute_script("window.location.href = arguments[0];", clemente_url_full)
-            _nav_ok = True
-        except Exception as _nav_err:
-            logger.info("[bbva] JS nav completo falló (%s), usando URL base", _nav_err)
-            driver.get(clemente_url_base)
-            _nav_ok = False
-
-        # Esperar a que Akamai actualice _abck (hasta 12 s)
-        for _w in range(12):
-            time.sleep(1)
-            _ck2 = {c["name"]: c["value"] for c in driver.get_cookies()}
-            if "_abck" in _ck2 and len(_ck2.get("_abck", "")) > 100:
-                logger.info("[bbva] loginClementeApp2 Akamai OK (abck len=%d, full=%s) tras %ds",
-                            len(_ck2["_abck"]), _nav_ok, _w + 1)
-                break
-        else:
-            logger.info("[bbva] loginClementeApp2: timeout esperando _abck (continuando)")
-        postlogin_payload = {
-            "documento": {
-                "tipoDocumento": {
-                    "codigoTipoDocumento": "0",
-                    "descripcionCorta": "",
-                    "descripcion": "",
-                },
-                "numeroDocumento": dni,
-                "genero": "",
-            },
-            "usuario":               "",
-            "claveDigital":          "",
-            "numeroClienteAltamira": numero_cliente,
-            "sessionIdLN":           session_id_ln,
-        }
-        logger.info("[bbva] postlogin (sessionIdLN[:16]=%s…)", session_id_ln[:16])
-        post = self._api_request(
-            driver, "/login/postlogin", method="POST", json_body=postlogin_payload,
-            with_xsrf=False,
-        )
-        logger.info("[bbva] postlogin HTTP %d  body[:200]=%s", post["status"], post["body"][:200])
-        if post["status"] != 200:
-            raise RuntimeError(
-                f"[bbva] postlogin HTTP {post['status']}: {post['body'][:300]}"
+            dni_input  = WebDriverWait(driver, 15).until(
+                lambda d: d.find_element(By.CSS_SELECTOR, "input[type='number']")
             )
-        # Verificar statusCode en el body (BBVA usa HTTP 200 incluso para errores de aplicación)
-        post_result = (post["json"] or {})
-        if str(post_result.get("statusCode", "200")) != "200":
+        except Exception as exc:
+            self._dump_page_state(driver)
+            raise RuntimeError(f"[bbva] no se encontró el input de DNI: {exc}")
+
+        try:
+            user_input = driver.find_element(By.CSS_SELECTOR, "input[name='username']")
+            pass_input = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+        except Exception as exc:
+            self._dump_page_state(driver)
+            raise RuntimeError(f"[bbva] no se encontraron inputs usuario/password: {exc}")
+
+        logger.info("[bbva] inputs encontrados — llenando formulario")
+
+        # ── Paso 3: llenar inputs (usar _type_input por Lit/Shadow DOM) ───────
+        self._type_input(driver, dni_input,  dni)
+        self._type_input(driver, user_input, username)
+        self._type_input(driver, pass_input, password)
+
+        # ── Paso 4: localizar y clickear el botón submit ──────────────────────
+        submit_el = None
+        for sel in [
+            "form#login button[type='submit']",
+            "button[type='submit']",
+            "form button:last-of-type",
+        ]:
+            try:
+                submit_el = driver.find_element(By.CSS_SELECTOR, sel)
+                if submit_el:
+                    logger.info("[bbva] botón submit encontrado: %s", sel)
+                    break
+            except Exception:
+                continue
+
+        if submit_el is None:
+            self._dump_page_state(driver)
+            raise RuntimeError("[bbva] no se encontró el botón submit del formulario")
+
+        self._click_element(driver, submit_el)
+        logger.info("[bbva] submit clickeado — esperando navegación")
+
+        # ── Paso 5: esperar redirect fuera de /login/ ─────────────────────────
+        # El browser navega: login/index.html → loginClementeApp2.html → /fnetcore/
+        # Tope: 30 s.  Si seguimos en /login/ tras eso, es un error (credenciales
+        # malas, captcha extra, o algún diálogo).
+        try:
+            WebDriverWait(driver, 30).until(
+                lambda d: "/login/" not in (d.current_url or "")
+            )
+        except Exception:
+            cur = driver.current_url or ""
+            self._dump_page_state(driver)
             raise RuntimeError(
-                f"[bbva] postlogin error: {post_result.get('statusText', '')} "
-                f"(statusCode={post_result.get('statusCode')})"
+                f"[bbva] tras submit seguimos en login (URL: {cur[:200]}). "
+                f"Posibles credenciales inválidas o captcha extra."
             )
 
-        # ── Paso 4b: obtenerTsec — establece cookie XSRF-TOKEN ────────────────
-        # Angular $http lee XSRF-TOKEN y lo reenvía como X-XSRF-TOKEN en cada
-        # request. Sin este paso la cookie no existe y datosperfil (y todo lo
-        # demás) devuelve 403 "Invalid CSRF Token 'null'".
-        tsec = self._api_request(driver, "/seguridad/cliente/obtenerTsec")
-        logger.info("[bbva] obtenerTsec HTTP %d  body=%s", tsec["status"], tsec["body"][:100])
+        post_url = driver.current_url or ""
+        logger.info("[bbva] navegación completada — URL actual: %s", post_url[:200])
 
-        # ── Paso 5: verificar sesión con datosperfil ──────────────────────────
+        # Pequeña pausa para que la app Angular complete su inicialización
+        time.sleep(3)
+
+        # ── Paso 6: verificar sesión con datosperfil ──────────────────────────
         perf = self._api_request(driver, "/cliente/datosperfil")
         logger.info("[bbva] datosperfil HTTP %d  body[:200]=%s", perf["status"], perf["body"][:200])
 
@@ -602,8 +472,8 @@ class BbvaScraper(BaseScraper):
             return
 
         raise RuntimeError(
-            f"[bbva] datosperfil HTTP {perf['status']} tras postlogin. "
-            f"datosperfil body: {perf['body'][:300]}"
+            f"[bbva] datosperfil HTTP {perf['status']} tras login. URL: {post_url[:150]}. "
+            f"Body: {perf['body'][:300]}"
         )
 
     # ── scrape ────────────────────────────────────────────────────────────────
