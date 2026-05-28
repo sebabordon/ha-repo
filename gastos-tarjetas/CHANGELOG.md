@@ -1,3 +1,10 @@
+## 0.3.62
+
+- **Fix UI "Sin registros guardados" — `list_movimientos_raw` expande banco→fuentes**: la sección "📦 Registros ingresados" en cada tab de banco mostraba "Sin registros guardados" aún cuando había filas en `movimientos_raw`. La UI llamaba `/api/scrapers/movimientos-raw?fuente=bbva` con el banco como filtro, pero las filas tenían `fuente='bbva_cuenta'`. Mismo bug que arreglamos en el scheduler en v0.3.57, ahora también en el query del backend. Nuevo helper `fuentes_for_banco(banco)` con el mapping `{"bbva": ["bbva","bbva_cuenta","bbva_visa","bbva_mc"], "amex": ["amex"], "galicia": ["galicia","galicia_mc"], "mercadopago": ["mercadopago"]}` — si el filtro `fuente` recibido es una banco-key conocida, se expande; si es una fuente específica devuelve `[fuente]` (compatibilidad). Usado en:
+  - `list_movimientos_raw(fuente=...)` → SQL `fuente IN (?, ?, ...)` con todas las fuentes del banco.
+  - `/api/scrapers/status` → suma `pendientes` de todas las fuentes del banco para el badge.
+  - Como efecto colateral, `auto_import_unmatched("bbva")` y `run_conciliation(fuente="bbva")` también funcionan ahora (defensa adicional sobre el fix de v0.3.57).
+
 ## 0.3.61
 
 - **Fix duplicados al scrapear — dedup en `insert_movimientos_raw` + migración para limpiar los existentes**: bug en la transición v0.3.55→0.3.57 dejó filas atascadas en `movimientos_raw` con estado='new' (porque la conciliación buscaba `fuente="bbva"` pero los datos tenían `fuente="bbva_cuenta"`). Cuando v0.3.57 arregló el scheduler, en el próximo run se reimportaron los 2 movimientos nuevos JUNTO con los 2 que estaban atascados → 4 gastos donde debería haber 2. **Fix doble**:

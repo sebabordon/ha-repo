@@ -54,12 +54,19 @@ class MovimientoRapidoRequest(BaseModel):
 @router.get("/scrapers/status")
 def scrapers_status(request: Request):
     require_auth(request)
-    from scrapers_db import get_scraper_statuses, count_pendientes_por_fuente
+    from scrapers_db import (
+        get_scraper_statuses,
+        count_pendientes_por_fuente,
+        fuentes_for_banco,
+    )
     statuses  = get_scraper_statuses()
     pendientes = count_pendientes_por_fuente()
-    # Enriquecer con count de pendientes
+    # Enriquecer con count de pendientes — agrega todas las fuentes del banco
+    # (ej. 'bbva' agrega 'bbva' + 'bbva_cuenta' + 'bbva_visa' + 'bbva_mc').
     for s in statuses:
-        s["pendientes"] = pendientes.get(s["fuente"], 0)
+        s["pendientes"] = sum(
+            pendientes.get(f, 0) for f in fuentes_for_banco(s["fuente"])
+        )
     return statuses
 
 

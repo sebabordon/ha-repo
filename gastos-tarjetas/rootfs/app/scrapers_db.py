@@ -19,6 +19,25 @@ logger = logging.getLogger(__name__)
 
 _DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
+# Mapping banco (clave del scraper, ej. "bbva") → lista de fuentes de datos que
+# emite (ej. ["bbva", "bbva_cuenta", "bbva_visa", "bbva_mc"]).  Un banco puede
+# generar movimientos para distintos productos, cada uno con su propia fuente
+# en la tabla `gastos`/`movimientos_raw`.  Sin este mapping, queries como
+# "todas las filas de bbva" no encuentran las de bbva_cuenta.
+_BANCO_FUENTES: dict[str, list[str]] = {
+    "bbva":        ["bbva", "bbva_cuenta", "bbva_visa", "bbva_mc"],
+    "amex":        ["amex"],
+    "galicia":     ["galicia", "galicia_mc"],
+    "mercadopago": ["mercadopago"],
+}
+
+def fuentes_for_banco(banco: str) -> list[str]:
+    """
+    Devuelve todas las fuentes de datos posibles para un banco dado.
+    Si `banco` ya es una fuente específica (ej. "bbva_cuenta"), devuelve [banco].
+    """
+    return _BANCO_FUENTES.get(banco, [banco])
+
 
 def _find_db_path() -> str:
     """
@@ -270,7 +289,12 @@ def list_movimientos_raw(
     if estado:
         q += " AND estado=?"; params.append(estado)
     if fuente:
-        q += " AND fuente=?"; params.append(fuente)
+        # Expandir banco → fuentes (ej. "bbva" → ["bbva","bbva_cuenta","bbva_visa","bbva_mc"]).
+        # Si `fuente` ya es una fuente específica, devuelve [fuente].
+        fuentes = fuentes_for_banco(fuente)
+        placeholders = ",".join("?" * len(fuentes))
+        q += f" AND fuente IN ({placeholders})"
+        params.extend(fuentes)
     q += f" ORDER BY scraped_at DESC, fecha DESC, id DESC LIMIT {int(limit)}"
     with _conn() as conn:
         rows = conn.execute(q, params).fetchall()
