@@ -1,3 +1,7 @@
+## 0.3.41
+
+- **Fix BBVA login — "element not interactable" en web components**: los `<input>` del formulario de BBVA están dentro de web components Lit/Spherica (`@bbva/webcomponents`); en modo headless Chromium el `send_keys()` directo falla con `ElementNotInteractableException`. Se agrega el helper `_type_input()` con tres estrategias progresivas: (1) `ActionChains` con scroll + move + click antes del `send_keys`; (2) setter nativo de `HTMLInputElement.prototype.value` vía JS + dispatch de eventos `input`/`change`/`blur` con `bubbles:true` para que el framework detecte el cambio; (3) asignación directa de `element.value` como último recurso. Los tres campos del formulario (DNI, usuario, contraseña) usan `_type_input()` y ya no llaman a `.clear()` previamente (que también fallaba por el mismo motivo).
+
 ## 0.3.40
 
 - **Fix BBVA login — URL correcta del formulario**: el scraper navegaba a `www.bbva.com.ar/personas/home.html` (página pública) pero el formulario de homebanking está en `https://online.bbva.com.ar/fnetcore/login/index.html`. Causa raíz confirmada por análisis del HAR del login completo. Se corrige `_LOGIN_URL` y `login_origin` al dominio `online.bbva.com.ar`. Los selectores `input#documentNumberInput`, `input#username` e `input[type='password']` quedan confirmados por la telemetría del HAR. El POST de login va a `/fnetcore/servicios/login/prelogin` con `claveDigital`; Akamai Bot Manager corre en background vía JS y Selenium lo maneja transparentemente.

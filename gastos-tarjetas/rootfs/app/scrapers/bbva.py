@@ -145,6 +145,71 @@ class BbvaScraper(BaseScraper):
             pass
         return None, False
 
+    def _type_input(self, driver, element, value: str) -> None:
+        """
+        Escribe en un campo de formulario con estrategias progresivas.
+
+        Problema: BBVA usa @bbva/webcomponents (Lit + elementos Shadow DOM);
+        los <input> nativos dentro del web component pueden no ser interactuables
+        con send_keys() directo en modo headless.
+
+        Estrategia 1 — ActionChains (la más "humana"):
+          scroll al elemento → move_to_element → click → send_keys
+
+        Estrategia 2 — JS nativo (para React / Lit / Angular):
+          Usa el setter del prototipo de HTMLInputElement para bypassear el
+          framework, luego dispara eventos 'input' y 'change' con bubbles=true
+          para que el framework detecte el cambio.
+
+        Estrategia 3 — última reserva:
+          execute_script("arguments[0].value = arguments[1]", el, value)
+          + disparo manual de eventos (sin prototipo).
+        """
+        from selenium.webdriver.common.action_chains import ActionChains
+
+        # ── Estrategia 1: ActionChains ────────────────────────────────────────
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+            time.sleep(0.3)
+            ActionChains(driver).move_to_element(element).click().perform()
+            time.sleep(0.25)
+            element.send_keys(value)
+            return
+        except Exception as e1:
+            logger.info("[bbva] _type_input estrategia 1 falló (%s), probando JS", e1)
+
+        # ── Estrategia 2: JS con setter nativo + eventos React/Lit ───────────
+        try:
+            driver.execute_script(
+                """
+                var el  = arguments[0];
+                var val = arguments[1];
+                try {
+                    var setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value'
+                    ).set;
+                    setter.call(el, val);
+                } catch(e) {
+                    el.value = val;
+                }
+                ['input', 'change', 'blur'].forEach(function(t) {
+                    el.dispatchEvent(new Event(t, {bubbles: true, cancelable: true}));
+                });
+                """,
+                element, value,
+            )
+            return
+        except Exception as e2:
+            logger.info("[bbva] _type_input estrategia 2 falló (%s), probando fallback", e2)
+
+        # ── Estrategia 3: assign directo (fallback final) ─────────────────────
+        driver.execute_script(
+            "arguments[0].value = arguments[1];"
+            "arguments[0].dispatchEvent(new Event('input',  {bubbles:true}));"
+            "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
+            element, value,
+        )
+
     def _dump_page_state(self, driver) -> None:
         """
         Emite al log (INFO) información diagnóstica de la página actual.
@@ -257,11 +322,7 @@ class BbvaScraper(BaseScraper):
             )
 
         logger.info("[bbva] llenando DNI")
-        try:
-            dni_el.clear()
-        except Exception:
-            pass
-        dni_el.send_keys(dni)
+        self._type_input(driver, dni_el, dni)
         time.sleep(0.5)
 
         # Botón "Continuar" / "Siguiente" (paso 1 → paso 2)
@@ -283,11 +344,7 @@ class BbvaScraper(BaseScraper):
             user_el, _ = self._find_across_frames(driver, _USER_SELECTORS)
             if user_el:
                 logger.info("[bbva] llenando usuario BBVA")
-                try:
-                    user_el.clear()
-                except Exception:
-                    pass
-                user_el.send_keys(username)
+                self._type_input(driver, user_el, username)
                 time.sleep(0.5)
             else:
                 logger.warning("[bbva] campo de usuario no encontrado (puede no existir en esta pantalla)")
@@ -302,11 +359,7 @@ class BbvaScraper(BaseScraper):
             )
 
         logger.info("[bbva] llenando contraseña")
-        try:
-            pass_el.clear()
-        except Exception:
-            pass
-        pass_el.send_keys(password)
+        self._type_input(driver, pass_el, password)
         time.sleep(0.5)
 
         # Submit
