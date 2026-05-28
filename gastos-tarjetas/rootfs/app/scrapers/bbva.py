@@ -501,11 +501,34 @@ class BbvaScraper(BaseScraper):
             pre_result.get("marcaTipoUsuario", "?"),
         )
 
-        # ── Paso 4: postlogin directo (sin navegar a loginClementeApp2.html) ────
-        # sessionIdLN: 128 chars [a-z0-9] aleatorio, mismo patrón que genera el
-        # JS del frontend.  No es necesario fetchear loginClementeApp2.html ya
-        # que esa página sólo lee el sessionIdLN de la URL y llama postlogin —
-        # lo hacemos directamente desde aquí.
+        # ── Paso 4: navegar a loginClementeApp2.html (sin query string) ─────────
+        # Akamai BotManager ejecuta sus scripts de sensor en cada navegación
+        # de página y actualiza el cookie `_abck`.  Postlogin se llama
+        # normalmente DESDE loginClementeApp2.html; si lo llamamos desde
+        # login/index.html (mismo contexto que prelogin), el `_abck` no fue
+        # actualizado y el servidor responde con statusCode:500.
+        #
+        # Solución: navegar a loginClementeApp2.html SIN query string (URL corta,
+        # sin token de authentication → no crashea headless Chrome), esperar a
+        # que Akamai actualice _abck, y luego llamar postlogin desde ese contexto.
+        # Navegamos a la URL BASE de loginClementeApp2 (sin el query string del token
+        # de authentication, que tiene ~350 chars y crashea el renderer headless).
+        # Objetivos: (1) Akamai actualiza _abck en este contexto de página; (2) el
+        # Referer que verá postlogin será loginClementeApp2.html (no login/index.html).
+        _clemente_base = "https://online.bbva.com.ar/fnetcore/loginClementeApp2.html"
+        logger.info("[bbva] navegando a loginClementeApp2 (sin query string, Akamai refresh)")
+        driver.get(_clemente_base)
+        # Esperar a que Akamai ejecute su sensor POST y actualice _abck (hasta 12 s)
+        for _w in range(12):
+            time.sleep(1)
+            _ck2 = {c["name"]: c["value"] for c in driver.get_cookies()}
+            if "_abck" in _ck2 and len(_ck2.get("_abck", "")) > 100:
+                logger.info("[bbva] loginClementeApp2 Akamai OK (abck len=%d) tras %ds",
+                            len(_ck2["_abck"]), _w + 1)
+                break
+        else:
+            logger.info("[bbva] loginClementeApp2: timeout esperando _abck")
+
         session_id_ln = _make_session_id_ln()
         postlogin_payload = {
             "documento": {
