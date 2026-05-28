@@ -201,22 +201,28 @@ class MercadoPagoScraper(BaseScraper):
         debug: bool = False,
     ) -> tuple[list[MovimientoRaw], int]:
         """Pagina /v1/payments/search y convierte resultados."""
-        movs:       list[MovimientoRaw] = []
-        skipped:    int = 0
-        cc_skipped: int = 0
-        offset:     int = 0
+        movs:        list[MovimientoRaw] = []
+        skipped:     int = 0
+        cc_skipped:  int = 0
+        rej_skipped: int = 0
+        offset:      int = 0
+
+        # Statuses que descartamos: el pago no ocurrió o fue revertido.
+        _SKIP_STATUSES = frozenset({"rejected", "cancelled", "charged_back", "refunded"})
 
         while True:
             params = {
-                role_param:     user_id,
-                "sort":         "date_created",
-                "criteria":     "desc",
-                "range":        "date_created",
-                "begin_date":   since,
-                "end_date":     until,
-                "status":       "approved",
-                "limit":        _PAGE_SIZE,
-                "offset":       offset,
+                role_param:   user_id,
+                "sort":       "date_created",
+                "criteria":   "desc",
+                "range":      "date_created",
+                "begin_date": since,
+                "end_date":   until,
+                # Sin filtro de status: la API devuelve approved + in_process + pending.
+                # Filtramos rejected/cancelled en código para no perder pagos recientes
+                # que aún no fueron aprobados (ej. tarjeta prepaga T+0).
+                "limit":      _PAGE_SIZE,
+                "offset":     offset,
             }
             resp = await client.get(f"{_BASE}/v1/payments/search", params=params)
             resp.raise_for_status()
@@ -229,6 +235,7 @@ class MercadoPagoScraper(BaseScraper):
                 pid        = payment.get("id")
                 pay_type   = payment.get("payment_type_id", "")
                 op_type    = payment.get("operation_type", "")
+                status     = payment.get("status", "")
                 amount     = payment.get("transaction_amount", 0)
                 reason     = (payment.get("reason") or payment.get("description") or "")[:30]
                 payer_id   = (payment.get("payer") or {}).get("id", "?")
@@ -237,9 +244,16 @@ class MercadoPagoScraper(BaseScraper):
                 def _dbg(tag: str) -> None:
                     if debug:
                         log_fn(
-                            f"  [dbg] {tag:<12} id={pid} payer={payer_id} coll={coll_id}"
-                            f" type={pay_type} op={op_type} amt={amount:.2f} reason={reason}"
+                            f"  [dbg] {tag:<12} id={pid} status={status} payer={payer_id}"
+                            f" coll={coll_id} type={pay_type} op={op_type}"
+                            f" amt={amount:.2f} reason={reason}"
                         )
+
+                # Excluir pagos fallidos o revertidos
+                if status in _SKIP_STATUSES:
+                    rej_skipped += 1
+                    _dbg("OMITIDO-ST")
+                    continue
 
                 # Excluir pagos con tarjeta de crédito: esos cargos ya aparecen
                 # en el resumen de la tarjeta y se importan vía PDF.
@@ -275,8 +289,9 @@ class MercadoPagoScraper(BaseScraper):
             if offset >= total or len(results) < _PAGE_SIZE:
                 break
 
-        cc_note = f", {cc_skipped} tarjeta crédito omitidos" if cc_skipped else ""
-        log_fn(f"  → {len(movs)} nuevos ({skipped} ya existían{cc_note})")
+        cc_note  = f", {cc_skipped} tarjeta crédito omitidos"  if cc_skipped  else ""
+        rej_note = f", {rej_skipped} rechazados/cancelados"    if rej_skipped else ""
+        log_fn(f"  → {len(movs)} nuevos ({skipped} ya existían{cc_note}{rej_note})")
         return movs, skipped
 
     # ── Conversión de pagos ───────────────────────────────────────────────────
@@ -324,6 +339,7 @@ class MercadoPagoScraper(BaseScraper):
         """Construye el diccionario raw_data con todos los campos relevantes."""
         raw_data: dict = {
             "payment_id":      p.get("id"),
+            "status":          p.get("status"),
             "operation_type":  p.get("operation_type"),
             "payment_method":  p.get("payment_method_id"),
             "payment_type_id": p.get("payment_type_id"),

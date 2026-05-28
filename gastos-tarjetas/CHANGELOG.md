@@ -1,3 +1,9 @@
+## 0.3.37
+
+- **Fix scraper MP — pagos recientes no aparecían**: el filtro `status=approved` en la API excluía pagos con tarjeta prepaga que aún están en estado `in_process` o `pending` (el ciclo de aprobación puede tardar minutos/horas después de la transacción). Ahora se consulta sin filtro de status y se descartan en código solo los que definitivamente no ocurrieron: `rejected`, `cancelled`, `charged_back`, `refunded`. El log del run muestra cuántos se omitieron por cada motivo.
+- **Debug MP — status en cada línea**: el log de debug ahora incluye `status=` para cada pago, lo que permite identificar fácilmente pagos en tránsito vs aprobados.
+- **raw_data MP — campo `status`**: se guarda el status del pago (`approved`, `in_process`, etc.) en `raw_data` para referencia futura.
+
 ## 0.3.36
 
 - **Fix scraper MP — fecha incorrecta para pagos con tarjeta prepaga**: el scraper usaba `date_approved` (fecha de liquidación) como fecha del movimiento. Para tarjetas prepaga (y otras con ciclo T+1), la liquidación ocurre al día siguiente de la transacción, desplazando la fecha un día. Ahora se usa `date_created` (momento de la transacción, igual a lo que muestra la app de MP), con `date_approved` como fallback si `date_created` no estuviera disponible.
