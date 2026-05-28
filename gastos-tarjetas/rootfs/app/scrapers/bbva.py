@@ -1,18 +1,26 @@
 """
 Scraper BBVA Argentina — híbrido Selenium + httpx.
 
-Selenium: login en la SPA (micro-frontend React, complejo de automatizar).
-httpx:    todas las llamadas a la API REST, usando las cookies que deja el login.
+Estrategia de login (confirmada por análisis HAR):
+  1. Selenium carga la página de login → Akamai Bot Manager inicializa cookies
+     anti-bot en el browser real (no se puede replicar sin un browser verdadero).
+  2. httpx extrae esas cookies y llama directamente a la API REST de login:
+       POST /login/prelogin   → devuelve redirect URL con sessionIdLN
+       POST /login/postlogin  → establece la sesión definitiva
+  No se interactúa con el formulario HTML (web components Lit/Spherica que
+  son extremadamente difíciles de automatizar en modo headless).
 
 API base: https://online.bbva.com.ar/fnetcore/servicios/
-Auth:     cookies de sesión generadas por el login (jsessionid + otras).
+Auth:     cookies de sesión de postlogin (jsessionid + otras).
 
 Credenciales:
   usuario     → número de DNI
   tercer_dato → nombre de usuario BBVA (el alias configurado en homebanking)
-  password    → contraseña / clave
+  password    → contraseña / clave digital
 
 Endpoints:
+  POST /login/prelogin                            → primer paso de auth; devuelve sessionId
+  POST /login/postlogin                           → segundo paso; establece sesión
   GET  /cliente/datosperfil                       → verifica sesión; devuelve nombre
   GET  /cliente/productos/cuentas                 → lista de cuentas (cajasAhorro[])
   POST /cliente/productos/cuentas/movimientos     → movimientos paginados
@@ -25,6 +33,7 @@ Detección de signo (importe siempre positivo en la API):
 """
 
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -51,35 +60,10 @@ _HEADERS = {
     "Referer":          "https://online.bbva.com.ar/",
 }
 
-# ── Selectores del formulario de login (confirmados por HAR bbvalogin.har) ───
-# Login page: https://online.bbva.com.ar/fnetcore/login/index.html
-# Campos en el form: documentNumberInput, username, password (claveDigital)
-# Dynatrace reporta interacciones KU53=username y "password"=password
-
-_DNI_SELECTORS = [
-    "input#documentNumberInput",          # confirmado por HTML de login
-    "input[name='documentNumber']",
-    "input[id*='document' i]:not([type='hidden'])",
-    "input[placeholder*='documento' i]",
-    "input[type='tel']",
-    "input[type='number']",
-    "input[type='text']",                  # último recurso
-]
-
-_USER_SELECTORS = [
-    "input#username",                      # confirmado por telemetría HAR
-    "input[name='username']",
-    "input[autocomplete='username']",
-    "input[placeholder*='usuario' i]",
-]
-
-_PASS_SELECTORS = [
-    "input[type='password']",             # confirmado por telemetría HAR
-    "input[name='password']",
-    "input[name='claveDigital']",         # nombre interno en el API prelogin
-    "input[autocomplete='current-password']",
-]
-
+# versionFront: versión del bundle del login, enviada en el payload de prelogin.
+# Valor confirmado por HAR del 2026-05-27.  Se intenta extraer del HTML en
+# _extract_version_front(); si falla se usa este fallback.
+_VERSION_FRONT_FALLBACK = "20260325.1526"
 
 def _ts() -> str:
     """Cache-buster en milisegundos, igual que el frontend de BBVA."""
@@ -106,44 +90,25 @@ class BbvaScraper(BaseScraper):
             follow_redirects=True,
         )
 
-    def _find_across_frames(self, driver, selectors: list[str]):
+    def _extract_version_front(self, driver) -> str:
         """
-        Busca el primer elemento que matchee cualquiera de los selectores,
-        probando el frame actual primero y luego cada iframe del DOM.
-
-        Si lo encuentra en un iframe, el driver queda enfocado en ese iframe
-        (para que las interacciones siguientes funcionen en el mismo contexto).
-        Si no lo encuentra en ningún lado, resetea a default_content.
-
-        Returns: (element, in_frame: bool) o (None, False)
+        Extrae versionFront del HTML de la página de login.
+        Formato: 8 dígitos + punto + dígitos (ej: "20260325.1526").
+        Si no se encuentra, devuelve _VERSION_FRONT_FALLBACK.
         """
-        # Frame actual (default)
-        for sel in selectors:
-            el = self.find(driver, sel)
-            if el:
-                return el, False
-
-        # Cada iframe de primer nivel
-        iframes = driver.find_elements("css selector", "iframe")
-        for iframe in iframes:
-            try:
-                driver.switch_to.frame(iframe)
-                for sel in selectors:
-                    el = self.find(driver, sel)
-                    if el:
-                        return el, True          # dejamos el driver en este frame
-            except Exception:
-                pass
-            try:
-                driver.switch_to.default_content()
-            except Exception:
-                pass
-
         try:
-            driver.switch_to.default_content()
-        except Exception:
-            pass
-        return None, False
+            source = driver.page_source
+            # Buscar en JSON embebido: "versionFront":"XXXXXXXX.XXXX"
+            m = re.search(r'"versionFront"\s*:\s*"(\d{8}\.\d+)"', source)
+            if m:
+                return m.group(1)
+            # Buscar en parámetros ts= de URLs de assets (misma versión usada como versionFront)
+            m = re.search(r'\bts=(\d{8}\.\d+)\b', source)
+            if m:
+                return m.group(1)
+        except Exception as exc:
+            logger.info("[bbva] _extract_version_front error: %s", exc)
+        return _VERSION_FRONT_FALLBACK
 
     def _type_input(self, driver, element, value: str) -> None:
         """
@@ -303,161 +268,188 @@ class BbvaScraper(BaseScraper):
 
     def do_login(self, driver, config: dict) -> None:
         """
-        Login en la SPA de BBVA con Selenium.
+        Login BBVA en dos pasos via API REST directa (NO interacción con formulario HTML).
 
-        URL real del login (confirmada por HAR):
-          https://online.bbva.com.ar/fnetcore/login/index.html
+        Estrategia confirmada por análisis HAR (2026-05-27):
 
-        Formulario de un solo paso:
-          - input#documentNumberInput  → DNI (config["usuario"])
-          - input#username             → usuario BBVA (config["tercer_dato"])
-          - input[type="password"]     → contraseña (config["password"])
+          Paso 1 — Akamai:
+            Selenium carga la página de login.  El JS de Akamai Bot Manager
+            corre en el browser real y setea cookies anti-bot (_abck, bm_sz, etc.)
+            que el servidor valida en cada request.  Sin estas cookies las llamadas
+            API son rechazadas.
 
-        El submit dispara: POST /fnetcore/servicios/login/prelogin con los
-        campos en JSON (claveDigital = contraseña). Akamai Bot Manager corre
-        en background y setea cookies de anti-bot automáticamente al ejecutar
-        el JS en el browser real (no interfiere con Selenium).
+          Paso 2 — prelogin:
+            POST /login/prelogin con { documento, usuario, claveDigital, versionFront }.
+            Respuesta 200: JSON con redirect URL que codifica sessionIdLN y
+            numeroClienteAltamira.
 
-        Después del submit se redirige a /fnetcore/#/initLogged/std y luego
-        a /fnetcore/#/globalposition (dashboard).
+          Paso 3 — postlogin:
+            POST /login/postlogin con { numeroClienteAltamira, sessionIdLN }.
+            Establece las cookies de sesión definitivas (jsessionid, etc.).
+
+          Paso 4 — verificar:
+            GET /cliente/datosperfil con las cookies combinadas.
         """
         dni      = config["usuario"]
         username = config.get("tercer_dato", "")
         password = config["password"]
 
-        logger.info("[bbva] cargando login: %s", _LOGIN_URL)
+        # ── Paso 1: cargar página → Akamai inicializa cookies anti-bot ────────
+        logger.info("[bbva] cargando login page para Akamai: %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
-        time.sleep(6)   # SPA React + lazy-loading de micro-frontends
-
-        # ── Diagnóstico inicial ───────────────────────────────────────────────
+        time.sleep(6)   # tiempo para que los scripts de Akamai completen
         self._dump_page_state(driver)
 
-        # ── Paso 1: número de DNI ─────────────────────────────────────────────
-        dni_el, in_frame = self._find_across_frames(driver, _DNI_SELECTORS)
-        if in_frame:
-            logger.info("[bbva] campo DNI encontrado en iframe")
-
-        if dni_el is None:
-            # Estado extra: si estamos en un iframe, dumpeamos su contenido también
-            logger.warning(
-                "[bbva] No se encontró el campo DNI. "
-                "Revisá los logs [bbva-diag] para ver la estructura real de la página."
-            )
-            raise RuntimeError(
-                "[bbva] campo DNI no encontrado tras 6 s. "
-                "Mirá los mensajes [bbva-diag] en el log del add-on."
-            )
-
-        logger.info("[bbva] llenando DNI")
-        self._type_input(driver, dni_el, dni)
-        time.sleep(0.5)
-
-        # Botón "Continuar" / "Siguiente" (paso 1 → paso 2).
-        # IMPORTANTE: no incluir button[type='submit'] acá — eso dispararía el
-        # submit final antes de llenar usuario y contraseña.
-        btn_cont = self.find(driver,
-            "#login-button, "
-            "button[id*='continu' i], button[id*='next' i], "
-            "button[id*='siguiente' i], button[id*='accept' i]"
+        version_front   = self._extract_version_front(driver)
+        cookies_akamai  = self._driver_cookies(driver)
+        logger.info(
+            "[bbva] Akamai cookies (%d): %s  |  versionFront: %s",
+            len(cookies_akamai), sorted(cookies_akamai.keys()), version_front,
         )
-        if btn_cont:
+
+        # ── Paso 2: POST prelogin ─────────────────────────────────────────────
+        prelogin_payload = {
+            "documento": {
+                "numeroDocumento": dni,
+                "genero": "",
+                "tipoDocumento": {
+                    "codigoTipoDocumento": "0",
+                    "descripcionCorta": "DNI",
+                    "descripcion": "DNI",
+                },
+            },
+            "usuario":      username,
+            "claveDigital": password,
+            "versionFront": version_front,
+            "rememberData": False,
+        }
+
+        with self._make_client(cookies_akamai) as client:
+            pre_resp = client.post(
+                f"{_API_BASE}/login/prelogin",
+                params={"ts": _ts()},
+                json=prelogin_payload,
+            )
+
+        logger.info(
+            "[bbva] prelogin HTTP %d  body=%s",
+            pre_resp.status_code, pre_resp.text[:500],
+        )
+
+        if pre_resp.status_code != 200:
+            raise RuntimeError(
+                f"[bbva] prelogin HTTP {pre_resp.status_code}: {pre_resp.text[:300]}"
+            )
+
+        # ── Paso 3: parsear sessionIdLN y numeroClienteAltamira ───────────────
+        # La respuesta incluye una URL de redirect con el formato:
+        #   .../loginClementeApp2.html?TOKEN=/std/{numCliente}/0/{dni}//{sessionId}
+        pre_cookies   = dict(pre_resp.cookies)
+        all_cookies   = {**cookies_akamai, **pre_cookies}
+        pre_result    = (pre_resp.json().get("result") or {})
+
+        url_redirect  = ""
+        for k in ("urlRedirect", "redirectUrl", "url", "redirect", "loginUrl", "callbackUrl"):
+            v = str(pre_result.get(k, "") or "")
+            if v and ("fnetcore" in v or "login" in v.lower()):
+                url_redirect = v
+                break
+
+        logger.info("[bbva] url_redirect: %s", url_redirect[:150] if url_redirect else "(no detectado)")
+
+        session_id     = ""
+        numero_cliente = ""
+
+        if url_redirect:
+            # Formato: /std/{numCliente}/{algo}/{dni}//{sessionId}
+            m = re.search(r"/std/(\d+)/\d+/\d+//([a-z0-9]+)", url_redirect)
+            if m:
+                numero_cliente = m.group(1)
+                session_id     = m.group(2)
+
+        # Fallback: buscar campos directos en el JSON
+        if not session_id:
+            session_id     = str(pre_result.get("sessionIdLN", "") or "")
+            numero_cliente = str(pre_result.get("numeroClienteAltamira", "") or "")
+
+        if not session_id:
+            raise RuntimeError(
+                f"[bbva] prelogin OK pero no se pudo extraer sessionId. "
+                f"Campos en result: {list(pre_result.keys())}. "
+                f"Body: {pre_resp.text[:400]}"
+            )
+
+        logger.info(
+            "[bbva] sessionId (len=%d)  numeroCliente=%s",
+            len(session_id), numero_cliente,
+        )
+
+        # ── Paso 4: POST postlogin ────────────────────────────────────────────
+        postlogin_payload = {
+            "documento": {
+                "tipoDocumento": {
+                    "codigoTipoDocumento": "0",
+                    "descripcionCorta": "",
+                    "descripcion": "",
+                },
+                "numeroDocumento": dni,
+                "genero": "",
+            },
+            "usuario":              "",
+            "claveDigital":         "",
+            "numeroClienteAltamira": numero_cliente,
+            "sessionIdLN":           session_id,
+        }
+
+        with self._make_client(all_cookies) as client:
+            post_resp = client.post(
+                f"{_API_BASE}/login/postlogin",
+                params={"ts": _ts()},
+                json=postlogin_payload,
+            )
+
+        logger.info(
+            "[bbva] postlogin HTTP %d  body=%s",
+            post_resp.status_code, post_resp.text[:200],
+        )
+        post_cookies = dict(post_resp.cookies)
+        all_cookies  = {**all_cookies, **post_cookies}
+
+        # ── Paso 5: verificar sesión con datosperfil ──────────────────────────
+        # Inyectar todas las cookies en el driver para que _save_session() las persista
+        for name, value in all_cookies.items():
             try:
-                self._click_element(driver, btn_cont)
-                logger.info("[bbva] clic en botón continuar")
-                time.sleep(3)
+                driver.add_cookie({
+                    "name":   name,
+                    "value":  value,
+                    "domain": "online.bbva.com.ar",
+                    "path":   "/",
+                })
             except Exception:
                 pass
 
-        # ── Paso 2: usuario BBVA ──────────────────────────────────────────────
-        if username:
-            user_el, _ = self._find_across_frames(driver, _USER_SELECTORS)
-            if user_el:
-                logger.info("[bbva] llenando usuario BBVA")
-                self._type_input(driver, user_el, username)
-                time.sleep(0.5)
-            else:
-                logger.warning("[bbva] campo de usuario no encontrado (puede no existir en esta pantalla)")
-
-        # ── Paso 2: contraseña ────────────────────────────────────────────────
-        pass_el, _ = self._find_across_frames(driver, _PASS_SELECTORS)
-        if pass_el is None:
-            self._dump_page_state(driver)
-            raise RuntimeError(
-                "[bbva] campo de contraseña no encontrado. "
-                "Mirá los mensajes [bbva-diag] en el log del add-on."
+        with self._make_client(all_cookies) as client:
+            perf_resp = client.get(
+                f"{_API_BASE}/cliente/datosperfil",
+                params={"ts": _ts()},
             )
 
-        logger.info("[bbva] llenando contraseña")
-        self._type_input(driver, pass_el, password)
-        time.sleep(0.5)
+        logger.info("[bbva] datosperfil HTTP %d", perf_resp.status_code)
 
-        # Submit
-        submit_el, _ = self._find_across_frames(driver, ["button[type='submit']"])
-        if submit_el is None:
-            raise RuntimeError("[bbva] botón Submit no encontrado")
+        if perf_resp.status_code == 200:
+            perfil = (
+                (perf_resp.json().get("result") or {})
+                .get("perfilCliente", {})
+            )
+            nombre = perfil.get("nombre", "?")
+            logger.info("[bbva] Login OK — usuario: %s", nombre)
+            return
 
-        self._click_element(driver, submit_el)
-        logger.info("[bbva] submit enviado — esperando cookies de sesión")
-
-        # BBVA tarda varios segundos en emitir el jsessionid definitivo
-        time.sleep(10)
-
-        # ── Diagnóstico post-submit (visible en el panel de log) ──────────────
-        try:
-            driver.switch_to.default_content()
-        except Exception:
-            pass
-
-        post_url = driver.current_url
-        logger.info("[bbva-diag] URL post-login: %s", post_url)
-
-        cookies = self._driver_cookies(driver)
-        cookie_names = sorted(cookies.keys())
-        logger.info(
-            "[bbva] cookies post-login: %d → %s",
-            len(cookies), cookie_names,
+        raise RuntimeError(
+            f"[bbva] datosperfil HTTP {perf_resp.status_code} tras prelogin+postlogin. "
+            f"postlogin body: {post_resp.text[:200]}. "
+            f"datosperfil body: {perf_resp.text[:200]}"
         )
-
-        # Si seguimos en la página de login, el submit no funcionó
-        still_on_login = "login" in post_url.lower() or "fnetcore/login" in post_url
-        if still_on_login:
-            self._dump_page_state(driver)
-            raise RuntimeError(
-                f"[bbva] Submit no produjo redirección — seguimos en login page: {post_url}. "
-                "Revisá credenciales (DNI / usuario / contraseña) o mirá los logs [bbva-diag]."
-            )
-
-        if not cookies:
-            raise RuntimeError(
-                "[bbva] Login redirigió pero no hay cookies en el driver. "
-                f"URL actual: {post_url}"
-            )
-
-        # ── Verificar sesión activa vía API ────────────────────────────────────
-        try:
-            with self._make_client(cookies) as client:
-                resp = client.get(
-                    f"{_API_BASE}/cliente/datosperfil",
-                    params={"ts": _ts()},
-                )
-            logger.info("[bbva] datosperfil HTTP %d", resp.status_code)
-            if resp.status_code == 200:
-                perfil = (
-                    (resp.json().get("result") or {})
-                    .get("perfilCliente", {})
-                )
-                nombre = perfil.get("nombre", "?")
-                logger.info("[bbva] Login OK — usuario: %s", nombre)
-                return
-            else:
-                raise RuntimeError(
-                    f"[bbva] API datosperfil respondió HTTP {resp.status_code}. "
-                    f"Respuesta: {resp.text[:200]}"
-                )
-        except RuntimeError:
-            raise
-        except Exception as exc:
-            raise RuntimeError(f"[bbva] Error llamando datosperfil: {exc}") from exc
 
     # ── scrape ────────────────────────────────────────────────────────────────
 
