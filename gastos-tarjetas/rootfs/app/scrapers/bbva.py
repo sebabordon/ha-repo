@@ -68,9 +68,14 @@ def _ts() -> str:
 
 
 class BbvaScraper(BaseScraper):
-    fuente       = "bbva"
-    nombre       = "BBVA Argentina"
-    login_origin = "https://online.bbva.com.ar"
+    fuente              = "bbva"
+    nombre              = "BBVA Argentina"
+    login_origin        = "https://online.bbva.com.ar"
+    # BBVA cierra la sesión por inactividad a los 5 minutos.  Dejamos un margen
+    # de 1 min: si la sesión guardada tiene más de 4 min, no la usamos y vamos
+    # directo al login (sin intentar restore + check_session, que terminaría
+    # con cookies stale y redirigiría a /desconexion.html).
+    session_ttl_seconds = 240
 
     # ── Helpers internos ──────────────────────────────────────────────────────
 

@@ -91,11 +91,18 @@ class BaseScraper(ABC):
       fuente: str           — identificador (usado para el archivo de sesión)
       nombre: str           — nombre legible
       login_origin: str     — dominio raíz del banco (para restaurar cookies)
+
+    Opcionales:
+      session_ttl_seconds: int|None — si la sesión guardada es más vieja que
+          este TTL (en segundos), `_has_session()` la considera inválida y
+          devuelve False (forzando re-login).  None = sin expiración (default).
+          Útil para bancos con sesiones cortas (ej. BBVA expira en 5 min).
     """
 
-    fuente:        str = ""
-    nombre:        str = ""
-    login_origin:  str = ""   # ej. "https://www.bbva.com.ar"
+    fuente:              str = ""
+    nombre:              str = ""
+    login_origin:        str = ""   # ej. "https://www.bbva.com.ar"
+    session_ttl_seconds: Optional[int] = None
 
     def __init__(self):
         os.makedirs(_SESSIONS_DIR, exist_ok=True)
@@ -105,7 +112,23 @@ class BaseScraper(ABC):
         return os.path.join(_SESSIONS_DIR, f"{self.fuente}.json")
 
     def _has_session(self) -> bool:
-        return os.path.exists(self.session_path)
+        if not os.path.exists(self.session_path):
+            return False
+        # TTL check: si la sesión es más vieja que session_ttl_seconds, descartarla
+        # sin intentar usarla (evita el ciclo restore→check_session(falla)→login con
+        # cookies stale que disparaba el redirect a /desconexion.html en BBVA).
+        if self.session_ttl_seconds is not None:
+            try:
+                age = time.time() - os.path.getmtime(self.session_path)
+                if age > self.session_ttl_seconds:
+                    logger.info(
+                        "[%s] Sesión guardada hace %.0fs (TTL=%ds) — descartando, se hará login.",
+                        self.fuente, age, self.session_ttl_seconds,
+                    )
+                    return False
+            except Exception:
+                pass   # si stat falla, devolver True y dejar que check_session decida
+        return True
 
     def clear_session(self) -> None:
         if self._has_session():
