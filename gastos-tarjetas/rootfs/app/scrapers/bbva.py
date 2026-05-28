@@ -210,6 +210,30 @@ class BbvaScraper(BaseScraper):
             element, value,
         )
 
+    def _click_element(self, driver, element) -> None:
+        """
+        Hace clic en un elemento con fallback a JS.
+
+        Mismo problema que _type_input: botones dentro de web components
+        Lit/Spherica no son interactuables con .click() directo en headless.
+
+        Estrategia 1 — ActionChains scroll + click (más confiable en headless).
+        Estrategia 2 — JS element.click() (bypasea la capa de interactabilidad).
+        """
+        from selenium.webdriver.common.action_chains import ActionChains
+
+        # Estrategia 1: ActionChains
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+            time.sleep(0.2)
+            ActionChains(driver).move_to_element(element).click().perform()
+            return
+        except Exception as e1:
+            logger.info("[bbva] _click_element estrategia 1 falló (%s), probando JS", e1)
+
+        # Estrategia 2: JS click
+        driver.execute_script("arguments[0].click();", element)
+
     def _dump_page_state(self, driver) -> None:
         """
         Emite al log (INFO) información diagnóstica de la página actual.
@@ -333,7 +357,7 @@ class BbvaScraper(BaseScraper):
         )
         if btn_cont:
             try:
-                btn_cont.click()
+                self._click_element(driver, btn_cont)
                 logger.info("[bbva] clic en botón continuar")
                 time.sleep(3)
             except Exception:
@@ -367,7 +391,7 @@ class BbvaScraper(BaseScraper):
         if submit_el is None:
             raise RuntimeError("[bbva] botón Submit no encontrado")
 
-        submit_el.click()
+        self._click_element(driver, submit_el)
         logger.info("[bbva] submit enviado — esperando cookies de sesión")
 
         # BBVA tarda varios segundos en emitir el jsessionid definitivo

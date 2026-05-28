@@ -1,3 +1,7 @@
+## 0.3.42
+
+- **Fix BBVA login — botón Submit no interactuable en web components**: el mismo problema de `ElementNotInteractableException` que afectaba a los campos de texto ahora se presentaba en el botón submit (y en el botón "Continuar"). Se agrega el helper `_click_element()` con dos estrategias: (1) ActionChains con scroll + move + click; (2) `element.click()` vía JS como fallback. Los dos botones del flujo de login (`btn_cont` y `submit_el`) ahora usan `_click_element()` en lugar de `.click()` directo.
+
 ## 0.3.41
 
 - **Fix BBVA login — "element not interactable" en web components**: los `<input>` del formulario de BBVA están dentro de web components Lit/Spherica (`@bbva/webcomponents`); en modo headless Chromium el `send_keys()` directo falla con `ElementNotInteractableException`. Se agrega el helper `_type_input()` con tres estrategias progresivas: (1) `ActionChains` con scroll + move + click antes del `send_keys`; (2) setter nativo de `HTMLInputElement.prototype.value` vía JS + dispatch de eventos `input`/`change`/`blur` con `bubbles:true` para que el framework detecte el cambio; (3) asignación directa de `element.value` como último recurso. Los tres campos del formulario (DNI, usuario, contraseña) usan `_type_input()` y ya no llaman a `.clear()` previamente (que también fallaba por el mismo motivo).
