@@ -1,3 +1,7 @@
+## 0.3.53
+
+- **Fix BBVA login — navegación a loginClementeApp2.html con URL completa vía `window.location.href`**: en 0.3.50/0.3.51 navegábamos a la URL base sin el token de authentication, pero el servidor BBVA puede necesitar ver ese token para registrar internamente la sesión antes de aceptar el postlogin. Se cambia a usar `driver.execute_script("window.location.href = ...", url_completa)` que evita el crash del renderer que causaba `driver.get()` con URLs largas. Fallback a URL base si la navegación JS falla. Se genera `sessionIdLN` antes de construir la URL (para embeber el mismo ID en la URL y en el payload de postlogin). Corrección de versión: el commit anterior de 0.3.51 fue insertado por encima del 0.3.52 UI; esta versión reordena correctamente la secuencia.
+
 ## 0.3.52
 
 - **UI: toggle de tamaño del gráfico mensual en la página principal**: botón ▾/▸/▴ en el título del gráfico "Movimientos ARS — mes a mes" que cicla entre normal, compacto (mitad de altura) y oculto. El estado se persiste en `localStorage` (clave `chart_home_mode` dentro de `ui_prefs`) y se restaura al recargar la página. También disponible como selector en la tab Interfaz → Preferencias para mayor comodidad.
