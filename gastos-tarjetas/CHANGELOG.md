@@ -1,3 +1,7 @@
+## 0.3.57
+
+- **Fix scheduler — conciliar y auto-importar por la `fuente` real de cada movimiento, no por el `banco`**: el scraper de BBVA se identifica como `banco="bbva"` pero los movimientos que emite tienen `fuente="bbva_cuenta"` (porque van a la cuenta corriente, no a una tarjeta). El scheduler ejecutaba `run_conciliation(fuente="bbva")` y `auto_import_unmatched("bbva")` — esos filtros no encontraban las filas en `movimientos_raw` (que tienen `fuente="bbva_cuenta"`), así que se quedaban indefinidamente con `estado="new"` sin moverse a la tabla `gastos`. Síntoma reportado: login OK, scraper devuelve N movimientos, pero la tabla de gastos no se actualiza. Solución: tras `insert_movimientos_raw`, extraemos el set de `fuentes` distintas presentes en los dicts insertados y corremos conciliación + auto-importación por cada una. Esto generaliza también a futuros scrapers de BBVA Visa / BBVA Mastercard (mismo `banco="bbva"`, distintas `fuente`). Se aplica al path scheduled (`_run_one`) y al manual (`run_scraper_now`). Las filas previamente "atascadas" en `movimientos_raw` con estado='new' se procesarán en el próximo run.
+
 ## 0.3.56
 
 - **Log del addon con fecha y hora**: uvicorn ahora usa `log_config.json` con formato `YYYY-MM-DD HH:MM:SS` en cada línea del log del addon de HA. Antes no había timestamp y era imposible saber a qué hora había ocurrido cada evento.

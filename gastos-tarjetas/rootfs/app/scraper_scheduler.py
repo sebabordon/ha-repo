@@ -88,21 +88,27 @@ async def _run_scraper_job(banco: str, data_dir: str) -> None:
             logger.warning("[scheduler] %s terminó con error: %s", banco, result.error)
             return
 
+        emitted_fuentes: set[str] = set()
         if result.movimientos:
             dicts = [m.to_dict() for m in result.movimientos]
             count = insert_movimientos_raw(dicts)
-            logger.info("[scheduler] %s: %d movimientos insertados.", banco, count)
+            emitted_fuentes = {d["fuente"] for d in dicts if d.get("fuente")}
+            logger.info("[scheduler] %s: %d movimientos insertados (fuentes=%s).",
+                        banco, count, sorted(emitted_fuentes))
         else:
             logger.info("[scheduler] %s: sin movimientos nuevos.", banco)
 
-        conc = run_conciliation(fuente=banco)
-        logger.info("[scheduler] Conciliación %s: %s", banco, conc)
-
-        # Auto-importar los movimientos que no matchearon con ningún PDF
+        # Conciliar y auto-importar por CADA fuente emitida.  El "banco" es la
+        # clave del scraper (ej. "bbva") pero los movimientos pueden tener una
+        # fuente distinta (ej. "bbva_cuenta", "bbva_visa", "bbva_mc") según
+        # qué producto del banco generó el dato.
         from scrapers_db import auto_import_unmatched
-        imported = auto_import_unmatched(banco)
-        if imported:
-            logger.info("[scheduler] %s: %d movimientos auto-importados a gastos.", banco, imported)
+        for f in (emitted_fuentes or {banco}):
+            conc = run_conciliation(fuente=f)
+            logger.info("[scheduler] Conciliación %s: %s", f, conc)
+            imported = auto_import_unmatched(f)
+            if imported:
+                logger.info("[scheduler] %s: %d movimientos auto-importados a gastos.", f, imported)
 
     finally:
         _user_data_dir.reset(token)
@@ -200,22 +206,32 @@ async def run_scraper_now(banco: str, data_dir: str | None = None) -> dict:
         return {"ok": False, "error": result.error, "session_expired": result.session_expired}
 
     inserted = 0
+    emitted_fuentes: set[str] = set()
     if result.movimientos:
         dicts    = [m.to_dict() for m in result.movimientos]
         inserted = insert_movimientos_raw(dicts)
+        emitted_fuentes = {d["fuente"] for d in dicts if d.get("fuente")}
 
-    conc = run_conciliation(fuente=banco)
-
-    # Auto-importar los que no matchearon
+    # Conciliar y auto-importar por CADA fuente emitida (no por el "banco"):
+    # bbva ejecuta el scraper pero los datos pueden ir a bbva_cuenta / bbva_visa
+    # / bbva_mc según el producto.  Sin esta unión, los movimientos quedaban
+    # atascados en movimientos_raw con estado='new' (la conciliación buscaba
+    # por fuente='bbva' y no encontraba nada).
     from scrapers_db import auto_import_unmatched
-    auto_imported = auto_import_unmatched(banco)
+    conc_agg = {"matched": 0, "unmatched": 0, "errors": 0}
+    auto_imported = 0
+    for f in (emitted_fuentes or {banco}):
+        c = run_conciliation(fuente=f)
+        for k in ("matched", "unmatched", "errors"):
+            conc_agg[k] += c.get(k, 0)
+        auto_imported += auto_import_unmatched(f)
 
     return {
         "ok":            True,
         "banco":         banco,
         "movimientos":   inserted,
         "auto_imported": auto_imported,
-        "conciliacion":  conc,
+        "conciliacion":  conc_agg,
         "saldos":        result.saldos,
         "timestamp":     datetime.utcnow().isoformat(),
     }
