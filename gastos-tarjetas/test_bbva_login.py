@@ -53,14 +53,32 @@ def make_driver() -> webdriver.Chrome:
     opts.add_argument("--disable-gpu")
     opts.add_argument("--window-size=1280,800")
     opts.add_argument(
-        "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     )
+    opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    opts.add_experimental_option("useAutomationExtension", False)
     if _USE_WDM:
-        # webdriver-manager descarga el chromedriver correcto para la versión de Chrome instalada
         service = Service(ChromeDriverManager().install())
-        return webdriver.Chrome(service=service, options=opts)
-    return webdriver.Chrome(options=opts)
+        driver = webdriver.Chrome(service=service, options=opts)
+    else:
+        driver = webdriver.Chrome(options=opts)
+    # CDP fingerprint overrides (mismo que base.py _create_driver)
+    try:
+        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined, configurable: true });
+                if (!window.chrome) { window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){}, app: {} }; }
+                Object.defineProperty(navigator, 'plugins', { get: () => { var p=[{name:'Chrome PDF Plugin',filename:'internal-pdf-viewer',description:'Portable Document Format'},{name:'Chrome PDF Viewer',filename:'mhjfbmdgcfjbbpaeojofohoefgiehjai',description:''},{name:'Native Client',filename:'internal-nacl-plugin',description:''}]; p.__proto__=PluginArray.prototype; return p; } });
+                try { Object.defineProperty(Notification,'permission',{get:()=>'default'}); } catch(e) {}
+                Object.defineProperty(navigator,'languages',{get:()=>['es-AR','es','en-US','en']});
+                Object.defineProperty(navigator,'platform',{get:()=>'Win32'});
+            """
+        })
+    except Exception:
+        pass
+    return driver
 
 
 def main() -> None:

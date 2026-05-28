@@ -39,7 +39,7 @@ _CHROMIUM_BIN    = os.environ.get("CHROMIUM_BIN",    "/usr/bin/chromium-browser"
 _CHROMEDRIVER_BIN = os.environ.get("CHROMEDRIVER_BIN", "/usr/bin/chromedriver")
 
 _UA = (
-    "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 "
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
@@ -142,6 +142,59 @@ class BaseScraper(ABC):
         driver = webdriver.Chrome(service=service, options=opts)
         driver.set_page_load_timeout(30)
         driver.implicitly_wait(0)   # usamos waits explícitos
+
+        # ── Parches de fingerprint via CDP ─────────────────────────────────────
+        # Akamai BotManager detecta automatización verificando propiedades del
+        # browser que difieren entre headless y un browser real.  Estas overrides
+        # se inyectan ANTES de que cargue cualquier página.
+        try:
+            driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                "source": """
+                    // 1. navigator.webdriver → undefined (ya cubierto por --disable-blink-features
+                    //    pero lo reforzamos por si acaso)
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined, configurable: true
+                    });
+                    // 2. window.chrome — ausente en headless; Akamai lo verifica
+                    if (!window.chrome) {
+                        window.chrome = {
+                            runtime: {},
+                            loadTimes: function() {},
+                            csi: function() {},
+                            app: {}
+                        };
+                    }
+                    // 3. navigator.plugins — headless tiene 0; simulamos algunos
+                    Object.defineProperty(navigator, 'plugins', {
+                        get: () => {
+                            var p = [
+                                {name:'Chrome PDF Plugin',filename:'internal-pdf-viewer',description:'Portable Document Format'},
+                                {name:'Chrome PDF Viewer', filename:'mhjfbmdgcfjbbpaeojofohoefgiehjai', description:''},
+                                {name:'Native Client',     filename:'internal-nacl-plugin',  description:''}
+                            ];
+                            p.__proto__ = PluginArray.prototype;
+                            return p;
+                        }
+                    });
+                    // 4. Notification.permission — headless devuelve 'denied'; cambiamos a 'default'
+                    try {
+                        Object.defineProperty(Notification, 'permission', {
+                            get: () => 'default'
+                        });
+                    } catch(e) {}
+                    // 5. navigator.languages — idioma de Argentina
+                    Object.defineProperty(navigator, 'languages', {
+                        get: () => ['es-AR', 'es', 'en-US', 'en']
+                    });
+                    // 6. navigator.platform — Windows (coherente con el User-Agent)
+                    Object.defineProperty(navigator, 'platform', {
+                        get: () => 'Win32'
+                    });
+                """
+            })
+        except Exception as _cdp_err:
+            pass   # si la versión de chromedriver no soporta CDP, ignoramos
+
         return driver
 
     # ── Sesión (cookies + localStorage) ──────────────────────────────────────

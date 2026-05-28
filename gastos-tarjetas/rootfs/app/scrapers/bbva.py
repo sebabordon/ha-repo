@@ -435,9 +435,10 @@ class BbvaScraper(BaseScraper):
 
         version_front  = self._extract_version_front(driver)
         cookies_akamai = self._driver_cookies(driver)
+        _abck_len = len(cookies_akamai.get("_abck", ""))
         logger.info(
-            "[bbva] Akamai cookies (%d): %s  |  versionFront: %s",
-            len(cookies_akamai), sorted(cookies_akamai.keys()), version_front,
+            "[bbva] Akamai cookies (%d): %s  |  versionFront: %s  |  _abck len=%d",
+            len(cookies_akamai), sorted(cookies_akamai.keys()), version_front, _abck_len,
         )
 
         # ── Paso 2: POST prelogin (vía fetch del browser, NO httpx) ───────────
