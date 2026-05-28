@@ -1,3 +1,11 @@
+## 0.3.64
+
+- **Fix signo BBVA cuenta — el `importe` viene firmado por la API**: el log diagnóstico de v0.3.63 reveló dos cosas: (1) BBVA NO devuelve `saldo` por movimiento en `/cliente/productos/cuentas/movimientos` (siempre `saldo=0,00`), por lo que la comparación de saldos es inútil; (2) BBVA SÍ devuelve `importe` firmado — negativo para egresos, positivo para ingresos. Antes mi código trataba "importe positivo" como ambiguo (caía al default `+1 egreso`), por lo que los ingresos del usuario se importaban con signo invertido. Fix: `_detect_sign` ahora confía en el signo del `importe` como fuente de verdad (segunda prioridad después de la `naturaleza` explícita que no existe en este endpoint). La comparación de saldos queda como tercer fallback defensivo.
+- **Diagnóstico mejorado**: el log ahora muestra el `importe` con signo (`importe=+10096673.65` o `importe=-8000000.00`) en lugar del valor absoluto, y la etiqueta `ingreso`/`egreso` en lugar de `sign=±1` para que sea más legible de un vistazo.
+- **Limpieza de gastos viejos con signo erróneo**: los gastos importados antes de v0.3.64 con signo invertido siguen en la tabla. Como el ✕ del UI marca el raw como `ignored` (sentinel anti-reimport), eso solo no alcanza para re-importar con el signo correcto. Dos opciones para limpiar:
+  - **Manual**: editar el monto del gasto en la UI principal cambiándole el signo (negativo si es ingreso).
+  - **Reset completo del scraper BBVA cuenta** vía SQL (perdés la categorización manual): `DELETE FROM gastos WHERE fuente='bbva_cuenta'; DELETE FROM movimientos_raw WHERE fuente='bbva_cuenta';` — luego correr el scraper de vuelta y se importan limpios con signo correcto.
+
 ## 0.3.63
 
 - **Fix detección de signo en movimientos BBVA — usar campos explícitos antes que diferencia de saldos**: la lógica anterior comparaba `saldo[i]` con `saldo[i+1]` para deducir si era ingreso/egreso, pero como el batch viene newest-first, el movimiento **más viejo** del batch no tiene `saldo[i+1]` para comparar — entonces siempre defaulteaba a egreso, incluso si era un ingreso. Síntoma: cuenta con 2 movimientos donde el más viejo era ingreso aparecía con signo invertido. **Nueva estrategia en `_detect_sign`** (en orden de confiabilidad):

@@ -669,22 +669,27 @@ class BbvaScraper(BaseScraper):
     @staticmethod
     def _detect_sign(mov: dict, mov_older: Optional[dict], importe_signed: float) -> tuple[int, str]:
         """
-        Detecta el signo de un movimiento BBVA.
+        Detecta el signo de un movimiento BBVA cuenta.
         Devuelve (sign, reason) donde sign ∈ {+1 egreso, -1 ingreso}.
 
-        Estrategia (en orden de confiabilidad):
-          1. Campo explícito de naturaleza/signo en la API (BBVA suele traer
-             alguno de estos: naturalezaMovimiento, naturaleza, signo, tipoSigno,
-             codigoSigno, "C"/"D" para crédito/débito).
-          2. Comparación de saldos: saldo_actual > saldo_anterior → ingreso.
-             Requiere que `mov_older` (el movimiento siguiente en el batch
-             newest-first, o sea el inmediatamente anterior en el tiempo) tenga
-             un campo saldo válido.
-          3. Signo del importe: si BBVA devuelve `importe` ya firmado
-             (negativo para egresos), respetar ese signo.
-          4. Default egreso (caso peor — sólo si todo lo demás falla).
+        Estrategia (en orden de confiabilidad, basada en datos reales del
+        endpoint `/cliente/productos/cuentas/movimientos`):
+
+          1. Campo explícito de naturaleza/signo en la API (defensa por si
+             futuras versiones de BBVA agregan uno: naturalezaMovimiento,
+             naturaleza, signo, etc.).
+          2. **`importe` firmado por la API** — fuente de verdad para este
+             endpoint: `importe<0` = egreso, `importe>0` = ingreso.
+             Confirmado experimentalmente (el log de v0.3.63 mostró importe
+             negativo para egresos y positivo para ingresos).
+          3. Comparación de saldos — para este endpoint NO sirve porque
+             BBVA devuelve `saldo=0` en cada movimiento (sólo expone el saldo
+             actual de la cuenta a nivel `cuentas`).  Lo dejamos por si en
+             algún momento BBVA empieza a devolverlo.
+          4. Default egreso (caso peor — sólo si importe es 0 y nada más
+             aplica, lo cual no debería ocurrir).
         """
-        # 1. Naturaleza / signo explícito
+        # 1. Naturaleza / signo explícito (defensa para futuros cambios)
         for k in ("naturalezaMovimiento", "naturaleza", "signo", "tipoSigno",
                   "codigoSigno", "tipoNaturaleza", "indicadorMovimiento"):
             v = mov.get(k)
@@ -696,26 +701,24 @@ class BbvaScraper(BaseScraper):
             if s in ("D", "DB", "DEBITO", "DÉBITO", "DEBIT", "-", "0", "E"):
                 return (+1, f"{k}={v}")
 
-        # 2. Comparación de saldos con el inmediatamente anterior en el tiempo
-        if mov_older is not None:
-            try:
-                saldo_actual = BbvaScraper._safe_parse_amount(mov.get("saldo"))
-                saldo_anterior = BbvaScraper._safe_parse_amount(mov_older.get("saldo"))
-                if saldo_actual is not None and saldo_anterior is not None:
-                    if saldo_actual > saldo_anterior:
-                        return (-1, "saldo↑")
-                    elif saldo_actual < saldo_anterior:
-                        return (+1, "saldo↓")
-            except Exception:
-                pass
-
-        # 3. Importe firmado por la API
+        # 2. **Importe firmado** — fuente de verdad para BBVA cuenta
         if importe_signed < 0:
             return (+1, "importe<0")
         if importe_signed > 0:
-            # Importe positivo es ambiguo (puede ser cualquiera).  En algunos
-            # endpoints BBVA usa importe>0 siempre.  No es señal confiable.
-            pass
+            return (-1, "importe>0")
+
+        # 3. Comparación de saldos (no aplica en BBVA cuenta porque saldo=0,
+        #    pero queda como fallback defensivo)
+        if mov_older is not None:
+            try:
+                saldo_actual   = BbvaScraper._safe_parse_amount(mov.get("saldo"))
+                saldo_anterior = BbvaScraper._safe_parse_amount(mov_older.get("saldo"))
+                if (saldo_actual is not None and saldo_anterior is not None
+                    and saldo_actual != saldo_anterior):
+                    return ((-1, "saldo↑") if saldo_actual > saldo_anterior
+                            else (+1, "saldo↓"))
+            except Exception:
+                pass
 
         # 4. Default
         return (+1, "default")
@@ -757,9 +760,10 @@ class BbvaScraper(BaseScraper):
             monto = importe_abs * sign
 
             if log_fn:
+                tag = "ingreso" if sign < 0 else "egreso"
                 log_fn(
-                    f"    mov fecha={fecha} importe={importe_abs:.2f} "
-                    f"saldo={mov.get('saldo')} → sign={sign:+d} ({reason})"
+                    f"    mov fecha={fecha} importe={importe_signed:+.2f} "
+                    f"saldo={mov.get('saldo')} → {tag} ({reason})"
                 )
 
             concepto = (mov.get("concepto") or "").strip()
