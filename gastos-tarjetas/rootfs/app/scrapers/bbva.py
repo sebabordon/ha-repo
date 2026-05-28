@@ -405,77 +405,60 @@ class BbvaScraper(BaseScraper):
                 f"[bbva] prelogin HTTP {pre['status']}: {pre['body'][:300]}"
             )
 
-        # ── Paso 3: parsear sessionIdLN y numeroClienteAltamira ───────────────
-        pre_result   = ((pre["json"] or {}).get("result") or {})
-        url_redirect = ""
-        for k in ("urlRedirect", "redirectUrl", "url", "redirect", "loginUrl", "callbackUrl"):
-            v = str(pre_result.get(k, "") or "")
-            if v and ("fnetcore" in v or "login" in v.lower()):
-                url_redirect = v
-                break
+        # ── Paso 3: validar loginOk y extraer authentication + numeroCliente ──
+        # La response real de prelogin (confirmada en producción) trae:
+        #   { loginOk, authentication, numeroClienteAltamira, codigoTipoIngreso, ... }
+        # El sessionIdLN del postlogin lo genera el frontend al navegar a
+        # loginClementeApp2.html (NO viene del servidor), así que dejamos al
+        # browser hacer ese paso por nosotros.
+        pre_result = ((pre["json"] or {}).get("result") or {})
 
-        logger.info(
-            "[bbva] url_redirect: %s",
-            url_redirect[:150] if url_redirect else "(no detectado)",
-        )
-
-        session_id     = ""
-        numero_cliente = ""
-
-        if url_redirect:
-            # Formato: /std/{numCliente}/{algo}/{dni}//{sessionId}
-            m = re.search(r"/std/(\d+)/\d+/\d+//([a-z0-9]+)", url_redirect)
-            if m:
-                numero_cliente = m.group(1)
-                session_id     = m.group(2)
-
-        # Fallback: buscar campos directos en el JSON
-        if not session_id:
-            session_id     = str(pre_result.get("sessionIdLN", "") or "")
-            numero_cliente = str(pre_result.get("numeroClienteAltamira", "") or "")
-
-        if not session_id:
+        if not pre_result.get("loginOk"):
             raise RuntimeError(
-                f"[bbva] prelogin OK pero no se pudo extraer sessionId. "
-                f"Campos en result: {list(pre_result.keys())}. "
-                f"Body: {pre['body'][:400]}"
+                f"[bbva] prelogin loginOk=false. Posibles credenciales inválidas. "
+                f"Body: {pre['body'][:300]}"
+            )
+
+        authentication = str(pre_result.get("authentication", "") or "")
+        numero_cliente = str(pre_result.get("numeroClienteAltamira", "") or "")
+
+        if not authentication or not numero_cliente:
+            raise RuntimeError(
+                f"[bbva] prelogin OK pero faltan datos (authentication o numeroClienteAltamira). "
+                f"Campos en result: {list(pre_result.keys())}"
             )
 
         logger.info(
-            "[bbva] sessionId (len=%d)  numeroCliente=%s",
-            len(session_id), numero_cliente,
+            "[bbva] authentication len=%d  numeroCliente=%s  marcaTipoUsuario=%s",
+            len(authentication), numero_cliente,
+            pre_result.get("marcaTipoUsuario", "?"),
         )
 
-        # ── Paso 4: POST postlogin ────────────────────────────────────────────
-        postlogin_payload = {
-            "documento": {
-                "tipoDocumento": {
-                    "codigoTipoDocumento": "0",
-                    "descripcionCorta": "",
-                    "descripcion": "",
-                },
-                "numeroDocumento": dni,
-                "genero": "",
-            },
-            "usuario":              "",
-            "claveDigital":         "",
-            "numeroClienteAltamira": numero_cliente,
-            "sessionIdLN":           session_id,
-        }
-
-        post = self._api_request(
-            driver, "/login/postlogin", method="POST", json_body=postlogin_payload,
+        # ── Paso 4: navegar a loginClementeApp2.html — el browser hace postlogin ──
+        # Patrón confirmado por HAR:
+        #   /fnetcore/loginClementeApp2.html?{authentication}=/std/{numCliente}/0/{dni}//{sessionIdLN}
+        # sessionIdLN lo genera el JS del frontend, así que lo dejamos vacío y
+        # confiamos en que la página lo complete antes de hacer postlogin.
+        clemente_url = (
+            f"https://online.bbva.com.ar/fnetcore/loginClementeApp2.html"
+            f"?{authentication}=/std/{numero_cliente}/0/{dni}/"
         )
-        logger.info("[bbva] postlogin HTTP %d  body=%s", post["status"], post["body"][:200])
+        logger.info("[bbva] navegando a loginClementeApp2 (len_url=%d)", len(clemente_url))
+        driver.get(clemente_url)
+        time.sleep(10)   # tiempo para que JS haga postlogin y se establezca la sesión
 
-        if post["status"] != 200:
-            raise RuntimeError(
-                f"[bbva] postlogin HTTP {post['status']}: {post['body'][:300]}"
-            )
+        post_nav_url = driver.current_url
+        logger.info("[bbva] URL tras loginClemente: %s", post_nav_url[:200])
+
+        post_cookies = self._driver_cookies(driver)
+        logger.info(
+            "[bbva] cookies tras loginClemente (%d): %s",
+            len(post_cookies), sorted(post_cookies.keys()),
+        )
 
         # ── Paso 5: verificar sesión con datosperfil ──────────────────────────
         perf = self._api_request(driver, "/cliente/datosperfil")
-        logger.info("[bbva] datosperfil HTTP %d", perf["status"])
+        logger.info("[bbva] datosperfil HTTP %d  body[:200]=%s", perf["status"], perf["body"][:200])
 
         if perf["status"] == 200 and perf["json"]:
             perfil = ((perf["json"].get("result") or {}).get("perfilCliente", {}))
@@ -484,8 +467,8 @@ class BbvaScraper(BaseScraper):
             return
 
         raise RuntimeError(
-            f"[bbva] datosperfil HTTP {perf['status']} tras prelogin+postlogin. "
-            f"postlogin body: {post['body'][:200]}. "
+            f"[bbva] datosperfil HTTP {perf['status']} tras loginClemente. "
+            f"URL actual: {post_nav_url[:150]}. "
             f"datosperfil body: {perf['body'][:200]}"
         )
 
