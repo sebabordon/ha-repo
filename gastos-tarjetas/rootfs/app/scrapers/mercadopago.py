@@ -365,17 +365,34 @@ class MercadoPagoScraper(BaseScraper):
         """
         Construye la descripción base sin sufijo de cuotas.
 
-        Prioridad (egresos, sign=+1):
-          1. point_of_interaction.business_info.sub_unit / unit  (QR/POS)
-          2. additional_info.items[0].title  (e-commerce; filtrado si es código técnico)
-          3. reason / description  (filtrado si es código técnico)
-          4. statement_descriptor
-          5. Etiqueta del tipo de operación
-          6. "MercadoPago"
-
-        Para ingresos (sign=-1): se antepone el nombre del pagador.
+        Reglas explícitas (primer match gana):
+          1. partition_transfer       → "Transferencia desde/hacia Reserva" según signo
+          2. account_money+transfer   → "Transferencia: {reason}"
+          3. account_money+regular    → reason directo (si no es código técnico)
+          4. Resto                    → lógica genérica: poi_name / merchant / reason /
+                                        stmt_desc / op_label / "MercadoPago"
         """
-        # ── Nombre del pagador (solo para ingresos) ────────────────────────────
+        pay_type    = p.get("payment_type_id", "")
+        op_type     = p.get("operation_type", "")
+        _raw_reason = (p.get("reason") or p.get("description") or "").strip()
+
+        # ── Regla 1: partition_transfer ────────────────────────────────────────
+        if op_type == "partition_transfer":
+            return "Transferencia desde Reserva" if sign == -1 else "Transferencia hacia Reserva"
+
+        # ── Regla 2: transferencia de dinero entre cuentas ─────────────────────
+        if pay_type == "account_money" and op_type == "money_transfer":
+            return f"Transferencia: {_raw_reason}" if _raw_reason else "Transferencia"
+
+        # ── Regla 3: pago regular con billetera → reason directo ───────────────
+        if pay_type == "account_money" and op_type == "regular_payment":
+            if _raw_reason and _raw_reason not in _TECHNICAL_CODES:
+                return _raw_reason
+            # reason vacío o código técnico → caer a lógica genérica abajo
+
+        # ── Lógica genérica para otros tipos (QR/POS, e-commerce, etc.) ────────
+
+        # Nombre del pagador (solo para ingresos no cubiertos por reglas anteriores)
         payer_name = ""
         if sign == -1:
             payer = p.get("payer") or {}
@@ -384,7 +401,7 @@ class MercadoPagoScraper(BaseScraper):
             nick  = (payer.get("nickname")   or "").strip()
             payer_name = f"{first} {last}".strip() or nick
 
-        # ── Nombre del negocio desde el punto de interacción (QR/POS) ─────────
+        # Nombre del negocio desde el punto de interacción (QR/POS)
         poi_name = ""
         try:
             biz      = (p.get("point_of_interaction") or {}).get("business_info") or {}
@@ -392,8 +409,7 @@ class MercadoPagoScraper(BaseScraper):
         except Exception:
             pass
 
-        # ── Nombre del ítem en additional_info (e-commerce / link de pago) ────
-        # Filtrar si es un código técnico de la API (ej. "debit_card", "checkout_on")
+        # Nombre del ítem en additional_info (filtrar códigos técnicos)
         merchant = ""
         try:
             items = (p.get("additional_info") or {}).get("items") or []
@@ -404,15 +420,13 @@ class MercadoPagoScraper(BaseScraper):
         except Exception:
             pass
 
-        # ── Razón textual del pago ─────────────────────────────────────────────
-        # Descartar si es un código técnico (sin espacios, ej. "checkout_on")
-        _raw_reason = (p.get("reason") or p.get("description") or "").strip()
+        # Razón textual (descartar si es código técnico)
         reason = _raw_reason if (" " in _raw_reason and _raw_reason not in _TECHNICAL_CODES) else ""
 
-        # ── Descriptor en extracto bancario (fallback adicional) ───────────────
+        # Descriptor en extracto bancario
         stmt_desc = (p.get("statement_descriptor") or "").strip()
 
-        # ── Etiqueta legible del tipo de operación ─────────────────────────────
+        # Etiqueta del tipo de operación
         op_label = {
             "regular_payment":    "Pago",
             "money_transfer":     "Transferencia",
@@ -425,32 +439,26 @@ class MercadoPagoScraper(BaseScraper):
             "money_outflows":     "Transferencia saliente",
             "money_release":      "Liberación de fondos",
             "partition_transfer": "Transferencia interna",
-        }.get(p.get("operation_type", ""), "")
+        }.get(op_type, "")
 
-        # ── Para ingresos: anteponer el nombre del pagador ─────────────────────
+        # Para ingresos: anteponer nombre del pagador
         if payer_name:
             extra = poi_name or merchant or reason or stmt_desc or op_label or ""
-            if extra:
-                return f"{payer_name} — {extra}"
-            return payer_name
+            return f"{payer_name} — {extra}" if extra else payer_name
 
-        # ── Para egresos: mejor nombre comercial disponible ────────────────────
+        # Para egresos: mejor nombre comercial disponible
         best_name = poi_name or merchant or ""
-
         if best_name and reason and best_name.lower() not in reason.lower():
-            base = f"{best_name} — {reason}"
-        elif best_name:
-            base = best_name
-        elif reason:
-            base = reason
-        elif stmt_desc:
-            base = stmt_desc
-        elif op_label:
-            base = op_label
-        else:
-            base = "MercadoPago"
-
-        return base
+            return f"{best_name} — {reason}"
+        if best_name:
+            return best_name
+        if reason:
+            return reason
+        if stmt_desc:
+            return stmt_desc
+        if op_label:
+            return op_label
+        return "MercadoPago"
 
     def _build_description(self, p: dict, sign: int = +1) -> str:
         """Descripción completa; agrega sufijo "(N cuotas)" si aplica."""

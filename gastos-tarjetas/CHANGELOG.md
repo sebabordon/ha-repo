@@ -1,3 +1,7 @@
+## 0.3.35
+
+- **Scraper MP — reglas de descripción explícitas**: `_build_description_base` ahora aplica reglas fijas antes de la lógica genérica: (1) `partition_transfer` → "Transferencia desde Reserva" (ingreso) o "Transferencia hacia Reserva" (egreso); (2) `account_money + money_transfer` → "Transferencia: {reason}" (ej. "Transferencia: Varios"); (3) `account_money + regular_payment` → `reason` directo (ej. "Merpago*grupolarg", "Express av dorrego 851"). El resto sigue con la lógica genérica (poi_name → merchant → reason → stmt_desc → op_label).
+
 ## 0.3.34
 
 - **Fix scraper MP — `partition_transfer` signo incorrecto**: MP devuelve este tipo de pago en ambas queries (`payer.id` Y `collector.id`) con el mismo `user_id` en ambos lados. La query de `payer.id` lo capturaba primero como egreso (+), y la de `collector.id` lo saltaba por deduplicación. Ahora se salta en la query de payer (sign=+1) y se captura únicamente en la de collector (sign=−1), resultando en ingreso correcto. Confirmado con el caso "Dinero retirado de Guita" ($101.887,54).
