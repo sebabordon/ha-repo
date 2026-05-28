@@ -1,3 +1,11 @@
+## 0.3.52
+
+- **UI: toggle de tamaño del gráfico mensual en la página principal**: botón ▾/▸/▴ en el título del gráfico "Movimientos ARS — mes a mes" que cicla entre normal, compacto (mitad de altura) y oculto. El estado se persiste en `localStorage` (clave `chart_home_mode` dentro de `ui_prefs`) y se restaura al recargar la página. También disponible como selector en la tab Interfaz → Preferencias para mayor comodidad.
+
+## 0.3.51
+
+- **Fix BBVA login — navegación a loginClementeApp2.html con URL completa vía JS**: en 0.3.50 navegábamos a la URL base (sin el token de authentication) para refrescar Akamai. Pero el servidor BBVA puede requerir el token de authentication en la URL para registrar la sesión server-side antes de aceptar el postlogin. Se cambia la navegación a usar `window.location.href = url_completa` (JS, no `driver.get`) con el token de authentication completo + sessionIdLN embebidos. `window.location.href` puede manejar URLs largas con `==SLASH==` más robustamente que el comando WebDriver `get`. Fallback: si la navegación JS falla, navega a la URL base. Se genera `sessionIdLN` antes de construir la URL (para poder ponerlo en la URL y usarlo en postlogin).
+
 ## 0.3.50
 
 - **Fix BBVA postlogin statusCode:500 — navegar a loginClementeApp2.html (sin query string) para refrescar Akamai**: postlogin devolvía HTTP 200 con `statusCode:500 "Esta transacción no puede ser realizada"` porque era llamado desde el contexto de `login/index.html` — el mismo contexto de prelogin. El servidor BBVA (o Akamai) espera que postlogin venga de `loginClementeApp2.html` (que es la página a la que navega el browser real entre prelogin y postlogin). Dos efectos de esa navegación: (1) el `_abck` de Akamai se actualiza con los datos del sensor de esa nueva página; (2) el header `Referer` del fetch de postlogin apunta a `loginClementeApp2.html`. Solución: antes de generar el sessionIdLN y llamar postlogin, navegamos a `https://online.bbva.com.ar/fnetcore/loginClementeApp2.html` **sin** query string (URL corta, sin el token de authentication de 350+ chars que crasheaba el renderer headless). Esperamos hasta 12 s a que `_abck` sea actualizado (largo > 100 chars), luego llamamos postlogin desde ese contexto.

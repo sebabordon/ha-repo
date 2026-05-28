@@ -86,8 +86,28 @@ body {
   margin-bottom: .75rem;
   text-transform: uppercase;
   letter-spacing: .04em;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
 }
+.chart-toggle-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: .1rem .4rem;
+  font-size: .8rem;
+  cursor: pointer;
+  color: #777;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.chart-toggle-btn:hover { background: #f0f0f0; color: #333; }
 #monthly-chart { max-height: 260px; }
+.chart-card--compact #monthly-chart { max-height: 130px; }
+.chart-card--hidden { padding-bottom: .75rem; margin-bottom: .9rem; }
+.chart-card--hidden #monthly-chart { display: none; }
+.chart-card--hidden .chart-title { margin-bottom: 0; }
 
 /* ── Tabs ────────────────────────────────────────────────────────────────────*/
 

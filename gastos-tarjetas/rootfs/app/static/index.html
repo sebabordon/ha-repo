@@ -32,8 +32,11 @@
   <main class="container">
 
     <!-- Monthly overview chart (always visible) -->
-    <div class="chart-card">
-      <div class="chart-title">Movimientos ARS — mes a mes</div>
+    <div class="chart-card" id="home-chart-card">
+      <div class="chart-title">
+        Movimientos ARS — mes a mes
+        <button class="chart-toggle-btn" id="home-chart-toggle" onclick="toggleChartMode()" title="Alternar tamaño del gráfico"></button>
+      </div>
       <canvas id="monthly-chart"></canvas>
     </div>
 
@@ -501,6 +504,20 @@
             <div class="ui-pref-controls">
               <input type="range" id="ui-font-size" min="12" max="17" step="1" oninput="syncFontSize()">
               <span id="ui-font-size-val" class="ui-font-size-val">14px</span>
+            </div>
+          </div>
+
+          <div class="ui-pref-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Gráfico mensual (inicio)</span>
+              <span class="ui-color-desc">tamaño del gráfico de movimientos en la página principal</span>
+            </div>
+            <div class="ui-pref-controls">
+              <select id="ui-chart-home-mode">
+                <option value="normal">Normal</option>
+                <option value="compact">Compacto (mitad)</option>
+                <option value="hidden">Oculto</option>
+              </select>
             </div>
           </div>
 

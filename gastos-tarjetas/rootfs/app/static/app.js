@@ -17,6 +17,7 @@ const UI_PREF_DEFAULTS = {
   venc_show_proximos: true,
   venc_show_rg5617:   true,
   venc_show_pdf_ref:  true,
+  chart_home_mode:    "normal",   // "normal" | "compact" | "hidden"
 };
 
 function getUiPref(key) {
@@ -44,6 +45,35 @@ function applyUiPrefs() {
   const monSel = document.getElementById("cf-moneda");
   if (mSel)   mSel.value   = getUiPref("graf_meses");
   if (monSel) monSel.value = getUiPref("graf_moneda");
+  // Home chart size
+  _applyChartMode(getUiPref("chart_home_mode"));
+}
+
+const _CHART_MODE_CYCLE  = ["normal", "compact", "hidden"];
+const _CHART_MODE_LABELS = { normal: "▾", compact: "▸", hidden: "▴" };
+const _CHART_MODE_TITLES = { normal: "Compactar gráfico", compact: "Ocultar gráfico", hidden: "Mostrar gráfico" };
+
+function _applyChartMode(mode) {
+  const card = document.getElementById("home-chart-card");
+  const btn  = document.getElementById("home-chart-toggle");
+  if (!card) return;
+  card.classList.remove("chart-card--compact", "chart-card--hidden");
+  if (mode === "compact") card.classList.add("chart-card--compact");
+  if (mode === "hidden")  card.classList.add("chart-card--hidden");
+  if (btn) {
+    btn.textContent = _CHART_MODE_LABELS[mode] || "▾";
+    btn.title       = _CHART_MODE_TITLES[mode] || "";
+  }
+}
+
+function toggleChartMode() {
+  const current = getUiPref("chart_home_mode");
+  const idx     = _CHART_MODE_CYCLE.indexOf(current);
+  const next    = _CHART_MODE_CYCLE[(idx + 1) % _CHART_MODE_CYCLE.length];
+  const stored  = JSON.parse(localStorage.getItem("ui_prefs") || "{}");
+  stored.chart_home_mode = next;
+  localStorage.setItem("ui_prefs", JSON.stringify(stored));
+  _applyChartMode(next);
 }
 
 applyUiColors();
@@ -180,6 +210,7 @@ function renderUiSettings() {
   setChk("ui-venc-show-proximos", p.venc_show_proximos);
   setChk("ui-venc-show-rg5617",   p.venc_show_rg5617);
   setChk("ui-venc-show-pdf-ref",  p.venc_show_pdf_ref);
+  setVal("ui-chart-home-mode",    p.chart_home_mode);
   _updateUiPreview();
 }
 
@@ -227,6 +258,7 @@ function _getUiPrefInputs() {
     venc_show_proximos: chk("ui-venc-show-proximos", true),
     venc_show_rg5617:   chk("ui-venc-show-rg5617",   true),
     venc_show_pdf_ref:  chk("ui-venc-show-pdf-ref",  true),
+    chart_home_mode:    sel("ui-chart-home-mode",    UI_PREF_DEFAULTS.chart_home_mode),
   };
 }
 
@@ -247,6 +279,7 @@ function saveUiSettings() {
   localStorage.setItem("ui_prefs",  JSON.stringify(p));
   applyUiColors();
   applyUiPrefs();
+  _applyChartMode(p.chart_home_mode);
   loadVencimientos();   // refresh widget with new thresholds & visibility prefs
   showToast("Configuración guardada.", "ok", 2500);
 }
