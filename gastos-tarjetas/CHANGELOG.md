@@ -1,3 +1,8 @@
+## 0.3.38
+
+- **Scraper BBVA — implementación inicial de cuenta corriente/ahorro**: reemplaza el stub anterior con un scraper funcional usando un enfoque híbrido Selenium + httpx. Selenium realiza el login en la SPA (micro-frontend React); httpx hace todas las llamadas a la API REST (`https://online.bbva.com.ar/fnetcore/servicios/`) usando las cookies de sesión generadas por el login. Los movimientos se obtienen paginados de `/cliente/productos/cuentas/movimientos` (10 por página) dentro del rango de fechas configurado. El signo de cada movimiento (ingreso/egreso) se deduce comparando el saldo consecutivo en el array newest-first que devuelve la API.
+- **Config BBVA — campos corregidos y ampliados**: `usuario` ahora está etiquetado como "Número de DNI", `tercer_dato` como "Usuario BBVA" (antes decía incorrectamente "dato estático de seguridad / apellido materno"), y se agrega campo opcional `dias` (días hacia atrás a consultar, default 60) igual que MercadoPago.
+
 ## 0.3.37
 
 - **Fix scraper MP — pagos recientes no aparecían**: el filtro `status=approved` en la API excluía pagos con tarjeta prepaga que aún están en estado `in_process` o `pending` (el ciclo de aprobación puede tardar minutos/horas después de la transacción). Ahora se consulta sin filtro de status y se descartan en código solo los que definitivamente no ocurrieron: `rejected`, `cancelled`, `charged_back`, `refunded`. El log del run muestra cuántos se omitieron por cada motivo.

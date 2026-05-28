@@ -21,8 +21,9 @@ Formato del JSON:
       "bbva": {
         "enabled": false,
         "usuario": "12345678",
+        "tercer_dato": "mi_usuario_bbva",
         "password": "...",
-        "tercer_dato": "APELLIDO",
+        "dias": "60",
         "schedule": "07:15"
       },
       ...
@@ -62,10 +63,19 @@ BANKS: dict[str, dict] = {
         "nombre":   "BBVA Argentina",
         "schedule": "07:15",
         "campos": [
-            {"key": "usuario",     "label": "Usuario",        "type": "text",     "required": True},
-            {"key": "password",    "label": "Contraseña",     "type": "password", "required": True},
-            {"key": "tercer_dato", "label": "Tercer dato",    "type": "text",     "required": False,
-             "hint": "Dato estático de seguridad (ej. apellido materno)"},
+            {"key": "usuario",     "label": "Número de DNI",       "type": "text",     "required": True,
+             "hint": "Solo el número, sin puntos (ej. 12345678)"},
+            {"key": "tercer_dato", "label": "Usuario BBVA",        "type": "text",     "required": True,
+             "hint": "El nombre de usuario que configuraste en homebanking (no el DNI)"},
+            {"key": "password",    "label": "Contraseña",          "type": "password", "required": True},
+            {
+                "key":         "dias",
+                "label":       "Días a consultar",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "60",
+                "hint":        "1 = solo hoy, 2 = hoy y ayer, N = últimos N días (default: 60)",
+            },
         ],
     },
     "galicia": {
