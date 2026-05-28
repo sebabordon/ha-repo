@@ -41,6 +41,8 @@ Detección de signo (importe siempre positivo en la API):
 import json as _json
 import logging
 import re
+import secrets
+import string
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -65,6 +67,13 @@ _VERSION_FRONT_FALLBACK = "20260325.1526"
 def _ts() -> str:
     """Cache-buster en milisegundos, igual que el frontend de BBVA."""
     return str(int(time.time() * 1000))
+
+
+_SESSION_ID_LN_ALPHABET = string.ascii_lowercase + string.digits
+
+def _make_session_id_ln() -> str:
+    """Genera sessionIdLN de 128 chars [a-z0-9], igual al que produce el JS de loginClementeApp2."""
+    return ''.join(secrets.choice(_SESSION_ID_LN_ALPHABET) for _ in range(128))
 
 
 class BbvaScraper(BaseScraper):
@@ -351,9 +360,12 @@ class BbvaScraper(BaseScraper):
             Respuesta 200: JSON con redirect URL que codifica sessionIdLN y
             numeroClienteAltamira.
 
-          Paso 3 — postlogin:
+          Paso 3 — postlogin directo:
+            Genera sessionIdLN aleatorio (128 chars [a-z0-9]).
             POST /login/postlogin con { numeroClienteAltamira, sessionIdLN }.
             Establece las cookies de sesión definitivas (jsessionid, etc.).
+            No se navega a loginClementeApp2.html porque la URL con el token
+            authentication crashea headless Chromium.
 
           Paso 4 — verificar:
             GET /cliente/datosperfil con las cookies combinadas.
@@ -434,27 +446,37 @@ class BbvaScraper(BaseScraper):
             pre_result.get("marcaTipoUsuario", "?"),
         )
 
-        # ── Paso 4: navegar a loginClementeApp2.html — el browser hace postlogin ──
-        # Patrón confirmado por HAR:
-        #   /fnetcore/loginClementeApp2.html?{authentication}=/std/{numCliente}/0/{dni}//{sessionIdLN}
-        # sessionIdLN lo genera el JS del frontend, así que lo dejamos vacío y
-        # confiamos en que la página lo complete antes de hacer postlogin.
-        clemente_url = (
-            f"https://online.bbva.com.ar/fnetcore/loginClementeApp2.html"
-            f"?{authentication}=/std/{numero_cliente}/0/{dni}/"
+        # ── Paso 4: postlogin directo (sin navegar a loginClementeApp2.html) ────
+        # Confirmado por HAR: postlogin solo requiere numeroClienteAltamira +
+        # sessionIdLN (128 chars [a-z0-9] aleatorio que el JS del frontend genera).
+        # Navegar a loginClementeApp2.html crashea el tab de Chromium headless
+        # porque la URL contiene el token authentication (~200 chars con ==SLASH==,
+        # +, = que confunden al parser de URLs del renderer).
+        session_id_ln = _make_session_id_ln()
+        postlogin_payload = {
+            "documento": {
+                "tipoDocumento": {
+                    "codigoTipoDocumento": "0",
+                    "descripcionCorta": "",
+                    "descripcion": "",
+                },
+                "numeroDocumento": dni,
+                "genero": "",
+            },
+            "usuario":               "",
+            "claveDigital":          "",
+            "numeroClienteAltamira": numero_cliente,
+            "sessionIdLN":           session_id_ln,
+        }
+        logger.info("[bbva] postlogin (sessionIdLN[:16]=%s…)", session_id_ln[:16])
+        post = self._api_request(
+            driver, "/login/postlogin", method="POST", json_body=postlogin_payload,
         )
-        logger.info("[bbva] navegando a loginClementeApp2 (len_url=%d)", len(clemente_url))
-        driver.get(clemente_url)
-        time.sleep(10)   # tiempo para que JS haga postlogin y se establezca la sesión
-
-        post_nav_url = driver.current_url
-        logger.info("[bbva] URL tras loginClemente: %s", post_nav_url[:200])
-
-        post_cookies = self._driver_cookies(driver)
-        logger.info(
-            "[bbva] cookies tras loginClemente (%d): %s",
-            len(post_cookies), sorted(post_cookies.keys()),
-        )
+        logger.info("[bbva] postlogin HTTP %d  body[:200]=%s", post["status"], post["body"][:200])
+        if post["status"] != 200:
+            raise RuntimeError(
+                f"[bbva] postlogin HTTP {post['status']}: {post['body'][:300]}"
+            )
 
         # ── Paso 5: verificar sesión con datosperfil ──────────────────────────
         perf = self._api_request(driver, "/cliente/datosperfil")
