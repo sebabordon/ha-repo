@@ -1,3 +1,7 @@
+## 0.3.40
+
+- **Fix BBVA login — URL correcta del formulario**: el scraper navegaba a `www.bbva.com.ar/personas/home.html` (página pública) pero el formulario de homebanking está en `https://online.bbva.com.ar/fnetcore/login/index.html`. Causa raíz confirmada por análisis del HAR del login completo. Se corrige `_LOGIN_URL` y `login_origin` al dominio `online.bbva.com.ar`. Los selectores `input#documentNumberInput`, `input#username` e `input[type='password']` quedan confirmados por la telemetría del HAR. El POST de login va a `/fnetcore/servicios/login/prelogin` con `claveDigital`; Akamai Bot Manager corre en background vía JS y Selenium lo maneja transparentemente.
+
 ## 0.3.39
 
 - **Fix BBVA login — detección de iframe y diagnóstico**: `input#documentNumberInput` no se encontraba porque el formulario de login de BBVA está dentro de un iframe (patrón habitual en SPAs). Se agrega `_find_across_frames()` que prueba el frame principal y luego cada iframe del DOM, dejando el contexto enfocado en el iframe correcto para las interacciones siguientes. Se agregan logs de diagnóstico (`[bbva-diag]`) que emiten título, URL, todos los inputs (id/type/name/placeholder) e iframes encontrados — visibles en Supervisión → Add-ons → Gastos → Log. El wait inicial se extiende a 6 s para dar tiempo al lazy-loading de React. Se agregan listas de selectores con fallbacks para DNI, usuario y contraseña.

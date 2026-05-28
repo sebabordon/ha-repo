@@ -34,7 +34,7 @@ from .base import BaseScraper, MovimientoRaw, ScraperResult
 
 logger = logging.getLogger(__name__)
 
-_LOGIN_URL = "https://www.bbva.com.ar/personas/home.html"
+_LOGIN_URL = "https://online.bbva.com.ar/fnetcore/login/index.html"
 _API_BASE  = "https://online.bbva.com.ar/fnetcore/servicios"
 
 # Argentina — sin horario de verano
@@ -51,32 +51,32 @@ _HEADERS = {
     "Referer":          "https://www.bbva.com.ar/",
 }
 
-# Selectores de DNI — en orden de probabilidad
+# ── Selectores del formulario de login (confirmados por HAR bbvalogin.har) ───
+# Login page: https://online.bbva.com.ar/fnetcore/login/index.html
+# Campos en el form: documentNumberInput, username, password (claveDigital)
+# Dynatrace reporta interacciones KU53=username y "password"=password
+
 _DNI_SELECTORS = [
-    "input#documentNumberInput",
+    "input#documentNumberInput",          # confirmado por HTML de login
     "input[name='documentNumber']",
     "input[id*='document' i]:not([type='hidden'])",
-    "input[id*='dni' i]:not([type='hidden'])",
     "input[placeholder*='documento' i]",
-    "input[placeholder*='DNI' i]",
     "input[type='tel']",
     "input[type='number']",
-    "input[type='text']",  # último recurso: primer input de texto
+    "input[type='text']",                  # último recurso
 ]
 
-# Selectores de usuario BBVA
 _USER_SELECTORS = [
-    "input#username",
+    "input#username",                      # confirmado por telemetría HAR
     "input[name='username']",
     "input[autocomplete='username']",
     "input[placeholder*='usuario' i]",
-    "input[id*='user' i]:not([type='hidden'])",
 ]
 
-# Selectores de contraseña
 _PASS_SELECTORS = [
-    "input[type='password']",
+    "input[type='password']",             # confirmado por telemetría HAR
     "input[name='password']",
+    "input[name='claveDigital']",         # nombre interno en el API prelogin
     "input[autocomplete='current-password']",
 ]
 
@@ -89,7 +89,7 @@ def _ts() -> str:
 class BbvaScraper(BaseScraper):
     fuente       = "bbva"
     nombre       = "BBVA Argentina"
-    login_origin = "https://www.bbva.com.ar"
+    login_origin = "https://online.bbva.com.ar"
 
     # ── Helpers internos ──────────────────────────────────────────────────────
 
@@ -213,14 +213,21 @@ class BbvaScraper(BaseScraper):
         """
         Login en la SPA de BBVA con Selenium.
 
-        BBVA muestra un formulario en (al menos) dos pasos:
-          Paso 1: tipo de documento (DNI) + número de documento → Continuar
-          Paso 2: nombre de usuario + contraseña → Ingresar
+        URL real del login (confirmada por HAR):
+          https://online.bbva.com.ar/fnetcore/login/index.html
 
-        El formulario puede estar en un iframe (patrón habitual en SPAs BBVA).
-        `_find_across_frames` detecta y cambia al iframe correcto automáticamente.
-        Si el login falla, se emite diagnóstico completo al log (inputs, iframes,
-        body HTML) para facilitar la calibración de selectores.
+        Formulario de un solo paso:
+          - input#documentNumberInput  → DNI (config["usuario"])
+          - input#username             → usuario BBVA (config["tercer_dato"])
+          - input[type="password"]     → contraseña (config["password"])
+
+        El submit dispara: POST /fnetcore/servicios/login/prelogin con los
+        campos en JSON (claveDigital = contraseña). Akamai Bot Manager corre
+        en background y setea cookies de anti-bot automáticamente al ejecutar
+        el JS en el browser real (no interfiere con Selenium).
+
+        Después del submit se redirige a /fnetcore/#/initLogged/std y luego
+        a /fnetcore/#/globalposition (dashboard).
         """
         dni      = config["usuario"]
         username = config.get("tercer_dato", "")
