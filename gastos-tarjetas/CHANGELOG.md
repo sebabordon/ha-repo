@@ -1,3 +1,12 @@
+## 0.3.65
+
+- **Unificación del botón ✕ en "📦 Registros ingresados" — mismo comportamiento para todos los scrapers**: antes MercadoPago borraba definitivamente con un solo clic (porque tenía dedup propio vía `payment_id`) mientras que AMEX/BBVA/Galicia hacían soft delete (marcaban como `ignored`). Eso confundía: el diálogo y la consecuencia eran distintos según el banco. Ahora con el dedup unificado de `insert_movimientos_raw` (v0.3.61) que mira todos los estados incluido `ignored`, el sentinel funciona para cualquier scraper. **Nueva regla única**:
+  - **1er ✕** sobre un registro (cualquier estado salvo `ignored`): soft delete → se borra el gasto vinculado si lo había, el raw queda como `ignored`. El scraper no lo va a reimportar.
+  - **2do ✕** sobre el mismo registro (ya en `ignored`): hard delete → la fila se borra de la DB. El scraper puede volver a importar esa transacción en el próximo run.
+  - **Entrada manual de /quick**: siempre hard delete (no tiene "reimport" posible).
+  - Tooltips y diálogos de confirmación actualizados para reflejar esto consistentemente en MP, AMEX, BBVA, Galicia, etc.
+- **Limpieza de archivos dev de BBVA**: eliminados `inject_bbva_session.py` y `test_bbva_login.py` (eran helpers de la etapa "API directa" / debugging local, ya no aplican con el login natural del browser de v0.3.55+). `.gitignore` actualizado para excluir `*_test.yaml`, `inject_*.py` y `test_*.py` y evitar que vuelvan a entrar al repo con credenciales reales.
+
 ## 0.3.64
 
 - **Fix signo BBVA cuenta — el `importe` viene firmado por la API**: el log diagnóstico de v0.3.63 reveló dos cosas: (1) BBVA NO devuelve `saldo` por movimiento en `/cliente/productos/cuentas/movimientos` (siempre `saldo=0,00`), por lo que la comparación de saldos es inútil; (2) BBVA SÍ devuelve `importe` firmado — negativo para egresos, positivo para ingresos. Antes mi código trataba "importe positivo" como ambiguo (caía al default `+1 egreso`), por lo que los ingresos del usuario se importaban con signo invertido. Fix: `_detect_sign` ahora confía en el signo del `importe` como fuente de verdad (segunda prioridad después de la `naturaleza` explícita que no existe en este endpoint). La comparación de saldos queda como tercer fallback defensivo.

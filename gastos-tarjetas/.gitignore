@@ -6,3 +6,6 @@ __pycache__/
 .DS_Store
 explore_*.py
 *_api.txt
+*_test.yaml
+inject_*.py
+test_*.py

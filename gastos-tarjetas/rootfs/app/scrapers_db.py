@@ -364,15 +364,22 @@ def delete_movimiento_raw(raw_id: int) -> dict:
     """
     Borra o ignora un movimiento_raw desde la UI del scraper.
 
-    - Entradas manuales /quick (raw_data contiene "manual_quick"):
-      se borran completamente. No tiene sentido guardar un sentinel para
-      algo que el usuario ingresó a mano.
+    Comportamiento UNIFICADO (todos los scrapers — MP, AMEX, BBVA, Galicia,
+    etc.) basado en el estado actual de la fila:
 
-    - Entradas del scraper:
-      se marcan como 'ignored' (soft delete). La fila queda como sentinel
-      para que el scraper no reimporte la misma transacción en el próximo run.
+    - Entrada manual de /quick (raw_data contiene "manual_quick"):
+      hard delete (el usuario la creó a mano, no tiene sentido bloquear
+      reimport — no existe "reimport" para entradas manuales).
 
-    Si el raw tenía estado='imported', también borra el gasto asociado.
+    - Entrada con estado='ignored':
+      hard delete (segundo ✕). Limpia el sentinel y permite que el scraper
+      vuelva a importar esa transacción en runs futuros.
+
+    - Cualquier otro estado (new/unmatched/matched/imported):
+      soft delete (primer ✕). Se marca como 'ignored', se borra el gasto
+      vinculado si lo había, y el dedup en `insert_movimientos_raw` impide
+      reimport en futuros runs (la fila ignored sirve de sentinel).
+
     Devuelve {'deleted_raw': bool, 'deleted_gasto': bool, 'gasto_id': int|None}.
     """
     with _conn() as conn:
@@ -389,7 +396,7 @@ def delete_movimiento_raw(raw_id: int) -> dict:
             conn.execute("DELETE FROM gastos WHERE id=?", (gasto_id,))
             deleted_gasto = True
 
-        # ¿Es entrada manual de /quick?
+        # Es entrada manual de /quick?
         is_manual_quick = False
         try:
             rd = json.loads(row["raw_data"]) if row["raw_data"] else {}
@@ -397,18 +404,12 @@ def delete_movimiento_raw(raw_id: int) -> dict:
         except Exception:
             pass
 
-        # MercadoPago tiene dedup propio vía payment_id en _get_existing_payment_ids,
-        # no necesita el sentinel 'ignored'. Un solo ✕ limpia completamente la fila
-        # y permite que el scraper vuelva a importar en el próximo run.
-        #
-        # AMEX / BBVA / Galicia dependen del sentinel 'ignored' (conciliation fallback)
-        # para no reimportar entradas eliminadas → soft delete ahí.
-        is_mp = row["fuente"] == "mercadopago"
-
-        if is_manual_quick or row["estado"] == "ignored" or is_mp:
+        if is_manual_quick or row["estado"] == "ignored":
+            # Hard delete: entrada manual, o segundo ✕ sobre un ignored
             conn.execute("DELETE FROM movimientos_raw WHERE id=?", (raw_id,))
         else:
-            # Soft delete: sentinel 'ignored' → scraper no reimporta (AMEX/BBVA/Galicia)
+            # Soft delete: sentinel 'ignored' impide reimport (el dedup en
+            # insert_movimientos_raw mira cualquier estado, incluido ignored)
             conn.execute(
                 "UPDATE movimientos_raw SET estado='ignored', gasto_id=NULL WHERE id=?",
                 (raw_id,),

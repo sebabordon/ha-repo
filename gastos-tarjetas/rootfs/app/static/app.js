@@ -3669,12 +3669,12 @@ async function _fetchScraperMovimientos(banco, el) {
       </span>`;
 
       const isIgnored   = r.estado === 'ignored';
-      const isMp        = banco === 'mercadopago';
+      // Comportamiento unificado en todos los scrapers (ver delete_movimiento_raw):
+      //   ignored → 2do ✕ borra definitivamente y permite reimport
+      //   otro    → 1er ✕ soft delete (gasto borrado, sentinel para no reimportar)
       const delTitle    = isIgnored
-        ? "Borrar definitivamente (quita el sentinel)"
-        : isMp
-          ? "Borrar (el scraper lo reimportará la próxima vez)"
-          : "Ignorar (el scraper no lo reimportará)";
+        ? "Borrar definitivamente (permite reimport)"
+        : "Ignorar (también borra el gasto vinculado, evita reimport)";
       const rowExtraClass = isIgnored ? " scraper-mov-row-ignored" : "";
       return `<div class="scraper-mov-row${rowExtraClass}" id="mov-row-${r.id}">
         ${fechaCell}
@@ -3690,15 +3690,12 @@ async function _fetchScraperMovimientos(banco, el) {
 }
 
 async function deleteMovimientoRaw(rawId, banco, isIgnored = false) {
-  const isMp = banco === 'mercadopago';
-  let msg;
-  if (isIgnored) {
-    msg = "¿Borrar definitivamente este registro?\nSe eliminará de la base de datos y el scraper podrá volver a importarlo.";
-  } else if (isMp) {
-    msg = "¿Borrar este registro?\nSi tiene un gasto vinculado también se borrará.\nEl scraper lo volverá a importar en el próximo run.";
-  } else {
-    msg = "¿Ignorar este registro?\nSi fue importado a gastos, también se borrará el gasto.\nEl scraper no lo volverá a importar.";
-  }
+  // Comportamiento unificado para todos los scrapers:
+  //   1er ✕ (estado != ignored): soft delete → gasto borrado, raw queda 'ignored' (no reimport).
+  //   2do ✕ (estado == ignored): hard delete → quita la fila, el scraper puede reimportar.
+  const msg = isIgnored
+    ? "¿Borrar definitivamente este registro?\nSe eliminará de la base de datos y el scraper podrá volver a importarlo."
+    : "¿Ignorar este registro?\nSi fue importado a gastos, también se borrará el gasto.\nEl scraper no lo volverá a importar (clic de nuevo en el ✕ para borrar el sentinel y permitir reimport).";
   if (!confirm(msg)) return;
   try {
     const res = await fetch(`${BASE}/api/scrapers/movimientos-raw/${rawId}`, { method: "DELETE" });
