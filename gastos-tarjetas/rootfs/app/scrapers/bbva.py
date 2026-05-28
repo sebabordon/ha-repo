@@ -511,25 +511,46 @@ class BbvaScraper(BaseScraper):
         # Solución: navegar a loginClementeApp2.html SIN query string (URL corta,
         # sin token de authentication → no crashea headless Chrome), esperar a
         # que Akamai actualice _abck, y luego llamar postlogin desde ese contexto.
-        # Navegamos a la URL BASE de loginClementeApp2 (sin el query string del token
-        # de authentication, que tiene ~350 chars y crashea el renderer headless).
-        # Objetivos: (1) Akamai actualiza _abck en este contexto de página; (2) el
-        # Referer que verá postlogin será loginClementeApp2.html (no login/index.html).
-        _clemente_base = "https://online.bbva.com.ar/fnetcore/loginClementeApp2.html"
-        logger.info("[bbva] navegando a loginClementeApp2 (sin query string, Akamai refresh)")
-        driver.get(_clemente_base)
-        # Esperar a que Akamai ejecute su sensor POST y actualice _abck (hasta 12 s)
+        # ── Paso 4a: navegar a loginClementeApp2.html para actualizar Akamai ────
+        # Akamai BotManager re-ejecuta sus scripts de sensor en cada navegación.
+        # Postlogin debe venir de ese contexto de página (Akamai `_abck` fresco
+        # + Referer correcto).  También el servidor BBVA puede requerir el GET a
+        # loginClementeApp2.html para registrar internamente la sesión previa al
+        # postlogin.
+        #
+        # Preferimos la URL COMPLETA (con el token de authentication) para que
+        # el servidor pueda validar la sesión; usamos window.location.href = url
+        # (en lugar de driver.get) porque es más resistente a crash del renderer.
+        # Fallback: URL base (sin token) si la navegación JS falla.
+        session_id_ln = _make_session_id_ln()
+        clemente_url_full = (
+            f"https://online.bbva.com.ar/fnetcore/loginClementeApp2.html"
+            f"?{authentication}=/std/{numero_cliente}/0/{dni}//{session_id_ln}"
+        )
+        clemente_url_base = "https://online.bbva.com.ar/fnetcore/loginClementeApp2.html"
+
+        # Intentar navegación JS con URL completa (el token de authentication
+        # no tiene slashes reales — usa ==SLASH== — por lo que driver.get falla
+        # pero window.location.href puede manejarlo mejor)
+        logger.info("[bbva] navegando a loginClementeApp2 vía JS (url len=%d)", len(clemente_url_full))
+        try:
+            driver.execute_script("window.location.href = arguments[0];", clemente_url_full)
+            _nav_ok = True
+        except Exception as _nav_err:
+            logger.info("[bbva] JS nav completo falló (%s), usando URL base", _nav_err)
+            driver.get(clemente_url_base)
+            _nav_ok = False
+
+        # Esperar a que Akamai actualice _abck (hasta 12 s)
         for _w in range(12):
             time.sleep(1)
             _ck2 = {c["name"]: c["value"] for c in driver.get_cookies()}
             if "_abck" in _ck2 and len(_ck2.get("_abck", "")) > 100:
-                logger.info("[bbva] loginClementeApp2 Akamai OK (abck len=%d) tras %ds",
-                            len(_ck2["_abck"]), _w + 1)
+                logger.info("[bbva] loginClementeApp2 Akamai OK (abck len=%d, full=%s) tras %ds",
+                            len(_ck2["_abck"]), _nav_ok, _w + 1)
                 break
         else:
-            logger.info("[bbva] loginClementeApp2: timeout esperando _abck")
-
-        session_id_ln = _make_session_id_ln()
+            logger.info("[bbva] loginClementeApp2: timeout esperando _abck (continuando)")
         postlogin_payload = {
             "documento": {
                 "tipoDocumento": {
