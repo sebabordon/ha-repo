@@ -378,6 +378,23 @@ class BbvaScraper(BaseScraper):
         username = config.get("tercer_dato", "")
         password = config["password"]
 
+        # ── Paso 0: limpiar cookies stale ─────────────────────────────────────
+        # Si venimos de un check_session que falló, hay cookies expiradas en el
+        # browser.  Si las dejamos, al cargar /login/index.html BBVA detecta la
+        # sesión vencida y redirige a /desconexion.html en lugar de mostrar el
+        # formulario → submit termina en desconexion y el login falla.
+        # delete_all_cookies() borra sólo las del dominio actual; si el driver
+        # está en about:blank navegamos primero a la raíz BBVA.
+        try:
+            cur = driver.current_url or ""
+            if "bbva.com.ar" not in cur:
+                driver.get("https://online.bbva.com.ar/")
+                time.sleep(1)
+            driver.delete_all_cookies()
+            logger.info("[bbva] cookies stale eliminadas antes del login")
+        except Exception as _ck_exc:
+            logger.info("[bbva] no se pudieron eliminar cookies stale: %s", _ck_exc)
+
         # ── Paso 1: cargar página y esperar Akamai+Adobe ──────────────────────
         logger.info("[bbva] cargando login page: %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
@@ -476,6 +493,13 @@ class BbvaScraper(BaseScraper):
                 raise RuntimeError(
                     f"[bbva] tras submit seguimos en /login/ (URL: {cur[:200]}). "
                     f"Posibles credenciales inválidas o captcha extra."
+                )
+            elif "desconexion" in cur or "logout" in cur:
+                raise RuntimeError(
+                    f"[bbva] tras submit el browser fue redirigido a desconexión "
+                    f"({cur[:200]}). BBVA detectó la sesión como vencida — "
+                    f"esto suele pasar si quedaron cookies stale, o si hubo "
+                    f"demasiados intentos seguidos.  Reintentar en unos minutos."
                 )
             else:
                 self._dump_page_state(driver)
