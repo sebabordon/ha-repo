@@ -437,26 +437,54 @@ class BbvaScraper(BaseScraper):
             raise RuntimeError("[bbva] no se encontró el botón submit del formulario")
 
         self._click_element(driver, submit_el)
-        logger.info("[bbva] submit clickeado — esperando navegación")
+        logger.info("[bbva] submit clickeado — esperando navegación a /fnetcore/")
 
-        # ── Paso 5: esperar redirect fuera de /login/ ─────────────────────────
+        # ── Paso 5: esperar a llegar a /fnetcore/ (NO a loginClementeApp2) ────
         # El browser navega: login/index.html → loginClementeApp2.html → /fnetcore/
-        # Tope: 30 s.  Si seguimos en /login/ tras eso, es un error (credenciales
-        # malas, captcha extra, o algún diálogo).
+        # `loginClementeApp2.html` es un paso intermedio donde el JS de BBVA
+        # llama postlogin y luego redirige a /fnetcore/.  En headless Chromium
+        # ese paso a veces se atasca (el JS no termina), pero el postlogin SÍ
+        # se ejecuta y las cookies de sesión quedan establecidas — entonces
+        # podemos navegar a /fnetcore/ manualmente.
+        from selenium.common.exceptions import TimeoutException
+
+        def _is_logged_in(d):
+            u = d.current_url or ""
+            return ("/fnetcore/" in u
+                    and "loginClementeApp2" not in u
+                    and "login/index" not in u)
+
         try:
-            WebDriverWait(driver, 30).until(
-                lambda d: "/login/" not in (d.current_url or "")
-            )
-        except Exception:
+            WebDriverWait(driver, 45).until(_is_logged_in)
+            logger.info("[bbva] navegación a /fnetcore/ OK — URL: %s",
+                        (driver.current_url or "")[:200])
+        except TimeoutException:
             cur = driver.current_url or ""
-            self._dump_page_state(driver)
-            raise RuntimeError(
-                f"[bbva] tras submit seguimos en login (URL: {cur[:200]}). "
-                f"Posibles credenciales inválidas o captcha extra."
-            )
+            logger.info("[bbva] timeout esperando /fnetcore/ — URL actual: %s", cur[:200])
+            if "loginClementeApp2" in cur:
+                # Atascado en el paso intermedio.  El postlogin probablemente ya
+                # corrió (cookies establecidas), pero el JS no llegó a redirigir.
+                # Forzamos la navegación a /fnetcore/.
+                logger.info("[bbva] stuck en loginClementeApp2 — navegando a /fnetcore/ manualmente")
+                try:
+                    driver.get("https://online.bbva.com.ar/fnetcore/")
+                    time.sleep(5)
+                except Exception as nav_exc:
+                    raise RuntimeError(f"[bbva] fallo navegando a /fnetcore/: {nav_exc}")
+            elif "/login/" in cur or "login/index" in cur:
+                self._dump_page_state(driver)
+                raise RuntimeError(
+                    f"[bbva] tras submit seguimos en /login/ (URL: {cur[:200]}). "
+                    f"Posibles credenciales inválidas o captcha extra."
+                )
+            else:
+                self._dump_page_state(driver)
+                raise RuntimeError(
+                    f"[bbva] tras submit URL inesperada: {cur[:200]}"
+                )
 
         post_url = driver.current_url or ""
-        logger.info("[bbva] navegación completada — URL actual: %s", post_url[:200])
+        logger.info("[bbva] URL final: %s", post_url[:200])
 
         # Pequeña pausa para que la app Angular complete su inicialización
         time.sleep(3)
