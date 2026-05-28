@@ -226,24 +226,39 @@ class MercadoPagoScraper(BaseScraper):
                 break
 
             for payment in results:
-                pid      = payment.get("id")
-                pay_type = payment.get("payment_type_id", "")
-                op_type  = payment.get("operation_type", "")
-                amount   = payment.get("transaction_amount", 0)
-                reason   = (payment.get("reason") or payment.get("description") or "")[:30]
+                pid        = payment.get("id")
+                pay_type   = payment.get("payment_type_id", "")
+                op_type    = payment.get("operation_type", "")
+                amount     = payment.get("transaction_amount", 0)
+                reason     = (payment.get("reason") or payment.get("description") or "")[:30]
+                payer_id   = (payment.get("payer") or {}).get("id", "?")
+                coll_id    = payment.get("collector_id", "?")
+
+                def _dbg(tag: str) -> None:
+                    if debug:
+                        log_fn(
+                            f"  [dbg] {tag:<12} id={pid} payer={payer_id} coll={coll_id}"
+                            f" type={pay_type} op={op_type} amt={amount:.2f} reason={reason}"
+                        )
 
                 # Excluir pagos con tarjeta de crédito: esos cargos ya aparecen
                 # en el resumen de la tarjeta y se importan vía PDF.
                 if pay_type == "credit_card":
                     cc_skipped += 1
-                    if debug:
-                        log_fn(f"  [dbg] OMITIDO-CC  id={pid} type={pay_type} op={op_type} amt={amount:.2f} reason={reason}")
+                    _dbg("OMITIDO-CC")
+                    continue
+
+                # partition_transfer: el mismo pago aparece en ambas queries (payer Y
+                # collector) porque MP lo asocia al mismo user_id en ambos lados.
+                # Saltearlo en la query de payer (sign=+1) y capturarlo solo en la de
+                # collector (sign=-1) para obtener el signo correcto (ingreso).
+                if op_type == "partition_transfer" and sign == +1:
+                    _dbg("DEFER-PT")
                     continue
 
                 if pid and pid in existing_ids:
                     skipped += 1
-                    if debug:
-                        log_fn(f"  [dbg] YA-EXISTE   id={pid} type={pay_type} op={op_type} amt={amount:.2f} reason={reason}")
+                    _dbg("YA-EXISTE")
                     continue
 
                 mov = self._payment_to_movimiento(payment, sign)
@@ -251,11 +266,9 @@ class MercadoPagoScraper(BaseScraper):
                     movs.append(mov)
                     if pid:
                         existing_ids.add(pid)
-                    if debug:
-                        log_fn(f"  [dbg] NUEVO       id={pid} type={pay_type} op={op_type} amt={amount:.2f} reason={reason}")
+                    _dbg("NUEVO")
                 else:
-                    if debug:
-                        log_fn(f"  [dbg] SIN-DATOS   id={pid} type={pay_type} op={op_type} amt={amount:.2f} reason={reason}")
+                    _dbg("SIN-DATOS")
 
             total  = data.get("paging", {}).get("total", 0)
             offset += len(results)

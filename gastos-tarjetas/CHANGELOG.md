@@ -1,3 +1,8 @@
+## 0.3.34
+
+- **Fix scraper MP — `partition_transfer` signo incorrecto**: MP devuelve este tipo de pago en ambas queries (`payer.id` Y `collector.id`) con el mismo `user_id` en ambos lados. La query de `payer.id` lo capturaba primero como egreso (+), y la de `collector.id` lo saltaba por deduplicación. Ahora se salta en la query de payer (sign=+1) y se captura únicamente en la de collector (sign=−1), resultando en ingreso correcto. Confirmado con el caso "Dinero retirado de Guita" ($101.887,54).
+- **Debug MP — payer_id y collector_id en log**: el log de debug ahora muestra `payer=` y `coll=` en cada línea para facilitar diagnóstico futuro de pagos con signo ambiguo. Nuevo tag `DEFER-PT` para partition_transfers diferidos.
+
 ## 0.3.33
 
 - **Fix debug log MP — salida real en el run log**: `logger.debug()` no aparece en el log del add-on de HA porque el handler raíz filtra en INFO. Se corrigió para usar `log_fn()` cuando `debug=True`, así los mensajes `[dbg] NUEVO/YA-EXISTE/OMITIDO-CC/SIN-DATOS` aparecen en el log del run (visible en el panel de scraper y en Supervisión → Add-ons → Gastos → Log). Se elimina el `logger.setLevel(DEBUG)` que no tenía efecto.
