@@ -1,3 +1,7 @@
+## 0.3.54
+
+- **Fix navbar sticky + alineación del toast**: la navbar superior no era `sticky`, así que al hacer scroll se iba con la página. El toast (`position: fixed; top: 52px`) asumía que la navbar seguía en su lugar, por lo que aparecía colgando 52px debajo del tope del viewport con un hueco vacío arriba. Se fija la navbar con `position: sticky; top: 0; z-index: 400` para que siempre esté visible, y en mobile el toast pasa a `top: 46px` para alinearse con la navbar de 46px de alto.
+
 ## 0.3.53
 
 - **Fix ícono del addon en la lista de addons de HA**: HA usa `icon.png` (128×128) para la lista y `logo.png` para la página de detalles. El addon solo tenía `logo.png`; se agrega `icon.png` generado a partir de `icono-sb.png`.
