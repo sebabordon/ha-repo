@@ -1,3 +1,13 @@
+## 0.4.3
+
+- **Botón "+ Crear cuenta" arriba a la derecha del tab**: lo movemos del final del listado al header del sub-tab Cuentas (flex `space-between` con el hint a la izquierda). En mobile el botón pasa abajo del hint a ancho completo.
+- **Tercera opción "PDF parser" en el modal de creación**: el radio de tipo ahora tiene 3 opciones:
+  - **Manual** → movimientos cargados a mano (sin cambios respecto a v0.4.2).
+  - **PDF parser** → cuenta auto sin scraper, alimentada solo por PDFs importados (esquema histórico de AMEX/BBVA MC/Visa/Galicia MC). Backend: `tipo=auto` sin `scraper_instance_id`.
+  - **Scraper** → cuenta auto con instancia de scraper asignada. Backend: `tipo=auto` con `scraper_instance_id` + `product_key`.
+- **Hint actualizado** en el header del tab explica los 3 tipos de un vistazo.
+- El combo de scraper solo aparece cuando elegís "Scraper" (antes aparecía con cualquier "Automática").
+
 ## 0.4.2
 
 - **Reubicación del botón "Crear cuenta"**: el botón estaba arriba del listado de cuentas en una `rules-header` (lo que parecía un banner superior). Lo movemos al final del listado como una "card" punteada `+ Crear cuenta` (más cerca de las cuentas existentes, menos visualmente intrusivo).

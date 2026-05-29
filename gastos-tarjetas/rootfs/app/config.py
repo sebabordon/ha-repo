@@ -1,6 +1,6 @@
 import os
 
-APP_VERSION = "0.4.2"
+APP_VERSION = "0.4.3"
 
 CLAUDE_API_KEY  = os.environ.get("CLAUDE_API_KEY",  "").strip()
 GROQ_API_KEY    = os.environ.get("GROQ_API_KEY",    "").strip()

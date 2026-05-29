@@ -397,14 +397,15 @@
 
       <!-- ── Sub-tab: Cuentas ──────────────────────────────────────── -->
       <div id="cfg-tab-cuentas" class="cfg-tab-content">
-        <p class="rules-hint">
-          Las cuentas <strong>automáticas</strong> se alimentan de un scraper o de PDFs importados.
-          Las <strong>manuales</strong> permiten cargar movimientos a mano.
-        </p>
-        <div id="cuentas-list"></div>
-        <div class="cuenta-add-card" id="cuenta-add-card">
-          <button id="btn-add-cuenta" class="btn cuenta-add-btn">+ Crear cuenta</button>
+        <div class="cuentas-header">
+          <p class="rules-hint">
+            <strong>Manual</strong>: cargás movimientos a mano.
+            <strong>PDF parser</strong>: alimentada por PDFs de resumen importados.
+            <strong>Scraper</strong>: alimentada por un scraper (login automático).
+          </p>
+          <button id="btn-add-cuenta" class="btn btn-primary">+ Crear cuenta</button>
         </div>
+        <div id="cuentas-list"></div>
       </div>
 
       <!-- ── Sub-tab: Scrapers ─────────────────────────────────────── -->

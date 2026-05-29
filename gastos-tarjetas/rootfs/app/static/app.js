@@ -3289,16 +3289,21 @@ function openCreateCuentaModal() {
       </div>
       <div class="scraper-field">
         <label>Tipo</label>
-        <div style="display:flex;gap:1rem;font-size:.9rem;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:.4rem;font-size:.9rem">
           <label style="cursor:pointer">
             <input type="radio" name="cc-tipo" value="manual" checked
-                   onchange="document.getElementById('cc-scraper-row').style.display='none'">
-            Manual <span style="color:#94a3b8">(cargo movimientos a mano)</span>
+                   onchange="_onCuentaTipoChange()">
+            <strong>Manual</strong> <span style="color:#94a3b8">— cargo movimientos a mano</span>
           </label>
           <label style="cursor:pointer">
-            <input type="radio" name="cc-tipo" value="auto"
-                   onchange="document.getElementById('cc-scraper-row').style.display='block'">
-            Automática <span style="color:#94a3b8">(scraper / PDFs)</span>
+            <input type="radio" name="cc-tipo" value="pdf"
+                   onchange="_onCuentaTipoChange()">
+            <strong>PDF parser</strong> <span style="color:#94a3b8">— alimentada por PDFs de resumen importados</span>
+          </label>
+          <label style="cursor:pointer">
+            <input type="radio" name="cc-tipo" value="scraper"
+                   onchange="_onCuentaTipoChange()">
+            <strong>Scraper</strong> <span style="color:#94a3b8">— alimentada por un scraper (login automático)</span>
           </label>
         </div>
       </div>
@@ -3334,27 +3339,37 @@ function closeCreateCuentaModal() {
   document.getElementById("create-cuenta-modal")?.remove();
 }
 
+function _onCuentaTipoChange() {
+  const tipo = document.querySelector('input[name="cc-tipo"]:checked')?.value;
+  const row  = document.getElementById('cc-scraper-row');
+  if (row) row.style.display = (tipo === "scraper") ? "block" : "none";
+}
+
 async function submitCreateCuenta() {
-  const nombre  = (document.getElementById("cc-nombre")?.value || "").trim();
-  const tipo    = document.querySelector('input[name="cc-tipo"]:checked')?.value || "manual";
-  const moneda  = document.getElementById("cc-moneda")?.value || "ARS";
-  const scrSel  = document.getElementById("cc-scraper")?.value || "";
+  const nombre   = (document.getElementById("cc-nombre")?.value || "").trim();
+  const tipoSel  = document.querySelector('input[name="cc-tipo"]:checked')?.value || "manual";
+  const moneda   = document.getElementById("cc-moneda")?.value || "ARS";
+  const scrSel   = document.getElementById("cc-scraper")?.value || "";
 
   if (!nombre) { showToast("Ingresá un nombre", "err"); return; }
+
+  // Mapeo UI tipo → backend
+  //   manual  → tipo=manual
+  //   pdf     → tipo=auto, sin scraper
+  //   scraper → tipo=auto, con scraper_instance_id
+  const backendTipo = (tipoSel === "manual") ? "manual" : "auto";
 
   let instanceId = null;
   let productKey = "main";
 
-  // Si tipo=auto y eligió scraper, resolver instancia
-  if (tipo === "auto" && scrSel) {
+  if (tipoSel === "scraper" && scrSel) {
     if (scrSel.startsWith("__new__:")) {
-      // Crear nueva instancia primero (con la cuenta linkeada después de crearla)
+      // Crear nueva instancia primero
       const banco = scrSel.split(":")[1];
       const tdef  = _scraperTypes.find(t => t.banco === banco);
       const sugg  = `${tdef?.nombre || banco} ${nombre}`.trim();
       const instNombre = prompt(`Nombre para la nueva instancia de ${tdef?.nombre || banco}:`, sugg);
       if (!instNombre) return;   // canceló → abortar todo
-      // product_key por moneda para BBVA
       if (banco === "bbva") {
         productKey = (moneda || "ARS").toUpperCase();
       }
@@ -3385,10 +3400,10 @@ async function submitCreateCuenta() {
     }
   }
 
-  const body = { nombre, moneda, tipo };
-  if (tipo === "auto" && instanceId) {
-    body.scraper_instance_id  = instanceId;
-    body.scraper_product_key  = productKey;
+  const body = { nombre, moneda, tipo: backendTipo };
+  if (tipoSel === "scraper" && instanceId) {
+    body.scraper_instance_id = instanceId;
+    body.scraper_product_key = productKey;
   }
 
   try {
@@ -3398,7 +3413,9 @@ async function submitCreateCuenta() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.detail || "Error al crear la cuenta");
-    showToast(`Cuenta "${nombre}" (${moneda}, ${tipo}) creada.`, "ok");
+    const label = (tipoSel === "manual") ? "manual"
+                : (tipoSel === "pdf") ? "PDF parser" : "scraper";
+    showToast(`Cuenta "${nombre}" (${moneda}, ${label}) creada.`, "ok");
     closeCreateCuentaModal();
     loadCuentas();
     loadSaldos();
