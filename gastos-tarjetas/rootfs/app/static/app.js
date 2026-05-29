@@ -55,6 +55,10 @@ const _CHART_MODE_CYCLE  = ["normal", "compact", "hidden"];
 const _CHART_MODE_LABELS = { normal: "▾", compact: "▸", hidden: "▴" };
 const _CHART_MODE_TITLES = { normal: "Compactar gráfico", compact: "Ocultar gráfico", hidden: "Mostrar gráfico" };
 
+const _BUD_MODE_CYCLE  = ["normal", "compact", "hidden"];
+const _BUD_MODE_LABELS = { normal: "▾", compact: "▸", hidden: "▴" };
+const _BUD_MODE_TITLES = { normal: "Compactar gráfico", compact: "Ocultar gráfico", hidden: "Mostrar gráfico" };
+
 function _applyChartMode(mode) {
   const card = document.getElementById("home-chart-card");
   const btn  = document.getElementById("home-chart-toggle");
@@ -4571,10 +4575,6 @@ async function savePwaShortcuts() {
 let _budgetChart    = null;
 let _budgetData     = [];
 let _budgetAllCats  = [];
-
-const _BUD_MODE_CYCLE  = ["normal", "compact", "hidden"];
-const _BUD_MODE_LABELS = { normal: "▾", compact: "▸", hidden: "▴" };
-const _BUD_MODE_TITLES = { normal: "Compactar gráfico", compact: "Ocultar gráfico", hidden: "Mostrar gráfico" };
 
 function _applyBudChartMode(mode) {
   const card = document.getElementById("bud-chart-card");
