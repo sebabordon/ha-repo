@@ -2,7 +2,7 @@
 
 - **Fix: saldo MercadoPago siempre daba 404**: el endpoint `/v1/account/balance` no está disponible para tokens personales. Se reemplazó por `/users/{user_id}/mercadopago_account/balance`, que sí responde con `available_balance` y `currency_id`. El `user_id` ya estaba disponible del paso `/users/me`.
 
-## 0.5.0
+## 0.5.2
 
 - **Fix: widget de saldos no se actualizaba tras ejecutar scraper**: `runCuentaInstance` llamaba `loadCuentas()` pero no `loadSaldos()` en el `finally`. El widget superior ahora refleja el saldo nuevo inmediatamente.
 - **Encriptación de credenciales habilitada**: se agrega `scraper_encryption_key` a la config del add-on (str? en `config.yaml`). Ponerle cualquier string largo activa Fernet (AES-128-CBC + HMAC-SHA256) para las credenciales de scrapers. Requiere la dependencia `cryptography`, ahora incluida en `requirements.txt`.

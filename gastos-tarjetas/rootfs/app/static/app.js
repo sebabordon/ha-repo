@@ -153,7 +153,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    loadCharts();
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); renderUiSettings(); renderScrapersConfig(); renderPwaShortcuts(); }
+    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); }
   });
 });
 
@@ -169,7 +169,6 @@ function switchCfgTab(id) {
 document.querySelectorAll(".cfg-tab").forEach(tab => {
   tab.addEventListener("click", () => {
     switchCfgTab(tab.dataset.cfgtab);
-    if (tab.dataset.cfgtab === "scrapers") renderScrapersConfig();
   });
 });
 
@@ -1515,9 +1514,18 @@ const _FUENTE_LABEL = {
   bbva_cuenta:"BBVA Cuenta", galicia_mc:"Galicia MC", mercadopago:"MercadoPago",
 };
 
+let _lastImportByFuente = {};
+
 async function loadImportaciones() {
   const res  = await fetch(`${BASE}/api/importaciones`);
   const data = await res.json();
+
+  // Populate _lastImportByFuente for inline parser panels in Cuentas tab
+  _lastImportByFuente = {};
+  for (const imp of data) {
+    if (!_lastImportByFuente[imp.fuente]) _lastImportByFuente[imp.fuente] = imp;
+  }
+
   const grp  = document.getElementById("delete-import-optgroup");
 
   // Populate delete-target optgroup
@@ -1554,8 +1562,6 @@ async function loadImportaciones() {
     }
   }
 
-  // Populate parser grid with last-import-per-fuente info
-  renderParserGrid(data);
 }
 
 // ── Delete all ────────────────────────────────────────────────────────────────
@@ -1598,72 +1604,6 @@ const _PARSERS = [
   { fuente: "mercadopago", label: "MercadoPago",  sub: "XLSX", accept: ".xls,.xlsx" },
 ];
 
-let _pendingUploadFuente = null;
-
-function renderParserGrid(importaciones) {
-  // Build map: fuente → most recent import info
-  const lastByFuente = {};
-  for (const imp of importaciones) {
-    if (!lastByFuente[imp.fuente]) lastByFuente[imp.fuente] = imp;
-  }
-
-  const grid = document.getElementById("parser-grid");
-  if (!grid) return;
-  grid.innerHTML = _PARSERS.map(p => {
-    const last = lastByFuente[p.fuente];
-    const lastLine = last
-      ? `<span class="parser-card-last">${last.mes_resumen ? _fmtMes(last.mes_resumen) : (last.fecha_import||"").slice(0,10)} · ${last.cantidad} mov.</span>`
-      : `<span class="parser-card-last parser-card-last-none">Sin imports</span>`;
-    return `
-      <div class="parser-card" onclick="triggerUpload('${p.fuente}')" title="Importar ${p.label}">
-        <div class="parser-card-label">${p.label}</div>
-        <div class="parser-card-sub">${p.sub}</div>
-        ${lastLine}
-        <div class="parser-card-uploading" id="pc-uploading-${p.fuente}" style="display:none">⏳</div>
-      </div>`;
-  }).join("");
-}
-
-function triggerUpload(fuente) {
-  const parser = _PARSERS.find(p => p.fuente === fuente);
-  if (!parser) return;
-  _pendingUploadFuente = fuente;
-  const inp = document.getElementById("upload-file-hidden");
-  inp.accept = parser.accept;
-  inp.click();
-}
-
-document.getElementById("upload-file-hidden").addEventListener("change", async function () {
-  const file   = this.files[0];
-  const fuente = _pendingUploadFuente;
-  this.value   = "";   // reset so same file can be re-selected
-  if (!file || !fuente) return;
-
-  const result    = document.getElementById("upload-result-global");
-  const spinner   = document.getElementById(`pc-uploading-${fuente}`);
-  if (spinner) spinner.style.display = "";
-  result.className = ""; result.textContent = "Procesando…";
-
-  const chk = document.getElementById("chk-include-rg5617");
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("fuente", fuente);
-  fd.append("include_rg5617_credits", chk && chk.checked ? "true" : "false");
-  try {
-    const res  = await fetch(`${BASE}/api/upload`, {method:"POST", body:fd});
-    const data = await res.json();
-    if (res.ok) {
-      showResult(result, `✅ ${data.importados} movimientos importados (${data.total_parseados} parseados).`, true);
-      loadGastos(); loadMonthlyChart(); loadCategorias(); loadSaldos(); loadImportaciones(); loadVencimientos();
-    } else {
-      showResult(result, `❌ ${data.detail||JSON.stringify(data)}`, false);
-    }
-  } catch(e) {
-    showResult(result, `❌ Error de red: ${e}`, false);
-  } finally {
-    if (spinner) spinner.style.display = "none";
-  }
-});
 
 // ── Categorization rules ──────────────────────────────────────────────────────
 let _rules = [];
@@ -2861,9 +2801,16 @@ function _renderCuentaParserInline(c) {
     ? `<button class="btn btn-sm" onclick="triggerCuentaUpload('${c.fuente}')">⬆ Subir ${escHtml(curParser?.sub || 'PDF')}</button>`
     : `<span style="font-size:.78rem;color:#94a3b8">Asigná un parser para habilitar el upload</span>`;
 
+  const lastImp  = _lastImportByFuente[c.fuente];
+  const lastLine = lastImp
+    ? `<span class="parser-card-last" style="font-size:.76rem;color:#64748b">
+         Último: ${lastImp.mes_resumen ? _fmtMes(lastImp.mes_resumen) : (lastImp.fecha_import||"").slice(0,10)} · ${lastImp.cantidad} mov.
+       </span>`
+    : `<span class="parser-card-last parser-card-last-none" style="font-size:.76rem;color:#94a3b8">Sin imports</span>`;
+
   return `
     <details class="cuenta-parser-details">
-      <summary>📄 PDF parser ${cur ? `<span class="parser-current">→ ${escHtml(curParser?.label || cur)}</span>` : `<span style="color:#94a3b8">(no asignado)</span>`}</summary>
+      <summary>📄 PDF parser ${cur ? `<span class="parser-current">→ ${escHtml(curParser?.label || cur)}</span>` : `<span style="color:#94a3b8">(no asignado)</span>`} ${lastLine}</summary>
       <div class="cuenta-parser-row">
         <label for="cp-sel-${c.fuente}">Parser:</label>
         <select id="cp-sel-${c.fuente}" onchange="saveCuentaParser('${c.fuente}', this.value)">
@@ -3105,6 +3052,26 @@ function _renderInstanceFullPanel(c, inst) {
       </div>
     </details>`;
 
+  const totpBtns = tdef.totp ? `
+    <button class="btn btn-sm" onclick="startTotpSetupInst('${inst.banco}', ${inst.id})"
+            id="btn-totp-inst-${inst.id}">🔑 Iniciar sesión TOTP</button>` : "";
+
+  const totpArea = tdef.totp ? `
+    <div class="scraper-totp-area" id="totp-area-inst-${inst.id}" style="display:none">
+      <label>Código de verificación (TOTP / email)</label>
+      <p style="font-size:.82rem;color:#92400e;margin-bottom:.5rem">
+        Hacé click en "Iniciar sesión TOTP" — el servidor abrirá el browser,
+        completará usuario y contraseña y te pedirá el código aquí.
+      </p>
+      <div class="scraper-totp-row">
+        <input id="totp-input-inst-${inst.id}" type="text" maxlength="8"
+               placeholder="123456" inputmode="numeric">
+        <button class="btn btn-sm btn-primary"
+                onclick="submitTotpCodeInst('${inst.banco}', ${inst.id})">Enviar código</button>
+      </div>
+      <p id="totp-msg-inst-${inst.id}" style="font-size:.8rem;margin-top:.4rem"></p>
+    </div>` : "";
+
   return `
     <div class="scraper-instance-panel" id="cuenta-inst-${c.fuente}">
       ${headerRow}
@@ -3112,9 +3079,15 @@ function _renderInstanceFullPanel(c, inst) {
       <div class="scraper-actions">
         <button class="btn btn-primary btn-sm" onclick="saveCuentaInstance('${c.fuente}', ${inst.id})">Guardar</button>
         <button class="btn btn-sm" onclick="runCuentaInstance('${c.fuente}', ${inst.id})" id="btn-cuenta-run-${c.fuente}">▶ Ejecutar ahora</button>
+        <button class="btn btn-sm" onclick="importUnmatchedInst('${inst.banco}', ${inst.id})"
+                id="btn-import-inst-${inst.id}"
+                title="Importar a Gastos los registros sin match con PDF">⬆ Importar pendientes</button>
+        ${totpBtns}
+        <button class="btn btn-sm" style="color:#b91c1c" onclick="deleteScraperSession('${inst.banco}')">🗑 Borrar sesión</button>
         <button class="btn btn-sm" style="color:#b91c1c" onclick="deleteCuentaInstance('${c.fuente}', ${inst.id})">🗑 Eliminar instancia</button>
         <span class="scraper-save-msg" id="cuenta-save-msg-${c.fuente}"></span>
       </div>
+      ${totpArea}
       ${statusInfo}
       ${logSection}
       ${movsSection}
@@ -3243,6 +3216,7 @@ async function runCuentaInstance(fuente, instanceId) {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "▶ Ejecutar ahora"; }
     loadCuentas();
+    loadSaldos();
   }
 }
 
@@ -3255,6 +3229,74 @@ async function deleteCuentaInstance(fuente, instanceId) {
     loadCuentas();
   } catch (e) {
     showToast("✗ " + e.message, "err");
+  }
+}
+
+async function importUnmatchedInst(banco, instId) {
+  const btn = document.getElementById(`btn-import-inst-${instId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "⟳ Importando…"; }
+  try {
+    const res  = await fetch(`${BASE}/api/scrapers/${banco}/importar-pendientes`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(
+        data.imported > 0
+          ? `✓ ${data.imported} movimientos importados a Gastos`
+          : "Sin movimientos pendientes",
+        "ok"
+      );
+      if (data.imported > 0) loadCuentas();
+    } else {
+      showToast(`✗ ${data.detail || "Error"}`, "err");
+    }
+  } catch(e) {
+    showToast(`✗ ${e.message}`, "err");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "⬆ Importar pendientes"; }
+  }
+}
+
+let _totpRequestIdInst = {};
+
+async function startTotpSetupInst(banco, instId) {
+  const btn  = document.getElementById(`btn-totp-inst-${instId}`);
+  const area = document.getElementById(`totp-area-inst-${instId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "⟳ Iniciando…"; }
+  try {
+    const res  = await fetch(`${BASE}/api/scrapers/${banco}/session-setup`, { method: "POST" });
+    const data = await res.json();
+    _totpRequestIdInst[instId] = data.request_id;
+    if (area) area.style.display = "";
+    document.getElementById(`totp-input-inst-${instId}`)?.focus();
+  } catch(e) {
+    showToast(`✗ ${e.message}`, "err");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🔑 Iniciar sesión TOTP"; }
+  }
+}
+
+async function submitTotpCodeInst(banco, instId) {
+  const code      = document.getElementById(`totp-input-inst-${instId}`)?.value?.trim();
+  const requestId = _totpRequestIdInst[instId];
+  const msgEl     = document.getElementById(`totp-msg-inst-${instId}`);
+  if (!code || !requestId) { if (msgEl) msgEl.textContent = "Ingresá el código primero."; return; }
+  try {
+    const res  = await fetch(`${BASE}/api/scrapers/${banco}/totp`, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ code, request_id: requestId }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (msgEl) msgEl.textContent = "✓ Sesión iniciada";
+      const area = document.getElementById(`totp-area-inst-${instId}`);
+      if (area) area.style.display = "none";
+      delete _totpRequestIdInst[instId];
+      loadCuentas();
+    } else {
+      if (msgEl) msgEl.textContent = `✗ ${data.detail || "Error"}`;
+    }
+  } catch(e) {
+    if (msgEl) msgEl.textContent = `✗ ${e.message}`;
   }
 }
 

@@ -297,28 +297,15 @@
 
       <!-- Config sub-tab bar -->
       <div class="cfg-tabs">
-        <button class="cfg-tab active" data-cfgtab="importar">Importar</button>
-        <button class="cfg-tab" data-cfgtab="reglas">Reglas</button>
+        <button class="cfg-tab active" data-cfgtab="reglas">Reglas</button>
         <button class="cfg-tab" data-cfgtab="personas">Personas</button>
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
-        <button class="cfg-tab" data-cfgtab="scrapers">Scrapers</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
         <button class="cfg-tab cfg-tab-danger" data-cfgtab="borrar">⚠ Borrar</button>
       </div>
 
-      <!-- ── Sub-tab: Importar ─────────────────────────────────────── -->
-      <div id="cfg-tab-importar" class="cfg-tab-content active">
-        <input type="file" id="upload-file-hidden" accept=".pdf,.xls,.xlsx" style="display:none">
-        <div id="parser-grid" class="parser-grid"></div>
-        <label class="import-opt-row" title="Las devoluciones de percepción RG 5617 (DEV PERCEPCION / CR.RG) se importan por defecto para mostrar el gasto real. El widget de vencimientos las excluye del total a pagar ya que el banco las descuenta automáticamente. Desmarcá si no querés verlas en la lista de gastos.">
-          <input type="checkbox" id="chk-include-rg5617" checked>
-          Incluir devoluciones RG 5617 (DEV PERCEPCION / CR.RG)
-        </label>
-        <div id="upload-result-global" style="margin-top:.5rem"></div>
-      </div>
-
       <!-- ── Sub-tab: Reglas ───────────────────────────────────────── -->
-      <div id="cfg-tab-reglas" class="cfg-tab-content">
+      <div id="cfg-tab-reglas" class="cfg-tab-content active">
         <div class="cfg-section">
           <div class="cfg-section-header" onclick="toggleCfgSection('reglas-cat')">
             <span class="cfg-arr" id="cfg-arr-reglas-cat">+</span>
@@ -408,21 +395,16 @@
         <div id="cuentas-list"></div>
       </div>
 
-      <!-- ── Sub-tab: Scrapers ─────────────────────────────────────── -->
-      <div id="cfg-tab-scrapers" class="cfg-tab-content">
-        <p class="rules-hint" style="margin-bottom:1rem">
-          Configurá las credenciales de acceso para cada banco. Los datos se guardan
-          en tu directorio de usuario en el servidor. Las contraseñas <strong>no se
-          muestran</strong> una vez guardadas; para cambiarlas escribí la nueva y guardá.
-        </p>
-        <div id="scrapers-config-list">
-          <!-- Generado por JS: renderScrapersConfig() -->
-          <p style="color:var(--text-muted);font-style:italic">Cargando…</p>
-        </div>
-      </div>
-
       <!-- ── Sub-tab: Interfaz ─────────────────────────────────────── -->
       <div id="cfg-tab-ui" class="cfg-tab-content">
+
+        <!-- ── Opciones de importación ── -->
+        <div class="ui-pref-section">Importación</div>
+        <label class="import-opt-row" style="margin:.4rem 0 1rem;display:flex;align-items:center;gap:.5rem;font-size:.9rem"
+               title="Las devoluciones de percepción RG 5617 (DEV PERCEPCION / CR.RG) se importan por defecto para mostrar el gasto real. El widget de vencimientos las excluye del total a pagar ya que el banco las descuenta automáticamente. Desmarcá si no querés verlas en la lista de gastos.">
+          <input type="checkbox" id="chk-include-rg5617" checked>
+          Incluir devoluciones RG 5617 (DEV PERCEPCION / CR.RG)
+        </label>
 
         <!-- ── PWA Shortcuts ── -->
         <div class="ui-pref-section">Accesos rápidos</div>
