@@ -1,3 +1,7 @@
+## 0.5.5
+
+- **Chart presupuesto vs real movido a tab Gráficos**: el card ahora aparece al inicio de la solapa Gráficos (arriba de los filtros y charts personalizados) en lugar de en la página de inicio. Se dispara al abrir la tab y al cambiar el mes.
+
 ## 0.5.4
 
 - **Fix: chart presupuesto vs real rompía la página**: las constantes `_BUD_MODE_LABELS/CYCLE/TITLES` estaban declaradas como `const` al final del archivo pero se accedían en `applyUiPrefs()` que corre en línea 80 (temporal dead zone). Se movieron al inicio del archivo junto a las constantes del gráfico mensual.

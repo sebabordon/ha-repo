@@ -46,27 +46,6 @@
     <!-- Credit-card due dates widget -->
     <div id="vencimientos-widget" class="vencimientos-widget" style="display:none"></div>
 
-    <!-- Budget vs actual chart card -->
-    <div class="chart-card" id="bud-chart-card">
-      <div class="chart-title">
-        Presupuesto vs real
-        <div style="display:flex;align-items:center;gap:.5rem;margin-left:auto">
-          <select id="bud-mes" style="font-size:.8rem;padding:.15rem .4rem;border:1px solid #ccc;border-radius:4px;color:#555">
-            <option value="">— mes —</option>
-          </select>
-          <button class="chart-toggle-btn" id="bud-chart-toggle" onclick="toggleBudChartMode()" title="Alternar tamaño del gráfico"></button>
-        </div>
-      </div>
-      <div class="cat-slicer" id="bud-cat-slicer" style="margin-bottom:.65rem">
-        <span class="cat-label">Categorías:</span>
-        <div id="bud-cat-chips"></div>
-      </div>
-      <canvas id="budget-chart"></canvas>
-      <div id="bud-chart-empty" style="display:none;text-align:center;padding:1.5rem 0;color:#aaa;font-size:.88rem">
-        No hay presupuesto ni gastos registrados para este mes.
-      </div>
-    </div>
-
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="graficos">Gráficos</button>
@@ -77,6 +56,28 @@
 
     <!-- ── Tab: Gráficos ──────────────────────────────────────────────── -->
     <section id="tab-graficos" class="tab-content active">
+
+      <!-- Budget vs actual chart -->
+      <div class="chart-card" id="bud-chart-card" style="margin:-0.25rem -0.25rem 1.25rem">
+        <div class="chart-title">
+          Presupuesto vs real
+          <div style="display:flex;align-items:center;gap:.5rem;margin-left:auto">
+            <select id="bud-mes" style="font-size:.8rem;padding:.15rem .4rem;border:1px solid #ccc;border-radius:4px;color:#555">
+              <option value="">— mes —</option>
+            </select>
+            <button class="chart-toggle-btn" id="bud-chart-toggle" onclick="toggleBudChartMode()" title="Alternar tamaño del gráfico"></button>
+          </div>
+        </div>
+        <div class="cat-slicer" id="bud-cat-slicer" style="margin-bottom:.65rem">
+          <span class="cat-label">Categorías:</span>
+          <div id="bud-cat-chips"></div>
+        </div>
+        <canvas id="budget-chart"></canvas>
+        <div id="bud-chart-empty" style="display:none;text-align:center;padding:1.5rem 0;color:#aaa;font-size:.88rem">
+          No hay presupuesto ni gastos registrados para este mes.
+        </div>
+      </div>
+
       <div class="chart-filters">
         <select id="cf-fuente">
           <option value="">Todas las fuentes</option>
