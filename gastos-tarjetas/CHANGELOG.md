@@ -1,3 +1,7 @@
+## 0.5.4
+
+- **Fix: chart presupuesto vs real rompía la página**: las constantes `_BUD_MODE_LABELS/CYCLE/TITLES` estaban declaradas como `const` al final del archivo pero se accedían en `applyUiPrefs()` que corre en línea 80 (temporal dead zone). Se movieron al inicio del archivo junto a las constantes del gráfico mensual.
+
 ## 0.5.3
 
 - **Chart presupuesto vs real en el inicio**: nueva tarjeta en la página principal (antes de los tabs) con un gráfico de barras agrupadas por categoría. Barra izquierda = presupuesto (verde); barra derecha = gasto real (amarillo si dentro del presupuesto, rojo si lo supera). Muestra por defecto el último mes cerrado. Incluye selector de mes persistente y chips de categorías filtrables (ambos se guardan en `localStorage` entre sesiones). El card tiene el mismo toggle normal/compacto/oculto que el gráfico mensual superior.
