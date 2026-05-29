@@ -1,3 +1,8 @@
+## 0.5.6
+
+- **MercadoPago: retiros a CBU vía `/mercadopago_account/movements/search`**: los retiros de billetera a cuenta bancaria (CBU) no aparecen en `/v1/payments/search`. Se agrega consulta al endpoint de movimientos bancarios; los movimientos cuyo `reference_id` ya existe en la DB se descartan para evitar duplicados. En modo debug se loguean todos los movimientos con `[mvt]` para inspección.
+- **MercadoPago: fecha en líneas de debug**: las líneas `[dbg]` de pagos ahora incluyen la fecha (`date_created[:10]`) para facilitar la identificación de transacciones.
+
 ## 0.5.5
 
 - **Chart presupuesto vs real movido a tab Gráficos**: el card ahora aparece al inicio de la solapa Gráficos (arriba de los filtros y charts personalizados) en lugar de en la página de inicio. Se dispara al abrir la tab y al cambiar el mes.
