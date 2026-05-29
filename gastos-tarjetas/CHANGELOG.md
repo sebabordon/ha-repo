@@ -1,3 +1,7 @@
+## 0.3.70
+
+- **Scraper MP — debug log enriquecido**: cuando "Log de debug" está tildado, cada pago muestra líneas adicionales con `payer_email`, `payer_ident` (tipo:número DNI/CUIL), `ext_ref` (external_reference, útil para CVU), `td_ref` (transaction_details.payment_method_reference_id, el CVU/CBU concreto) y `td_bank` (financial_institution). Solo aparecen las líneas con valor no vacío. Permite ver qué campos trae la API para transferencias y decidir qué enriquecer en la descripción.
+
 ## 0.3.69
 
 - **BBVA — filtro de monedas a importar** (`monedas` en credentials): nuevo campo text en el config del scraper BBVA donde se ingresan los códigos de moneda a procesar, separados por coma (`ARS`, `USD`, `EUR`).  Si está vacío o sin setear, el default es **solo `ARS`** (conservador — no importa dólares ni euros sin pedirlo explícitamente, antes los importaba todos a `bbva_cuenta`).  La detección de moneda por cuenta usa la lógica que ya estaba en `_detect_moneda` (prefiere `codigoMoneda`/`moneda` de la API, fallback al alias "Pesos"/"Dolares"/"Euros").  El log muestra `monedas_filtro=['ARS']` al inicio y `Saltando cuenta: Dolares (moneda=USD no está en ['ARS'])` por cada cuenta filtrada, así queda claro qué se procesa y qué no.  El saldo de las cuentas filtradas se sigue registrando (informativo) pero sin importar movimientos.  Esto es la fase 1 hacia multi-instancia/multi-cuenta — eventualmente la idea es permitir mapeo per-cuenta (cuenta USD → otra fuente/usuario distintos).

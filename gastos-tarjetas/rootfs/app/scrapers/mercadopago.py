@@ -241,6 +241,15 @@ class MercadoPagoScraper(BaseScraper):
                 payer_id   = (payment.get("payer") or {}).get("id", "?")
                 coll_id    = payment.get("collector_id", "?")
 
+                # Campos extra para debug: enriquecen la descripción de transferencias
+                payer_email  = (payment.get("payer") or {}).get("email", "")
+                payer_ident  = (payment.get("payer") or {}).get("identification") or {}
+                payer_dni    = f"{payer_ident.get('type','')}:{payer_ident.get('number','')}" if payer_ident else ""
+                ext_ref      = (payment.get("external_reference") or "")[:40]
+                td           = payment.get("transaction_details") or {}
+                td_ref       = (td.get("payment_method_reference_id") or "")[:40]
+                td_bank      = (td.get("financial_institution") or "")
+
                 def _dbg(tag: str) -> None:
                     if debug:
                         log_fn(
@@ -248,6 +257,11 @@ class MercadoPagoScraper(BaseScraper):
                             f" coll={coll_id} type={pay_type} op={op_type}"
                             f" amt={amount:.2f} reason={reason}"
                         )
+                        if payer_email: log_fn(f"           payer_email={payer_email}")
+                        if payer_dni:   log_fn(f"           payer_ident={payer_dni}")
+                        if ext_ref:     log_fn(f"           ext_ref={ext_ref}")
+                        if td_ref:      log_fn(f"           td_ref={td_ref}")
+                        if td_bank:     log_fn(f"           td_bank={td_bank}")
 
                 # Excluir pagos fallidos o revertidos
                 if status in _SKIP_STATUSES:
