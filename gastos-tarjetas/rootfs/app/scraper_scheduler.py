@@ -33,19 +33,21 @@ logger = logging.getLogger(__name__)
 _scheduler: Optional[AsyncIOScheduler] = None
 
 _SCRAPER_CLASSES = {
-    "amex":        "scrapers.amex:AmexScraper",
-    "bbva":        "scrapers.bbva:BbvaScraper",
-    "galicia":     "scrapers.galicia:GaliciaScraper",
-    "mercadopago": "scrapers.mercadopago:MercadoPagoScraper",
+    "amex":           "scrapers.amex:AmexScraper",
+    "bbva":           "scrapers.bbva:BbvaScraper",
+    "galicia":        "scrapers.galicia:GaliciaScraper",
+    "mercadopago":    "scrapers.mercadopago:MercadoPagoScraper",
+    "invertironline": "scrapers.invertironline:InvertirOnlineScraper",
 }
 
 # Default fuente que emite cada scraper "estándar" cuando no hay overriding por
 # __cuentas__.  Usado por el remap del scheduler para scrapers single-product
 # (AMEX/Galicia/MP) que tienen 1 cuenta mapeada y emiten todo a su default.
 _BANCO_DEFAULT_FUENTE = {
-    "amex":        "amex",
-    "galicia":     "galicia_mc",
-    "mercadopago": "mercadopago",
+    "amex":           "amex",
+    "galicia":        "galicia_mc",
+    "mercadopago":    "mercadopago",
+    "invertironline": "invertironline",
     # BBVA NO está acá porque hace remap per-product internamente.
 }
 
@@ -196,14 +198,15 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
         # Actualizar status de la instancia
         from datetime import datetime as _dt
         now_iso = _dt.utcnow().isoformat()
+        _any_saldo = next(iter(result.saldos.values()), {}) if result.saldos else {}
         update_instance_status(
             instance_id,
             ultimo_run=now_iso,
             ultimo_ok=now_iso,
             estado="ok",
             error_msg=None,
-            saldo_ars=(result.saldos.get("bbva_cuenta", {}) or {}).get("saldo_ars"),
-            saldo_usd=(result.saldos.get("bbva_cuenta", {}) or {}).get("saldo_usd"),
+            saldo_ars=_any_saldo.get("saldo_ars"),
+            saldo_usd=_any_saldo.get("saldo_usd"),
         )
 
     finally:
@@ -421,14 +424,15 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
         # Actualizar status
         from datetime import datetime as _dt
         now_iso = _dt.utcnow().isoformat()
+        _any_saldo = next(iter(result.saldos.values()), {}) if result.saldos else {}
         update_instance_status(
             instance_id,
             ultimo_run=now_iso,
             ultimo_ok=now_iso,
             estado="ok",
             error_msg=None,
-            saldo_ars=(result.saldos.get("bbva_cuenta", {}) or {}).get("saldo_ars"),
-            saldo_usd=(result.saldos.get("bbva_cuenta", {}) or {}).get("saldo_usd"),
+            saldo_ars=_any_saldo.get("saldo_ars"),
+            saldo_usd=_any_saldo.get("saldo_usd"),
             movimientos_nuevos=inserted,
         )
 

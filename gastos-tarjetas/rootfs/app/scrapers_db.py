@@ -25,10 +25,11 @@ _DATA_DIR = os.environ.get("DATA_DIR", "/data")
 # `scraper_instances`, que captura cualquier alias custom que el usuario haya
 # creado en la tab Cuentas.
 _BANCO_FUENTES_FALLBACK: dict[str, list[str]] = {
-    "bbva":        ["bbva", "bbva_cuenta", "bbva_visa", "bbva_mc"],
-    "amex":        ["amex"],
-    "galicia":     ["galicia", "galicia_mc"],
-    "mercadopago": ["mercadopago"],
+    "bbva":           ["bbva", "bbva_cuenta", "bbva_visa", "bbva_mc"],
+    "amex":           ["amex"],
+    "galicia":        ["galicia", "galicia_mc"],
+    "mercadopago":    ["mercadopago"],
+    "invertironline": ["invertironline"],
 }
 
 def fuentes_for_banco(banco_or_fuente: str) -> list[str]:
@@ -140,8 +141,8 @@ def _ensure_scraper_tables(conn: sqlite3.Connection) -> None:
     if "last_log" not in cols:
         conn.execute("ALTER TABLE scraper_status ADD COLUMN last_log TEXT")
 
-    # Pre-cargar filas para los 4 bancos conocidos
-    for f in ("amex", "bbva", "galicia", "mercadopago"):
+    # Pre-cargar filas para los bancos conocidos
+    for f in ("amex", "bbva", "galicia", "mercadopago", "invertironline"):
         conn.execute(
             "INSERT OR IGNORE INTO scraper_status (fuente, estado) VALUES (?, 'idle')",
             (f,),

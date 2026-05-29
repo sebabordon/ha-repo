@@ -103,6 +103,30 @@ BANKS: dict[str, dict] = {
         ],
         "totp": True,   # requiere flujo TOTP interactivo para la primera sesión
     },
+    "invertironline": {
+        "nombre":   "InvertirOnline",
+        "schedule": "08:00",
+        "campos": [
+            {"key": "usuario",  "label": "Usuario",    "type": "text",     "required": True,
+             "hint": "Tu usuario de IOL (generalmente tu email)"},
+            {"key": "password", "label": "Contraseña", "type": "password", "required": True},
+            {
+                "key":         "dias",
+                "label":       "Días a consultar (operaciones)",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "60",
+                "hint":        "Días hacia atrás para importar compras/ventas. Solo aplica con 'Importar operaciones' activo.",
+            },
+            {
+                "key":      "importar_operaciones",
+                "label":    "Importar operaciones (compras/ventas)",
+                "type":     "checkbox",
+                "required": False,
+                "hint":     "Si está activo, importa compras y ventas como movimientos en la pestaña Gastos.",
+            },
+        ],
+    },
     "mercadopago": {
         "nombre":   "MercadoPago",
         "schedule": "07:45",
@@ -237,10 +261,11 @@ def set_bank_config(banco: str, updates: dict, data_dir: str | None = None) -> N
         else:
             # Crear instancia + linkear cuenta default del banco
             _DEFAULT_LINK = {
-                "bbva":        ("bbva_cuenta", "ARS"),
-                "amex":        ("amex",        "main"),
-                "galicia":     ("galicia_mc",  "main"),
-                "mercadopago": ("mercadopago", "main"),
+                "bbva":           ("bbva_cuenta",    "ARS"),
+                "amex":           ("amex",           "main"),
+                "galicia":        ("galicia_mc",     "main"),
+                "mercadopago":    ("mercadopago",    "main"),
+                "invertironline": ("invertironline", "main"),
             }
             link = _DEFAULT_LINK.get(banco)
             label = banco.upper() if banco != "mercadopago" else "MercadoPago"

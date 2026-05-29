@@ -1,3 +1,9 @@
+## 0.4.6
+
+- **Nuevo scraper: InvertirOnline (IOL)**: consulta el portafolio vía API REST (sin Selenium). Autentica con usuario/contraseña usando OAuth2 `grant_type=password`, almacena el token y lo refresca automáticamente con `refresh_token` antes de que expire (TTL 1 hora con margen de 5 min). En cada run obtiene `/api/v2/portafolio/argentina`, suma el `valorizado` por moneda y actualiza `saldo_ars` (posiciones ARS + efectivo en cuenta) y `saldo_usd` (posiciones USD) en la cuenta "InvertirOnline". Opcionalmente importa operaciones terminadas (compras/ventas/cobros) como movimientos si el checkbox "Importar operaciones" está activo. Para configurarlo: Cuentas → crear cuenta tipo Scraper → selector → InvertirOnline.
+- **Fix scheduler: saldo hardcodeado a "bbva_cuenta"**: `_run_instance_job` y `run_instance_now` leían el saldo del resultado con `result.saldos.get("bbva_cuenta", {})`, lo que devolvía `None` para MP, IOL y cualquier otro banco que no sea BBVA. Ahora usa el primer valor disponible de `result.saldos` de forma genérica.
+- **Nueva cuenta default "InvertirOnline"** (`fuente="invertironline"`, `moneda="MULTI"`, `activa=1`, `auto_saldo=1`) en `init_db()`.
+
 ## 0.4.5
 
 - **Fix HTTP 500 al cambiar el scraper / borrar cuenta / crear cuenta**: las rutas `PUT /api/cuentas/{fuente}/scraper`, `DELETE /api/cuentas/{fuente}` y `POST /api/cuentas` eran sync (`def`) y llamaban a `reload_scheduler()`. FastAPI ejecuta los `def` en un threadpool sin event loop, y `_scheduler.start()` (APScheduler AsyncIO) hace `asyncio.get_running_loop()` → `RuntimeError: no running event loop`. Fix: las tres rutas pasaron a `async def`.

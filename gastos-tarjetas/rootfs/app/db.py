@@ -110,12 +110,13 @@ def init_db():
             )
         """)
         _defaults = [
-            ("bbva_cuenta", "BBVA Cuenta",       0, "ARS", None, 1, 1),
-            ("mercadopago", "MercadoPago",        0, "ARS", None, 1, 1),
-            ("amex",        "AMEX",               0, "ARS", None, 0, 0),
-            ("bbva_mc",     "BBVA Mastercard",    0, "ARS", None, 0, 0),
-            ("bbva_visa",   "BBVA Visa",          0, "ARS", None, 0, 0),
-            ("galicia_mc",  "Galicia Mastercard", 0, "ARS", None, 0, 0),
+            ("bbva_cuenta",    "BBVA Cuenta",       0, "ARS",   None, 1, 1),
+            ("mercadopago",    "MercadoPago",        0, "ARS",   None, 1, 1),
+            ("invertironline", "InvertirOnline",     0, "MULTI", None, 1, 1),
+            ("amex",           "AMEX",               0, "ARS",   None, 0, 0),
+            ("bbva_mc",        "BBVA Mastercard",    0, "ARS",   None, 0, 0),
+            ("bbva_visa",      "BBVA Visa",          0, "ARS",   None, 0, 0),
+            ("galicia_mc",     "Galicia Mastercard", 0, "ARS",   None, 0, 0),
         ]
         conn.executemany(
             "INSERT OR IGNORE INTO cuentas (fuente,nombre,saldo,moneda,fecha_actualizacion,activa,auto_saldo) VALUES (?,?,?,?,?,?,?)",
