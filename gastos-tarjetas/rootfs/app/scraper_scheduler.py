@@ -384,8 +384,8 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
     from scraper_instances_db import (
         get_instance, get_cuentas_for_instance, update_instance_status,
     )
-    from userctx import _user_data_dir
-    from db import adjust_cuenta_saldo, get_data_dir
+    from userctx import _user_data_dir, get_data_dir
+    from db import adjust_cuenta_saldo
 
     effective_dir = data_dir or get_data_dir()
     token = _user_data_dir.set(effective_dir)
