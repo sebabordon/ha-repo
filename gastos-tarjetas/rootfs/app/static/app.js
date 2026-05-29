@@ -4635,11 +4635,21 @@ function _renderBudCatChips() {
   const hidden    = new Set((_getBudPrefs().cats_hidden) || []);
   const allActive = _budgetAllCats.length > 0 && _budgetAllCats.every(c => !hidden.has(c));
 
-  wrap.innerHTML =
-    `<span class="cat-chip cat-todos ${allActive ? "active" : ""}" onclick="toggleAllBudCats()">Todas</span>` +
-    _budgetAllCats.map(c =>
-      `<span class="cat-chip ${!hidden.has(c) ? "active" : ""}" onclick="toggleBudCat(${JSON.stringify(c)})">${escHtml(c)}</span>`
-    ).join("");
+  wrap.innerHTML = "";
+
+  const todas = document.createElement("span");
+  todas.className = `cat-chip cat-todos${allActive ? " active" : ""}`;
+  todas.textContent = "Todas";
+  todas.onclick = toggleAllBudCats;
+  wrap.appendChild(todas);
+
+  _budgetAllCats.forEach(c => {
+    const chip = document.createElement("span");
+    chip.className = `cat-chip${!hidden.has(c) ? " active" : ""}`;
+    chip.textContent = c;
+    chip.onclick = () => toggleBudCat(c);
+    wrap.appendChild(chip);
+  });
 }
 
 function toggleAllBudCats() {

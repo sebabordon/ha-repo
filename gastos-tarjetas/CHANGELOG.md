@@ -1,5 +1,6 @@
 ## 0.5.6
 
+- **Fix: chips de categorías en chart presupuesto vs real no respondían al click**: el onclick se generaba como atributo HTML con `JSON.stringify(cat)` (comillas dobles), lo que rompía el atributo. Se reemplazó por `createElement` + `chip.onclick = () => toggleBudCat(c)`, igual que los chips de la tab Gastos.
 - **MercadoPago: retiros a CBU vía `/mercadopago_account/movements/search`**: los retiros de billetera a cuenta bancaria (CBU) no aparecen en `/v1/payments/search`. Se agrega consulta al endpoint de movimientos bancarios; los movimientos cuyo `reference_id` ya existe en la DB se descartan para evitar duplicados. En modo debug se loguean todos los movimientos con `[mvt]` para inspección.
 - **MercadoPago: fecha en líneas de debug**: las líneas `[dbg]` de pagos ahora incluyen la fecha (`date_created[:10]`) para facilitar la identificación de transacciones.
 
