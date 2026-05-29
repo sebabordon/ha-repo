@@ -1,3 +1,65 @@
+## 0.4.0
+
+**Fase 1 de multi-instancia de scrapers (backend, sin cambios visibles en UI).**
+
+Refactor preparatorio para que un usuario pueda tener varias instancias del
+mismo banco (ej. BBVA Personal + BBVA Empresa), cada una con sus propias
+credenciales y su propio mapeo a cuentas. v0.4.1 agrega la UI desde la tab
+Cuentas; v0.4.2 limpia el código legacy.
+
+- **Nueva tabla `scraper_instances`** (por usuario): cada instancia tiene
+  `banco`, `nombre`, `config` (JSON con credenciales, dias, monedas, etc.),
+  `schedule`, `enabled`, y todos los campos de status (`ultimo_run`, `estado`,
+  `saldos`, `error_msg`, `last_log`). Reemplaza a `scraper_credentials.json` y
+  a la tabla `scraper_status` como source-of-truth. Ambos quedan en disco/DB
+  por back-compat durante v0.4.x.
+- **Nuevas columnas en `cuentas`**: `scraper_instance_id` (FK opcional a
+  `scraper_instances.id`) y `scraper_product_key` (TEXT: "ARS"/"USD"/"EUR"/
+  "main" — qué "producto" de la instancia alimenta esta cuenta). Decision 1=B:
+  una cuenta es alimentada por UNA instancia; dos cuentas BBVA = dos
+  instancias = dos logins independientes (con sus propias credenciales,
+  aunque sean idénticas).
+- **Migración automática `scraper_instances_v1`**: al arrancar v0.4.0, lee
+  `scraper_credentials.json` + `scraper_status` y crea una instancia
+  "{Banco} default" por cada banco existente. Linkea las cuentas auto
+  pre-existentes (`bbva_cuenta` → BBVA default con product_key=ARS, `amex` →
+  AMEX default con product_key=main, etc.). No se renombra ninguna fuente
+  existente — gastos históricos quedan intactos.
+- **Encryption-ready (opcional)**: nuevo módulo `scraper_crypto.py` con
+  fallback graceful. Si `SCRAPER_ENCRYPTION_KEY` está seteada Y `cryptography`
+  está instalado → encripta config con Fernet; si falta alguno → plaintext
+  (default actual). Cada fila de `scraper_instances` tiene un flag
+  `config_encrypted` para coexistencia. Para habilitar: agregar `cryptography`
+  a requirements + setear la env var en la config del add-on de HA.
+- **Scheduler refactor**: ahora itera `scraper_instances` (filtrado por user
+  data_dir), no más `find_all_enabled_configs` de credentials. Cada job
+  carga la instancia, descifra config, agrega `__cuentas__` con la lista de
+  cuentas mapeadas (fuente + product_key) y se lo pasa al scraper. Status se
+  actualiza vía `update_instance_status` (mirror a `scraper_status` legacy
+  para que la UI siga funcionando sin tocarse).
+- **BBVA scraper — modo multi-instancia**: si recibe `__cuentas__` en config,
+  mapea `product_key=ARS/USD/EUR` → cuenta destino y emite movimientos con la
+  `fuente` correspondiente. Si NO recibe `__cuentas__` (standalone/testing),
+  cae al modo legacy (filtra por config `monedas` y emite todo a
+  `bbva_cuenta`).
+- **AMEX/Galicia/MP** (single-product): el scheduler hace remap post-scrape:
+  si la instancia tiene una cuenta mapeada con fuente custom (ej. `amex_personal`),
+  re-construye los `MovimientoRaw` con esa fuente. Los scrapers no necesitan
+  cambios.
+- **`fuentes_for_banco` ahora resuelve por query a DB** en lugar del mapping
+  hardcoded `_BANCO_FUENTES`. Cuando un usuario crea cuentas con slugs
+  custom en v0.4.1+, esta función las captura automáticamente. Fallback al
+  hardcoded sólo si las tablas multi-instancia no existen (primer arranque
+  pre-migración).
+- **Mirror back-compat**: `set_bank_config` (escritura de credenciales desde
+  la UI viejos) también actualiza la instancia default del banco; si no
+  existe, la crea + linkea la cuenta default. `update_instance_status` también
+  refresca `scraper_status` (legacy) para la instancia default de cada banco.
+- **Sin cambios visibles**: la tab Scrapers actual sigue funcionando igual —
+  por debajo opera sobre la instancia default. Los endpoints `/api/scrapers/...`
+  no se rompieron. La migración garantiza que un usuario que actualice de
+  v0.3.x a v0.4.0 no note ninguna diferencia funcional.
+
 ## 0.3.71
 
 - **Scraper MP — fix signo `account_fund`**: los depósitos bancarios (`op=account_fund`, tipo `bank_transfer`) aparecían en ambas queries igual que `partition_transfer`. Se agregan al defer de la query de payer (sign=+1) para capturarlos solo en la de collector (sign=−1), evitando que $8M/$4.5M/etc. queden importados como egresos.

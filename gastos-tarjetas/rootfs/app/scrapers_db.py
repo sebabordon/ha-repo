@@ -19,24 +19,53 @@ logger = logging.getLogger(__name__)
 
 _DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
-# Mapping banco (clave del scraper, ej. "bbva") → lista de fuentes de datos que
-# emite (ej. ["bbva", "bbva_cuenta", "bbva_visa", "bbva_mc"]).  Un banco puede
-# generar movimientos para distintos productos, cada uno con su propia fuente
-# en la tabla `gastos`/`movimientos_raw`.  Sin este mapping, queries como
-# "todas las filas de bbva" no encuentran las de bbva_cuenta.
-_BANCO_FUENTES: dict[str, list[str]] = {
+# Fallback hardcoded — usado cuando las tablas multi-instancia (v0.4.0) todavía
+# no existen (DB recién creada antes del primer run de migraciones).  Después
+# de la migración, fuentes_for_banco() resuelve por query a `cuentas` /
+# `scraper_instances`, que captura cualquier alias custom que el usuario haya
+# creado en la tab Cuentas.
+_BANCO_FUENTES_FALLBACK: dict[str, list[str]] = {
     "bbva":        ["bbva", "bbva_cuenta", "bbva_visa", "bbva_mc"],
     "amex":        ["amex"],
     "galicia":     ["galicia", "galicia_mc"],
     "mercadopago": ["mercadopago"],
 }
 
-def fuentes_for_banco(banco: str) -> list[str]:
+def fuentes_for_banco(banco_or_fuente: str) -> list[str]:
     """
-    Devuelve todas las fuentes de datos posibles para un banco dado.
-    Si `banco` ya es una fuente específica (ej. "bbva_cuenta"), devuelve [banco].
+    Devuelve todas las `fuente` (columna en cuentas/gastos/movimientos_raw)
+    asociadas al argumento.
+
+    - Si `banco_or_fuente` es una banco-key conocida (bbva/amex/galicia/...):
+      devuelve todas las fuentes de cuentas linkeadas a instancias de ese banco.
+    - Si es una fuente específica (ej. "bbva_cuenta", "mis_pesos_bbva"):
+      devuelve [fuente] (pasa por single match).
+
+    Hace fallback al mapping hardcoded si las tablas multi-instancia todavía
+    no están creadas (primer arranque, pre-migración).
     """
-    return _BANCO_FUENTES.get(banco, [banco])
+    try:
+        with _conn() as conn:
+            # Primero: probar como banco-key — recoger fuentes de cuentas
+            # linkeadas a instancias de ese banco.
+            rows = conn.execute(
+                "SELECT c.fuente FROM cuentas c "
+                "JOIN scraper_instances si ON si.id = c.scraper_instance_id "
+                "WHERE si.banco = ?",
+                (banco_or_fuente,),
+            ).fetchall()
+            fuentes = sorted({r["fuente"] for r in rows})
+            if fuentes:
+                # Incluir el banco-key como alias por si quedan datos legacy
+                # con fuente=banco-key (pre-migración).
+                if banco_or_fuente not in fuentes:
+                    fuentes.append(banco_or_fuente)
+                return fuentes
+            # No matchea como banco — devolver como fuente específica
+            return [banco_or_fuente]
+    except Exception:
+        # Tablas todavía no creadas → fallback hardcoded
+        return _BANCO_FUENTES_FALLBACK.get(banco_or_fuente, [banco_or_fuente])
 
 
 def _find_db_path() -> str:

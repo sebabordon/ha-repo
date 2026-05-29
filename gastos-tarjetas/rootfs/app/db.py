@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -7,6 +8,8 @@ from typing import Optional
 import yaml
 
 from userctx import get_db_path, get_rules_file
+
+logger = logging.getLogger(__name__)
 
 # After the sign-normalization migration (v0.2.35), ALL sources use the same
 # convention: positive monto = egreso (money going out), negative = ingreso.
@@ -281,6 +284,132 @@ def _run_migrations(conn):
                 )
                 deleted += 1
         conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_scraper_gastos_v1')")
+
+    if "scraper_instances_v1" not in done:
+        # v0.4.0: refactor multi-instancia.  Cada cuenta auto-fed apunta a una
+        # `scraper_instance` que tiene su propio set de credenciales/config y
+        # status.  Esto permite múltiples instancias del mismo banco (ej. BBVA
+        # personal + BBVA empresa) — fase preparatoria para multi-cuenta UI.
+        import os as _os
+        import json as _json
+        try:
+            from scraper_crypto import encrypt_str
+        except Exception:
+            encrypt_str = lambda s: (s, False)
+
+        # 1. Crear tabla scraper_instances
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS scraper_instances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                banco TEXT NOT NULL,
+                nombre TEXT NOT NULL,
+                config TEXT NOT NULL,
+                config_encrypted INTEGER DEFAULT 0,
+                schedule TEXT,
+                enabled INTEGER DEFAULT 1,
+                ultimo_run TEXT,
+                ultimo_ok TEXT,
+                estado TEXT DEFAULT 'idle',
+                error_msg TEXT,
+                saldo_ars REAL,
+                saldo_usd REAL,
+                movimientos_nuevos INTEGER DEFAULT 0,
+                last_log TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_scraper_instances_banco "
+            "ON scraper_instances(banco)"
+        )
+
+        # 2. Agregar columnas a cuentas
+        ccols = {r[1] for r in conn.execute("PRAGMA table_info(cuentas)").fetchall()}
+        if "scraper_instance_id" not in ccols:
+            conn.execute(
+                "ALTER TABLE cuentas ADD COLUMN scraper_instance_id INTEGER "
+                "REFERENCES scraper_instances(id)"
+            )
+        if "scraper_product_key" not in ccols:
+            conn.execute("ALTER TABLE cuentas ADD COLUMN scraper_product_key TEXT")
+
+        # 3. Migración de scraper_credentials.json + scraper_status → instancias
+        # Mapping banco → (cuenta_fuente_default, product_key_default, nombre_label)
+        _BANCO_DEFAULTS = {
+            "bbva":        ("bbva_cuenta", "ARS",  "BBVA"),
+            "amex":        ("amex",        "main", "AMEX"),
+            "galicia":     ("galicia_mc",  "main", "Galicia"),
+            "mercadopago": ("mercadopago", "main", "MercadoPago"),
+        }
+        # data_dir: el directorio del archivo de DB es el data_dir del usuario
+        try:
+            db_path_now = get_db_path()
+            data_dir = _os.path.dirname(db_path_now)
+        except Exception:
+            data_dir = _os.environ.get("DATA_DIR", "/data")
+
+        creds_path = _os.path.join(data_dir, "scraper_credentials.json")
+        existing_creds: dict = {}
+        if _os.path.exists(creds_path):
+            try:
+                with open(creds_path) as _f:
+                    existing_creds = _json.load(_f) or {}
+            except Exception as _exc:
+                # No falla la migración si el JSON está corrupto
+                existing_creds = {}
+
+        instances_created = 0
+        for banco, bank_creds in existing_creds.items():
+            if banco not in _BANCO_DEFAULTS:
+                continue
+            cuenta_fuente, product_key, banco_label = _BANCO_DEFAULTS[banco]
+            nombre = f"{banco_label} default"
+            enabled = 1 if bank_creds.get("enabled") else 0
+            schedule = bank_creds.get("schedule")
+
+            # Status desde scraper_status (si existe)
+            status = conn.execute(
+                "SELECT * FROM scraper_status WHERE fuente=?", (banco,)
+            ).fetchone()
+
+            # Encriptar config (no-op si no hay key configurada)
+            config_json = _json.dumps(bank_creds, ensure_ascii=False)
+            config_data, is_enc = encrypt_str(config_json)
+
+            cur = conn.execute(
+                """INSERT INTO scraper_instances
+                   (banco, nombre, config, config_encrypted, schedule, enabled,
+                    ultimo_run, ultimo_ok, estado, error_msg,
+                    saldo_ars, saldo_usd, movimientos_nuevos, last_log)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    banco, nombre, config_data, 1 if is_enc else 0,
+                    schedule, enabled,
+                    status["ultimo_run"]   if status else None,
+                    status["ultimo_ok"]    if status else None,
+                    status["estado"]       if status else 'idle',
+                    status["error_msg"]    if status else None,
+                    status["saldo_ars"]    if status else None,
+                    status["saldo_usd"]    if status else None,
+                    status["movimientos_nuevos"] if status else 0,
+                    (status["last_log"] if status and "last_log" in status.keys() else None),
+                )
+            )
+            instance_id = cur.lastrowid
+            instances_created += 1
+
+            # Linkear la cuenta default del banco a esta instancia
+            conn.execute(
+                "UPDATE cuentas SET scraper_instance_id=?, scraper_product_key=? "
+                "WHERE fuente=?",
+                (instance_id, product_key, cuenta_fuente)
+            )
+        logger.info(
+            "Migración scraper_instances_v1: %d instancias creadas desde %s",
+            instances_created, creds_path,
+        )
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('scraper_instances_v1')")
 
 
 @contextmanager

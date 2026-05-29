@@ -86,11 +86,11 @@ BANKS: dict[str, dict] = {
             },
             {
                 "key":         "monedas",
-                "label":       "Monedas a importar",
+                "label":       "Monedas a importar (legacy)",
                 "type":        "text",
                 "required":    False,
                 "placeholder": "ARS",
-                "hint":        "Códigos de moneda separados por coma (ej. ARS, USD, EUR). Vacío o sin setear = solo ARS. Filtra qué cuentas se procesan: la cuenta en USD se ignora si solo está ARS.",
+                "hint":        "Códigos de moneda separados por coma (ej. ARS, USD, EUR). Vacío = solo ARS. Filtra qué cuentas BBVA procesar. NOTA: en v0.4.0+ este campo se usa SOLO si la instancia no tiene cuentas mapeadas (modo legacy). Cuando linkees cuentas desde la tab Cuentas, este campo se ignora porque las cuentas ya implican qué monedas procesar.",
             },
         ],
     },
@@ -218,6 +218,42 @@ def set_bank_config(banco: str, updates: dict, data_dir: str | None = None) -> N
 
     creds[banco] = merged
     write_creds(creds, data_dir)
+
+    # Mirror a la instancia default del banco en `scraper_instances` (v0.4.0+).
+    # Si la instancia no existe, la creamos (caso: usuario habilitó un banco
+    # nuevo después de la migración inicial).
+    try:
+        from scraper_instances_db import (
+            get_instance_by_banco_default, update_instance, create_instance, link_cuenta,
+        )
+        inst = get_instance_by_banco_default(banco)
+        if inst:
+            update_instance(
+                inst["id"],
+                config=merged,
+                schedule=merged.get("schedule"),
+                enabled=bool(merged.get("enabled")),
+            )
+        else:
+            # Crear instancia + linkear cuenta default del banco
+            _DEFAULT_LINK = {
+                "bbva":        ("bbva_cuenta", "ARS"),
+                "amex":        ("amex",        "main"),
+                "galicia":     ("galicia_mc",  "main"),
+                "mercadopago": ("mercadopago", "main"),
+            }
+            link = _DEFAULT_LINK.get(banco)
+            label = banco.upper() if banco != "mercadopago" else "MercadoPago"
+            new_id = create_instance(
+                banco=banco, nombre=f"{label} default",
+                config=merged, schedule=merged.get("schedule"),
+                enabled=bool(merged.get("enabled")),
+            )
+            if link:
+                cuenta_fuente, product_key = link
+                link_cuenta(cuenta_fuente, new_id, product_key)
+    except Exception as exc:
+        logger.warning("Mirror a scraper_instances falló: %s", exc)
 
 
 # ── Respuesta para la API (sin contraseñas) ────────────────────────────────────

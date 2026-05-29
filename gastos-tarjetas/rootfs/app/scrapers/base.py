@@ -391,6 +391,34 @@ class BaseScraper(ABC):
         except Exception as exc:
             logger.error("Error al persistir saldos: %s", exc)
 
+    # ── Helpers multi-instancia (v0.4.0+) ─────────────────────────────────────
+
+    @staticmethod
+    def _fuente_for_product(config: dict, product_key: str,
+                            default_fuente: str) -> str:
+        """
+        Devuelve la `fuente` que el scraper debe emitir para un producto dado.
+
+        Resuelve a partir de `config["__cuentas__"]` (lista de cuentas mapeadas
+        por el scheduler).  Para scrapers single-product (AMEX, Galicia, MP),
+        `product_key="main"` matchea cualquier cuenta sin product_key específico.
+
+        Si no hay match (o `__cuentas__` no viene en el config — modo legacy
+        standalone), devuelve `default_fuente` (la fuente clásica hardcoded
+        del scraper, ej. "amex" para AMEX, "mercadopago" para MP).
+        """
+        cuentas = config.get("__cuentas__") or []
+        if not cuentas:
+            return default_fuente
+        # Match exacto por product_key
+        for c in cuentas:
+            if (c.get("product_key") or "").upper() == (product_key or "").upper():
+                return c.get("fuente") or default_fuente
+        # Fallback: si single-product, usar la primera cuenta mapeada
+        if len(cuentas) == 1 and (product_key or "").lower() == "main":
+            return cuentas[0].get("fuente") or default_fuente
+        return default_fuente
+
     # ── Métodos abstractos ────────────────────────────────────────────────────
 
     @abstractmethod

@@ -546,16 +546,31 @@ class BbvaScraper(BaseScraper):
         dias            = int(config.get("dias") or _DIAS_DEFAULT)
         usuario_default = (config.get("usuario_default") or "").strip() or None
 
-        # Parseo del filtro de monedas: lista separada por coma, normalizada
-        # a {ARS, USD, EUR}.  Vacío o no seteado → solo ARS (default conservador
-        # para no importar dólares o euros sin pedirlo explícitamente).
-        _monedas_raw = (config.get("monedas") or "").strip()
-        if _monedas_raw:
-            monedas_filtro = {
-                m.strip().upper() for m in _monedas_raw.split(",") if m.strip()
+        # ── Determinar mapeo cuenta→fuente ────────────────────────────────────
+        # Si el scheduler nos pasa `__cuentas__` (v0.4.0+): cada cuenta tiene
+        # un product_key que matchea con la moneda BBVA (ARS/USD/EUR).
+        #   product_key → MovimientoRaw.fuente
+        # Si NO viene (legacy / standalone): caemos al esquema viejo basado en
+        # `monedas` config string + fuente hardcoded "bbva_cuenta".
+        cuentas_map = config.get("__cuentas__") or []
+        if cuentas_map:
+            product_to_fuente = {
+                (c.get("product_key") or "").upper(): c.get("fuente")
+                for c in cuentas_map if c.get("fuente")
             }
+            monedas_permitidas = set(product_to_fuente.keys())
+            _log(f"Modo multi-instancia — mapeo {product_to_fuente}")
         else:
-            monedas_filtro = {"ARS"}
+            # Legacy: monedas config string, fuente fija
+            _monedas_raw = (config.get("monedas") or "").strip()
+            if _monedas_raw:
+                monedas_permitidas = {
+                    m.strip().upper() for m in _monedas_raw.split(",") if m.strip()
+                }
+            else:
+                monedas_permitidas = {"ARS"}
+            product_to_fuente = {m: "bbva_cuenta" for m in monedas_permitidas}
+            _log(f"Modo legacy — monedas={sorted(monedas_permitidas)} → bbva_cuenta")
 
         movimientos: list[MovimientoRaw] = []
         saldos: dict = {}
@@ -570,8 +585,8 @@ class BbvaScraper(BaseScraper):
         result = (cuentas_resp["json"] or {}).get("result", {}) or {}
         cajas  = result.get("cajasAhorro", []) or []
         _log(
-            f"Cuentas encontradas: {len(cajas)}  |  "
-            f"monedas_filtro={sorted(monedas_filtro)}  |  "
+            f"Cuentas encontradas en API: {len(cajas)}  |  "
+            f"monedas a procesar: {sorted(monedas_permitidas)}  |  "
             f"usuario_default={usuario_default or '(none)'}"
         )
 
@@ -586,34 +601,30 @@ class BbvaScraper(BaseScraper):
             alias     = cuenta.get("alias", id_prod)
             saldo_raw = cuenta.get("saldo") or cuenta.get("importe") or ""
 
-            # Detección de moneda: la API a veces trae `codigoMoneda`/`moneda`;
-            # si no, deducimos por el alias ("Pesos" → ARS, "Dolares"/"Dólares" → USD,
-            # "Euros" → EUR).  Default ARS.
             moneda = self._detect_moneda(cuenta, alias)
 
-            # Aún si la cuenta queda filtrada, registramos su saldo (informativo)
+            # Registramos el saldo siempre (informativo, incluso si está filtrada)
             if saldo_raw:
                 saldo_val = self.parse_amount(str(saldo_raw))
+                fuente_target = product_to_fuente.get(moneda, "bbva_cuenta")
                 saldo_key = "saldo_usd" if moneda == "USD" else "saldo_eur" if moneda == "EUR" else "saldo_ars"
-                saldos.setdefault("bbva_cuenta", {})[saldo_key] = saldo_val
+                saldos.setdefault(fuente_target, {})[saldo_key] = saldo_val
 
-            # Filtro por moneda: skipear cuentas cuya moneda no esté en la lista
-            if moneda not in monedas_filtro:
-                _log(
-                    f"Saltando cuenta: {alias} (id={id_prod}, moneda={moneda} "
-                    f"no está en {sorted(monedas_filtro)})"
-                )
+            if moneda not in monedas_permitidas:
+                _log(f"Saltando cuenta: {alias} (id={id_prod}, moneda={moneda} no mapeada)")
                 continue
 
-            _log(f"Procesando cuenta: {alias} (id={id_prod}, moneda={moneda})")
+            fuente_target = product_to_fuente.get(moneda, "bbva_cuenta")
+            _log(f"Procesando cuenta: {alias} (id={id_prod}, moneda={moneda}) → fuente={fuente_target}")
             if saldo_raw:
                 _log(f"  Saldo actual: {saldo_raw}")
 
             movs = self._fetch_movimientos(
                 driver, id_prod, fecha_desde, fecha_hasta, _log,
                 moneda=moneda, usuario_default=usuario_default,
+                fuente_target=fuente_target,
             )
-            _log(f"  → {len(movs)} movimientos importados de {alias}")
+            _log(f"  → {len(movs)} movimientos importados de {alias} (fuente={fuente_target})")
             movimientos.extend(movs)
 
         return ScraperResult(
@@ -661,6 +672,7 @@ class BbvaScraper(BaseScraper):
         log_fn,
         moneda: str = "ARS",
         usuario_default: Optional[str] = None,
+        fuente_target: str = "bbva_cuenta",
     ) -> list[MovimientoRaw]:
         """
         Pagina la API de movimientos hasta obtenerlos todos (vía fetch del browser).
@@ -745,7 +757,9 @@ class BbvaScraper(BaseScraper):
                 hit_out_of_range = False
 
             all_movs.extend(self._parse_batch(
-                batch_in_range, log_fn, moneda=moneda, usuario_default=usuario_default,
+                batch_in_range, log_fn,
+                moneda=moneda, usuario_default=usuario_default,
+                fuente_target=fuente_target,
             ))
 
             # Stop conditions:
@@ -832,6 +846,7 @@ class BbvaScraper(BaseScraper):
         log_fn=None,
         moneda: str = "ARS",
         usuario_default: Optional[str] = None,
+        fuente_target: str = "bbva_cuenta",
     ) -> list[MovimientoRaw]:
         """
         Convierte un batch de movimientos BBVA a MovimientoRaw.
@@ -892,7 +907,7 @@ class BbvaScraper(BaseScraper):
             raw_data = {k: v for k, v in raw_data.items() if v is not None}
 
             result.append(MovimientoRaw(
-                fuente      = "bbva_cuenta",
+                fuente      = fuente_target,
                 fecha       = fecha,
                 descripcion = desc,
                 monto       = monto,
