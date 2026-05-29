@@ -18,6 +18,7 @@ const UI_PREF_DEFAULTS = {
   venc_show_rg5617:   true,
   venc_show_pdf_ref:  true,
   chart_home_mode:    "normal",   // "normal" | "compact" | "hidden"
+  bud_chart_mode:     "normal",   // "normal" | "compact" | "hidden"
 };
 
 function getUiPref(key) {
@@ -47,6 +48,7 @@ function applyUiPrefs() {
   if (monSel) monSel.value = getUiPref("graf_moneda");
   // Home chart size
   _applyChartMode(getUiPref("chart_home_mode"));
+  _applyBudChartMode(getUiPref("bud_chart_mode"));
 }
 
 const _CHART_MODE_CYCLE  = ["normal", "compact", "hidden"];
@@ -407,12 +409,29 @@ function _populateMonthFilter(meses) {
     else                   sel.value = initialDefaults[id] || defaultActive;
   });
 
+  // Budget chart month selector: use saved pref on first load, else preserve current
+  const budSel = document.getElementById("bud-mes");
+  if (budSel) {
+    const savedBudMes = (_getBudPrefs().mes) || "";
+    const currentBud  = budSel.value;
+    while (budSel.options.length > 1) budSel.remove(1);
+    meses.forEach(m => {
+      const opt = document.createElement("option");
+      opt.value = m; opt.textContent = _fmtMes(m);
+      budSel.appendChild(opt);
+    });
+    if (_monthFilterReady)                               budSel.value = currentBud;
+    else if (savedBudMes && meses.includes(savedBudMes)) budSel.value = savedBudMes;
+    else                                                 budSel.value = defaultClosed;
+  }
+
   // Trigger initial loads now that the month filters are set
   if (!_monthFilterReady) {
     _monthFilterReady = true;
     loadGastos();
     _filtersReadyForCharts = true;
     _checkInitialChartLoad();
+    loadBudgetChart();
   }
 }
 
@@ -4547,6 +4566,152 @@ async function savePwaShortcuts() {
   if (res.ok) showToast("Shortcuts guardados. Recargá la PWA para verlos.", "ok", 4000);
   else        showToast("Error al guardar shortcuts.", "err");
 }
+
+// ── Budget vs real home chart ─────────────────────────────────────────────────
+let _budgetChart    = null;
+let _budgetData     = [];
+let _budgetAllCats  = [];
+
+const _BUD_MODE_CYCLE  = ["normal", "compact", "hidden"];
+const _BUD_MODE_LABELS = { normal: "▾", compact: "▸", hidden: "▴" };
+const _BUD_MODE_TITLES = { normal: "Compactar gráfico", compact: "Ocultar gráfico", hidden: "Mostrar gráfico" };
+
+function _applyBudChartMode(mode) {
+  const card = document.getElementById("bud-chart-card");
+  const btn  = document.getElementById("bud-chart-toggle");
+  if (!card) return;
+  card.classList.remove("chart-card--compact", "chart-card--hidden");
+  if (mode === "compact") card.classList.add("chart-card--compact");
+  if (mode === "hidden")  card.classList.add("chart-card--hidden");
+  if (btn) {
+    btn.textContent = _BUD_MODE_LABELS[mode] || "▾";
+    btn.title       = _BUD_MODE_TITLES[mode] || "";
+  }
+}
+
+function toggleBudChartMode() {
+  const current = getUiPref("bud_chart_mode");
+  const idx     = _BUD_MODE_CYCLE.indexOf(current);
+  const next    = _BUD_MODE_CYCLE[(idx + 1) % _BUD_MODE_CYCLE.length];
+  const stored  = JSON.parse(localStorage.getItem("ui_prefs") || "{}");
+  stored.bud_chart_mode = next;
+  localStorage.setItem("ui_prefs", JSON.stringify(stored));
+  _applyBudChartMode(next);
+}
+
+function _getBudPrefs() {
+  return JSON.parse(localStorage.getItem("bud_prefs") || "{}");
+}
+function _saveBudPrefs(patch) {
+  localStorage.setItem("bud_prefs", JSON.stringify({ ..._getBudPrefs(), ...patch }));
+}
+
+async function loadBudgetChart() {
+  const sel = document.getElementById("bud-mes");
+  const mes = sel ? sel.value : "";
+  if (!mes) return;
+  _saveBudPrefs({ mes });
+
+  let data;
+  try {
+    const res = await fetch(`${BASE}/api/presupuesto?mes=${mes}`);
+    data = await res.json();
+  } catch (e) {
+    console.error("loadBudgetChart error:", e);
+    return;
+  }
+
+  const vs = data.vs_actual || [];
+  _budgetData    = vs.filter(d => d.presupuesto > 0 || d.gastado > 0);
+  _budgetAllCats = _budgetData.map(d => d.categoria);
+
+  _renderBudCatChips();
+  _drawBudgetChart();
+}
+
+function _renderBudCatChips() {
+  const wrap = document.getElementById("bud-cat-chips");
+  if (!wrap) return;
+  const hidden    = new Set((_getBudPrefs().cats_hidden) || []);
+  const allActive = _budgetAllCats.length > 0 && _budgetAllCats.every(c => !hidden.has(c));
+
+  wrap.innerHTML =
+    `<span class="cat-chip cat-todos ${allActive ? "active" : ""}" onclick="toggleAllBudCats()">Todas</span>` +
+    _budgetAllCats.map(c =>
+      `<span class="cat-chip ${!hidden.has(c) ? "active" : ""}" onclick="toggleBudCat(${JSON.stringify(c)})">${escHtml(c)}</span>`
+    ).join("");
+}
+
+function toggleAllBudCats() {
+  const hidden    = new Set((_getBudPrefs().cats_hidden) || []);
+  const allActive = _budgetAllCats.length > 0 && _budgetAllCats.every(c => !hidden.has(c));
+  _saveBudPrefs({ cats_hidden: allActive ? _budgetAllCats.slice() : [] });
+  _renderBudCatChips();
+  _drawBudgetChart();
+}
+
+function toggleBudCat(cat) {
+  const hidden = new Set((_getBudPrefs().cats_hidden) || []);
+  if (hidden.has(cat)) hidden.delete(cat); else hidden.add(cat);
+  _saveBudPrefs({ cats_hidden: [...hidden] });
+  _renderBudCatChips();
+  _drawBudgetChart();
+}
+
+function _drawBudgetChart() {
+  const empty  = document.getElementById("bud-chart-empty");
+  const canvas = document.getElementById("budget-chart");
+  const hidden  = new Set((_getBudPrefs().cats_hidden) || []);
+  const visible = _budgetData.filter(d => !hidden.has(d.categoria));
+
+  if (!visible.length) {
+    if (_budgetChart) { _budgetChart.destroy(); _budgetChart = null; }
+    if (canvas) canvas.style.display = "none";
+    if (empty)  empty.style.display  = "";
+    return;
+  }
+  if (canvas) canvas.style.display = "";
+  if (empty)  empty.style.display  = "none";
+
+  const labels     = visible.map(d => d.categoria);
+  const presup     = visible.map(d => d.presupuesto);
+  const gastado    = visible.map(d => d.gastado);
+  const gastadoBg  = visible.map(d => d.presupuesto > 0 && d.gastado > d.presupuesto ? "rgba(239,68,68,.82)"  : "rgba(234,179,8,.82)");
+  const gastadoBdr = visible.map(d => d.presupuesto > 0 && d.gastado > d.presupuesto ? "rgba(215,35,35,1)"    : "rgba(202,138,0,1)");
+
+  const chartData = {
+    labels,
+    datasets: [
+      { label: "Presupuesto", data: presup,  backgroundColor: "rgba(34,197,94,.75)", borderColor: "rgba(21,128,61,1)", borderWidth: 1, borderRadius: 3 },
+      { label: "Real",        data: gastado, backgroundColor: gastadoBg,             borderColor: gastadoBdr,          borderWidth: 1, borderRadius: 3 },
+    ],
+  };
+
+  if (_budgetChart) {
+    _budgetChart.data = chartData;
+    _budgetChart.update();
+    return;
+  }
+
+  _budgetChart = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: chartData,
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { position: "top" },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${_fmtNum(c.raw)}` } },
+      },
+      scales: {
+        x: { ticks: { maxRotation: 45, autoSkip: false } },
+        y: { ticks: { callback: v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v } },
+      },
+    },
+  });
+}
+
+document.getElementById("bud-mes").addEventListener("change", loadBudgetChart);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {

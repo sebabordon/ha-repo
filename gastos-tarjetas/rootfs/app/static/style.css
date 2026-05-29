@@ -112,6 +112,14 @@ body {
 .chart-card--hidden #monthly-chart { display: none; }
 .chart-card--hidden .chart-title { margin-bottom: 0; }
 
+/* ── Budget vs actual home chart ──────────────────────────────────────────────*/
+#budget-chart { max-height: 300px; }
+#bud-chart-card.chart-card--compact #budget-chart { max-height: 150px; }
+#bud-chart-card.chart-card--hidden #budget-chart,
+#bud-chart-card.chart-card--hidden #bud-cat-slicer,
+#bud-chart-card.chart-card--hidden #bud-chart-empty { display: none !important; }
+#bud-chart-card.chart-card--hidden .chart-title { margin-bottom: 0; }
+
 /* ── Tabs ────────────────────────────────────────────────────────────────────*/
 
 .tabs { display: flex; gap: 0; margin-bottom: 0; }
@@ -363,7 +371,7 @@ body {
   white-space: nowrap;
   padding-top: .3rem;
 }
-#cat-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+#cat-chips, #bud-cat-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
 
 .cat-chip {
   display: inline-flex;

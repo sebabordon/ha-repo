@@ -1,3 +1,7 @@
+## 0.5.3
+
+- **Chart presupuesto vs real en el inicio**: nueva tarjeta en la página principal (antes de los tabs) con un gráfico de barras agrupadas por categoría. Barra izquierda = presupuesto (verde); barra derecha = gasto real (amarillo si dentro del presupuesto, rojo si lo supera). Muestra por defecto el último mes cerrado. Incluye selector de mes persistente y chips de categorías filtrables (ambos se guardan en `localStorage` entre sesiones). El card tiene el mismo toggle normal/compacto/oculto que el gráfico mensual superior.
+
 ## 0.5.1
 
 - **Fix: saldo MercadoPago siempre daba 404**: el endpoint `/v1/account/balance` no está disponible para tokens personales. Se reemplazó por `/users/{user_id}/mercadopago_account/balance`, que sí responde con `available_balance` y `currency_id`. El `user_id` ya estaba disponible del paso `/users/me`.
