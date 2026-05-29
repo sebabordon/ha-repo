@@ -276,12 +276,12 @@ class MercadoPagoScraper(BaseScraper):
                     _dbg("OMITIDO-CC")
                     continue
 
-                # partition_transfer: el mismo pago aparece en ambas queries (payer Y
-                # collector) porque MP lo asocia al mismo user_id en ambos lados.
-                # Saltearlo en la query de payer (sign=+1) y capturarlo solo en la de
-                # collector (sign=-1) para obtener el signo correcto (ingreso).
-                if op_type == "partition_transfer" and sign == +1:
-                    _dbg("DEFER-PT")
+                # partition_transfer y account_fund: ambos aparecen en las dos queries
+                # porque MP los asocia al mismo user_id en payer y collector.
+                # account_fund = dinero que entra a la cuenta (depósito desde banco, etc.)
+                # Siempre son ingresos → saltar en query de payer, capturar en collector.
+                if op_type in ("partition_transfer", "account_fund") and sign == +1:
+                    _dbg("DEFER-IN")
                     continue
 
                 if pid and pid in existing_ids:
@@ -362,15 +362,18 @@ class MercadoPagoScraper(BaseScraper):
             "collector_id":    p.get("collector_id"),
         }
 
-        # Para ingresos (sign=-1): guardar nombre del pagador
+        # Para ingresos (sign=-1): guardar datos del pagador
         if sign == -1:
             payer = p.get("payer") or {}
             first = (payer.get("first_name") or "").strip()
             last  = (payer.get("last_name")  or "").strip()
             nick  = (payer.get("nickname")   or "").strip()
+            email = (payer.get("email")      or "").strip()
             payer_name = f"{first} {last}".strip() or nick
             if payer_name:
-                raw_data["payer_name"] = payer_name
+                raw_data["payer_name"]  = payer_name
+            if email:
+                raw_data["payer_email"] = email
 
         # Descriptor en extracto bancario (útil para identificar el comercio)
         stmt_desc = (p.get("statement_descriptor") or "").strip()
@@ -399,23 +402,44 @@ class MercadoPagoScraper(BaseScraper):
         Construye la descripción base sin sufijo de cuotas.
 
         Reglas explícitas (primer match gana):
-          1. partition_transfer       → "Transferencia desde/hacia Reserva" según signo
-          2. account_money+transfer   → "Transferencia: {reason}"
-          3. account_money+regular    → reason directo (si no es código técnico)
-          4. Resto                    → lógica genérica: poi_name / merchant / reason /
+          1. partition_transfer       → "Transferencia desde/hacia Reserva"
+          2. account_fund             → "Depósito bancario"
+          3. account_money+transfer   → "{sender} — Transferencia: {reason}" (sign=-1)
+                                        "Transferencia: {reason}" (sign=+1)
+          4. account_money+regular    → reason directo (si no es código técnico)
+          5. Resto                    → lógica genérica: poi_name / merchant / reason /
                                         stmt_desc / op_label / "MercadoPago"
         """
         pay_type    = p.get("payment_type_id", "")
         op_type     = p.get("operation_type", "")
         _raw_reason = (p.get("reason") or p.get("description") or "").strip()
 
+        # ── Helper: nombre del pagador (disponible en collector query, sign=-1) ──
+        def _payer_name() -> str:
+            payer = p.get("payer") or {}
+            first = (payer.get("first_name") or "").strip()
+            last  = (payer.get("last_name")  or "").strip()
+            nick  = (payer.get("nickname")   or "").strip()
+            email = (payer.get("email")      or "").strip()
+            return f"{first} {last}".strip() or nick or email
+
         # ── Regla 1: partition_transfer ────────────────────────────────────────
         if op_type == "partition_transfer":
             return "Transferencia desde Reserva" if sign == -1 else "Transferencia hacia Reserva"
 
-        # ── Regla 2: transferencia de dinero entre cuentas ─────────────────────
+        # ── Regla 2: depósito bancario (bank_transfer + account_fund) ──────────
+        if op_type == "account_fund":
+            # Siempre es ingreso (se captura solo en collector query).
+            # El motivo "Bank Transfer" es genérico; usamos etiqueta propia.
+            return "Depósito bancario"
+
+        # ── Regla 3: transferencia entre cuentas MP ────────────────────────────
         if pay_type == "account_money" and op_type == "money_transfer":
-            return f"Transferencia: {_raw_reason}" if _raw_reason else "Transferencia"
+            label = f"Transferencia: {_raw_reason}" if _raw_reason else "Transferencia"
+            if sign == -1:
+                sender = _payer_name()
+                return f"{sender} — {label}" if sender else label
+            return label
 
         # ── Regla 3: pago regular con billetera → reason directo ───────────────
         if pay_type == "account_money" and op_type == "regular_payment":

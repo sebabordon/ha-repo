@@ -1,3 +1,10 @@
+## 0.3.71
+
+- **Scraper MP — fix signo `account_fund`**: los depósitos bancarios (`op=account_fund`, tipo `bank_transfer`) aparecían en ambas queries igual que `partition_transfer`. Se agregan al defer de la query de payer (sign=+1) para capturarlos solo en la de collector (sign=−1), evitando que $8M/$4.5M/etc. queden importados como egresos.
+- **Scraper MP — descripción `account_fund`**: nueva Regla 2 que retorna `"Depósito bancario"` para cualquier pago con `op=account_fund`, en lugar de caer al fallback genérico.
+- **Scraper MP — descripción `money_transfer` ingreso**: para transferencias recibidas (sign=−1), la descripción ahora incluye el nombre/email del pagador: `"fausto@sbsoft.com.ar — Transferencia: Varios"`. Los egresos mantienen `"Transferencia: Varios"`.
+- **Scraper MP — raw_data `payer_email`**: se guarda el email del pagador en `raw_data` para movimientos ingresados como ingresos (sign=−1).
+
 ## 0.3.70
 
 - **Scraper MP — debug log enriquecido**: cuando "Log de debug" está tildado, cada pago muestra líneas adicionales con `payer_email`, `payer_ident` (tipo:número DNI/CUIL), `ext_ref` (external_reference, útil para CVU), `td_ref` (transaction_details.payment_method_reference_id, el CVU/CBU concreto) y `td_bank` (financial_institution). Solo aparecen las líneas con valor no vacío. Permite ver qué campos trae la API para transferencias y decidir qué enriquecer en la descripción.
