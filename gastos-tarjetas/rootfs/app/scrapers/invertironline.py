@@ -40,16 +40,24 @@ _DIAS_DEFAULT = 60
 
 _ART = timezone(timedelta(hours=-3))
 
-_TIPO_MAP = {
-    "acciones":                    "Acción",
-    "cedears":                     "CEDEAR",
-    "fondos_comunes_de_inversion": "FCI",
-    "titulos_publicos":            "Bono",
-    "obligaciones_negociables":    "ON",
-    "cauciones":                   "Caución",
-    "opciones":                    "Opción",
-    "futuros":                     "Futuro",
-}
+def _tipo_label(raw: str) -> str:
+    """
+    Convierte tipo de instrumento IOL a etiqueta corta.
+    El campo puede venir en snake_case ("fondos_comunes_de_inversion") o
+    PascalCase ("FondoComun") dependiendo de la versión de la API.
+    """
+    if not raw:
+        return ""
+    t = raw.lower()
+    if "cedear" in t:                              return "CEDEAR"
+    if "fondo" in t or "fci" in t:                return "FCI"
+    if "accion" in t or "acción" in t:            return "Acción"
+    if "titulo" in t or "bono" in t:              return "Bono"
+    if "obligacion" in t or "obligación" in t:    return "ON"
+    if "caucion" in t or "caución" in t:          return "Caución"
+    if "opcion" in t or "opción" in t:            return "Opción"
+    if "futuro" in t:                              return "Futuro"
+    return ""
 
 # Tipos de operación que representan ingresos (signo negativo en nuestra convención)
 _SIGN_INGRESO = ("venta", "cobro", "acreditaci", "dividendo", "renta")
@@ -254,10 +262,10 @@ class InvertirOnlineScraper(BaseScraper):
           - {"activos": [...], "estadoCuenta": {...}}   (objeto con claves camelCase)
           - [...]                                        (array directo de activos)
         """
-        # Log de diagnóstico: primeras 400 chars del raw para detectar estructura
+        # Log de diagnóstico: claves del root y primer activo completo
         import json as _json
-        raw_snippet = _json.dumps(raw)[:400]
-        log_fn(f"[debug] respuesta raw (400c): {raw_snippet}")
+        root_keys = list(raw.keys()) if isinstance(raw, dict) else f"array[{len(raw)}]"
+        log_fn(f"[debug] claves root: {root_keys}")
 
         # Normalizar a lista de activos + dict de estado_cuenta
         if isinstance(raw, list):
@@ -272,18 +280,25 @@ class InvertirOnlineScraper(BaseScraper):
             )
 
         log_fn(f"Activos: {len(activos)}")
+        if activos:
+            log_fn(f"[debug] activo[0]: {_json.dumps(activos[0])[:600]}")
 
         val_ars = 0.0
         val_usd = 0.0
 
         for a in activos:
-            moneda     = _to_moneda(a.get("moneda"))
+            # Los campos de identificación están en el sub-objeto "titulo"
+            titulo     = a.get("titulo") or {}
+            simbolo    = (titulo.get("simbolo") or a.get("simbolo") or "?").strip()
+            desc       = (titulo.get("descripcion") or a.get("descripcion") or "").strip()
+            tipo_raw   = titulo.get("tipo") or a.get("tipo_instrumento") or ""
+            # moneda puede estar en el activo o en titulo
+            moneda     = _to_moneda(a.get("moneda") or titulo.get("moneda"))
             valorizado = float(a.get("valorizado") or 0)
-            simbolo    = a.get("simbolo") or "?"
-            desc       = (a.get("descripcion") or "").strip()
-            variacion  = float(a.get("variacion") or 0)
-            tipo_label = _TIPO_MAP.get(a.get("tipo_instrumento") or "", "")
-            extra      = (f"  [{tipo_label}]" if tipo_label else "") + (f"  {desc}" if desc else "")
+            # "variacion" (%) puede llamarse "variacionDiaria" en esta versión de API
+            variacion  = float(a.get("variacion") or a.get("variacionDiaria") or 0)
+            label      = _tipo_label(tipo_raw)
+            extra      = (f"  [{label}]" if label else "") + (f"  {desc}" if desc else "")
 
             if moneda == "USD":
                 val_usd += valorizado

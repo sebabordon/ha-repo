@@ -1,3 +1,11 @@
+## 0.4.8
+
+- **IOL: fix campos anidados en `titulo{}`**: los campos `simbolo`, `descripcion` y `tipo` no están directamente en el activo sino dentro del sub-objeto `titulo`. Ahora se leen con fallback (`titulo.X` o `a.X`). Como consecuencia el símbolo mostraba `?` y el tipo quedaba vacío.
+- **IOL: fix variación diaria**: la API devuelve `variacionDiaria` en vez de `variacion`; se usa el primero disponible con fallback.
+- **IOL: `_tipo_label()` con matching flexible**: reemplaza el dict exacto por una función que hace substring lowercase, cubriendo "FondoComun", "fondos_comunes_de_inversion" y cualquier variante futura.
+- **IOL: log de diagnóstico mejorado**: muestra las claves del root y el primer activo completo (600 chars) en vez de los 400 chars del response entero (que se cortaba antes de ver `titulo`).
+- **UI: botón "⎘ Copiar" en el log de instancias**: el panel de cuenta (tab Cuentas) ahora tiene el mismo botón de copiar que la tab Scrapers, con IDs `copy-log-btn-inst-{id}` y `scraper-log-pre-inst-{id}`.
+
 ## 0.4.7
 
 - **IOL: fix moneda ARS/USD**: la API puede devolver `moneda` como entero (0=ARS, 1=USD) o string ("peso_argentino"/"dolar_estadounidense"). Reemplazado el dict-lookup por la función `_to_moneda()` que cubre ambos formatos. También fix en `estado_cuenta.saldos`: antes siempre sumaba a ARS; ahora cada ítem de saldo respeta su propia moneda.

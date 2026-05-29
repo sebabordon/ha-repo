@@ -3082,8 +3082,13 @@ function _renderInstanceFullPanel(c, inst) {
 
   const logSection = inst.last_log ? `
     <details class="scraper-log-details">
-      <summary>📋 Detalle del último run</summary>
-      <pre class="scraper-log-pre">${escHtml(inst.last_log)}</pre>
+      <summary>
+        <span>📋 Detalle del último run</span>
+        <button class="btn-copy-log" id="copy-log-btn-inst-${inst.id}"
+                onclick="event.stopPropagation();copyScraperLog('inst-${inst.id}')"
+                title="Copiar al portapapeles">⎘ Copiar</button>
+      </summary>
+      <pre class="scraper-log-pre" id="scraper-log-pre-inst-${inst.id}">${escHtml(inst.last_log)}</pre>
     </details>` : "";
 
   // Movimientos guardados (reusa el endpoint legacy filtrado por la fuente de esta cuenta)
