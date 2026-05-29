@@ -362,29 +362,27 @@ def auto_import_unmatched(fuente: str) -> int:
 
 def delete_movimiento_raw(raw_id: int) -> dict:
     """
-    Borra o ignora un movimiento_raw desde la UI del scraper.
+    Borra un movimiento_raw desde la UI del scraper — HARD DELETE.
 
-    Comportamiento UNIFICADO (todos los scrapers — MP, AMEX, BBVA, Galicia,
-    etc.) basado en el estado actual de la fila:
+    Comportamiento uniforme para todos los scrapers:
+      - La fila se elimina completamente de `movimientos_raw`.
+      - Si tenía estado='imported' y un `gasto_id` vinculado, ese gasto
+        también se borra de la tabla `gastos`.
 
-    - Entrada manual de /quick (raw_data contiene "manual_quick"):
-      hard delete (el usuario la creó a mano, no tiene sentido bloquear
-      reimport — no existe "reimport" para entradas manuales).
-
-    - Entrada con estado='ignored':
-      hard delete (segundo ✕). Limpia el sentinel y permite que el scraper
-      vuelva a importar esa transacción en runs futuros.
-
-    - Cualquier otro estado (new/unmatched/matched/imported):
-      soft delete (primer ✕). Se marca como 'ignored', se borra el gasto
-      vinculado si lo había, y el dedup en `insert_movimientos_raw` impide
-      reimport en futuros runs (la fila ignored sirve de sentinel).
+    Trade-off conocido: como la fila desaparece de la DB, el dedup de
+    `insert_movimientos_raw` no la encuentra en el próximo run del scraper,
+    por lo que SÍ puede re-importarse mientras la transacción esté dentro
+    del rango temporal configurado (`dias`).  Si el usuario quiere bloquear
+    re-import definitivamente, las opciones son:
+      - Reducir el `dias` configurado para que la transacción quede fuera
+        del rango.
+      - Usar una regla de categorización que filtre la descripción.
 
     Devuelve {'deleted_raw': bool, 'deleted_gasto': bool, 'gasto_id': int|None}.
     """
     with _conn() as conn:
         row = conn.execute(
-            "SELECT fuente, estado, gasto_id, raw_data FROM movimientos_raw WHERE id=?",
+            "SELECT fuente, estado, gasto_id FROM movimientos_raw WHERE id=?",
             (raw_id,),
         ).fetchone()
         if not row:
@@ -396,24 +394,7 @@ def delete_movimiento_raw(raw_id: int) -> dict:
             conn.execute("DELETE FROM gastos WHERE id=?", (gasto_id,))
             deleted_gasto = True
 
-        # Es entrada manual de /quick?
-        is_manual_quick = False
-        try:
-            rd = json.loads(row["raw_data"]) if row["raw_data"] else {}
-            is_manual_quick = bool(rd.get("manual_quick"))
-        except Exception:
-            pass
-
-        if is_manual_quick or row["estado"] == "ignored":
-            # Hard delete: entrada manual, o segundo ✕ sobre un ignored
-            conn.execute("DELETE FROM movimientos_raw WHERE id=?", (raw_id,))
-        else:
-            # Soft delete: sentinel 'ignored' impide reimport (el dedup en
-            # insert_movimientos_raw mira cualquier estado, incluido ignored)
-            conn.execute(
-                "UPDATE movimientos_raw SET estado='ignored', gasto_id=NULL WHERE id=?",
-                (raw_id,),
-            )
+        conn.execute("DELETE FROM movimientos_raw WHERE id=?", (raw_id,))
     return {"deleted_raw": True, "deleted_gasto": deleted_gasto, "gasto_id": gasto_id}
 
 

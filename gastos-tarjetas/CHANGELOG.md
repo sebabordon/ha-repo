@@ -1,3 +1,9 @@
+## 0.3.68
+
+- **Botón ✕ en "📦 Registros ingresados" — hard delete único (eliminamos el soft delete)**: ya no se usa el estado `ignored` como sentinel anti-reimport.  Un solo clic en ✕ borra definitivamente la fila de `movimientos_raw` y, si tenía un gasto vinculado, también borra el gasto.  Comportamiento idéntico en todos los scrapers (MP, AMEX, BBVA, Galicia, etc.).
+- **Trade-off conocido**: como la fila desaparece de la DB, el dedup de `insert_movimientos_raw` no la detecta en el siguiente run, así que el scraper SÍ puede re-importar la transacción si todavía cae dentro del rango temporal configurado (`dias`).  El diálogo de confirmación lo aclara explícitamente con un ⚠.  Para bloquear definitivamente: bajar `dias` (que la transacción quede fuera del rango) o usar una regla de categorización que la filtre por descripción.
+- **Filas viejas con estado `ignored`** (del esquema previo): siguen existiendo pero ya nada las crea.  Si querés limpiarlas, hacé clic en su ✕ (ahora con el hard delete, las elimina del todo).
+
 ## 0.3.67
 
 - **Fix BBVA paginación — `fechaDesde`/`fechaHasta` ahora se envían en TODAS las páginas, no solo la primera**: bug reportado: configurando `dias=35` el scraper importaba movimientos hasta diciembre del año anterior (~150 días). Causa: la primera llamada de paginación incluía `fechaDesde`/`fechaHasta` (más todos los filtros vacíos requeridos), pero las páginas siguientes solo enviaban `idProducto + ultimoMovimientoMostrado`, lo que hacía que BBVA paginara por TODA la historia de la cuenta ignorando el filtro temporal. Fix: incluir el payload completo (incluyendo `fechaDesde`/`fechaHasta` y los demás filtros vacíos) en cada iteración del while.

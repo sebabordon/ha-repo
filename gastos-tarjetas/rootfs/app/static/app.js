@@ -3669,12 +3669,11 @@ async function _fetchScraperMovimientos(banco, el) {
       </span>`;
 
       const isIgnored   = r.estado === 'ignored';
-      // Comportamiento unificado en todos los scrapers (ver delete_movimiento_raw):
-      //   ignored → 2do ✕ borra definitivamente y permite reimport
-      //   otro    → 1er ✕ soft delete (gasto borrado, sentinel para no reimportar)
-      const delTitle    = isIgnored
-        ? "Borrar definitivamente (permite reimport)"
-        : "Ignorar (también borra el gasto vinculado, evita reimport)";
+      // Borrado definitivo (hard delete) — quita la fila y el gasto vinculado.
+      // El scraper podrá re-importar si la transacción está dentro del rango
+      // de "dias" configurado.  Para bloquear definitivamente: reducir "dias"
+      // o usar una regla de categorización.
+      const delTitle    = "Borrar definitivamente (también borra el gasto vinculado)";
       const rowExtraClass = isIgnored ? " scraper-mov-row-ignored" : "";
       return `<div class="scraper-mov-row${rowExtraClass}" id="mov-row-${r.id}">
         ${fechaCell}
@@ -3690,12 +3689,11 @@ async function _fetchScraperMovimientos(banco, el) {
 }
 
 async function deleteMovimientoRaw(rawId, banco, isIgnored = false) {
-  // Comportamiento unificado para todos los scrapers:
-  //   1er ✕ (estado != ignored): soft delete → gasto borrado, raw queda 'ignored' (no reimport).
-  //   2do ✕ (estado == ignored): hard delete → quita la fila, el scraper puede reimportar.
-  const msg = isIgnored
-    ? "¿Borrar definitivamente este registro?\nSe eliminará de la base de datos y el scraper podrá volver a importarlo."
-    : "¿Ignorar este registro?\nSi fue importado a gastos, también se borrará el gasto.\nEl scraper no lo volverá a importar (clic de nuevo en el ✕ para borrar el sentinel y permitir reimport).";
+  // Hard delete: la fila se elimina completamente, junto con el gasto vinculado
+  // si lo había.  El scraper podrá re-importar la transacción si todavía cae
+  // en el rango de "dias" configurado (para bloquear: bajar "dias" o usar
+  // una regla de categorización que la filtre).
+  const msg = "¿Borrar este registro?\nSi tiene un gasto vinculado, también se borrará.\n\n⚠ Si el scraper vuelve a correr y la transacción está dentro del rango de días configurado, la va a re-importar.";
   if (!confirm(msg)) return;
   try {
     const res = await fetch(`${BASE}/api/scrapers/movimientos-raw/${rawId}`, { method: "DELETE" });
