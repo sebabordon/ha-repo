@@ -4,23 +4,16 @@ Scraper InvertirOnline — API REST.
 No usa Selenium. Autenticación OAuth2 (grant_type=password) con refresh automático.
 
 Funcionalidad:
-  1. Autenticar y obtener access_token + refresh_token (expiry 1 hora)
-  2. Consultar portafolio → saldo_ars (posiciones + cash ARS) y saldo_usd (posiciones USD)
-  3. Opcionalmente importar operaciones terminadas como movimientos
+  1. Autenticar → access_token + refresh_token (TTL 1 hora, refresh automático)
+  2. GET /api/v2/estadocuenta → saldo_ars y saldo_usd por cuenta (cash + títulos)
+  3. GET /api/v2/portafolio/{pais} → log detallado de cada tenencia
+  4. GET /api/v2/operaciones → importar compras/ventas como movimientos (opcional)
 
-Endpoints:
-  POST /token                             → OAuth2 password grant / refresh
-  GET  /api/v2/portafolio/{pais}          → holdings + estado de cuenta
-  GET  /api/v2/operaciones                → operaciones terminadas (opt.)
-
-Credenciales:
-  usuario     → usuario IOL (email o alias)
-  password    → contraseña IOL
-  dias        → días a consultar para operaciones (default 60)
-  importar_operaciones → checkbox: importar compras/ventas como movimientos
+El estadocuenta es la fuente de saldos: cada cuenta tiene `total` = cash + títulos
+valorizados, separado por moneda. El portafolio se usa solo para el log detallado.
 """
 
-import json
+import json as _json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -40,40 +33,43 @@ _DIAS_DEFAULT = 60
 
 _ART = timezone(timedelta(hours=-3))
 
-def _tipo_label(raw: str) -> str:
-    """
-    Convierte tipo de instrumento IOL a etiqueta corta.
-    El campo puede venir en snake_case ("fondos_comunes_de_inversion") o
-    PascalCase ("FondoComun") dependiendo de la versión de la API.
-    """
-    if not raw:
-        return ""
-    t = raw.lower()
-    if "cedear" in t:                              return "CEDEAR"
-    if "fondo" in t or "fci" in t:                return "FCI"
-    if "accion" in t or "acción" in t:            return "Acción"
-    if "titulo" in t or "bono" in t:              return "Bono"
-    if "obligacion" in t or "obligación" in t:    return "ON"
-    if "caucion" in t or "caución" in t:          return "Caución"
-    if "opcion" in t or "opción" in t:            return "Opción"
-    if "futuro" in t:                              return "Futuro"
-    return ""
-
-# Tipos de operación que representan ingresos (signo negativo en nuestra convención)
+# Tipos de operación que son ingresos (signo negativo en nuestra convención)
 _SIGN_INGRESO = ("venta", "cobro", "acreditaci", "dividendo", "renta")
 
 
 def _to_moneda(raw) -> str:
     """
     Convierte el campo `moneda` de IOL a "ARS" o "USD".
-
-    La API puede devolver el campo como string ("peso_argentino") o como entero
-    (0 = ARS, 1 = USD) dependiendo de la versión y del endpoint.
+    Acepta int (0=ARS, 1=USD), string en cualquier case
+    ("peso_Argentino", "dolar_Estadounidense", "peso_argentino", etc.)
     """
-    if raw in (1, "1", "dolar_estadounidense", "Dolar", "dolar"):
+    if raw is None:
+        return "ARS"
+    if isinstance(raw, int):
+        return "USD" if raw == 1 else "ARS"
+    s = str(raw).lower()
+    if "dolar" in s or "dollar" in s or s == "1":
         return "USD"
-    # 0, "0", "peso_argentino", None, o cualquier otro valor → ARS
     return "ARS"
+
+
+def _tipo_label(raw: str) -> str:
+    """
+    Convierte tipo de instrumento IOL a etiqueta corta.
+    Acepta snake_case ("fondos_comunes_de_inversion") o PascalCase ("FondoComun").
+    """
+    if not raw:
+        return ""
+    t = raw.lower()
+    if "cedear" in t:                           return "CEDEAR"
+    if "fondo" in t or "fci" in t:             return "FCI"
+    if "accion" in t or "acción" in t:         return "Acción"
+    if "titulo" in t or "bono" in t:           return "Bono"
+    if "obligacion" in t or "obligación" in t: return "ON"
+    if "caucion" in t or "caución" in t:       return "Caución"
+    if "opcion" in t or "opción" in t:         return "Opción"
+    if "futuro" in t:                           return "Futuro"
+    return ""
 
 
 class InvertirOnlineScraper(BaseScraper):
@@ -89,7 +85,7 @@ class InvertirOnlineScraper(BaseScraper):
             return None
         try:
             with open(self.session_path) as f:
-                data = json.load(f)
+                data = _json.load(f)
             expires_at = data.get("expires_at")
             if expires_at:
                 exp = datetime.fromisoformat(expires_at)
@@ -110,7 +106,7 @@ class InvertirOnlineScraper(BaseScraper):
             ).isoformat()
             os.makedirs(os.path.dirname(self.session_path), exist_ok=True)
             with open(self.session_path, "w") as f:
-                json.dump({
+                _json.dump({
                     "access_token":  token_resp.get("access_token"),
                     "refresh_token": token_resp.get("refresh_token"),
                     "expires_at":    expires_at,
@@ -193,19 +189,28 @@ class InvertirOnlineScraper(BaseScraper):
                 token = await self._ensure_token(client, config, _l)
                 hdrs  = {"Authorization": f"Bearer {token}"}
 
-                _l(f"Consultando portafolio ({_PAIS})…")
-                resp = await client.get(
-                    f"{_BASE}/api/v2/portafolio/{_PAIS}", headers=hdrs
-                )
-                if resp.status_code == 401:
+                # 1. Estado de cuenta → saldos por moneda
+                _l("Consultando estado de cuenta…")
+                resp_ec = await client.get(f"{_BASE}/api/v2/estadocuenta", headers=hdrs)
+                if resp_ec.status_code == 401:
                     self.clear_session()
                     raise ValueError(
                         "Token inválido (401) — sesión eliminada, el próximo run hará re-login"
                     )
-                resp.raise_for_status()
+                resp_ec.raise_for_status()
+                saldo_ars, saldo_usd = self._process_estadocuenta(resp_ec.json(), _l)
 
-                saldo_ars, saldo_usd = self._process_portfolio(resp.json(), _l)
+                # 2. Portafolio → log de tenencias individuales
+                _l(f"Consultando tenencias ({_PAIS})…")
+                resp_pf = await client.get(
+                    f"{_BASE}/api/v2/portafolio/{_PAIS}", headers=hdrs
+                )
+                if resp_pf.status_code == 200:
+                    self._log_holdings(resp_pf.json(), _l)
+                else:
+                    _l(f"Portafolio no disponible: HTTP {resp_pf.status_code}")
 
+                # 3. Operaciones (opcional)
                 movimientos: list[MovimientoRaw] = []
                 if config.get("importar_operaciones"):
                     dias = int(config.get("dias") or _DIAS_DEFAULT)
@@ -248,81 +253,84 @@ class InvertirOnlineScraper(BaseScraper):
             )
             return ScraperResult(fuente=self.fuente, error=err, log_lines=log)
 
-    # ── Portfolio ─────────────────────────────────────────────────────────────
+    # ── Estado de cuenta (saldos) ──────────────────────────────────────────────
 
-    def _process_portfolio(self, raw: object, log_fn) -> tuple[float, float]:
+    def _process_estadocuenta(self, ec: dict, log_fn) -> tuple[float, float]:
         """
-        Suma el valor de los activos y el efectivo por moneda.
+        Extrae saldo_ars y saldo_usd de /api/v2/estadocuenta.
 
-        saldo_ars = Σ valorizado(ARS) + efectivo ARS en cuenta
-        saldo_usd = Σ valorizado(USD) + efectivo USD en cuenta
-
-        La API puede devolver:
-          - {"activos": [...], "estado_cuenta": {...}}  (objeto con claves snake_case)
-          - {"activos": [...], "estadoCuenta": {...}}   (objeto con claves camelCase)
-          - [...]                                        (array directo de activos)
+        Cada cuenta en ec["cuentas"] tiene:
+          - moneda: "peso_Argentino" | "dolar_Estadounidense"
+          - total:  cash + títulos valorizados (lo que queremos como saldo)
         """
-        # Log de diagnóstico: claves del root y primer activo completo
-        import json as _json
-        root_keys = list(raw.keys()) if isinstance(raw, dict) else f"array[{len(raw)}]"
-        log_fn(f"[debug] claves root: {root_keys}")
-
-        # Normalizar a lista de activos + dict de estado_cuenta
-        if isinstance(raw, list):
-            activos       = raw
-            estado_cuenta = {}
-        else:
-            activos = raw.get("activos") or []
-            estado_cuenta = (
-                raw.get("estado_cuenta")
-                or raw.get("estadoCuenta")
-                or {}
-            )
-
-        log_fn(f"Activos: {len(activos)}")
-        if activos:
-            log_fn(f"[debug] activo[0]: {_json.dumps(activos[0])[:600]}")
+        cuentas = ec.get("cuentas") or []
+        log_fn(f"[debug] estadocuenta keys: {list(ec.keys())}  cuentas: {len(cuentas)}")
 
         val_ars = 0.0
         val_usd = 0.0
 
+        for c in cuentas:
+            moneda  = _to_moneda(c.get("moneda"))
+            total   = float(c.get("total") or 0)
+            saldo   = float(c.get("saldo") or 0)          # cash
+            titulos = float(c.get("titulosValorizados") or 0)
+            tipo    = (c.get("tipo") or "").replace("_", " ")
+            estado  = c.get("estado") or ""
+
+            if moneda == "USD":
+                val_usd += total
+                log_fn(
+                    f"  Cuenta USD ({tipo}): cash U${saldo:,.2f}"
+                    f" + títulos U${titulos:,.2f} = U${total:,.2f}  [{estado}]"
+                )
+            else:
+                val_ars += total
+                log_fn(
+                    f"  Cuenta ARS ({tipo}): cash ${saldo:,.0f}"
+                    f" + títulos ${titulos:,.0f} = ${total:,.0f}  [{estado}]"
+                )
+
+        log_fn(f"Total: ${val_ars:,.0f} ARS  |  U${val_usd:,.2f} USD")
+        return round(val_ars, 2), round(val_usd, 2)
+
+    # ── Portafolio (log de tenencias) ──────────────────────────────────────────
+
+    def _log_holdings(self, raw: object, log_fn) -> None:
+        """
+        Loguea las tenencias individuales del portafolio.
+        No modifica saldos — es solo para visibilidad en el log del run.
+        """
+        # La API puede devolver dict con "activos" o array directo
+        if isinstance(raw, list):
+            activos = raw
+        else:
+            root_keys = list(raw.keys()) if isinstance(raw, dict) else "?"
+            log_fn(f"[debug] portafolio keys: {root_keys}")
+            activos = raw.get("activos") or []
+
+        if not activos:
+            log_fn("Sin tenencias individuales en portafolio.")
+            return
+
+        log_fn(f"Tenencias ({len(activos)}):")
+        if activos:
+            log_fn(f"[debug] activo[0]: {_json.dumps(activos[0])[:500]}")
+
         for a in activos:
-            # Los campos de identificación están en el sub-objeto "titulo"
             titulo     = a.get("titulo") or {}
             simbolo    = (titulo.get("simbolo") or a.get("simbolo") or "?").strip()
             desc       = (titulo.get("descripcion") or a.get("descripcion") or "").strip()
             tipo_raw   = titulo.get("tipo") or a.get("tipo_instrumento") or ""
-            # moneda puede estar en el activo o en titulo
             moneda     = _to_moneda(a.get("moneda") or titulo.get("moneda"))
             valorizado = float(a.get("valorizado") or 0)
-            # "variacion" (%) puede llamarse "variacionDiaria" en esta versión de API
             variacion  = float(a.get("variacion") or a.get("variacionDiaria") or 0)
             label      = _tipo_label(tipo_raw)
             extra      = (f"  [{label}]" if label else "") + (f"  {desc}" if desc else "")
 
             if moneda == "USD":
-                val_usd += valorizado
-                log_fn(f"  {simbolo:<10} = U${valorizado:>10,.2f}  ({variacion:+.2f}%){extra}")
+                log_fn(f"  {simbolo:<12} U${valorizado:>10,.2f}  ({variacion:+.2f}%){extra}")
             else:
-                val_ars += valorizado
-                log_fn(f"  {simbolo:<10} = ${valorizado:>12,.0f}  ({variacion:+.2f}%){extra}")
-
-        # Efectivo en cuenta — cada ítem puede tener su propia moneda
-        for s in estado_cuenta.get("saldos") or []:
-            saldo = float(s.get("saldo") or 0)
-            if not saldo:
-                continue
-            liq          = s.get("liquidacion") or "efectivo"
-            moneda_saldo = _to_moneda(s.get("moneda"))
-            if moneda_saldo == "USD":
-                val_usd += saldo
-                log_fn(f"  Efectivo ({liq}): U${saldo:,.2f} USD")
-            else:
-                val_ars += saldo
-                log_fn(f"  Efectivo ({liq}): ${saldo:,.0f} ARS")
-
-        log_fn(f"Total portafolio: ${val_ars:,.0f} ARS  |  U${val_usd:,.2f} USD")
-        return round(val_ars, 2), round(val_usd, 2)
+                log_fn(f"  {simbolo:<12}  ${valorizado:>12,.0f}  ({variacion:+.2f}%){extra}")
 
     # ── Operaciones ──────────────────────────────────────────────────────────
 
@@ -372,9 +380,9 @@ class InvertirOnlineScraper(BaseScraper):
             if monto_raw <= 0:
                 return None
 
-            moneda   = _to_moneda(op.get("moneda"))
-            tipo_l   = tipo.lower()
-            sign     = -1 if any(k in tipo_l for k in _SIGN_INGRESO) else +1
+            moneda = _to_moneda(op.get("moneda"))
+            tipo_l = tipo.lower()
+            sign   = -1 if any(k in tipo_l for k in _SIGN_INGRESO) else +1
 
             instrumento = op.get("instrumento") or {}
             simbolo     = (instrumento.get("simbolo") or "").strip()

@@ -1,3 +1,10 @@
+## 0.4.9
+
+- **IOL: usar `/api/v2/estadocuenta` como fuente de saldos**: en vez de sumar manualmente los `valorizado` del portafolio, ahora se consulta el endpoint `/api/v2/estadocuenta` que devuelve `cuentas[].total` (cash + títulos valorizados) separado por moneda (`peso_Argentino` / `dolar_Estadounidense`). Es la fuente autorizada de IOL y evita desincronías entre la valorización del portafolio y el saldo real de la cuenta.
+- **IOL: portafolio solo para log**: `/api/v2/portafolio/argentina` ya no computa saldos; muestra cada tenencia con símbolo, valorización, variación diaria y tipo de instrumento para visibilidad en el log del run.
+- **IOL: `_process_estadocuenta()`**: nuevo método que parsea las cuentas del estado de cuenta, loguea cash + títulos por cuenta y devuelve el total ARS y USD acumulado.
+- **IOL: `_log_holdings()`**: rebautizado desde `_process_portfolio()`; ahora es puro logging sin side-effects sobre saldos.
+
 ## 0.4.8
 
 - **IOL: fix campos anidados en `titulo{}`**: los campos `simbolo`, `descripcion` y `tipo` no están directamente en el activo sino dentro del sub-objeto `titulo`. Ahora se leen con fallback (`titulo.X` o `a.X`). Como consecuencia el símbolo mostraba `?` y el tipo quedaba vacío.
