@@ -1,3 +1,7 @@
+## 0.3.69
+
+- **BBVA — filtro de monedas a importar** (`monedas` en credentials): nuevo campo text en el config del scraper BBVA donde se ingresan los códigos de moneda a procesar, separados por coma (`ARS`, `USD`, `EUR`).  Si está vacío o sin setear, el default es **solo `ARS`** (conservador — no importa dólares ni euros sin pedirlo explícitamente, antes los importaba todos a `bbva_cuenta`).  La detección de moneda por cuenta usa la lógica que ya estaba en `_detect_moneda` (prefiere `codigoMoneda`/`moneda` de la API, fallback al alias "Pesos"/"Dolares"/"Euros").  El log muestra `monedas_filtro=['ARS']` al inicio y `Saltando cuenta: Dolares (moneda=USD no está en ['ARS'])` por cada cuenta filtrada, así queda claro qué se procesa y qué no.  El saldo de las cuentas filtradas se sigue registrando (informativo) pero sin importar movimientos.  Esto es la fase 1 hacia multi-instancia/multi-cuenta — eventualmente la idea es permitir mapeo per-cuenta (cuenta USD → otra fuente/usuario distintos).
+
 ## 0.3.68
 
 - **Botón ✕ en "📦 Registros ingresados" — hard delete único (eliminamos el soft delete)**: ya no se usa el estado `ignored` como sentinel anti-reimport.  Un solo clic en ✕ borra definitivamente la fila de `movimientos_raw` y, si tenía un gasto vinculado, también borra el gasto.  Comportamiento idéntico en todos los scrapers (MP, AMEX, BBVA, Galicia, etc.).

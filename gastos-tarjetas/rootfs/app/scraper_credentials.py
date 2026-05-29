@@ -84,6 +84,14 @@ BANKS: dict[str, dict] = {
                 "placeholder": "Titular",
                 "hint":        "Nombre que verán los gastos importados de este scraper (ej. Titular, Sebastián). Si está vacío, se usa el default configurado en Config → Usuarios → fuente_usuario['bbva_cuenta'].",
             },
+            {
+                "key":         "monedas",
+                "label":       "Monedas a importar",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "ARS",
+                "hint":        "Códigos de moneda separados por coma (ej. ARS, USD, EUR). Vacío o sin setear = solo ARS. Filtra qué cuentas se procesan: la cuenta en USD se ignora si solo está ARS.",
+            },
         ],
     },
     "galicia": {

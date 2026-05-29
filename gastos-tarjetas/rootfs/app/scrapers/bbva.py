@@ -546,6 +546,17 @@ class BbvaScraper(BaseScraper):
         dias            = int(config.get("dias") or _DIAS_DEFAULT)
         usuario_default = (config.get("usuario_default") or "").strip() or None
 
+        # Parseo del filtro de monedas: lista separada por coma, normalizada
+        # a {ARS, USD, EUR}.  Vacío o no seteado → solo ARS (default conservador
+        # para no importar dólares o euros sin pedirlo explícitamente).
+        _monedas_raw = (config.get("monedas") or "").strip()
+        if _monedas_raw:
+            monedas_filtro = {
+                m.strip().upper() for m in _monedas_raw.split(",") if m.strip()
+            }
+        else:
+            monedas_filtro = {"ARS"}
+
         movimientos: list[MovimientoRaw] = []
         saldos: dict = {}
 
@@ -558,7 +569,11 @@ class BbvaScraper(BaseScraper):
 
         result = (cuentas_resp["json"] or {}).get("result", {}) or {}
         cajas  = result.get("cajasAhorro", []) or []
-        _log(f"Cuentas encontradas: {len(cajas)}  |  usuario_default={usuario_default or '(none)'}")
+        _log(
+            f"Cuentas encontradas: {len(cajas)}  |  "
+            f"monedas_filtro={sorted(monedas_filtro)}  |  "
+            f"usuario_default={usuario_default or '(none)'}"
+        )
 
         today_art   = datetime.now(_ART).date()
         since_date  = today_art - timedelta(days=dias - 1)
@@ -576,12 +591,22 @@ class BbvaScraper(BaseScraper):
             # "Euros" → EUR).  Default ARS.
             moneda = self._detect_moneda(cuenta, alias)
 
-            _log(f"Procesando cuenta: {alias} (id={id_prod}, moneda={moneda})")
-
+            # Aún si la cuenta queda filtrada, registramos su saldo (informativo)
             if saldo_raw:
                 saldo_val = self.parse_amount(str(saldo_raw))
                 saldo_key = "saldo_usd" if moneda == "USD" else "saldo_eur" if moneda == "EUR" else "saldo_ars"
                 saldos.setdefault("bbva_cuenta", {})[saldo_key] = saldo_val
+
+            # Filtro por moneda: skipear cuentas cuya moneda no esté en la lista
+            if moneda not in monedas_filtro:
+                _log(
+                    f"Saltando cuenta: {alias} (id={id_prod}, moneda={moneda} "
+                    f"no está en {sorted(monedas_filtro)})"
+                )
+                continue
+
+            _log(f"Procesando cuenta: {alias} (id={id_prod}, moneda={moneda})")
+            if saldo_raw:
                 _log(f"  Saldo actual: {saldo_raw}")
 
             movs = self._fetch_movimientos(
