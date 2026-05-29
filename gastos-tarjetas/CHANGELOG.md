@@ -1,5 +1,8 @@
 ## 0.5.7
 
+- **MercadoPago: fix retiros a CBU externa no se importaban**: el filtro DEFER-IN descartaba todos los `account_fund` en la query de payer, incluyendo transferencias salientes a un CBU de otro banco. Ahora sólo se difieren los `account_fund` cuyo collector es el mismo usuario (depósito propio); si el collector es externo, se captura como egreso con descripción "Retiro a CBU".
+- **MercadoPago: revertido endpoint `/mercadopago_account/movements/search`**: ese endpoint no está en la documentación oficial y devolvía 403. Se eliminó la consulta; los retiros a CBU ahora se capturan correctamente vía el filtro corregido en `/v1/payments/search`.
+
 ## 0.5.6
 
 - **Fix: chips de categorías en chart presupuesto vs real no respondían al click**: el onclick se generaba como atributo HTML con `JSON.stringify(cat)` (comillas dobles), lo que rompía el atributo. Se reemplazó por `createElement` + `chip.onclick = () => toggleBudCat(c)`, igual que los chips de la tab Gastos.

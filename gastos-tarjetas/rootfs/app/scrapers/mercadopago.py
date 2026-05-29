@@ -103,11 +103,6 @@ class MercadoPagoScraper(BaseScraper):
                 _l(f"Payment IDs ya conocidos en DB: {len(existing_ids)}")
 
                 # 3. Egresos e ingresos
-                today_art  = datetime.now(_ART).date()
-                since_date = today_art - timedelta(days=dias - 1)
-                since_iso  = f"{since_date}T00:00:00.000-03:00"
-                until_iso  = f"{today_art}T23:59:59.999-03:00"
-
                 movimientos, stats = await self._fetch_all(
                     client, user_id, dias, existing_ids, _l, debug_log
                 )
@@ -116,12 +111,6 @@ class MercadoPagoScraper(BaseScraper):
                     f"{stats['ingresos']} ingresos "
                     f"({stats['skipped']} ya existían)"
                 )
-
-                # 3b. Movimientos bancarios (retiros a CBU no incluidos en payments)
-                bank_movs = await self._fetch_movements(
-                    client, user_id, since_iso, until_iso, existing_ids, _l, debug_log
-                )
-                movimientos.extend(bank_movs)
 
                 # 4. Saldo
                 saldos = await self._fetch_balance(client, user_id, _l)
@@ -288,13 +277,21 @@ class MercadoPagoScraper(BaseScraper):
                     _dbg("OMITIDO-CC")
                     continue
 
-                # partition_transfer y account_fund: ambos aparecen en las dos queries
-                # porque MP los asocia al mismo user_id en payer y collector.
-                # account_fund = dinero que entra a la cuenta (depósito desde banco, etc.)
-                # Siempre son ingresos → saltar en query de payer, capturar en collector.
-                if op_type in ("partition_transfer", "account_fund") and sign == +1:
+                # partition_transfer: aparece en ambas queries (payer=user, collector=user).
+                # Siempre es movimiento interno → diferir a la query de collector.
+                if op_type == "partition_transfer" and sign == +1:
                     _dbg("DEFER-IN")
                     continue
+
+                # account_fund: depósito bancario (banco→MP) también aparece en ambas
+                # queries con payer=user. Si el collector es el mismo usuario → diferir.
+                # Si el collector es externo (banco de destino) → retiro a CBU, capturar.
+                if op_type == "account_fund" and sign == +1:
+                    raw_coll = payment.get("collector_id")
+                    if raw_coll is None or str(raw_coll) == str(user_id):
+                        _dbg("DEFER-IN")
+                        continue
+                    # collector externo → retiro a CBU, cae al procesamiento normal
 
                 if pid and pid in existing_ids:
                     skipped += 1
@@ -439,10 +436,10 @@ class MercadoPagoScraper(BaseScraper):
         if op_type == "partition_transfer":
             return "Transferencia desde Reserva" if sign == -1 else "Transferencia hacia Reserva"
 
-        # ── Regla 2: depósito bancario (bank_transfer + account_fund) ──────────
+        # ── Regla 2: depósito bancario o retiro a CBU (account_fund) ─────────────
         if op_type == "account_fund":
-            # Siempre es ingreso (se captura solo en collector query).
-            # El motivo "Bank Transfer" es genérico; usamos etiqueta propia.
+            if sign == +1:
+                return "Retiro a CBU"
             return "Depósito bancario"
 
         # ── Regla 3: transferencia entre cuentas MP ────────────────────────────
@@ -538,122 +535,6 @@ class MercadoPagoScraper(BaseScraper):
         if installments > 1:
             base += f" ({installments} cuotas)"
         return base
-
-    # ── Movimientos bancarios (retiros a CBU) ────────────────────────────────
-
-    async def _fetch_movements(
-        self,
-        client: httpx.AsyncClient,
-        user_id: int,
-        since: str,
-        until: str,
-        existing_ids: set,
-        log_fn,
-        debug: bool = False,
-    ) -> list[MovimientoRaw]:
-        """Consulta /users/{user_id}/mercadopago_account/movements/search para capturar retiros
-        bancarios (transferencias a CBU) que no aparecen en /v1/payments/search.
-
-        Los movimientos cuyo reference_id coincide con un payment_id conocido se
-        descartan para evitar duplicados con los pagos ya importados.
-        """
-        movs:        list[MovimientoRaw] = []
-        seen_mv_ids: set = set()
-        offset = 0
-        skipped = 0
-
-        try:
-            while True:
-                params = {
-                    "begin_date": since,
-                    "end_date":   until,
-                    "limit":      _PAGE_SIZE,
-                    "offset":     offset,
-                }
-                resp = await client.get(
-                    f"{_BASE}/users/{user_id}/mercadopago_account/movements/search", params=params
-                )
-                if resp.status_code != 200:
-                    log_fn(f"Movimientos bancarios: status {resp.status_code} — omitido")
-                    return movs
-
-                data    = resp.json()
-                results = data.get("results", [])
-                if not results:
-                    break
-
-                for mv in results:
-                    mv_id    = mv.get("id")
-                    ref_id   = mv.get("reference_id")
-                    amount   = float(mv.get("amount", 0))
-                    mv_type  = (mv.get("type") or "").strip()
-                    detail   = (mv.get("detail") or "").strip()
-                    fin_ent  = (mv.get("financial_entity") or "").strip()
-                    date_str = (mv.get("date_created") or "")[:10]
-                    currency = mv.get("currency_id", "ARS")
-
-                    if debug:
-                        log_fn(
-                            f"  [mvt] id={mv_id} {date_str} type={mv_type}"
-                            f" amt={amount:.2f} ref={ref_id}"
-                            f" detail={detail[:35]} fin={fin_ent}"
-                        )
-
-                    if mv_id and mv_id in seen_mv_ids:
-                        continue
-                    if mv_id:
-                        seen_mv_ids.add(mv_id)
-
-                    # Ya capturado desde /v1/payments/search
-                    if ref_id and ref_id in existing_ids:
-                        skipped += 1
-                        continue
-
-                    if not date_str or len(date_str) < 10 or not amount:
-                        continue
-
-                    # Signo: amount < 0 → salida de billetera → egreso (monto > 0)
-                    #        amount > 0 → entrada → ingreso (monto < 0)
-                    monto = round(-amount, 2)
-
-                    # Descripción
-                    desc = detail or fin_ent or mv_type or "Transferencia bancaria"
-                    if fin_ent and detail and fin_ent.lower() not in detail.lower():
-                        desc = f"{detail} — {fin_ent}"
-
-                    raw: dict = {
-                        "movement_id":      mv_id,
-                        "movement_type":    mv_type or None,
-                        "financial_entity": fin_ent or None,
-                        "reference_id":     ref_id,
-                    }
-                    if self._default_usuario:
-                        raw["usuario"] = self._default_usuario
-
-                    movs.append(MovimientoRaw(
-                        fuente      = "mercadopago",
-                        fecha       = date_str,
-                        descripcion = desc,
-                        monto       = monto,
-                        moneda      = "USD" if currency == "USD" else "ARS",
-                        raw_data    = raw,
-                    ))
-                    if mv_id:
-                        existing_ids.add(mv_id)
-
-                total  = data.get("paging", {}).get("total", 0)
-                offset += len(results)
-                if offset >= total or len(results) < _PAGE_SIZE:
-                    break
-
-        except Exception as exc:
-            log_fn(f"Movimientos bancarios: error — {exc}")
-
-        log_fn(
-            f"Movimientos bancarios: {len(movs)} nuevos"
-            + (f" ({skipped} ya existían)" if skipped else "")
-        )
-        return movs
 
     # ── Saldo ─────────────────────────────────────────────────────────────────
 
