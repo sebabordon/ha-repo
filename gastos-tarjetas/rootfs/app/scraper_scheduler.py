@@ -160,7 +160,10 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
         if result.error:
             logger.warning("[scheduler] instancia %d (%s) terminó con error: %s",
                            instance_id, banco, result.error)
-            update_instance_status(instance_id, estado="error", error_msg=result.error)
+            update_instance_status(
+                instance_id, estado="error", error_msg=result.error,
+                last_log="\n".join(result.log_lines) if result.log_lines else None,
+            )
             return
 
         # Remap fuente para scrapers single-product (AMEX/Galicia/MP) — BBVA
@@ -207,6 +210,7 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
             error_msg=None,
             saldo_ars=_any_saldo.get("saldo_ars"),
             saldo_usd=_any_saldo.get("saldo_usd"),
+            last_log="\n".join(result.log_lines) if result.log_lines else None,
         )
 
     finally:
@@ -395,7 +399,10 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
             return {"ok": False, "error": msg}
 
         if result.error:
-            update_instance_status(instance_id, estado="error", error_msg=result.error)
+            update_instance_status(
+                instance_id, estado="error", error_msg=result.error,
+                last_log="\n".join(result.log_lines) if result.log_lines else None,
+            )
             return {"ok": False, "error": result.error,
                     "session_expired": result.session_expired}
 
@@ -434,6 +441,7 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
             saldo_ars=_any_saldo.get("saldo_ars"),
             saldo_usd=_any_saldo.get("saldo_usd"),
             movimientos_nuevos=inserted,
+            last_log="\n".join(result.log_lines) if result.log_lines else None,
         )
 
         return {

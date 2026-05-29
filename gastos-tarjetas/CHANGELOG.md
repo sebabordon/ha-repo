@@ -1,3 +1,9 @@
+## 0.4.7
+
+- **IOL: fix moneda ARS/USD**: la API puede devolver `moneda` como entero (0=ARS, 1=USD) o string ("peso_argentino"/"dolar_estadounidense"). Reemplazado el dict-lookup por la función `_to_moneda()` que cubre ambos formatos. También fix en `estado_cuenta.saldos`: antes siempre sumaba a ARS; ahora cada ítem de saldo respeta su propia moneda.
+- **IOL: estructura de respuesta defensiva**: `_process_portfolio()` ahora acepta tanto `{"activos":[...], "estado_cuenta":{...}}` (snake_case) como `{"activos":[...], "estadoCuenta":{...}}` (camelCase) o un array directo de activos. Agrega log de diagnóstico con los primeros 400 caracteres del raw para identificar la estructura real.
+- **Log visible en panel de cuenta**: el scheduler no pasaba `last_log` a `update_instance_status`, por lo que `scraper_instances.last_log` nunca se actualizaba y el panel mostraba vacío. Ahora se pasa en todos los paths (ok, error, error_msg).
+
 ## 0.4.6
 
 - **Nuevo scraper: InvertirOnline (IOL)**: consulta el portafolio vía API REST (sin Selenium). Autentica con usuario/contraseña usando OAuth2 `grant_type=password`, almacena el token y lo refresca automáticamente con `refresh_token` antes de que expire (TTL 1 hora con margen de 5 min). En cada run obtiene `/api/v2/portafolio/argentina`, suma el `valorizado` por moneda y actualiza `saldo_ars` (posiciones ARS + efectivo en cuenta) y `saldo_usd` (posiciones USD) en la cuenta "InvertirOnline". Opcionalmente importa operaciones terminadas (compras/ventas/cobros) como movimientos si el checkbox "Importar operaciones" está activo. Para configurarlo: Cuentas → crear cuenta tipo Scraper → selector → InvertirOnline.

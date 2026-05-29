@@ -40,11 +40,6 @@ _DIAS_DEFAULT = 60
 
 _ART = timezone(timedelta(hours=-3))
 
-_MONEDA_MAP = {
-    "peso_argentino":       "ARS",
-    "dolar_estadounidense": "USD",
-}
-
 _TIPO_MAP = {
     "acciones":                    "Acción",
     "cedears":                     "CEDEAR",
@@ -58,6 +53,19 @@ _TIPO_MAP = {
 
 # Tipos de operación que representan ingresos (signo negativo en nuestra convención)
 _SIGN_INGRESO = ("venta", "cobro", "acreditaci", "dividendo", "renta")
+
+
+def _to_moneda(raw) -> str:
+    """
+    Convierte el campo `moneda` de IOL a "ARS" o "USD".
+
+    La API puede devolver el campo como string ("peso_argentino") o como entero
+    (0 = ARS, 1 = USD) dependiendo de la versión y del endpoint.
+    """
+    if raw in (1, "1", "dolar_estadounidense", "Dolar", "dolar"):
+        return "USD"
+    # 0, "0", "peso_argentino", None, o cualquier otro valor → ARS
+    return "ARS"
 
 
 class InvertirOnlineScraper(BaseScraper):
@@ -234,21 +242,42 @@ class InvertirOnlineScraper(BaseScraper):
 
     # ── Portfolio ─────────────────────────────────────────────────────────────
 
-    def _process_portfolio(self, portfolio: dict, log_fn) -> tuple[float, float]:
+    def _process_portfolio(self, raw: object, log_fn) -> tuple[float, float]:
         """
         Suma el valor de los activos y el efectivo por moneda.
 
-        saldo_ars = Σ valorizado(ARS) + efectivo en cuenta (ARS)
-        saldo_usd = Σ valorizado(USD)
+        saldo_ars = Σ valorizado(ARS) + efectivo ARS en cuenta
+        saldo_usd = Σ valorizado(USD) + efectivo USD en cuenta
+
+        La API puede devolver:
+          - {"activos": [...], "estado_cuenta": {...}}  (objeto con claves snake_case)
+          - {"activos": [...], "estadoCuenta": {...}}   (objeto con claves camelCase)
+          - [...]                                        (array directo de activos)
         """
-        activos       = portfolio.get("activos") or []
-        estado_cuenta = portfolio.get("estado_cuenta") or {}
+        # Log de diagnóstico: primeras 400 chars del raw para detectar estructura
+        import json as _json
+        raw_snippet = _json.dumps(raw)[:400]
+        log_fn(f"[debug] respuesta raw (400c): {raw_snippet}")
+
+        # Normalizar a lista de activos + dict de estado_cuenta
+        if isinstance(raw, list):
+            activos       = raw
+            estado_cuenta = {}
+        else:
+            activos = raw.get("activos") or []
+            estado_cuenta = (
+                raw.get("estado_cuenta")
+                or raw.get("estadoCuenta")
+                or {}
+            )
+
+        log_fn(f"Activos: {len(activos)}")
 
         val_ars = 0.0
         val_usd = 0.0
 
         for a in activos:
-            moneda     = _MONEDA_MAP.get((a.get("moneda") or "").lower(), "ARS")
+            moneda     = _to_moneda(a.get("moneda"))
             valorizado = float(a.get("valorizado") or 0)
             simbolo    = a.get("simbolo") or "?"
             desc       = (a.get("descripcion") or "").strip()
@@ -263,17 +292,21 @@ class InvertirOnlineScraper(BaseScraper):
                 val_ars += valorizado
                 log_fn(f"  {simbolo:<10} = ${valorizado:>12,.0f}  ({variacion:+.2f}%){extra}")
 
-        # Efectivo en cuenta (saldos de liquidación — normalmente ARS)
+        # Efectivo en cuenta — cada ítem puede tener su propia moneda
         for s in estado_cuenta.get("saldos") or []:
             saldo = float(s.get("saldo") or 0)
-            if saldo:
-                liq = s.get("liquidacion") or "efectivo"
+            if not saldo:
+                continue
+            liq          = s.get("liquidacion") or "efectivo"
+            moneda_saldo = _to_moneda(s.get("moneda"))
+            if moneda_saldo == "USD":
+                val_usd += saldo
+                log_fn(f"  Efectivo ({liq}): U${saldo:,.2f} USD")
+            else:
                 val_ars += saldo
                 log_fn(f"  Efectivo ({liq}): ${saldo:,.0f} ARS")
 
-        log_fn(
-            f"Total portafolio: ${val_ars:,.0f} ARS  |  U${val_usd:,.2f} USD"
-        )
+        log_fn(f"Total portafolio: ${val_ars:,.0f} ARS  |  U${val_usd:,.2f} USD")
         return round(val_ars, 2), round(val_usd, 2)
 
     # ── Operaciones ──────────────────────────────────────────────────────────
@@ -324,7 +357,7 @@ class InvertirOnlineScraper(BaseScraper):
             if monto_raw <= 0:
                 return None
 
-            moneda   = _MONEDA_MAP.get((op.get("moneda") or "").lower(), "ARS")
+            moneda   = _to_moneda(op.get("moneda"))
             tipo_l   = tipo.lower()
             sign     = -1 if any(k in tipo_l for k in _SIGN_INGRESO) else +1
 
