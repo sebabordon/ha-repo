@@ -18,7 +18,7 @@ def list_cuentas(request: Request):
 
 
 @router.post("/cuentas")
-def post_cuenta(body: dict, request: Request):
+async def post_cuenta(body: dict, request: Request):
     """
     Crea una cuenta nueva.
     Body:
@@ -91,8 +91,8 @@ def put_cuenta(fuente: str, body: dict, request: Request):
 
 
 @router.delete("/cuentas/{fuente}")
-def del_cuenta(fuente: str, request: Request,
-               delete_gastos: bool = True):
+async def del_cuenta(fuente: str, request: Request,
+                     delete_gastos: bool = True):
     """
     Borra una cuenta (manual o auto).  Por defecto borra también los gastos y
     `movimientos_raw` asociados.  Si `delete_gastos=false`, los gastos quedan

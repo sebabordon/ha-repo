@@ -1,3 +1,8 @@
+## 0.4.5
+
+- **Fix HTTP 500 al cambiar el scraper / borrar cuenta / crear cuenta**: las rutas `PUT /api/cuentas/{fuente}/scraper`, `DELETE /api/cuentas/{fuente}` y `POST /api/cuentas` eran sync (`def`) y llamaban a `reload_scheduler()`. FastAPI ejecuta los `def` en un threadpool sin event loop, y `_scheduler.start()` (APScheduler AsyncIO) hace `asyncio.get_running_loop()` → `RuntimeError: no running event loop`. Fix: las tres rutas pasaron a `async def`.
+- **Defensa adicional en `reload_scheduler`**: si en el futuro algo todavía la llama desde un thread sin event loop, en lugar de explotar ahora loguea un warning y devuelve. Los cambios se aplican en el próximo restart del add-on (o llamando `POST /api/scrapers/scheduler/reload` desde un endpoint async).
+
 ## 0.4.4
 
 Tres cambios grandes en la tab Cuentas: cuentas colapsables, parser por cuenta, y delete de cuentas auto.

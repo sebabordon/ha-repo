@@ -314,7 +314,22 @@ def stop_scheduler() -> None:
 
 
 def reload_scheduler() -> None:
-    """Recarga los jobs del scheduler (llamar después de guardar credenciales)."""
+    """
+    Recarga los jobs del scheduler.  Safe to call from any context — si no hay
+    event loop corriendo (típico cuando un endpoint sync hace reload), se loguea
+    un warning y se saltea (los cambios se aplican en el próximo arranque del
+    add-on o en un reload async posterior).
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        logger.warning(
+            "[scheduler] reload_scheduler() llamado desde contexto sin event "
+            "loop — skipping.  Los cambios se aplican en el próximo restart "
+            "del add-on (o llamá POST /api/scrapers/scheduler/reload desde un "
+            "endpoint async)."
+        )
+        return
     stop_scheduler()
     start_scheduler()
 

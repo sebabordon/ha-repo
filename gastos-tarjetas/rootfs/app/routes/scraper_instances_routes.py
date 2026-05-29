@@ -222,7 +222,7 @@ async def run_instance_route(instance_id: int, request: Request):
 # Asigna/desasigna una instancia a una cuenta auto.
 
 @router.put("/cuentas/{fuente}/scraper")
-def set_cuenta_scraper(fuente: str, body: dict, request: Request):
+async def set_cuenta_scraper(fuente: str, body: dict, request: Request):
     """
     Body: { instance_id: int|None, product_key: str|None }
     - instance_id=None → desasigna (cuenta queda sin scraper).
