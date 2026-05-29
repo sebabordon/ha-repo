@@ -646,25 +646,28 @@ class BbvaScraper(BaseScraper):
         """
         all_movs: list[MovimientoRaw] = []
         ultimo = 0
+        # Parsear fecha_desde a ISO para comparar contra los movimientos recibidos
+        # y cortar la paginación cuando empecemos a recibir cosas fuera del rango.
+        # fecha_desde está en formato DD/MM/YYYY.
+        fecha_desde_iso = self.parse_date_ar(fecha_desde)
 
         while True:
-            if ultimo == 0:
-                payload: dict = {
-                    "idProducto":               id_producto,
-                    "ultimoMovimientoMostrado": "0",
-                    "filtro":                   False,
-                    "fechaDesde":               fecha_desde,
-                    "fechaHasta":               fecha_hasta,
-                    "importeDesde":             "",
-                    "importeHasta":             "",
-                    "codigoTipoMovimiento":     "",
-                    "idRubroMovimiento":        "",
-                }
-            else:
-                payload = {
-                    "idProducto":               id_producto,
-                    "ultimoMovimientoMostrado": ultimo,
-                }
+            # IMPORTANTE: incluir SIEMPRE fechaDesde/fechaHasta en el payload
+            # (en TODAS las páginas, no solo la primera).  Si solo mandamos
+            # idProducto + ultimoMovimientoMostrado, BBVA pagina por TODA la
+            # historia de la cuenta, ignorando el filtro de fechas — bug
+            # reportado: dias=35 traía hasta diciembre del año anterior.
+            payload: dict = {
+                "idProducto":               id_producto,
+                "ultimoMovimientoMostrado": "0" if ultimo == 0 else ultimo,
+                "filtro":                   False,
+                "fechaDesde":               fecha_desde,
+                "fechaHasta":               fecha_hasta,
+                "importeDesde":             "",
+                "importeHasta":             "",
+                "codigoTipoMovimiento":     "",
+                "idRubroMovimiento":        "",
+            }
 
             resp = self._api_request(
                 driver,
@@ -691,12 +694,39 @@ class BbvaScraper(BaseScraper):
             # qué campos trae la API (útil para refinar detección de signo).
             if batch and ultimo == 0:
                 log_fn(f"    [debug] keys del primer mov: {sorted(batch[0].keys())}")
+
+            # Safety: filtrar movimientos fuera de fecha_desde — defensa por si
+            # BBVA ignora el filtro de fechas en alguna página.  El batch viene
+            # newest-first, así que el primero fuera de rango → todos los
+            # siguientes también están fuera.
+            batch_in_range = batch
+            if fecha_desde_iso:
+                in_range = []
+                for mov in batch:
+                    f_iso = self.parse_date_ar(mov.get("fecha", ""))
+                    if f_iso and f_iso < fecha_desde_iso:
+                        break   # fuera del rango → parar
+                    in_range.append(mov)
+                if len(in_range) < len(batch):
+                    log_fn(
+                        f"    [filter] descartados {len(batch) - len(in_range)} movimientos "
+                        f"anteriores a {fecha_desde} (fuera del rango configurado)"
+                    )
+                batch_in_range = in_range
+                # Si descartamos algo, no tiene sentido seguir paginando
+                # (los siguientes son aún más viejos)
+                hit_out_of_range = len(in_range) < len(batch)
+            else:
+                hit_out_of_range = False
+
             all_movs.extend(self._parse_batch(
-                batch, log_fn, moneda=moneda, usuario_default=usuario_default,
+                batch_in_range, log_fn, moneda=moneda, usuario_default=usuario_default,
             ))
 
-            # Si devolvió menos de _PAGE_SIZE, no hay más páginas
-            if len(batch) < _PAGE_SIZE:
+            # Stop conditions:
+            #   - llegamos al final de la página (menos de _PAGE_SIZE devueltos)
+            #   - se cortó el batch porque entró movimientos fuera del rango
+            if len(batch) < _PAGE_SIZE or hit_out_of_range:
                 break
 
             ultimo += len(batch)
