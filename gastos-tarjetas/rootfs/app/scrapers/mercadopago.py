@@ -119,7 +119,7 @@ class MercadoPagoScraper(BaseScraper):
 
                 # 3b. Movimientos bancarios (retiros a CBU no incluidos en payments)
                 bank_movs = await self._fetch_movements(
-                    client, since_iso, until_iso, existing_ids, _l, debug_log
+                    client, user_id, since_iso, until_iso, existing_ids, _l, debug_log
                 )
                 movimientos.extend(bank_movs)
 
@@ -544,13 +544,14 @@ class MercadoPagoScraper(BaseScraper):
     async def _fetch_movements(
         self,
         client: httpx.AsyncClient,
+        user_id: int,
         since: str,
         until: str,
         existing_ids: set,
         log_fn,
         debug: bool = False,
     ) -> list[MovimientoRaw]:
-        """Consulta /mercadopago_account/movements/search para capturar retiros
+        """Consulta /users/{user_id}/mercadopago_account/movements/search para capturar retiros
         bancarios (transferencias a CBU) que no aparecen en /v1/payments/search.
 
         Los movimientos cuyo reference_id coincide con un payment_id conocido se
@@ -570,7 +571,7 @@ class MercadoPagoScraper(BaseScraper):
                     "offset":     offset,
                 }
                 resp = await client.get(
-                    f"{_BASE}/mercadopago_account/movements/search", params=params
+                    f"{_BASE}/users/{user_id}/mercadopago_account/movements/search", params=params
                 )
                 if resp.status_code != 200:
                     log_fn(f"Movimientos bancarios: status {resp.status_code} — omitido")
