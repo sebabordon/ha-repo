@@ -1,3 +1,14 @@
+## 0.5.1
+
+- **Fix: saldo MercadoPago siempre daba 404**: el endpoint `/v1/account/balance` no está disponible para tokens personales. Se reemplazó por `/users/{user_id}/mercadopago_account/balance`, que sí responde con `available_balance` y `currency_id`. El `user_id` ya estaba disponible del paso `/users/me`.
+
+## 0.5.0
+
+- **Fix: widget de saldos no se actualizaba tras ejecutar scraper**: `runCuentaInstance` llamaba `loadCuentas()` pero no `loadSaldos()` en el `finally`. El widget superior ahora refleja el saldo nuevo inmediatamente.
+- **Encriptación de credenciales habilitada**: se agrega `scraper_encryption_key` a la config del add-on (str? en `config.yaml`). Ponerle cualquier string largo activa Fernet (AES-128-CBC + HMAC-SHA256) para las credenciales de scrapers. Requiere la dependencia `cryptography`, ahora incluida en `requirements.txt`.
+- **Tab Scrapers eliminada**: las credenciales, estado, "Importar pendientes", "Borrar sesión" y TOTP de cada scraper ya estaban disponibles en el panel inline de cada cuenta (tab Cuentas). La tab duplicaba la funcionalidad. Se agregan los botones faltantes ("Importar pendientes", "Borrar sesión", TOTP) al panel inline para que quede paridad completa.
+- **Tab Importar eliminada**: el "último import" de cada parser ahora se muestra en el panel PDF parser inline de cada cuenta (en tab Cuentas). La opción RG 5617 se movió a Config → Interfaz.
+
 ## 0.4.9
 
 - **IOL: usar `/api/v2/estadocuenta` como fuente de saldos**: en vez de sumar manualmente los `valorizado` del portafolio, ahora se consulta el endpoint `/api/v2/estadocuenta` que devuelve `cuentas[].total` (cash + títulos valorizados) separado por moneda (`peso_Argentino` / `dolar_Estadounidense`). Es la fuente autorizada de IOL y evita desincronías entre la valorización del portafolio y el saldo real de la cuenta.

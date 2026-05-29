@@ -16,7 +16,7 @@ Endpoints usados:
   GET /users/me                          → ID y datos del usuario autenticado
   GET /v1/payments/search?payer.id=…    → pagos realizados (egresos)
   GET /v1/payments/search?collector.id=… → cobros recibidos (ingresos)
-  GET /v1/account/balance               → saldo disponible
+  GET /users/{user_id}/mercadopago_account/balance → saldo disponible
 
 Pagos con tarjeta de crédito (payment_type_id == "credit_card"):
   Se EXCLUYEN. Esos cargos aparecen en el resumen de la tarjeta (AMEX, BBVA,
@@ -113,7 +113,7 @@ class MercadoPagoScraper(BaseScraper):
                 )
 
                 # 4. Saldo
-                saldos = await self._fetch_balance(client, _l)
+                saldos = await self._fetch_balance(client, user_id, _l)
 
             result = ScraperResult(
                 fuente      = self.fuente,
@@ -530,16 +530,18 @@ class MercadoPagoScraper(BaseScraper):
     # ── Saldo ─────────────────────────────────────────────────────────────────
 
     async def _fetch_balance(
-        self, client: httpx.AsyncClient, log_fn
+        self, client: httpx.AsyncClient, user_id: int, log_fn
     ) -> dict:
         """Consulta el saldo disponible de la cuenta."""
         try:
-            resp = await client.get(f"{_BASE}/v1/account/balance")
+            resp = await client.get(f"{_BASE}/users/{user_id}/mercadopago_account/balance")
             if resp.status_code == 200:
-                data  = resp.json()
-                saldo = float(data.get("available_balance", 0))
-                log_fn(f"Saldo disponible: ${saldo:,.2f} ARS")
-                return {"mercadopago": {"saldo_ars": saldo}}
+                data     = resp.json()
+                currency = data.get("currency_id", "ARS")
+                saldo    = float(data.get("available_balance", 0))
+                log_fn(f"Saldo disponible: ${saldo:,.2f} {currency}")
+                key = "saldo_usd" if currency == "USD" else "saldo_ars"
+                return {"mercadopago": {key: saldo}}
             log_fn(f"Saldo: status {resp.status_code} — ignorado")
         except Exception as exc:
             log_fn(f"Saldo no disponible: {exc}")

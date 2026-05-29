@@ -1,6 +1,6 @@
 name: "Gastos"
 description: "Parsea y categoriza gastos de AMEX, Mastercard, Visa y MercadoLibre Argentina"
-version: "0.4.9"
+version: "0.5.1"
 slug: "gastos_tarjetas"
 init: false
 arch:
@@ -19,6 +19,7 @@ options:
   registration_enabled: false
   admin_password: ""
   titular2_name: ""
+  scraper_encryption_key: ""
 schema:
   claude_api_key: str?
   groq_api_key: str?
@@ -27,6 +28,7 @@ schema:
   registration_enabled: bool
   admin_password: str?
   titular2_name: str?
+  scraper_encryption_key: str?
 map:
   - data:rw
 ports:
