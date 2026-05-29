@@ -164,8 +164,13 @@ class MercadoPagoScraper(BaseScraper):
         log_fn,
         debug: bool = False,
     ) -> tuple[list[MovimientoRaw], dict]:
-        """Trae egresos (payer) e ingresos (collector) del período."""
-        # dias=1 → sólo hoy (ART); dias=2 → ayer y hoy; etc.
+        """Trae egresos (payer) e ingresos (collector) del período.
+
+        Corre la query de collector PRIMERO para identificar qué payment_ids de
+        account_fund son depósitos propios (payer==collector==user). Luego la
+        query de payer usa ese set para diferir solo esos IDs; cualquier
+        account_fund que no esté ahí es un retiro a CBU externa y se captura.
+        """
         today_art  = datetime.now(_ART).date()
         since_date = today_art - timedelta(days=dias - 1)
         since = f"{since_date}T00:00:00.000-03:00"
@@ -174,17 +179,24 @@ class MercadoPagoScraper(BaseScraper):
         movimientos: list[MovimientoRaw] = []
         stats = {"egresos": 0, "ingresos": 0, "skipped": 0}
 
-        for role, sign, label in [
-            ("payer.id",     +1, "egresos"),
-            ("collector.id", -1, "ingresos"),
-        ]:
-            log_fn(f"Consultando {label} (últimos {dias} días) …")
-            page_movs, skipped = await self._paginate(
-                client, user_id, role, since, until, sign, existing_ids, log_fn, debug
-            )
-            movimientos.extend(page_movs)
-            stats[label]      = len(page_movs)
-            stats["skipped"] += skipped
+        # 1. Collector primero: los account_fund que aparecen aquí son depósitos propios.
+        log_fn(f"Consultando ingresos (últimos {dias} días) …")
+        ingr_movs, skipped_i, deposit_ids = await self._paginate(
+            client, user_id, "collector.id", since, until, -1, existing_ids, log_fn, debug
+        )
+        movimientos.extend(ingr_movs)
+        stats["ingresos"] = len(ingr_movs)
+        stats["skipped"] += skipped_i
+
+        # 2. Payer: diferir account_fund en deposit_ids; los demás son retiros externos.
+        log_fn(f"Consultando egresos (últimos {dias} días) …")
+        egr_movs, skipped_e, _ = await self._paginate(
+            client, user_id, "payer.id", since, until, +1, existing_ids, log_fn, debug,
+            deposit_ids=deposit_ids,
+        )
+        movimientos.extend(egr_movs)
+        stats["egresos"] = len(egr_movs)
+        stats["skipped"] += skipped_e
 
         return movimientos, stats
 
@@ -199,13 +211,15 @@ class MercadoPagoScraper(BaseScraper):
         existing_ids: set,
         log_fn,
         debug: bool = False,
-    ) -> tuple[list[MovimientoRaw], int]:
+        deposit_ids: Optional[set] = None,
+    ) -> tuple[list[MovimientoRaw], int, set]:
         """Pagina /v1/payments/search y convierte resultados."""
         movs:        list[MovimientoRaw] = []
         skipped:     int = 0
         cc_skipped:  int = 0
         rej_skipped: int = 0
         offset:      int = 0
+        af_ids_seen: set = set()  # account_fund IDs vistos (para devolver al caller)
 
         # Statuses que descartamos: el pago no ocurrió o fue revertido.
         _SKIP_STATUSES = frozenset({"rejected", "cancelled", "charged_back", "refunded"})
@@ -264,6 +278,11 @@ class MercadoPagoScraper(BaseScraper):
                         if td_ref:      log_fn(f"           td_ref={td_ref}")
                         if td_bank:     log_fn(f"           td_bank={td_bank}")
 
+                # Registrar IDs de account_fund antes de cualquier filtro:
+                # permite saber qué IDs aparecieron en la collector query.
+                if op_type == "account_fund" and pid:
+                    af_ids_seen.add(pid)
+
                 # Excluir pagos fallidos o revertidos
                 if status in _SKIP_STATUSES:
                     rej_skipped += 1
@@ -283,15 +302,14 @@ class MercadoPagoScraper(BaseScraper):
                     _dbg("DEFER-IN")
                     continue
 
-                # account_fund: depósito bancario (banco→MP) también aparece en ambas
-                # queries con payer=user. Si el collector es el mismo usuario → diferir.
-                # Si el collector es externo (banco de destino) → retiro a CBU, capturar.
+                # account_fund en payer query: diferir solo si el ID apareció en la
+                # collector query (= depósito propio, payer==collector==user).
+                # Si NO está en deposit_ids → retiro a CBU externa → capturar como egreso.
                 if op_type == "account_fund" and sign == +1:
-                    raw_coll = payment.get("collector_id")
-                    if raw_coll is None or str(raw_coll) == str(user_id):
+                    if deposit_ids is None or pid in deposit_ids:
                         _dbg("DEFER-IN")
                         continue
-                    # collector externo → retiro a CBU, cae al procesamiento normal
+                    _dbg("RETIRO-CBU")  # externo → cae al procesamiento normal
 
                 if pid and pid in existing_ids:
                     skipped += 1
@@ -315,7 +333,7 @@ class MercadoPagoScraper(BaseScraper):
         cc_note  = f", {cc_skipped} tarjeta crédito omitidos"  if cc_skipped  else ""
         rej_note = f", {rej_skipped} rechazados/cancelados"    if rej_skipped else ""
         log_fn(f"  → {len(movs)} nuevos ({skipped} ya existían{cc_note}{rej_note})")
-        return movs, skipped
+        return movs, skipped, af_ids_seen
 
     # ── Conversión de pagos ───────────────────────────────────────────────────
 

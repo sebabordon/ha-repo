@@ -1,3 +1,7 @@
+## 0.5.9
+
+- **MercadoPago: fix retiros a CBU externa (two-pass)**: la API no devuelve `collector_id` en la query de payer, por lo que el fix anterior era inefectivo. Ahora la query de **collector se corre primero** y se recolectan los IDs de `account_fund` que aparecen ahí (= depósitos propios, `payer==collector==user`). La query de payer luego difiere solo esos IDs; cualquier `account_fund` que no esté en ese set se captura como "Retiro a CBU". El tag de debug cambió de `DEFER-IN` a `RETIRO-CBU` para los retiros externos.
+
 ## 0.5.8
 
 ## 0.5.7
