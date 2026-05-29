@@ -1,3 +1,19 @@
+## 0.4.4
+
+Tres cambios grandes en la tab Cuentas: cuentas colapsables, parser por cuenta, y delete de cuentas auto.
+
+- **Cada cuenta es colapsable con botón +/−**: por default todas arrancan cerradas (sólo se ve header con nombre + badge + moneda + saldo). Click en cualquier parte del header (o en el +/−) expande/colapsa el body con detalles, acciones, parser y scraper. El estado expandido se persiste en `localStorage` (`cuenta-expanded-<fuente>`) por cuenta. Adiós scroll infinito.
+- **PDF parser inline por cuenta** (sección "📄 PDF parser"):
+  - Nueva columna `parser_type` en tabla `cuentas` (migración `cuentas_parser_type_v1`).  Las cuentas pre-existentes la heredan de su fuente (bbva_cuenta → parser bbva_cuenta, amex → parser amex, etc.).
+  - Combo para asignar/cambiar el parser de cada cuenta auto (lista viene del nuevo endpoint `GET /api/parsers`).
+  - Botón `⬆ Subir PDF/XLSX` que abre el file picker filtrado por el accept del parser (.pdf o .xls,.xlsx).
+  - Backend: `PUT /api/cuentas/{fuente}/parser` actualiza, `POST /api/cuentas/{fuente}/upload` recibe el archivo. Internamente delega a `/api/upload` con el nuevo flag `target_fuente`: el archivo se parsea con el parser de la cuenta, pero los gastos se guardan con la **fuente real de la cuenta** (no la del parser). Eso permite que cuentas con slug custom (ej. `bbva_pesos_personal`) reusen un parser estándar.
+  - La tab Importar vieja sigue viva — se va a migrar progresivamente. Por ahora, ambos coexisten.
+- **Eliminar cualquier cuenta** (no sólo manuales):
+  - Nuevo endpoint `GET /api/cuentas/{fuente}/gastos-count` para que el front muestre cuántos gastos van a desaparecer antes de confirmar.
+  - `DELETE /api/cuentas/{fuente}` ahora acepta cuentas auto también (antes sólo manuales). Borra: cuenta + gastos + filas en `movimientos_raw`. Si la cuenta estaba linkeada a una `scraper_instance`, la instancia **no se borra** (otras cuentas podrían usarla).
+  - UI: botón `🗑 Eliminar cuenta` ahora aparece en TODAS las cuentas. El confirm muestra cantidad exacta de gastos a borrar.
+
 ## 0.4.3
 
 - **Botón "+ Crear cuenta" arriba a la derecha del tab**: lo movemos del final del listado al header del sub-tab Cuentas (flex `space-between` con el hint a la izquierda). En mobile el botón pasa abajo del hint a ancho completo.

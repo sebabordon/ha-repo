@@ -411,6 +411,30 @@ def _run_migrations(conn):
         )
         conn.execute("INSERT INTO db_migrations (name) VALUES ('scraper_instances_v1')")
 
+    if "cuentas_parser_type_v1" not in done:
+        # v0.4.4: cada cuenta puede declarar QUÉ parser usar para sus PDF imports.
+        # Antes, el `fuente` de la cuenta ERA el key del parser hardcoded.  Ahora
+        # cuentas con slugs custom pueden mapearse al parser del banco (ej. una
+        # cuenta "bbva_pesos_personal" usa el parser "bbva_cuenta").
+        ccols = {r[1] for r in conn.execute("PRAGMA table_info(cuentas)").fetchall()}
+        if "parser_type" not in ccols:
+            conn.execute("ALTER TABLE cuentas ADD COLUMN parser_type TEXT")
+        # Backfill: para las cuentas pre-existentes cuyo fuente matchea un parser
+        # conocido, copiar fuente → parser_type.
+        try:
+            from parsers import PARSERS as _PARSERS_MAP
+            known_parsers = list(_PARSERS_MAP.keys())
+        except Exception:
+            known_parsers = [
+                "amex","bbva_mc","bbva_visa","bbva_cuenta","galicia_mc","mercadopago",
+            ]
+        for p in known_parsers:
+            conn.execute(
+                "UPDATE cuentas SET parser_type=? WHERE fuente=? AND parser_type IS NULL",
+                (p, p),
+            )
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('cuentas_parser_type_v1')")
+
 
 @contextmanager
 def _conn():
@@ -1052,6 +1076,51 @@ def delete_cuenta_manual(fuente: str) -> bool:
         conn.execute("DELETE FROM gastos  WHERE fuente=?", (fuente,))
         conn.execute("DELETE FROM cuentas WHERE fuente=?", (fuente,))
     return True
+
+
+def delete_cuenta_any(fuente: str, delete_gastos: bool = True) -> dict:
+    """
+    Borra cualquier cuenta (manual o auto), opcionalmente con sus gastos.
+    Devuelve {'deleted': bool, 'gastos_deleted': int, 'tipo': str}.
+    Para cuentas auto linkeadas a una scraper_instance, se desconecta el link
+    pero la instancia NO se borra (otras cuentas podrían usarla).
+    """
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT tipo, scraper_instance_id FROM cuentas WHERE fuente=?",
+            (fuente,),
+        ).fetchone()
+        if not row:
+            return {"deleted": False, "gastos_deleted": 0, "tipo": None}
+
+        gastos_count = 0
+        if delete_gastos:
+            cur = conn.execute("DELETE FROM gastos WHERE fuente=?", (fuente,))
+            gastos_count = cur.rowcount
+            # También las filas en movimientos_raw (importadas por el scraper)
+            conn.execute("DELETE FROM movimientos_raw WHERE fuente=?", (fuente,))
+
+        conn.execute("DELETE FROM cuentas WHERE fuente=?", (fuente,))
+    return {"deleted": True, "gastos_deleted": gastos_count, "tipo": row["tipo"]}
+
+
+def count_gastos_cuenta(fuente: str) -> int:
+    """Cantidad de gastos asociados a una cuenta (para confirmaciones de delete)."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM gastos WHERE fuente=?", (fuente,)
+        ).fetchone()
+    return int(row["n"] or 0)
+
+
+def update_cuenta_parser(fuente: str, parser_type: Optional[str]) -> bool:
+    """Asigna/desasigna el `parser_type` de una cuenta."""
+    with _conn() as conn:
+        cur = conn.execute(
+            "UPDATE cuentas SET parser_type=? WHERE fuente=?",
+            (parser_type or None, fuente),
+        )
+        return cur.rowcount > 0
 
 
 def recalc_cuenta_saldo(fuente: str):

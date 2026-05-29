@@ -1,9 +1,10 @@
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from auth import require_auth
 from db import (
     get_cuentas, update_cuenta, rename_cuenta,
     create_cuenta_manual, create_cuenta_auto, delete_cuenta_manual,
+    delete_cuenta_any, count_gastos_cuenta, update_cuenta_parser,
     get_movimientos_cuenta, insert_movimiento_manual, delete_movimiento_manual,
 )
 
@@ -90,11 +91,98 @@ def put_cuenta(fuente: str, body: dict, request: Request):
 
 
 @router.delete("/cuentas/{fuente}")
-def del_cuenta(fuente: str, request: Request):
+def del_cuenta(fuente: str, request: Request,
+               delete_gastos: bool = True):
+    """
+    Borra una cuenta (manual o auto).  Por defecto borra también los gastos y
+    `movimientos_raw` asociados.  Si `delete_gastos=false`, los gastos quedan
+    huérfanos (sin cuenta) — útil si querés mantener el historial.
+    Si la cuenta estaba linkeada a una scraper_instance, la instancia NO se
+    borra (otras cuentas podrían estar usándola).
+    """
     require_auth(request)
-    if not delete_cuenta_manual(fuente):
-        raise HTTPException(400, "Solo se pueden eliminar cuentas manuales")
-    return {"ok": True}
+    result = delete_cuenta_any(fuente, delete_gastos=delete_gastos)
+    if not result["deleted"]:
+        raise HTTPException(404, f"Cuenta '{fuente}' no encontrada")
+    # Si era auto y tenía instancia linkeada, recargar scheduler para que sepa
+    try:
+        from scraper_scheduler import reload_scheduler
+        reload_scheduler()
+    except Exception:
+        pass
+    return {"ok": True, **result}
+
+
+@router.get("/cuentas/{fuente}/gastos-count")
+def get_cuenta_gastos_count(fuente: str, request: Request):
+    """Cantidad de gastos asociados — usado para mostrar warning antes de borrar."""
+    require_auth(request)
+    return {"fuente": fuente, "gastos": count_gastos_cuenta(fuente)}
+
+
+@router.put("/cuentas/{fuente}/parser")
+def put_cuenta_parser(fuente: str, body: dict, request: Request):
+    """
+    Asigna/desasigna el `parser_type` de una cuenta.
+    Body: { parser_type: str|null }  — null/"" desasigna.
+    """
+    require_auth(request)
+    parser_type = (body.get("parser_type") or "").strip() or None
+    if parser_type:
+        try:
+            from parsers import PARSERS
+            if parser_type not in PARSERS:
+                raise HTTPException(400, f"parser_type desconocido: {parser_type!r}. "
+                                         f"Opciones: {list(PARSERS)}")
+        except ImportError:
+            pass   # no validamos si parsers no se puede importar
+    if not update_cuenta_parser(fuente, parser_type):
+        raise HTTPException(404, f"Cuenta '{fuente}' no encontrada")
+    return {"ok": True, "fuente": fuente, "parser_type": parser_type}
+
+
+@router.get("/parsers")
+def list_parsers(request: Request):
+    """
+    Lista los parsers disponibles para asignar a una cuenta.
+    Devuelve [{key, label, sub, accept}].
+    """
+    require_auth(request)
+    return [
+        {"key": "amex",        "label": "AMEX",         "sub": "PDF",  "accept": ".pdf"},
+        {"key": "bbva_mc",     "label": "BBVA MC",      "sub": "PDF",  "accept": ".pdf"},
+        {"key": "bbva_visa",   "label": "BBVA Visa",    "sub": "PDF",  "accept": ".pdf"},
+        {"key": "bbva_cuenta", "label": "BBVA Cuenta",  "sub": "PDF",  "accept": ".pdf"},
+        {"key": "galicia_mc",  "label": "Galicia MC",   "sub": "PDF",  "accept": ".pdf"},
+        {"key": "mercadopago", "label": "MercadoPago",  "sub": "XLSX", "accept": ".xls,.xlsx"},
+    ]
+
+
+@router.post("/cuentas/{fuente}/upload")
+async def upload_cuenta(fuente: str, request: Request,
+                        file: UploadFile = File(...),
+                        include_rg5617_credits: str = Form("false")):
+    """
+    Upload de un PDF/XLSX para esta cuenta.  Usa el `parser_type` configurado
+    en la cuenta (o cae al `fuente` si parser_type=NULL, para back-compat con
+    las cuentas pre-existentes).
+    """
+    require_auth(request)
+    # Determinar parser_type de la cuenta
+    cuentas = get_cuentas()
+    cuenta = next((c for c in cuentas if c["fuente"] == fuente), None)
+    if not cuenta:
+        raise HTTPException(404, f"Cuenta '{fuente}' no encontrada")
+    parser_type = cuenta.get("parser_type") or fuente
+    # Delegamos al handler de upload genérico — pero el `fuente` que se inserta
+    # en gastos es el de la cuenta (NO el parser_type).  Importante para cuentas
+    # con slug custom que comparten parser con un banco.
+    from routes.upload import upload_file as legacy_upload
+    return await legacy_upload(
+        file=file, fuente=parser_type, request=request,
+        include_rg5617_credits=include_rg5617_credits,
+        target_fuente=fuente,
+    )
 
 
 @router.get("/cuentas/{fuente}/movimientos")

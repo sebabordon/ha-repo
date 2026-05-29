@@ -21,11 +21,23 @@ async def upload_file(
     file: UploadFile = File(...),
     fuente: str = Form(...),
     include_rg5617_credits: str = Form("false"),
+    target_fuente: str = Form(None),
 ):
+    """
+    `fuente` = parser key (qué parser usar para parsear el archivo).
+    `target_fuente` = (opcional, v0.4.4+) `fuente` con la que se guardan los
+                      gastos.  Por defecto = `fuente`.  Útil cuando una cuenta
+                      con slug custom (ej. "bbva_pesos_personal") usa el parser
+                      "bbva_cuenta" pero querés que los gastos queden bajo su
+                      propio slug.
+    """
     require_auth(request)
 
     if fuente not in PARSERS:
         raise HTTPException(400, f"Fuente desconocida: {fuente}. Opciones: {list(PARSERS)}")
+
+    # Si no se pasa target_fuente, gastos van con la misma fuente del parser
+    effective_fuente = (target_fuente or fuente).strip()
 
     content = await file.read()
 
@@ -64,6 +76,10 @@ async def upload_file(
         d = g.model_dump()
         d["categoria"] = cat
         d["categoria_fuente"] = fuente_cat
+        # Override fuente con effective_fuente (= target_fuente si se pasó,
+        # sino = fuente del parser).  Esto permite que cuentas con slug custom
+        # usen un parser estándar pero conserven su propio fuente.
+        d["fuente"] = effective_fuente
         if needs_flip and d["monto"] != 0:
             d["monto"] = -float(d["monto"])
         if g.usuario is not None:
@@ -130,17 +146,17 @@ async def upload_file(
                 "descripcion":     "Créditos del resumen",
                 "monto":           str(delta),   # negative = ingreso (credit/overpayment)
                 "moneda":          "ARS",
-                "fuente":          fuente,
+                "fuente":          effective_fuente,
                 "categoria":       "Créditos tarjeta",
                 "categoria_fuente": "auto",
-                "archivo_origen":  file.filename or fuente,
+                "archivo_origen":  file.filename or effective_fuente,
                 "usuario":         usuario_default,
             })
             ajuste_ars = delta
 
     import_info = {
-        "fuente":          fuente,
-        "archivo":         file.filename or fuente,
+        "fuente":          effective_fuente,
+        "archivo":         file.filename or effective_fuente,
         "mes_resumen":     mes_resumen,
         "fecha_venc":      str(fecha_venc)       if fecha_venc      else None,
         "total_ars":       float(stmt_ars)        if stmt_ars        else None,
@@ -154,18 +170,19 @@ async def upload_file(
     # Si el scraper ya auto-importó transacciones del período que acaba de cerrarse,
     # el PDF recién subido genera duplicados. Eliminamos la versión del scraper
     # (el PDF es el resumen oficial) y actualizamos los movimientos_raw a 'matched'.
-    _SCRAPER_FUENTES = frozenset({"amex", "bbva_mc", "bbva_visa"})
+    _SCRAPER_PARSERS = frozenset({"amex", "bbva_mc", "bbva_visa"})
     deduped = 0
-    if fuente in _SCRAPER_FUENTES:
+    if fuente in _SCRAPER_PARSERS:
         from scrapers_db import consolidate_scraper_duplicates
-        deduped = consolidate_scraper_duplicates(fuente, records)
+        deduped = consolidate_scraper_duplicates(effective_fuente, records)
         if deduped:
-            logger.info("[upload] %s: %d duplicado(s) de scraper consolidados.", fuente, deduped)
+            logger.info("[upload] %s: %d duplicado(s) de scraper consolidados.",
+                        effective_fuente, deduped)
 
     # Auto-update balance if the parser detected one
     saldo = getattr(PARSERS[fuente], "saldo_final", None)
     if saldo is not None:
-        upsert_cuenta_saldo(fuente, float(saldo))
+        upsert_cuenta_saldo(effective_fuente, float(saldo))
 
     result: dict = {"importados": count, "total_parseados": len(gastos)}
     if ajuste_ars is not None:

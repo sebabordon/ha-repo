@@ -1674,3 +1674,101 @@ tbody tr:hover { background: #fafbff; }
   .cuentas-header { gap: .5rem; }
   .cuentas-header .btn { width: 100%; }
 }
+
+/* ── Cuenta collapsible (v0.4.4+) ──────────────────────────────────────────── */
+
+.cuenta-header-clickable {
+  cursor: pointer;
+  user-select: none;
+}
+.cuenta-header-clickable:hover {
+  background: #f8fafc;
+}
+.cuenta-collapse-btn {
+  background: none;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cuenta-collapse-btn:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+.cuenta-card-expanded .cuenta-collapse-btn {
+  background: #475569;
+  color: white;
+  border-color: #475569;
+}
+.cuenta-body {
+  border-top: 1px solid #f1f5f9;
+}
+
+/* ── PDF parser inline per cuenta (v0.4.4+) ────────────────────────────────── */
+
+.cuenta-parser-details {
+  background: #fafbfc;
+  border-radius: 6px;
+  padding: .5rem .75rem;
+  margin: .5rem 1rem;
+}
+.cuenta-parser-details > summary {
+  cursor: pointer;
+  font-size: .85rem;
+  color: #475569;
+  font-weight: 500;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.cuenta-parser-details > summary::-webkit-details-marker { display: none; }
+.cuenta-parser-details > summary::before {
+  content: "▸";
+  font-size: .7rem;
+  color: #94a3b8;
+  transition: transform .2s;
+}
+.cuenta-parser-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.cuenta-parser-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: .5rem;
+  flex-wrap: wrap;
+}
+.cuenta-parser-row label {
+  font-size: .8rem;
+  color: #64748b;
+}
+.cuenta-parser-row select {
+  padding: .25rem .5rem;
+  font-size: .8rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: white;
+}
+.parser-current {
+  color: #475569;
+  font-size: .8rem;
+  font-weight: 400;
+}
+.cp-msg {
+  display: block;
+  margin-top: .4rem;
+  font-size: .8rem;
+}
+.cp-msg.ok  { color: #16a34a; }
+.cp-msg.err { color: #b91c1c; }

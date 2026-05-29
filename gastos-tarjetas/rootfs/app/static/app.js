@@ -2673,17 +2673,19 @@ function _drawForecast(data) {
 let _cuentasData = [];
 
 async function loadCuentas() {
-  // Cuentas + datos de scrapers en paralelo (v0.4.1+: panel inline por cuenta auto)
-  const [cuentasRes, instRes, typesRes, jobsRes, statusRes] = await Promise.all([
+  // Cuentas + datos de scrapers + parsers en paralelo
+  const [cuentasRes, instRes, typesRes, jobsRes, statusRes, parsersRes] = await Promise.all([
     fetch(`${BASE}/api/cuentas`),
     fetch(`${BASE}/api/scraper-instances`),
     fetch(`${BASE}/api/scraper-types`),
     fetch(`${BASE}/api/scrapers/jobs`),
     fetch(`${BASE}/api/scrapers/status`),
+    fetch(`${BASE}/api/parsers`),
   ]);
   _cuentasData     = await cuentasRes.json();
   _scraperInstances = instRes.ok  ? await instRes.json()  : [];
   _scraperTypes     = typesRes.ok ? await typesRes.json() : [];
+  window._parsersList = parsersRes.ok ? await parsersRes.json() : [];
   const jobs        = jobsRes.ok  ? await jobsRes.json()  : [];
   // job.id = "scraper_inst_<id>_<dir>" → guardamos next_run por instance_id
   _instanceJobs = {};
@@ -2786,11 +2788,13 @@ function _renderCuentaCard(c) {
     </div>`;
   }
 
+  // Acciones — siempre incluye "Eliminar cuenta" (con confirmación que cuenta gastos)
   const actions = isManual
     ? `${widgetBtn}
-       <button class="btn btn-sm btn-danger" onclick="deleteCuenta('${c.fuente}')">Eliminar cuenta</button>`
+       <button class="btn btn-sm btn-danger" onclick="deleteCuenta('${c.fuente}')">🗑 Eliminar cuenta</button>`
     : `<button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">✏ Editar saldo</button>
-       ${widgetBtn}`;
+       ${widgetBtn}
+       <button class="btn btn-sm btn-danger" onclick="deleteCuenta('${c.fuente}')">🗑 Eliminar cuenta</button>`;
 
   // Movements section (manual accounts only)
   const movsSection = isManual ? `
@@ -2799,6 +2803,9 @@ function _renderCuentaCard(c) {
       <div id="movs-list-${c.fuente}"></div>
     </div>` : "";
 
+  // PDF parser inline panel (auto accounts only) — v0.4.4+
+  const parserSection = !isManual ? _renderCuentaParserInline(c) : "";
+
   // Scraper inline panel (auto accounts only) — v0.4.1+
   const scraperSection = !isManual
     ? `<div class="cuenta-scraper-panel" id="cuenta-scraper-${c.fuente}">
@@ -2806,23 +2813,142 @@ function _renderCuentaCard(c) {
        </div>`
     : "";
 
+  // Collapsible: defaultea cerrado.  Recordamos preferencia por cuenta en localStorage.
+  const stored = localStorage.getItem(`cuenta-expanded-${c.fuente}`);
+  const expanded = stored === "1";
+  const toggleSym = expanded ? "−" : "+";
+
   return `
-  <div class="cuenta-card" id="cuenta-card-${c.fuente}">
-    <div class="cuenta-header">
+  <div class="cuenta-card${expanded ? ' cuenta-card-expanded' : ''}" id="cuenta-card-${c.fuente}">
+    <div class="cuenta-header cuenta-header-clickable" onclick="toggleCuentaExpand('${c.fuente}')">
+      <button class="cuenta-collapse-btn" id="cuenta-toggle-${c.fuente}"
+              title="${expanded ? 'Colapsar' : 'Expandir'}">${toggleSym}</button>
       <span class="cuenta-nombre" title="Click para renombrar"
-            onclick="startRenameCuenta('${c.fuente}')">${escHtml(c.nombre)}</span>
+            onclick="event.stopPropagation();startRenameCuenta('${c.fuente}')">${escHtml(c.nombre)}</span>
       ${badge}
-      ${monedaSel}
+      <span onclick="event.stopPropagation()">${monedaSel}</span>
       ${saldoDisplay}
     </div>
-    <div class="cuenta-meta">
-      ${c.fecha_actualizacion ? `Actualizado: ${c.fecha_actualizacion}` : "Sin datos"}${!isManual ? ` · <code style="font-size:.75rem">${c.fuente}</code>` : ""}
+    <div class="cuenta-body" id="cuenta-body-${c.fuente}" style="display:${expanded ? 'block' : 'none'}">
+      <div class="cuenta-meta">
+        ${c.fecha_actualizacion ? `Actualizado: ${c.fecha_actualizacion}` : "Sin datos"}${!isManual ? ` · <code style="font-size:.75rem">${c.fuente}</code>` : ""}
+      </div>
+      <div class="cuenta-actions">${actions}</div>
+      ${editSaldoRow}
+      ${movsSection}
+      ${parserSection}
+      ${scraperSection}
     </div>
-    <div class="cuenta-actions">${actions}</div>
-    ${editSaldoRow}
-    ${movsSection}
-    ${scraperSection}
   </div>`;
+}
+
+// ── PDF parser inline (cada cuenta auto puede tener un parser asignado) ─────
+
+function _renderCuentaParserInline(c) {
+  // Lista de parsers conocidos (cacheo en _parsersList)
+  const parsers = window._parsersList || [];
+  const cur     = c.parser_type || "";
+
+  const opts = [`<option value="">(sin parser asignado)</option>`];
+  for (const p of parsers) {
+    const sel = p.key === cur ? " selected" : "";
+    opts.push(`<option value="${p.key}"${sel}>${escHtml(p.label)} (${escHtml(p.sub)})</option>`);
+  }
+
+  const curParser  = parsers.find(p => p.key === cur);
+  const acceptStr  = curParser?.accept || ".pdf";
+  const uploadBtn  = cur
+    ? `<button class="btn btn-sm" onclick="triggerCuentaUpload('${c.fuente}')">⬆ Subir ${escHtml(curParser?.sub || 'PDF')}</button>`
+    : `<span style="font-size:.78rem;color:#94a3b8">Asigná un parser para habilitar el upload</span>`;
+
+  return `
+    <details class="cuenta-parser-details">
+      <summary>📄 PDF parser ${cur ? `<span class="parser-current">→ ${escHtml(curParser?.label || cur)}</span>` : `<span style="color:#94a3b8">(no asignado)</span>`}</summary>
+      <div class="cuenta-parser-row">
+        <label for="cp-sel-${c.fuente}">Parser:</label>
+        <select id="cp-sel-${c.fuente}" onchange="saveCuentaParser('${c.fuente}', this.value)">
+          ${opts.join("")}
+        </select>
+        ${uploadBtn}
+        <input type="file" id="cp-file-${c.fuente}" accept="${acceptStr}" style="display:none"
+               onchange="onCuentaFileChange('${c.fuente}', this)">
+      </div>
+      <p class="field-hint" style="margin-top:.4rem">
+        Subí el resumen oficial (PDF) o el export (XLSX para MercadoPago) de esta cuenta.
+        El parser elegido procesa el archivo y los gastos se guardan con la fuente <code>${escHtml(c.fuente)}</code>.
+      </p>
+      <span id="cp-msg-${c.fuente}" class="cp-msg"></span>
+    </details>`;
+}
+
+async function saveCuentaParser(fuente, parserType) {
+  try {
+    const res = await fetch(`${BASE}/api/cuentas/${encodeURIComponent(fuente)}/parser`, {
+      method: "PUT", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ parser_type: parserType || null }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast(parserType ? "Parser asignado" : "Parser desasignado", "ok");
+    loadCuentas();
+  } catch (e) {
+    showToast("✗ " + e.message, "err");
+  }
+}
+
+function triggerCuentaUpload(fuente) {
+  document.getElementById(`cp-file-${fuente}`)?.click();
+}
+
+async function onCuentaFileChange(fuente, inputEl) {
+  const file = inputEl.files[0];
+  inputEl.value = "";
+  if (!file) return;
+
+  const msgEl = document.getElementById(`cp-msg-${fuente}`);
+  if (msgEl) { msgEl.textContent = "Procesando…"; msgEl.className = "cp-msg"; }
+
+  const fd = new FormData();
+  fd.append("file", file);
+  const chk = document.getElementById("chk-include-rg5617");
+  fd.append("include_rg5617_credits", chk && chk.checked ? "true" : "false");
+
+  try {
+    const res = await fetch(`${BASE}/api/cuentas/${encodeURIComponent(fuente)}/upload`, {
+      method: "POST", body: fd,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    if (msgEl) {
+      msgEl.textContent = `✓ ${data.importados} importados (${data.total_parseados} parseados)`;
+      msgEl.className = "cp-msg ok";
+    }
+    loadGastos(); loadMonthlyChart(); loadCategorias(); loadSaldos(); loadImportaciones(); loadVencimientos?.();
+  } catch (e) {
+    if (msgEl) { msgEl.textContent = "✗ " + e.message; msgEl.className = "cp-msg err"; }
+  }
+}
+
+// ── Toggle collapse/expand de cada cuenta ────────────────────────────────────
+
+function toggleCuentaExpand(fuente) {
+  const body  = document.getElementById(`cuenta-body-${fuente}`);
+  const card  = document.getElementById(`cuenta-card-${fuente}`);
+  const tog   = document.getElementById(`cuenta-toggle-${fuente}`);
+  if (!body || !tog) return;
+  const isOpen = body.style.display !== "none";
+  if (isOpen) {
+    body.style.display = "none";
+    tog.textContent = "+";
+    tog.title = "Expandir";
+    card?.classList.remove("cuenta-card-expanded");
+    localStorage.setItem(`cuenta-expanded-${fuente}`, "0");
+  } else {
+    body.style.display = "block";
+    tog.textContent = "−";
+    tog.title = "Colapsar";
+    card?.classList.add("cuenta-card-expanded");
+    localStorage.setItem(`cuenta-expanded-${fuente}`, "1");
+  }
 }
 
 // ── Scraper inline panel en cada cuenta auto (v0.4.1+) ───────────────────────
@@ -3170,10 +3296,29 @@ async function toggleCuentaActiva(fuente, activa) {
 }
 
 async function deleteCuenta(fuente) {
-  showConfirm("¿Eliminar esta cuenta y todos sus movimientos?", async () => {
-    await fetch(`${BASE}/api/cuentas/${fuente}`, {method:"DELETE"});
+  // Contar gastos para mostrar warning preciso
+  let gastosCount = 0;
+  try {
+    const r = await fetch(`${BASE}/api/cuentas/${encodeURIComponent(fuente)}/gastos-count`);
+    if (r.ok) gastosCount = (await r.json()).gastos || 0;
+  } catch (_) {}
+
+  const msg = gastosCount > 0
+    ? `¿Eliminar la cuenta "${fuente}" y sus ${gastosCount} gastos asociados?\n\n` +
+      `⚠ Esto es irreversible. Los gastos vinculados (y movimientos del scraper si los hay) se borran.\n` +
+      `Si la cuenta usa un scraper, la instancia NO se borra (otras cuentas podrían usarla).`
+    : `¿Eliminar la cuenta "${fuente}"?\n\nNo tiene gastos asociados.`;
+  if (!confirm(msg)) return;
+
+  try {
+    const res = await fetch(`${BASE}/api/cuentas/${encodeURIComponent(fuente)}`, {method:"DELETE"});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "Error al borrar");
+    showToast(`Cuenta eliminada${data.gastos_deleted ? ` (${data.gastos_deleted} gastos)` : ""}`, "ok");
     loadCuentas(); loadSaldos();
-  });
+  } catch (e) {
+    showToast("✗ " + e.message, "err");
+  }
 }
 
 function startRenameCuenta(fuente) {
