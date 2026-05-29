@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Request
 from auth import require_auth
 from db import (
     get_cuentas, update_cuenta, rename_cuenta,
-    create_cuenta_manual, delete_cuenta_manual,
+    create_cuenta_manual, create_cuenta_auto, delete_cuenta_manual,
     get_movimientos_cuenta, insert_movimiento_manual, delete_movimiento_manual,
 )
 
@@ -18,6 +18,16 @@ def list_cuentas(request: Request):
 
 @router.post("/cuentas")
 def post_cuenta(body: dict, request: Request):
+    """
+    Crea una cuenta nueva.
+    Body:
+      - nombre (requerido)
+      - moneda: "ARS" | "USD" (default "ARS")
+      - tipo:   "manual" (default) | "auto"
+      - Si tipo="auto":
+          - scraper_instance_id (int, opcional) → linkea a una instancia existente
+          - scraper_product_key (str, opcional, default "main")
+    """
     require_auth(request)
     nombre = (body.get("nombre") or "").strip()
     if not nombre:
@@ -25,6 +35,33 @@ def post_cuenta(body: dict, request: Request):
     moneda = body.get("moneda", "ARS")
     if moneda not in ("ARS", "USD"):
         moneda = "ARS"
+
+    tipo = (body.get("tipo") or "manual").strip().lower()
+    if tipo == "auto":
+        inst_id_raw = body.get("scraper_instance_id")
+        try:
+            inst_id = int(inst_id_raw) if inst_id_raw not in (None, "", 0, "0") else None
+        except (ValueError, TypeError):
+            raise HTTPException(400, "scraper_instance_id inválido")
+        product_key = (body.get("scraper_product_key") or "main").strip() or "main"
+        # Si linkeás a una instancia BBVA, validar que product_key esté en ARS/USD/EUR
+        if inst_id is not None:
+            from scraper_instances_db import get_instance
+            inst = get_instance(inst_id)
+            if not inst:
+                raise HTTPException(404, f"Instancia {inst_id} no encontrada")
+            if inst["banco"] == "bbva" and product_key.upper() not in ("ARS", "USD", "EUR"):
+                product_key = "ARS"
+        new = create_cuenta_auto(nombre, moneda, inst_id, product_key)
+        # Si linkeamos a una instancia, reload del scheduler para captar la nueva cuenta
+        if inst_id is not None:
+            try:
+                from scraper_scheduler import reload_scheduler
+                reload_scheduler()
+            except Exception:
+                pass
+        return new
+
     return create_cuenta_manual(nombre, moneda)
 
 

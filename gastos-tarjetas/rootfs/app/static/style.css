@@ -1651,3 +1651,27 @@ tbody tr:hover { background: #fafbff; }
   color: #888;
   margin-top: .4rem;
 }
+
+/* ── Crear cuenta — card al final del listado (v0.4.1+) ────────────────────── */
+
+.cuenta-add-card {
+  margin-top: 1rem;
+  padding: .75rem;
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  text-align: center;
+  transition: background .15s, border-color .15s;
+}
+.cuenta-add-card:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+.cuenta-add-btn {
+  background: none;
+  border: none;
+  color: #475569;
+  font-size: .95rem;
+  cursor: pointer;
+  padding: .25rem .75rem;
+}
+.cuenta-add-btn:hover { color: #1e293b; }

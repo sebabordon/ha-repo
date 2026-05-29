@@ -397,14 +397,14 @@
 
       <!-- ── Sub-tab: Cuentas ──────────────────────────────────────── -->
       <div id="cfg-tab-cuentas" class="cfg-tab-content">
-        <div class="rules-header" style="margin-bottom:.5rem">
-          <button id="btn-add-cuenta" class="btn">+ Nueva cuenta manual</button>
-        </div>
         <p class="rules-hint">
-          Las cuentas <strong>automáticas</strong> se actualizan al importar un archivo.
+          Las cuentas <strong>automáticas</strong> se alimentan de un scraper o de PDFs importados.
           Las <strong>manuales</strong> permiten cargar movimientos a mano.
         </p>
         <div id="cuentas-list"></div>
+        <div class="cuenta-add-card" id="cuenta-add-card">
+          <button id="btn-add-cuenta" class="btn cuenta-add-btn">+ Crear cuenta</button>
+        </div>
       </div>
 
       <!-- ── Sub-tab: Scrapers ─────────────────────────────────────── -->

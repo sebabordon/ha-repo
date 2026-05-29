@@ -1013,6 +1013,37 @@ def create_cuenta_manual(nombre: str, moneda: str = "ARS") -> dict:
             "fecha_actualizacion": None}
 
 
+def create_cuenta_auto(nombre: str, moneda: str = "ARS",
+                       scraper_instance_id: Optional[int] = None,
+                       scraper_product_key: Optional[str] = None) -> dict:
+    """
+    Crea una cuenta auto-fed con slug derivado del nombre.  Opcionalmente la
+    linkea a una scraper_instance (con product_key).  Usado por el wizard de
+    "Nueva cuenta auto" en la tab Cuentas (v0.4.1+).
+    """
+    base = _slugify(nombre)
+    with _conn() as conn:
+        fuente = base
+        i = 2
+        while conn.execute("SELECT 1 FROM cuentas WHERE fuente=?", (fuente,)).fetchone():
+            fuente = f"{base}_{i}"; i += 1
+        conn.execute(
+            "INSERT INTO cuentas "
+            "(fuente,nombre,saldo,saldo_usd,moneda,activa,auto_saldo,tipo,"
+            " scraper_instance_id,scraper_product_key) "
+            "VALUES (?,?,0,0,?,1,1,'auto',?,?)",
+            (fuente, nombre, moneda, scraper_instance_id, scraper_product_key),
+        )
+    return {
+        "fuente": fuente, "nombre": nombre,
+        "saldo": 0.0, "saldo_usd": 0.0,
+        "moneda": moneda, "activa": 1, "auto_saldo": 1, "tipo": "auto",
+        "scraper_instance_id": scraper_instance_id,
+        "scraper_product_key": scraper_product_key,
+        "fecha_actualizacion": None,
+    }
+
+
 def delete_cuenta_manual(fuente: str) -> bool:
     with _conn() as conn:
         row = conn.execute("SELECT tipo FROM cuentas WHERE fuente=?", (fuente,)).fetchone()

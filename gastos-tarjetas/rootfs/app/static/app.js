@@ -3262,21 +3262,150 @@ async function deleteGasto(id) {
   });
 }
 
-document.getElementById("btn-add-cuenta").addEventListener("click", () => {
-  showPrompt("Nombre de la nueva cuenta:", "ej: Efectivo, Cuenta Nación", nombre => {
-    showSelectPrompt("Moneda de la cuenta:", [
-      {value:"ARS", label:"ARS – pesos"},
-      {value:"USD", label:"USD – dólares"},
-    ], async moneda => {
-      const res = await fetch(`${BASE}/api/cuentas`, {
-        method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({nombre, moneda}),
-      });
-      if (res.ok) { showToast(`Cuenta "${nombre}" (${moneda}) creada.`, "ok"); loadCuentas(); loadSaldos(); }
-      else showToast("Error al crear la cuenta.", "err");
+document.getElementById("btn-add-cuenta").addEventListener("click", () => openCreateCuentaModal());
+
+function openCreateCuentaModal() {
+  // Estado del modal — cerramos cualquier instancia previa
+  document.getElementById("create-cuenta-modal")?.remove();
+
+  // Lista de scrapers disponibles (instancias actuales + tipos para crear nuevas)
+  const instOpts = (_scraperInstances || []).map(i =>
+    `<option value="${i.id}">${escHtml(i.banco)} — ${escHtml(i.nombre)}</option>`
+  ).join("");
+  const typeOpts = (_scraperTypes || []).map(t =>
+    `<option value="__new__:${t.banco}">+ Nueva instancia ${escHtml(t.nombre)}</option>`
+  ).join("");
+
+  const modal = document.createElement("div");
+  modal.id = "create-cuenta-modal";
+  modal.className = "modal-backdrop";
+  modal.onclick = (ev) => { if (ev.target === modal) closeCreateCuentaModal(); };
+  modal.innerHTML = `
+    <div class="modal" style="max-width:480px">
+      <h3>Crear nueva cuenta</h3>
+      <div class="scraper-field">
+        <label for="cc-nombre">Nombre</label>
+        <input id="cc-nombre" type="text" placeholder="ej: Efectivo, Cuenta Nación, BBVA Pesos…">
+      </div>
+      <div class="scraper-field">
+        <label>Tipo</label>
+        <div style="display:flex;gap:1rem;font-size:.9rem;flex-wrap:wrap">
+          <label style="cursor:pointer">
+            <input type="radio" name="cc-tipo" value="manual" checked
+                   onchange="document.getElementById('cc-scraper-row').style.display='none'">
+            Manual <span style="color:#94a3b8">(cargo movimientos a mano)</span>
+          </label>
+          <label style="cursor:pointer">
+            <input type="radio" name="cc-tipo" value="auto"
+                   onchange="document.getElementById('cc-scraper-row').style.display='block'">
+            Automática <span style="color:#94a3b8">(scraper / PDFs)</span>
+          </label>
+        </div>
+      </div>
+      <div class="scraper-field">
+        <label for="cc-moneda">Moneda</label>
+        <select id="cc-moneda">
+          <option value="ARS">ARS – pesos</option>
+          <option value="USD">USD – dólares</option>
+        </select>
+      </div>
+      <div class="scraper-field" id="cc-scraper-row" style="display:none">
+        <label for="cc-scraper">Scraper (opcional)</label>
+        <select id="cc-scraper">
+          <option value="">(sin scraper — solo PDFs / API)</option>
+          ${instOpts ? `<optgroup label="Instancias existentes">${instOpts}</optgroup>` : ""}
+          ${typeOpts ? `<optgroup label="Crear nueva instancia">${typeOpts}</optgroup>` : ""}
+        </select>
+        <span class="field-hint">
+          Para BBVA el "producto" se asigna por moneda (ARS → Pesos, USD → Dolares).
+          Si elegís "Nueva instancia", la creo deshabilitada y luego completás credenciales en el panel inline de la cuenta.
+        </span>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeCreateCuentaModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="submitCreateCuenta()">Crear cuenta</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById("cc-nombre")?.focus(), 50);
+}
+
+function closeCreateCuentaModal() {
+  document.getElementById("create-cuenta-modal")?.remove();
+}
+
+async function submitCreateCuenta() {
+  const nombre  = (document.getElementById("cc-nombre")?.value || "").trim();
+  const tipo    = document.querySelector('input[name="cc-tipo"]:checked')?.value || "manual";
+  const moneda  = document.getElementById("cc-moneda")?.value || "ARS";
+  const scrSel  = document.getElementById("cc-scraper")?.value || "";
+
+  if (!nombre) { showToast("Ingresá un nombre", "err"); return; }
+
+  let instanceId = null;
+  let productKey = "main";
+
+  // Si tipo=auto y eligió scraper, resolver instancia
+  if (tipo === "auto" && scrSel) {
+    if (scrSel.startsWith("__new__:")) {
+      // Crear nueva instancia primero (con la cuenta linkeada después de crearla)
+      const banco = scrSel.split(":")[1];
+      const tdef  = _scraperTypes.find(t => t.banco === banco);
+      const sugg  = `${tdef?.nombre || banco} ${nombre}`.trim();
+      const instNombre = prompt(`Nombre para la nueva instancia de ${tdef?.nombre || banco}:`, sugg);
+      if (!instNombre) return;   // canceló → abortar todo
+      // product_key por moneda para BBVA
+      if (banco === "bbva") {
+        productKey = (moneda || "ARS").toUpperCase();
+      }
+      try {
+        const r = await fetch(`${BASE}/api/scraper-instances`, {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            banco, nombre: instNombre,
+            config: { enabled: false },
+            schedule: tdef?.schedule_default || "07:00",
+            enabled: false,
+          }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data?.detail || "Error creando instancia");
+        instanceId = data.instance_id;
+      } catch (e) {
+        showToast("✗ " + e.message, "err");
+        return;
+      }
+    } else {
+      // Instancia existente
+      instanceId = parseInt(scrSel, 10);
+      const inst = _getInstanceById(instanceId);
+      if (inst?.banco === "bbva") {
+        productKey = (moneda || "ARS").toUpperCase();
+      }
+    }
+  }
+
+  const body = { nombre, moneda, tipo };
+  if (tipo === "auto" && instanceId) {
+    body.scraper_instance_id  = instanceId;
+    body.scraper_product_key  = productKey;
+  }
+
+  try {
+    const res = await fetch(`${BASE}/api/cuentas`, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(body),
     });
-  });
-});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.detail || "Error al crear la cuenta");
+    showToast(`Cuenta "${nombre}" (${moneda}, ${tipo}) creada.`, "ok");
+    closeCreateCuentaModal();
+    loadCuentas();
+    loadSaldos();
+  } catch (e) {
+    showToast("✗ " + e.message, "err");
+  }
+}
 
 // ── Personas (Config tab) ─────────────────────────────────────────────────────
 let _usuariosConfig = {usuarios: ["Titular","Adicional"], fuente_usuario: {}, reglas_usuario: []};

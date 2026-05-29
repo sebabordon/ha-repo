@@ -1,3 +1,14 @@
+## 0.4.2
+
+- **Reubicación del botón "Crear cuenta"**: el botón estaba arriba del listado de cuentas en una `rules-header` (lo que parecía un banner superior). Lo movemos al final del listado como una "card" punteada `+ Crear cuenta` (más cerca de las cuentas existentes, menos visualmente intrusivo).
+- **Modal unificado con tipo + scraper**: el flujo previo era una secuencia de prompts (nombre → moneda) y solo permitía crear cuentas manuales. Ahora click → un solo modal con:
+  - **Nombre**
+  - **Tipo**: Manual (movimientos a mano) o Automática (scraper / PDFs)
+  - **Moneda** (ARS / USD)
+  - **Scraper** (solo si tipo=Automática): combo con instancias existentes + opción `+ Nueva instancia BBVA/AMEX/...`
+- **Backend extendido**: `POST /api/cuentas` acepta `tipo: "manual"|"auto"` + `scraper_instance_id` + `scraper_product_key`. Nueva función `create_cuenta_auto` en `db.py` que crea la cuenta con slug derivado del nombre + linkea opcionalmente a una instancia. Para BBVA se valida que `product_key` sea `ARS`/`USD`/`EUR` (default ARS si viene cualquier otra cosa).
+- **Flujo "crear con nueva instancia"**: si en el modal elegís "+ Nueva instancia BBVA", el JS primero crea la instancia (deshabilitada, sin credenciales), después crea la cuenta linkeada — luego abrís el panel inline de la cuenta y completás las credenciales. Cancelar el prompt del nombre de la instancia aborta toda la creación.
+
 ## 0.4.1
 
 **Fase 2 de multi-instancia — UI en la tab Cuentas.**
