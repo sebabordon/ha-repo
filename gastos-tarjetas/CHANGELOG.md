@@ -1,3 +1,5 @@
+## 0.5.8
+
 ## 0.5.7
 
 - **MercadoPago: fix retiros a CBU externa no se importaban**: el filtro DEFER-IN descartaba todos los `account_fund` en la query de payer, incluyendo transferencias salientes a un CBU de otro banco. Ahora sólo se difieren los `account_fund` cuyo collector es el mismo usuario (depósito propio); si el collector es externo, se captura como egreso con descripción "Retiro a CBU".
