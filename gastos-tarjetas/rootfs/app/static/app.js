@@ -2673,10 +2673,38 @@ function _drawForecast(data) {
 let _cuentasData = [];
 
 async function loadCuentas() {
-  const res = await fetch(`${BASE}/api/cuentas`);
-  _cuentasData = await res.json();
+  // Cuentas + datos de scrapers en paralelo (v0.4.1+: panel inline por cuenta auto)
+  const [cuentasRes, instRes, typesRes, jobsRes, statusRes] = await Promise.all([
+    fetch(`${BASE}/api/cuentas`),
+    fetch(`${BASE}/api/scraper-instances`),
+    fetch(`${BASE}/api/scraper-types`),
+    fetch(`${BASE}/api/scrapers/jobs`),
+    fetch(`${BASE}/api/scrapers/status`),
+  ]);
+  _cuentasData     = await cuentasRes.json();
+  _scraperInstances = instRes.ok  ? await instRes.json()  : [];
+  _scraperTypes     = typesRes.ok ? await typesRes.json() : [];
+  const jobs        = jobsRes.ok  ? await jobsRes.json()  : [];
+  // job.id = "scraper_inst_<id>_<dir>" → guardamos next_run por instance_id
+  _instanceJobs = {};
+  for (const j of jobs) {
+    const m = (j.id || "").match(/^scraper_inst_(\d+)_/);
+    if (m) _instanceJobs[m[1]] = j.next_run;
+  }
+  // Statuses para back-compat (instancia default).  Keyed por banco (legacy).
+  const statuses    = statusRes.ok ? await statusRes.json() : [];
+  _scraperStatuses  = Object.fromEntries(statuses.map(s => [s.fuente, s]));
   _populateFuenteSelects();
   renderCuentas();
+}
+
+// Globals nuevos para v0.4.1
+let _scraperInstances = [];
+let _scraperTypes     = [];
+let _instanceJobs     = {};
+
+function _getInstanceById(id) {
+  return _scraperInstances.find(i => i.id === id || i.id === Number(id));
 }
 
 function renderCuentas() {
@@ -2771,6 +2799,13 @@ function _renderCuentaCard(c) {
       <div id="movs-list-${c.fuente}"></div>
     </div>` : "";
 
+  // Scraper inline panel (auto accounts only) — v0.4.1+
+  const scraperSection = !isManual
+    ? `<div class="cuenta-scraper-panel" id="cuenta-scraper-${c.fuente}">
+         ${_renderCuentaScraperInline(c)}
+       </div>`
+    : "";
+
   return `
   <div class="cuenta-card" id="cuenta-card-${c.fuente}">
     <div class="cuenta-header">
@@ -2786,7 +2821,310 @@ function _renderCuentaCard(c) {
     <div class="cuenta-actions">${actions}</div>
     ${editSaldoRow}
     ${movsSection}
+    ${scraperSection}
   </div>`;
+}
+
+// ── Scraper inline panel en cada cuenta auto (v0.4.1+) ───────────────────────
+
+function _renderCuentaScraperInline(c) {
+  // Detalle del scraper para la cuenta `c`.  Si la cuenta tiene scraper_instance_id,
+  // mostramos su config inline.  Si no, mostramos solo el combo para asignar.
+  const instId = c.scraper_instance_id;
+  const inst   = instId ? _getInstanceById(instId) : null;
+
+  // ── Combo de selección de scraper ──────────────────────────────────────────
+  const opts = [`<option value="">(sin scraper)</option>`];
+  for (const i of _scraperInstances) {
+    const sel = (inst && i.id === inst.id) ? " selected" : "";
+    opts.push(`<option value="${i.id}"${sel}>${escHtml(i.banco)} — ${escHtml(i.nombre)}</option>`);
+  }
+  // Opciones "+ Nueva instancia" — una por banco-type disponible
+  opts.push(`<option disabled>──────</option>`);
+  for (const t of _scraperTypes) {
+    opts.push(`<option value="__new__:${t.banco}">+ Nueva instancia ${escHtml(t.nombre)}</option>`);
+  }
+
+  const combo = `
+    <div class="cuenta-scraper-combo-row">
+      <label for="cs-sel-${c.fuente}">Scraper que la alimenta:</label>
+      <select id="cs-sel-${c.fuente}" onchange="onCuentaScraperChange('${c.fuente}', this.value)">
+        ${opts.join("")}
+      </select>
+    </div>`;
+
+  if (!inst) {
+    return `
+      <details class="cuenta-scraper-details">
+        <summary>🤖 Scraper</summary>
+        ${combo}
+        <p style="font-size:.8rem;color:#94a3b8;margin:.5rem 0">
+          Esta cuenta no tiene un scraper asignado. Elegí uno del combo, o creá uno nuevo.
+        </p>
+      </details>`;
+  }
+
+  // ── Instancia asignada: render full panel ─────────────────────────────────
+  return `
+    <details class="cuenta-scraper-details" open>
+      <summary>🤖 Scraper — ${escHtml(inst.banco)}: ${escHtml(inst.nombre)} ${_instanceStatusBadge(inst)}</summary>
+      ${combo}
+      ${_renderInstanceFullPanel(c, inst)}
+    </details>`;
+}
+
+function _instanceStatusBadge(inst) {
+  const map = {
+    ok:              { cls: "scraper-status-ok",      txt: "✓ OK" },
+    error:           { cls: "scraper-status-error",   txt: "✗ Error" },
+    running:         { cls: "scraper-status-running", txt: "⟳ Corriendo" },
+    session_expired: { cls: "scraper-status-error",   txt: "⚠ Sesión expirada" },
+    idle:            { cls: "scraper-status-idle",    txt: "Sin correr" },
+  };
+  const b = map[inst.estado] || map.idle;
+  return `<span class="scraper-status-badge ${b.cls}">${b.txt}</span>`;
+}
+
+function _renderInstanceFullPanel(c, inst) {
+  // Type def (campos definitions) for this banco
+  const tdef   = _scraperTypes.find(t => t.banco === inst.banco) || { campos: [] };
+  const cfg    = inst.config || {};
+
+  // Build fields (similar to scraper-tab card)
+  const fieldsHtml = (tdef.campos || []).map(campo => {
+    const val    = (cfg[campo.key] || "");
+    const hasPwd = campo.type === "password" && cfg[`has_${campo.key}`];
+    const hintHtml = campo.hint ? `<span class="field-hint">${escHtml(campo.hint)}</span>` : "";
+
+    if (campo.type === "checkbox") {
+      const checked = cfg[campo.key] ? "checked" : "";
+      return `
+        <div class="scraper-field scraper-field-checkbox">
+          <label>
+            <input id="ci-${inst.id}-${campo.key}" type="checkbox" ${checked}>
+            ${escHtml(campo.label)}
+          </label>
+          ${hintHtml}
+        </div>`;
+    }
+
+    const placeholder = campo.type === "password"
+      ? (hasPwd ? "••••••••  (guardada — dejá vacío para no cambiar)" : "Nueva contraseña")
+      : (campo.placeholder || "");
+    const hasPwdHtml = hasPwd ? `<span class="has-pwd-note">✓ Contraseña guardada</span>` : "";
+    const hintShown  = campo.type !== "password" ? hintHtml : "";
+    return `
+      <div class="scraper-field">
+        <label for="ci-${inst.id}-${campo.key}">${escHtml(campo.label)}</label>
+        <input id="ci-${inst.id}-${campo.key}"
+               type="${campo.type === 'password' ? 'password' : 'text'}"
+               value="${campo.type === 'password' ? '' : escHtml(val)}"
+               placeholder="${escHtml(placeholder)}"
+               autocomplete="${campo.type === 'password' ? 'new-password' : 'off'}">
+        ${hintShown}${hasPwdHtml}
+      </div>`;
+  }).join("");
+
+  // Schedule + nombre + enabled toggle
+  const headerRow = `
+    <div class="scraper-field-row">
+      <div class="scraper-field" style="flex:2 1 200px">
+        <label for="ci-${inst.id}-nombre">Nombre</label>
+        <input id="ci-${inst.id}-nombre" type="text" value="${escHtml(inst.nombre)}">
+      </div>
+      <div class="scraper-field" style="flex:1 1 130px">
+        <label for="ci-${inst.id}-schedule">Hora diaria</label>
+        <input id="ci-${inst.id}-schedule" type="time" value="${escHtml(inst.schedule || tdef.schedule_default || '07:00')}">
+      </div>
+      <div class="scraper-field scraper-field-checkbox" style="flex:0 0 auto;align-self:end">
+        <label>
+          <input id="ci-${inst.id}-enabled" type="checkbox" ${inst.enabled ? "checked" : ""}>
+          Activa
+        </label>
+      </div>
+    </div>`;
+
+  // Status info (next_run, ultimo_run, last_log)
+  const nextRun = _instanceJobs[String(inst.id)];
+  const statusInfo = `
+    <div class="scraper-status-info">
+      ${inst.ultimo_run ? `<span title="Cuándo arrancó el último run">▶ Último intento: ${escHtml(inst.ultimo_run.replace('T',' ').slice(0,16))}</span>` : ""}
+      ${inst.ultimo_ok  ? `<span style="color:#16a34a">✓ Último OK: ${escHtml(inst.ultimo_ok.replace('T',' ').slice(0,16))}</span>` : ""}
+      ${nextRun ? `<span style="color:#2563eb">⏱ Próximo: ${escHtml(new Date(nextRun).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}))}</span>` : ""}
+    </div>
+    ${inst.error_msg ? `<p style="font-size:.8rem;color:#b91c1c;margin-top:.4rem">Último error: ${escHtml(inst.error_msg)}</p>` : ""}`;
+
+  const logSection = inst.last_log ? `
+    <details class="scraper-log-details">
+      <summary>📋 Detalle del último run</summary>
+      <pre class="scraper-log-pre">${escHtml(inst.last_log)}</pre>
+    </details>` : "";
+
+  // Movimientos guardados (reusa el endpoint legacy filtrado por la fuente de esta cuenta)
+  const movsSection = `
+    <details class="scraper-movs-details" id="movs-details-${c.fuente}">
+      <summary onclick="loadScraperMovimientos('${c.fuente}')">
+        <span>📦 Registros ingresados</span>
+        <button class="btn-refresh-movs" id="btn-refresh-movs-${c.fuente}"
+                onclick="event.stopPropagation();refreshScraperMovimientos('${c.fuente}')"
+                title="Actualizar">↻</button>
+      </summary>
+      <div id="movs-list-${c.fuente}" class="scraper-movs-list">
+        <span style="font-size:.78rem;color:#94a3b8">Abrí para ver los registros.</span>
+      </div>
+    </details>`;
+
+  return `
+    <div class="scraper-instance-panel" id="cuenta-inst-${c.fuente}">
+      ${headerRow}
+      <div class="scraper-fields">${fieldsHtml}</div>
+      <div class="scraper-actions">
+        <button class="btn btn-primary btn-sm" onclick="saveCuentaInstance('${c.fuente}', ${inst.id})">Guardar</button>
+        <button class="btn btn-sm" onclick="runCuentaInstance('${c.fuente}', ${inst.id})" id="btn-cuenta-run-${c.fuente}">▶ Ejecutar ahora</button>
+        <button class="btn btn-sm" style="color:#b91c1c" onclick="deleteCuentaInstance('${c.fuente}', ${inst.id})">🗑 Eliminar instancia</button>
+        <span class="scraper-save-msg" id="cuenta-save-msg-${c.fuente}"></span>
+      </div>
+      ${statusInfo}
+      ${logSection}
+      ${movsSection}
+    </div>`;
+}
+
+// ── Handlers ─────────────────────────────────────────────────────────────────
+
+async function onCuentaScraperChange(fuente, value) {
+  // value puede ser: "" (sin scraper), "<id>" (asignar instancia existente),
+  //                  "__new__:<banco>" (crear nueva instancia)
+  if (value && value.startsWith("__new__:")) {
+    const banco = value.split(":")[1];
+    await _createInstanceForCuenta(fuente, banco);
+    return;
+  }
+  // Asignar/desasignar instancia existente
+  const cuenta = _cuentasData.find(c => c.fuente === fuente);
+  let product_key = "main";
+  if (value) {
+    const inst = _getInstanceById(value);
+    if (inst && inst.banco === "bbva") {
+      // BBVA: product_key por moneda. Si la cuenta es ARS/USD/EUR, usamos eso.
+      const mon = (cuenta?.moneda || "ARS").toUpperCase();
+      product_key = ["ARS","USD","EUR"].includes(mon) ? mon : "ARS";
+    }
+  }
+  try {
+    const res = await fetch(`${BASE}/api/cuentas/${encodeURIComponent(fuente)}/scraper`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instance_id: value || null, product_key }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast(value ? "Scraper asignado" : "Scraper desasignado", "ok");
+    loadCuentas();
+  } catch (e) {
+    showToast("✗ " + e.message, "err");
+  }
+}
+
+async function _createInstanceForCuenta(fuente, banco) {
+  const cuenta = _cuentasData.find(c => c.fuente === fuente);
+  const tdef   = _scraperTypes.find(t => t.banco === banco);
+  if (!tdef) { showToast("Banco desconocido", "err"); return; }
+
+  const nombre = prompt(`Nombre para esta instancia de ${tdef.nombre}:\n(ej. "${tdef.nombre} Personal" o "${tdef.nombre} ${cuenta?.nombre || ''}")`,
+                        `${tdef.nombre} ${cuenta?.nombre || ''}`.trim());
+  if (!nombre) { loadCuentas(); return; }
+
+  // product_key: para BBVA ARS/USD/EUR según moneda de la cuenta; resto "main"
+  let product_key = "main";
+  if (banco === "bbva") {
+    const mon = (cuenta?.moneda || "ARS").toUpperCase();
+    product_key = ["ARS","USD","EUR"].includes(mon) ? mon : "ARS";
+  }
+  try {
+    const res = await fetch(`${BASE}/api/scraper-instances`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        banco, nombre,
+        config: { enabled: false },   // crear deshabilitada, usuario completa credenciales después
+        schedule: tdef.schedule_default || "07:00",
+        enabled: false,
+        cuenta_fuente: fuente,
+        product_key,
+      }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast(`Instancia "${nombre}" creada — completá las credenciales abajo`, "ok");
+    await loadCuentas();
+  } catch (e) {
+    showToast("✗ " + e.message, "err");
+  }
+}
+
+async function saveCuentaInstance(fuente, instanceId) {
+  const inst = _getInstanceById(instanceId);
+  if (!inst) return;
+  const tdef = _scraperTypes.find(t => t.banco === inst.banco) || { campos: [] };
+
+  // Recolectar valores del form
+  const config = {};
+  for (const campo of (tdef.campos || [])) {
+    const el = document.getElementById(`ci-${instanceId}-${campo.key}`);
+    if (!el) continue;
+    config[campo.key] = campo.type === "checkbox" ? el.checked : el.value;
+  }
+  // enabled toggle (separado de config)
+  const enabledEl = document.getElementById(`ci-${instanceId}-enabled`);
+  const nombreEl  = document.getElementById(`ci-${instanceId}-nombre`);
+  const schedEl   = document.getElementById(`ci-${instanceId}-schedule`);
+
+  const body = {
+    nombre: nombreEl?.value || inst.nombre,
+    config,
+    schedule: schedEl?.value || inst.schedule,
+    enabled: enabledEl ? enabledEl.checked : !!inst.enabled,
+  };
+
+  const msgEl = document.getElementById(`cuenta-save-msg-${fuente}`);
+  if (msgEl) { msgEl.className = "scraper-save-msg"; msgEl.textContent = ""; }
+  try {
+    const res = await fetch(`${BASE}/api/scraper-instances/${instanceId}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    if (msgEl) { msgEl.className = "scraper-save-msg ok"; msgEl.textContent = "✓ Guardado"; }
+    setTimeout(loadCuentas, 600);
+  } catch (e) {
+    if (msgEl) { msgEl.className = "scraper-save-msg error"; msgEl.textContent = "✗ " + e.message; }
+  }
+}
+
+async function runCuentaInstance(fuente, instanceId) {
+  const btn = document.getElementById(`btn-cuenta-run-${fuente}`);
+  if (btn) { btn.disabled = true; btn.textContent = "⟳ Corriendo…"; }
+  try {
+    const res = await fetch(`${BASE}/api/scraper-instances/${instanceId}/run`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!data.ok) throw new Error(data.error || "Error");
+    const imp = data.auto_imported ?? 0;
+    showToast(`✓ ${data.movimientos || 0} movimientos · ${imp} importados a Gastos`, "ok");
+  } catch (e) {
+    showToast("✗ " + e.message, "err");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "▶ Ejecutar ahora"; }
+    loadCuentas();
+  }
+}
+
+async function deleteCuentaInstance(fuente, instanceId) {
+  if (!confirm("¿Eliminar esta instancia de scraper?\nLas cuentas que la usaban quedan sin scraper asignado (no se borra ningún gasto).")) return;
+  try {
+    const res = await fetch(`${BASE}/api/scraper-instances/${instanceId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await res.text());
+    showToast("Instancia eliminada", "ok");
+    loadCuentas();
+  } catch (e) {
+    showToast("✗ " + e.message, "err");
+  }
 }
 
 function toggleCuentaEdit(fuente) {

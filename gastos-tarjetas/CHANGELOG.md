@@ -1,3 +1,32 @@
+## 0.4.1
+
+**Fase 2 de multi-instancia — UI en la tab Cuentas.**
+
+Cada cuenta `tipo=auto` ahora tiene un panel inline "🤖 Scraper" con todo el flujo de gestión del scraper que la alimenta. La tab Scrapers (vieja) se mantiene viva en v0.4.1 — la limpiamos en v0.4.2.
+
+- **Nuevos endpoints backend** (`routes/scraper_instances_routes.py`):
+  - `GET /api/scraper-types` — lista de tipos de scraper disponibles (BBVA/AMEX/Galicia/MP) con sus definiciones de campos. Usado por el combo "Nueva instancia".
+  - `GET /api/scraper-instances` — lista de instancias del usuario (secretos enmascarados).
+  - `GET /api/scraper-instances/{id}` — detalle de una instancia + cuentas que alimenta.
+  - `POST /api/scraper-instances` — crear nueva instancia (opcionalmente linkea a una cuenta con `cuenta_fuente` + `product_key`).
+  - `PUT /api/scraper-instances/{id}` — actualizar nombre/config/schedule/enabled (mergea config preservando passwords vacíos).
+  - `DELETE /api/scraper-instances/{id}` — eliminar instancia (las cuentas que la usaban quedan sin scraper, no se borran gastos).
+  - `POST /api/scraper-instances/{id}/run` — trigger manual de la instancia.
+  - `PUT /api/cuentas/{fuente}/scraper` — asignar/desasignar instancia a cuenta (con `product_key`).
+- **UI en tab Cuentas — panel inline por cuenta auto**:
+  - Combo "Scraper que la alimenta" con instancias existentes + opciones "+ Nueva instancia BBVA/AMEX/Galicia/MercadoPago".
+  - Si la cuenta tiene una instancia asignada: panel inline con form de credenciales (campos vienen de `scraper-types`), nombre, hora diaria, toggle Activa, badge de estado, botones [Guardar] / [▶ Ejecutar ahora] / [🗑 Eliminar instancia].
+  - Sección "📋 Detalle del último run" colapsable con el `last_log`.
+  - Sección "📦 Registros ingresados" reusando el componente actual (delete con ✕ funciona igual — hard delete de v0.3.68).
+  - Status info: último intento, último OK, próximo run (del scheduler).
+  - Para banco BBVA, `product_key` se asigna automáticamente según la moneda de la cuenta (ARS/USD/EUR).
+- **Crear "+ Nueva instancia" desde combo**:
+  - Prompt para el nombre (sugerencia: "{Banco} {nombre_cuenta}").
+  - Crea la instancia deshabilitada (para que completes credenciales antes de activarla).
+  - La linkea automáticamente a la cuenta + setea el `product_key`.
+  - El combo se actualiza, el panel inline aparece para que entres password/usuario.
+- **Compatibilidad**: tab Scrapers (vieja) sigue funcionando — actúa sobre la instancia default de cada banco. Los endpoints `/api/scrapers/*` legacy siguen vivos.
+
 ## 0.4.0
 
 **Fase 1 de multi-instancia de scrapers (backend, sin cambios visibles en UI).**
