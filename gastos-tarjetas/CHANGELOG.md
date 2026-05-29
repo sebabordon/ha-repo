@@ -1,3 +1,5 @@
+## 0.5.7
+
 ## 0.5.6
 
 - **Fix: chips de categorías en chart presupuesto vs real no respondían al click**: el onclick se generaba como atributo HTML con `JSON.stringify(cat)` (comillas dobles), lo que rompía el atributo. Se reemplazó por `createElement` + `chip.onclick = () => toggleBudCat(c)`, igual que los chips de la tab Gastos.
