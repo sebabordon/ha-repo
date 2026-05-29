@@ -116,6 +116,7 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
     """
     from conciliacion import run_conciliation
     from scrapers_db import insert_movimientos_raw, auto_import_unmatched
+    from db import adjust_cuenta_saldo
 
     # Setear contexto de usuario para que DB y archivos apunten al dir correcto
     from userctx import _user_data_dir
@@ -212,6 +213,17 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
             saldo_usd=_any_saldo.get("saldo_usd"),
             last_log="\n".join(result.log_lines) if result.log_lines else None,
         )
+
+        # Para fuentes sin saldo de API, actualizar el saldo de la cuenta
+        # aplicando el delta neto de los movimientos nuevos.
+        for fuente in emitted_fuentes:
+            if fuente not in result.saldos:
+                for moneda in ("ARS", "USD"):
+                    delta = -round(sum(
+                        m.monto for m in result.movimientos
+                        if m.fuente == fuente and m.moneda == moneda
+                    ), 2)
+                    adjust_cuenta_saldo(fuente, delta, moneda)
 
     finally:
         _user_data_dir.reset(token)
@@ -372,7 +384,8 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
     from scraper_instances_db import (
         get_instance, get_cuentas_for_instance, update_instance_status,
     )
-    from userctx import _user_data_dir, get_data_dir
+    from userctx import _user_data_dir
+    from db import adjust_cuenta_saldo, get_data_dir
 
     effective_dir = data_dir or get_data_dir()
     token = _user_data_dir.set(effective_dir)
@@ -443,6 +456,17 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
             movimientos_nuevos=inserted,
             last_log="\n".join(result.log_lines) if result.log_lines else None,
         )
+
+        # Para fuentes sin saldo de API, actualizar el saldo de la cuenta
+        # aplicando el delta neto de los movimientos nuevos.
+        for fuente in emitted_fuentes:
+            if fuente not in result.saldos:
+                for moneda in ("ARS", "USD"):
+                    delta = -round(sum(
+                        m.monto for m in result.movimientos
+                        if m.fuente == fuente and m.moneda == moneda
+                    ), 2)
+                    adjust_cuenta_saldo(fuente, delta, moneda)
 
         return {
             "ok":            True,

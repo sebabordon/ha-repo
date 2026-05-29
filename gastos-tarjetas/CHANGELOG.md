@@ -6,6 +6,7 @@
 
 - **Fix: widget de saldos no se actualizaba tras ejecutar scraper**: `runCuentaInstance` llamaba `loadCuentas()` pero no `loadSaldos()` en el `finally`. El widget superior ahora refleja el saldo nuevo inmediatamente.
 - **Encriptación de credenciales habilitada**: se agrega `scraper_encryption_key` a la config del add-on (str? en `config.yaml`). Ponerle cualquier string largo activa Fernet (AES-128-CBC + HMAC-SHA256) para las credenciales de scrapers. Requiere la dependencia `cryptography`, ahora incluida en `requirements.txt`.
+- **MercadoPago: saldo por delta de movimientos**: como la API devuelve 403 para el endpoint de saldo con tokens personales, el scheduler ahora aplica el delta neto de cada run a `cuentas.saldo` (sólo si `auto_saldo=1`). El usuario setea el saldo correcto una vez; cada import lo mantiene actualizado automáticamente. La lógica es genérica: aplica a cualquier scraper que no devuelva saldo de API.
 - **Tab Scrapers eliminada**: las credenciales, estado, "Importar pendientes", "Borrar sesión" y TOTP de cada scraper ya estaban disponibles en el panel inline de cada cuenta (tab Cuentas). La tab duplicaba la funcionalidad. Se agregan los botones faltantes ("Importar pendientes", "Borrar sesión", TOTP) al panel inline para que quede paridad completa.
 - **Tab Importar eliminada**: el "último import" de cada parser ahora se muestra en el panel PDF parser inline de cada cuenta (en tab Cuentas). La opción RG 5617 se movió a Config → Interfaz.
 

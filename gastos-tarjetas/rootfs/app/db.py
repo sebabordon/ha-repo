@@ -990,6 +990,23 @@ def get_cuentas() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def adjust_cuenta_saldo(fuente: str, delta: float, moneda: str = "ARS") -> None:
+    """Suma delta al saldo de la cuenta (sólo si auto_saldo=1).
+
+    Usado cuando el scraper no obtiene saldo de la API: aplica el neto
+    de los movimientos nuevos para mantener el saldo aproximado.
+    """
+    if not delta:
+        return
+    field = "saldo_usd" if moneda == "USD" else "saldo"
+    with _conn() as conn:
+        conn.execute(
+            f"UPDATE cuentas SET {field}={field}+?, fecha_actualizacion=date('now') "
+            "WHERE fuente=? AND auto_saldo=1",
+            (round(delta, 2), fuente),
+        )
+
+
 def upsert_cuenta_saldo(fuente: str, saldo: float, moneda: str = "ARS", fecha: str = None):
     from datetime import date
     fecha = fecha or str(date.today())
