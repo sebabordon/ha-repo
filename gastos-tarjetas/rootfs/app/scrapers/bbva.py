@@ -543,7 +543,8 @@ class BbvaScraper(BaseScraper):
             logger.info("[bbva] %s", msg)
             log.append(msg)
 
-        dias = int(config.get("dias") or _DIAS_DEFAULT)
+        dias            = int(config.get("dias") or _DIAS_DEFAULT)
+        usuario_default = (config.get("usuario_default") or "").strip() or None
 
         movimientos: list[MovimientoRaw] = []
         saldos: dict = {}
@@ -557,7 +558,7 @@ class BbvaScraper(BaseScraper):
 
         result = (cuentas_resp["json"] or {}).get("result", {}) or {}
         cajas  = result.get("cajasAhorro", []) or []
-        _log(f"Cuentas encontradas: {len(cajas)}")
+        _log(f"Cuentas encontradas: {len(cajas)}  |  usuario_default={usuario_default or '(none)'}")
 
         today_art   = datetime.now(_ART).date()
         since_date  = today_art - timedelta(days=dias - 1)
@@ -570,15 +571,22 @@ class BbvaScraper(BaseScraper):
             alias     = cuenta.get("alias", id_prod)
             saldo_raw = cuenta.get("saldo") or cuenta.get("importe") or ""
 
-            _log(f"Procesando cuenta: {alias} (id={id_prod})")
+            # Detección de moneda: la API a veces trae `codigoMoneda`/`moneda`;
+            # si no, deducimos por el alias ("Pesos" → ARS, "Dolares"/"Dólares" → USD,
+            # "Euros" → EUR).  Default ARS.
+            moneda = self._detect_moneda(cuenta, alias)
+
+            _log(f"Procesando cuenta: {alias} (id={id_prod}, moneda={moneda})")
 
             if saldo_raw:
                 saldo_val = self.parse_amount(str(saldo_raw))
-                saldos["bbva_cuenta"] = {"saldo_ars": saldo_val}
+                saldo_key = "saldo_usd" if moneda == "USD" else "saldo_eur" if moneda == "EUR" else "saldo_ars"
+                saldos.setdefault("bbva_cuenta", {})[saldo_key] = saldo_val
                 _log(f"  Saldo actual: {saldo_raw}")
 
             movs = self._fetch_movimientos(
                 driver, id_prod, fecha_desde, fecha_hasta, _log,
+                moneda=moneda, usuario_default=usuario_default,
             )
             _log(f"  → {len(movs)} movimientos importados de {alias}")
             movimientos.extend(movs)
@@ -590,6 +598,33 @@ class BbvaScraper(BaseScraper):
             log_lines   = log,
         )
 
+    @staticmethod
+    def _detect_moneda(cuenta: dict, alias: str) -> str:
+        """
+        Detecta la moneda de una cuenta BBVA.
+        Prioriza el campo `codigoMoneda`/`moneda` de la API si está presente;
+        si no, deduce por el alias ("Pesos"/"Dolares"/"Euros").  Default: ARS.
+        """
+        for k in ("codigoMoneda", "moneda", "currency"):
+            v = cuenta.get(k)
+            if v:
+                s = str(v).strip().upper()
+                # Normalizar: 032=ARS, 840=USD, 978=EUR (códigos ISO típicos
+                # que usan algunos bancos), o el código de moneda directo.
+                if s in ("ARS", "032", "$", "PESOS"):
+                    return "ARS"
+                if s in ("USD", "840", "USS", "DOLAR", "DOLARES", "DÓLARES"):
+                    return "USD"
+                if s in ("EUR", "978", "EUROS"):
+                    return "EUR"
+        # Fallback: deducir por alias
+        a = (alias or "").strip().upper()
+        if "DOLAR" in a or "DÓLAR" in a or "USD" in a:
+            return "USD"
+        if "EURO" in a or "EUR" in a:
+            return "EUR"
+        return "ARS"
+
     # ── paginación ─────────────────────────────────────────────────────────────
 
     def _fetch_movimientos(
@@ -599,6 +634,8 @@ class BbvaScraper(BaseScraper):
         fecha_desde: str,
         fecha_hasta: str,
         log_fn,
+        moneda: str = "ARS",
+        usuario_default: Optional[str] = None,
     ) -> list[MovimientoRaw]:
         """
         Pagina la API de movimientos hasta obtenerlos todos (vía fetch del browser).
@@ -654,7 +691,9 @@ class BbvaScraper(BaseScraper):
             # qué campos trae la API (útil para refinar detección de signo).
             if batch and ultimo == 0:
                 log_fn(f"    [debug] keys del primer mov: {sorted(batch[0].keys())}")
-            all_movs.extend(self._parse_batch(batch, log_fn))
+            all_movs.extend(self._parse_batch(
+                batch, log_fn, moneda=moneda, usuario_default=usuario_default,
+            ))
 
             # Si devolvió menos de _PAGE_SIZE, no hay más páginas
             if len(batch) < _PAGE_SIZE:
@@ -732,10 +771,23 @@ class BbvaScraper(BaseScraper):
         except Exception:
             return None
 
-    def _parse_batch(self, batch: list[dict], log_fn=None) -> list[MovimientoRaw]:
+    def _parse_batch(
+        self,
+        batch: list[dict],
+        log_fn=None,
+        moneda: str = "ARS",
+        usuario_default: Optional[str] = None,
+    ) -> list[MovimientoRaw]:
         """
         Convierte un batch de movimientos BBVA a MovimientoRaw.
         El array llega newest-first.  Ver `_detect_sign` para la lógica del signo.
+
+        Args:
+            moneda: código de moneda para los movimientos ("ARS"/"USD"/"EUR").
+            usuario_default: si está seteado, se escribe en raw_data["usuario"]
+                de cada movimiento, y `importar_a_gastos` lo aplica como el
+                usuario del gasto creado.  None → no se setea (cae al fallback
+                de user_config en importar_a_gastos).
 
         Convención de monto:
           monto > 0 = egreso   (plata que sale)
@@ -779,6 +831,7 @@ class BbvaScraper(BaseScraper):
                 "codigo_tipo_movimiento": mov.get("codigoTipoMovimiento") or None,
                 "tiene_detalle":          mov.get("tieneDetalle"),
                 "sign_reason":            reason,
+                "usuario":                usuario_default,   # None si no hay config
             }
             # Limpiar None para no inflar el raw_data
             raw_data = {k: v for k, v in raw_data.items() if v is not None}
@@ -788,7 +841,7 @@ class BbvaScraper(BaseScraper):
                 fecha       = fecha,
                 descripcion = desc,
                 monto       = monto,
-                moneda      = "ARS",
+                moneda      = moneda,
                 raw_data    = raw_data,
             ))
 

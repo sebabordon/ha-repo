@@ -530,7 +530,7 @@ def importar_a_gastos(
         if not raw:
             return None
 
-        # Extraer usuario del raw_data si el scraper lo guardó
+        # Extraer usuario del raw_data si el scraper lo guardó (1ra prioridad)
         usuario = None
         if raw["raw_data"]:
             try:
@@ -538,6 +538,17 @@ def importar_a_gastos(
                 u = (rd.get("usuario") or "").strip()
                 if u:
                     usuario = u
+            except Exception:
+                pass
+        # Fallback: si el scraper no setea `usuario`, usar el default de
+        # user_config.fuente_usuario[fuente] (configurable en la UI:
+        # Config → Usuarios).  Esto garantiza que TODOS los gastos importados
+        # por un scraper tengan un usuario asignado (no NULL).
+        if usuario is None:
+            try:
+                from user_config import read_user_config
+                ucfg = read_user_config()
+                usuario = (ucfg.get("fuente_usuario", {}) or {}).get(raw["fuente"]) or None
             except Exception:
                 pass
 

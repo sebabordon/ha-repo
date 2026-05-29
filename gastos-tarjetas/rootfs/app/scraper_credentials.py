@@ -76,6 +76,14 @@ BANKS: dict[str, dict] = {
                 "placeholder": "60",
                 "hint":        "1 = solo hoy, 2 = hoy y ayer, N = últimos N días (default: 60)",
             },
+            {
+                "key":         "usuario_default",
+                "label":       "Usuario para los gastos importados",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "Titular",
+                "hint":        "Nombre que verán los gastos importados de este scraper (ej. Titular, Sebastián). Si está vacío, se usa el default configurado en Config → Usuarios → fuente_usuario['bbva_cuenta'].",
+            },
         ],
     },
     "galicia": {
