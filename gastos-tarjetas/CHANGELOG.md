@@ -1,3 +1,7 @@
+## 0.5.14
+
+- **Fix: settlement report — 3 correcciones según la documentación oficial de MP**: (1) endpoint corregido de `release_report` a `settlement_report`; (2) el polling ahora detecta que el reporte está listo por su presencia en la lista con `file_name` (no hay campo `status` en el listado); (3) parser CSV corregido: separador `;`, columnas `TRANSACTION_DATE`, `TRANSACTION_AMOUNT`, `TRANSACTION_CURRENCY`, `TRANSACTION_TYPE` — las columnas `NET_DEBIT_AMOUNT`/`NET_CREDIT_AMOUNT`/`RECORD_TYPE` no existen en el formato real.
+
 ## 0.5.13
 
 - **Fix: release report timeout** (polling nunca matcheaba): el `POST` devuelve solo el ID numérico, no el `file_name`. El polling ahora matchea por `id` en la lista; una vez que el reporte está `processed` extrae el `file_name` real para la descarga. Timeout extendido a ~90 seg (30 × 3 s).

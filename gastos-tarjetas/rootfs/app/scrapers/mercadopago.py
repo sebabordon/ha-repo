@@ -17,9 +17,9 @@ Endpoints usados:
   GET  /v1/payments/search?payer.id=…      → pagos realizados (egresos)
   GET  /v1/payments/search?collector.id=…  → cobros recibidos (ingresos)
   GET  /users/{user_id}/mercadopago_account/balance → saldo disponible
-  POST /v1/account/release_report          → solicitar reporte de movimientos
-  GET  /v1/account/release_report/list     → estado del reporte
-  GET  /v1/account/release_report/{file}   → descargar CSV del reporte
+  POST /v1/account/settlement_report        → solicitar reporte de movimientos
+  GET  /v1/account/settlement_report/list  → lista reportes listos
+  GET  /v1/account/settlement_report/{f}   → descargar CSV del reporte
 
 Pagos con tarjeta de crédito (payment_type_id == "credit_card"):
   Se EXCLUYEN. Esos cargos aparecen en el resumen de la tarjeta (AMEX, BBVA,
@@ -128,9 +128,9 @@ class MercadoPagoScraper(BaseScraper):
                     f"({stats['skipped']} ya existían)"
                 )
 
-                # 3b. Release report: captura transferencias a CBU externo que
+                # 3b. Settlement report: captura transferencias a CBU externo que
                 #     no aparecen en /v1/payments/search (ej. retiros a banco).
-                rpt_movs = await self._fetch_release_report(
+                rpt_movs = await self._fetch_settlement_report(
                     client, since_date, today_art, existing_ids, _l, debug_log
                 )
                 movimientos.extend(rpt_movs)
@@ -587,9 +587,9 @@ class MercadoPagoScraper(BaseScraper):
             base += f" ({installments} cuotas)"
         return base
 
-    # ── Release report (transferencias a CBU externo) ─────────────────────────
+    # ── Settlement report (transferencias a CBU externo) ─────────────────────
 
-    async def _fetch_release_report(
+    async def _fetch_settlement_report(
         self,
         client: httpx.AsyncClient,
         since_date: date,
@@ -599,18 +599,22 @@ class MercadoPagoScraper(BaseScraper):
         debug: bool = False,
     ) -> list[MovimientoRaw]:
         """
-        Genera y descarga el release report de MP para el período.
-        Captura transferencias a CVU/CBU que no aparecen en /v1/payments/search.
+        Genera y descarga el settlement report de MP para el período.
+        Captura transferencias a CVU/CBU externo que no aparecen en /v1/payments/search.
 
-        Flujo:
-          1. POST /v1/account/release_report  → crea el reporte (async)
-          2. Polling GET /v1/account/release_report/list hasta status="processed"
-          3. GET /v1/account/release_report/{file_name}  → descarga el CSV
-          4. Parsea y devuelve movimientos no incluidos en existing_ids.
+        Endpoint correcto según la documentación oficial:
+          POST /v1/account/settlement_report         → crea el reporte (async, HTTP 202)
+          GET  /v1/account/settlement_report/list    → lista reportes listos
+          GET  /v1/account/settlement_report/:file   → descarga CSV
 
-        Si el token no tiene permisos (403/401) o el reporte no está listo en
-        ~60 segundos, loguea y devuelve lista vacía sin lanzar excepción.
+        El reporte aparece en la lista solo cuando está completamente generado
+        (no hay campo "status"; su presencia con file_name = listo para descargar).
+
+        Si el token no tiene permisos (403/401) o el reporte no aparece en ~90 s,
+        loguea y devuelve lista vacía sin lanzar excepción.
         """
+        _URL = f"{_BASE}/v1/account/settlement_report"
+
         # Convertir fechas ART a UTC para la API de reportes
         since_dt = datetime(
             since_date.year, since_date.month, since_date.day, 0, 0, 0, tzinfo=_ART
@@ -621,48 +625,45 @@ class MercadoPagoScraper(BaseScraper):
         since_utc = since_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         until_utc = until_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        log_fn("Release report: solicitando …")
+        log_fn("Settlement report: solicitando …")
         try:
             resp = await client.post(
-                f"{_BASE}/v1/account/release_report",
+                _URL,
                 json={"begin_date": since_utc, "end_date": until_utc},
             )
         except Exception as exc:
-            log_fn(f"Release report: error de red — {exc}")
+            log_fn(f"Settlement report: error de red — {exc}")
             return []
 
         if resp.status_code in (401, 403):
-            log_fn(f"Release report: sin permiso ({resp.status_code}) — omitido")
+            log_fn(f"Settlement report: sin permiso ({resp.status_code}) — omitido")
             return []
         if resp.status_code not in (200, 201, 202, 203):
-            log_fn(f"Release report: POST status {resp.status_code} — omitido")
+            log_fn(f"Settlement report: POST status {resp.status_code} — omitido")
             return []
 
         rdata     = resp.json() if resp.text else {}
-        # El POST puede devolver el ID numérico antes de que el file_name exista.
-        # Guardamos ambos para matchear en la lista de polling.
         report_id = rdata.get("id")
+        # file_name puede venir ya en la respuesta del POST o aparecer luego en la lista
         file_name = str(rdata.get("file_name") or "").strip()
         if not report_id and not file_name:
-            log_fn("Release report: sin id ni file_name en la respuesta — omitido")
+            log_fn("Settlement report: sin id ni file_name en la respuesta — omitido")
             return []
 
-        log_fn(f"Release report: esperando id={report_id} …")
+        log_fn(f"Settlement report: esperando id={report_id} …")
 
-        # Polling con back-off lineal: hasta ~90 seg
-        # Matcheamos por id (siempre presente) y obtenemos el file_name real
-        # recién cuando el reporte está procesado.
+        # Polling: el reporte aparece en la lista solo cuando está listo.
+        # No hay campo "status"; basta con que esté presente y tenga file_name.
         csv_text: Optional[str] = None
-        for attempt in range(30):
+        for _attempt in range(30):          # máx ~90 s (30 × 3 s)
             await asyncio.sleep(3)
             try:
-                list_resp = await client.get(f"{_BASE}/v1/account/release_report/list")
+                list_resp = await client.get(f"{_URL}/list")
             except Exception:
                 continue
             if list_resp.status_code != 200:
                 break
             for rpt in (list_resp.json() or []):
-                # Comparar por id (int o str) o por file_name si lo teníamos
                 rpt_id   = rpt.get("id")
                 rpt_file = str(rpt.get("file_name") or "").strip()
                 match = (
@@ -671,31 +672,28 @@ class MercadoPagoScraper(BaseScraper):
                 )
                 if not match:
                     continue
-                if rpt.get("status") == "processed":
-                    dl_name = rpt_file or file_name
-                    log_fn(f"Release report: descargando {dl_name} …")
+                # Si está en la lista con file_name → está listo para descargar
+                if rpt_file:
+                    log_fn(f"Settlement report: descargando {rpt_file} …")
                     try:
-                        dl = await client.get(
-                            f"{_BASE}/v1/account/release_report/{dl_name}",
-                            timeout=60,
-                        )
+                        dl = await client.get(f"{_URL}/{rpt_file}", timeout=60)
                         if dl.status_code == 200:
                             csv_text = dl.text
                         else:
-                            log_fn(f"Release report: download status {dl.status_code}")
+                            log_fn(f"Settlement report: download status {dl.status_code}")
                     except Exception as exc:
-                        log_fn(f"Release report: error descargando — {exc}")
-                break  # encontrado en la lista (puede no estar listo aún)
+                        log_fn(f"Settlement report: error descargando — {exc}")
+                break  # encontrado (puede no tener file_name aún si todavía genera)
             if csv_text is not None:
                 break
 
         if csv_text is None:
-            log_fn("Release report: timeout esperando procesamiento — omitido")
+            log_fn("Settlement report: timeout esperando procesamiento — omitido")
             return []
 
-        return self._parse_release_csv(csv_text, existing_ids, log_fn, debug)
+        return self._parse_settlement_csv(csv_text, existing_ids, log_fn, debug)
 
-    def _parse_release_csv(
+    def _parse_settlement_csv(
         self,
         csv_text: str,
         existing_ids: set,
@@ -703,74 +701,76 @@ class MercadoPagoScraper(BaseScraper):
         debug: bool = False,
     ) -> list[MovimientoRaw]:
         """
-        Parsea el CSV del release report.
+        Parsea el CSV del settlement report.
 
-        Solo importa filas que representan movimientos de dinero no ya capturados
-        por /v1/payments/search (dedup por SOURCE_ID vs existing_ids).
+        Formato real según la documentación oficial de MP:
+          - Separador: ";"
+          - Columnas clave: SOURCE_ID, TRANSACTION_DATE, TRANSACTION_AMOUNT,
+            TRANSACTION_CURRENCY, TRANSACTION_TYPE, EXTERNAL_REFERENCE,
+            SETTLEMENT_NET_AMOUNT
 
-        Columnas clave del CSV de MP:
-          DATE, SOURCE_ID, RECORD_TYPE, DESCRIPTION,
-          NET_DEBIT_AMOUNT, NET_CREDIT_AMOUNT, GROSS_AMOUNT
+        TRANSACTION_TYPE conocidos:
+          SETTLEMENT  → pago recibido (ingreso para el merchant)
+          WITHDRAWAL  → retiro a banco (egreso — lo que buscamos capturar)
+          PAYOUT      → variante de withdrawal
+
+        Dedup: filas cuyo SOURCE_ID ya está en existing_ids (importadas vía
+        /v1/payments/search) se omiten para no duplicar.
         """
         movs:    list[MovimientoRaw] = []
         skipped: int = 0
 
-        # RECORD_TYPE que son solo marcadores de balance, sin movimiento de dinero real
-        _BALANCE_TYPES = frozenset({
-            "initial_available_balance",
-            "total",
-            "available_balance",
-        })
+        # TRANSACTION_TYPE que representan salidas de dinero (egresos)
+        _EGRESO_TYPES = frozenset({"WITHDRAWAL", "PAYOUT", "MONEY_TRANSFER_WITHDRAWAL"})
 
         try:
-            reader = csv_mod.DictReader(io.StringIO(csv_text))
+            reader = csv_mod.DictReader(io.StringIO(csv_text), delimiter=";")
             for row in reader:
-                record_type = (row.get("RECORD_TYPE")        or "").strip()
-                source_id   = (row.get("SOURCE_ID")          or "").strip()
-                date_str    = (row.get("DATE")               or "")[:10]
-                description = (row.get("DESCRIPTION")        or "").strip()
-                net_debit   = _safe_float(row.get("NET_DEBIT_AMOUNT",  "0"))
-                net_credit  = _safe_float(row.get("NET_CREDIT_AMOUNT", "0"))
+                tx_type   = (row.get("TRANSACTION_TYPE")   or "").strip().upper()
+                source_id = (row.get("SOURCE_ID")          or "").strip()
+                ext_ref   = (row.get("EXTERNAL_REFERENCE") or "").strip()
+                date_str  = (row.get("TRANSACTION_DATE")   or "")[:10]
+                amount    = _safe_float(row.get("TRANSACTION_AMOUNT", "0"))
+                net_amt   = _safe_float(row.get("SETTLEMENT_NET_AMOUNT", "0"))
+                currency  = (row.get("TRANSACTION_CURRENCY") or "ARS").strip()
 
                 if debug:
                     log_fn(
-                        f"  [rpt] {record_type:<28} src={source_id or '-':<14} "
-                        f"{date_str} deb={net_debit:>12,.2f} "
-                        f"cre={net_credit:>12,.2f}  {description[:35]}"
+                        f"  [rpt] {tx_type:<28} src={source_id or '-':<14} "
+                        f"{date_str} amt={amount:>14,.2f} {currency}"
+                        + (f"  ext={ext_ref[:30]}" if ext_ref else "")
                     )
 
-                # Ignorar filas de balance (sin movimiento real)
-                if record_type in _BALANCE_TYPES:
-                    continue
-
-                # Ignorar filas sin movimiento neto ni fecha
+                # Ignorar filas sin fecha o sin monto
                 if not date_str or len(date_str) < 10:
                     continue
-                if net_debit == 0 and net_credit == 0:
+                if amount == 0 and net_amt == 0:
                     continue
 
-                # Dedup: si el SOURCE_ID ya está en existing_ids (importado desde
-                # payments/search), saltar para evitar duplicados
+                # Dedup: si el SOURCE_ID coincide con un payment ya importado → saltar
                 src_int = _try_int(source_id)
                 if src_int and src_int in existing_ids:
                     skipped += 1
                     continue
 
-                # Determinar signo, descripción y moneda
-                if net_debit > 0:
-                    monto = round(net_debit, 2)    # egreso: positivo
-                    desc  = _clean_report_desc(description) or "Retiro a CBU"
+                # Determinar dirección y descripción según TRANSACTION_TYPE
+                effective_amount = abs(net_amt) if net_amt != 0 else abs(amount)
+                if tx_type in _EGRESO_TYPES or amount < 0:
+                    monto = round(effective_amount, 2)   # egreso: positivo
+                    desc  = "Retiro a CBU"
                 else:
-                    monto = -round(net_credit, 2)  # ingreso: negativo
-                    desc  = _clean_report_desc(description) or "Depósito bancario"
+                    monto = -round(effective_amount, 2)  # ingreso: negativo
+                    desc  = f"Liquidación {tx_type}".strip() if tx_type else "Liquidación"
+
+                moneda = "USD" if currency == "USD" else "ARS"
 
                 raw: dict = {
-                    # Almacenar como payment_id para que _get_existing_payment_ids
-                    # lo encuentre en la próxima ejecución y no duplique.
-                    "payment_id":  src_int,
-                    "source_id":   source_id or None,
-                    "record_type": record_type or None,
-                    "rpt_desc":    description or None,
+                    # payment_id = source_id para que _get_existing_payment_ids
+                    # lo reconozca en la próxima ejecución y no lo duplique.
+                    "payment_id":       src_int,
+                    "source_id":        source_id or None,
+                    "transaction_type": tx_type or None,
+                    "external_ref":     ext_ref or None,
                 }
                 if self._default_usuario:
                     raw["usuario"] = self._default_usuario
@@ -780,17 +780,17 @@ class MercadoPagoScraper(BaseScraper):
                     fecha       = date_str,
                     descripcion = desc,
                     monto       = monto,
-                    moneda      = "ARS",
+                    moneda      = moneda,
                     raw_data    = raw,
                 ))
                 if src_int:
                     existing_ids.add(src_int)
 
         except Exception as exc:
-            log_fn(f"Release report: error parseando CSV — {exc}")
+            log_fn(f"Settlement report: error parseando CSV — {exc}")
 
         note = f" ({skipped} ya existían)" if skipped else ""
-        log_fn(f"Release report: {len(movs)} movimientos nuevos{note}")
+        log_fn(f"Settlement report: {len(movs)} movimientos nuevos{note}")
         return movs
 
     # ── Saldo ─────────────────────────────────────────────────────────────────
