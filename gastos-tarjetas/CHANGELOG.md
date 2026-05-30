@@ -1,3 +1,7 @@
+## 0.5.15
+
+- **Settlement report: estrategia list-first para evitar timeout**: antes de solicitar un reporte nuevo, consulta `GET /list` y descarga el más reciente si ya existe (0 s de espera). Solo si la lista está vacía hace `POST` + polling. La ventana del reporte nuevo es siempre los últimos 10 días (fija, independiente de `dias`); el dedup por `existing_ids` maneja cualquier solapamiento con imports anteriores.
+
 ## 0.5.14
 
 - **Fix: settlement report — 3 correcciones según la documentación oficial de MP**: (1) endpoint corregido de `release_report` a `settlement_report`; (2) el polling ahora detecta que el reporte está listo por su presencia en la lista con `file_name` (no hay campo `status` en el listado); (3) parser CSV corregido: separador `;`, columnas `TRANSACTION_DATE`, `TRANSACTION_AMOUNT`, `TRANSACTION_CURRENCY`, `TRANSACTION_TYPE` — las columnas `NET_DEBIT_AMOUNT`/`NET_CREDIT_AMOUNT`/`RECORD_TYPE` no existen en el formato real.

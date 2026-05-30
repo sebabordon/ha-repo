@@ -599,37 +599,41 @@ class MercadoPagoScraper(BaseScraper):
         debug: bool = False,
     ) -> list[MovimientoRaw]:
         """
-        Genera y descarga el settlement report de MP para el período.
-        Captura transferencias a CVU/CBU externo que no aparecen en /v1/payments/search.
+        Descarga el settlement report de MP para capturar retiros a CVU/CBU externo.
 
-        Endpoint correcto según la documentación oficial:
-          POST /v1/account/settlement_report         → crea el reporte (async, HTTP 202)
-          GET  /v1/account/settlement_report/list    → lista reportes listos
-          GET  /v1/account/settlement_report/:file   → descarga CSV
+        Estrategia (evita esperas en el caso normal):
+          1. GET /list → si hay algún reporte ya generado, descargar el más reciente
+             directamente (0 s de espera). El dedup por existing_ids maneja solapamiento.
+          2. Si la lista está vacía o no hay ninguno listo: POST para crear un reporte
+             de los últimos 10 días y hacer polling hasta que aparezca en la lista.
 
-        El reporte aparece en la lista solo cuando está completamente generado
-        (no hay campo "status"; su presencia con file_name = listo para descargar).
-
-        Si el token no tiene permisos (403/401) o el reporte no aparece en ~90 s,
-        loguea y devuelve lista vacía sin lanzar excepción.
+        El reporte aparece en la lista solo cuando está listo (no hay campo "status").
+        Si el token no tiene permiso (401/403) se loguea y se devuelve lista vacía.
         """
         _URL = f"{_BASE}/v1/account/settlement_report"
 
-        # Convertir fechas ART a UTC para la API de reportes
-        since_dt = datetime(
-            since_date.year, since_date.month, since_date.day, 0, 0, 0, tzinfo=_ART
-        ).astimezone(timezone.utc)
-        until_dt = datetime(
-            until_date.year, until_date.month, until_date.day, 23, 59, 59, tzinfo=_ART
-        ).astimezone(timezone.utc)
-        since_utc = since_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        until_utc = until_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        # ── Paso 1: intentar usar un reporte ya existente ─────────────────────
+        csv_text: Optional[str] = await self._download_latest_settlement(
+            client, _URL, log_fn
+        )
+        if csv_text is not None:
+            return self._parse_settlement_csv(csv_text, existing_ids, log_fn, debug)
 
-        log_fn("Settlement report: solicitando …")
+        # ── Paso 2: solicitar reporte de los últimos 10 días ─────────────────
+        # Ventana fija de 10 días: el dedup evita duplicados con imports anteriores.
+        today_art  = datetime.now(_ART).date()
+        win_since  = today_art - timedelta(days=9)
+        since_utc  = datetime(
+            win_since.year, win_since.month, win_since.day, 0, 0, 0, tzinfo=_ART
+        ).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        until_utc  = datetime(
+            today_art.year, today_art.month, today_art.day, 23, 59, 59, tzinfo=_ART
+        ).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        log_fn("Settlement report: solicitando (últimos 10 días) …")
         try:
             resp = await client.post(
-                _URL,
-                json={"begin_date": since_utc, "end_date": until_utc},
+                _URL, json={"begin_date": since_utc, "end_date": until_utc},
             )
         except Exception as exc:
             log_fn(f"Settlement report: error de red — {exc}")
@@ -644,17 +648,14 @@ class MercadoPagoScraper(BaseScraper):
 
         rdata     = resp.json() if resp.text else {}
         report_id = rdata.get("id")
-        # file_name puede venir ya en la respuesta del POST o aparecer luego en la lista
         file_name = str(rdata.get("file_name") or "").strip()
         if not report_id and not file_name:
             log_fn("Settlement report: sin id ni file_name en la respuesta — omitido")
             return []
 
-        log_fn(f"Settlement report: esperando id={report_id} …")
+        log_fn(f"Settlement report: generando id={report_id}, esperando …")
 
-        # Polling: el reporte aparece en la lista solo cuando está listo.
-        # No hay campo "status"; basta con que esté presente y tenga file_name.
-        csv_text: Optional[str] = None
+        # Polling: el reporte aparece en la lista solo cuando está completamente listo.
         for _attempt in range(30):          # máx ~90 s (30 × 3 s)
             await asyncio.sleep(3)
             try:
@@ -672,18 +673,11 @@ class MercadoPagoScraper(BaseScraper):
                 )
                 if not match:
                     continue
-                # Si está en la lista con file_name → está listo para descargar
                 if rpt_file:
-                    log_fn(f"Settlement report: descargando {rpt_file} …")
-                    try:
-                        dl = await client.get(f"{_URL}/{rpt_file}", timeout=60)
-                        if dl.status_code == 200:
-                            csv_text = dl.text
-                        else:
-                            log_fn(f"Settlement report: download status {dl.status_code}")
-                    except Exception as exc:
-                        log_fn(f"Settlement report: error descargando — {exc}")
-                break  # encontrado (puede no tener file_name aún si todavía genera)
+                    csv_text = await self._download_settlement_file(
+                        client, _URL, rpt_file, log_fn
+                    )
+                break
             if csv_text is not None:
                 break
 
@@ -692,6 +686,53 @@ class MercadoPagoScraper(BaseScraper):
             return []
 
         return self._parse_settlement_csv(csv_text, existing_ids, log_fn, debug)
+
+    async def _download_latest_settlement(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        log_fn,
+    ) -> Optional[str]:
+        """
+        Consulta la lista de reportes y descarga el más reciente si existe.
+        Devuelve el texto del CSV o None si la lista está vacía o falla.
+        """
+        try:
+            list_resp = await client.get(f"{base_url}/list")
+            if list_resp.status_code != 200:
+                return None
+            reports = [
+                r for r in (list_resp.json() or [])
+                if str(r.get("file_name") or "").strip()
+            ]
+            if not reports:
+                return None
+            # Ordenar por date_created descendente y tomar el más reciente
+            reports.sort(key=lambda r: r.get("date_created") or "", reverse=True)
+            rpt_file = str(reports[0]["file_name"]).strip()
+            log_fn(f"Settlement report: usando existente {rpt_file}")
+            return await self._download_settlement_file(client, base_url, rpt_file, log_fn)
+        except Exception as exc:
+            log_fn(f"Settlement report: error consultando lista — {exc}")
+            return None
+
+    async def _download_settlement_file(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        file_name: str,
+        log_fn,
+    ) -> Optional[str]:
+        """Descarga un archivo de reporte por nombre. Devuelve el texto o None."""
+        try:
+            dl = await client.get(f"{base_url}/{file_name}", timeout=60)
+            if dl.status_code == 200:
+                log_fn(f"Settlement report: descargando {file_name} …")
+                return dl.text
+            log_fn(f"Settlement report: download status {dl.status_code}")
+        except Exception as exc:
+            log_fn(f"Settlement report: error descargando — {exc}")
+        return None
 
     def _parse_settlement_csv(
         self,
