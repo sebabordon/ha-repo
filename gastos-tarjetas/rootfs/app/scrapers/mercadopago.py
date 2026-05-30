@@ -316,13 +316,18 @@ class MercadoPagoScraper(BaseScraper):
                     _dbg("YA-EXISTE")
                     continue
 
-                mov = self._payment_to_movimiento(payment, sign)
+                mov, drop_reason = self._payment_to_movimiento(payment, sign)
                 if mov:
                     movs.append(mov)
                     if pid:
                         existing_ids.add(pid)
                     _dbg("NUEVO")
                 else:
+                    # Siempre visible (no solo en debug) para no perder drops silenciosos.
+                    log_fn(
+                        f"  [!] SIN-DATOS id={pid} {fecha_dbg} amt={amount} "
+                        f"op={op_type} motivo={drop_reason}"
+                    )
                     _dbg("SIN-DATOS")
 
             total  = data.get("paging", {}).get("total", 0)
@@ -337,12 +342,17 @@ class MercadoPagoScraper(BaseScraper):
 
     # ── Conversión de pagos ───────────────────────────────────────────────────
 
-    def _payment_to_movimiento(self, p: dict, sign: int) -> Optional[MovimientoRaw]:
+    def _payment_to_movimiento(
+        self, p: dict, sign: int
+    ) -> tuple[Optional[MovimientoRaw], str]:
         """
         Convierte un objeto payment de la API en un único MovimientoRaw.
 
         sign = +1  → egreso  (user pagó  → monto positivo en nuestra convención)
         sign = -1  → ingreso (user cobró → monto negativo)
+
+        Devuelve (movimiento, "") en caso de éxito,
+        o (None, motivo) cuando el pago no puede convertirse.
         """
         try:
             # Usar date_created (momento de la transacción, lo que muestra la app MP).
@@ -350,18 +360,18 @@ class MercadoPagoScraper(BaseScraper):
             # lo que desplazaba la fecha un día hacia adelante.
             fecha_str = (p.get("date_created") or p.get("date_approved") or "")[:10]
             if not fecha_str or len(fecha_str) < 10:
-                return None
+                return None, "sin_fecha"
 
             monto = float(p.get("transaction_amount", 0))
             if monto <= 0:
-                return None
+                return None, f"monto={monto}"
 
             moneda      = "USD" if p.get("currency_id") == "USD" else "ARS"
             monto_final = round(monto * sign, 2)
 
             desc = self._build_description(p, sign)
             if not desc:
-                return None
+                return None, "sin_descripcion"
 
             raw_data = self._build_raw_data(p, sign)
             return MovimientoRaw(
@@ -371,10 +381,10 @@ class MercadoPagoScraper(BaseScraper):
                 monto       = monto_final,
                 moneda      = moneda,
                 raw_data    = raw_data,
-            )
+            ), ""
         except Exception as exc:
             logger.warning("[mp] Error convirtiendo payment id=%s: %s", p.get("id"), exc)
-            return None
+            return None, f"excepcion: {exc}"
 
     def _build_raw_data(self, p: dict, sign: int = +1) -> dict:
         """Construye el diccionario raw_data con todos los campos relevantes."""
