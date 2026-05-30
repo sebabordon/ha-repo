@@ -1,3 +1,7 @@
+## 0.5.16
+
+- **Settlement report: correcciones de clasificación**: agrega `PAYOUTS` (plural, el tipo real en producción) explícitamente al set de retiros bancarios; descripción de retiros cambia a "Retiro a CVU/CBU". SOURCE_IDs de 13+ dígitos (IDs internos de MP, ej. intereses de Mercado Crédito) se clasifican como "Intereses/Rendimientos" en vez de "Liquidación SETTLEMENT". El campo `METADATA` del CSV ahora se loguea en debug `[rpt]` y se guarda en `raw_data` para análisis posterior.
+
 ## 0.5.15
 
 - **Settlement report: estrategia list-first para evitar timeout**: antes de solicitar un reporte nuevo, consulta `GET /list` y descarga el más reciente si ya existe (0 s de espera). Solo si la lista está vacía hace `POST` + polling. La ventana del reporte nuevo es siempre los últimos 10 días (fija, independiente de `dias`); el dedup por `existing_ids` maneja cualquier solapamiento con imports anteriores.

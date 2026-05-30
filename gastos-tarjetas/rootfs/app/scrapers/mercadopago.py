@@ -748,12 +748,16 @@ class MercadoPagoScraper(BaseScraper):
           - Separador: ";"
           - Columnas clave: SOURCE_ID, TRANSACTION_DATE, TRANSACTION_AMOUNT,
             TRANSACTION_CURRENCY, TRANSACTION_TYPE, EXTERNAL_REFERENCE,
-            SETTLEMENT_NET_AMOUNT
+            SETTLEMENT_NET_AMOUNT, METADATA
 
-        TRANSACTION_TYPE conocidos:
-          SETTLEMENT  → pago recibido (ingreso para el merchant)
-          WITHDRAWAL  → retiro a banco (egreso — lo que buscamos capturar)
-          PAYOUT      → variante de withdrawal
+        TRANSACTION_TYPE observados en producción:
+          SETTLEMENT  → movimiento de billetera (pagos, transferencias, depósitos)
+          PAYOUTS     → retiro a CVU/CBU bancario externo (egreso)
+          WITHDRAWAL  → variante de retiro
+          PAYOUT      → variante de retiro
+
+        SOURCE_ID con 13+ dígitos = ID interno de MP (timestamp ms), no un
+        payment_id. Suelen ser intereses de Mercado Crédito o rendimientos.
 
         Dedup: filas cuyo SOURCE_ID ya está en existing_ids (importadas vía
         /v1/payments/search) se omiten para no duplicar.
@@ -761,8 +765,10 @@ class MercadoPagoScraper(BaseScraper):
         movs:    list[MovimientoRaw] = []
         skipped: int = 0
 
-        # TRANSACTION_TYPE que representan salidas de dinero (egresos)
-        _EGRESO_TYPES = frozenset({"WITHDRAWAL", "PAYOUT", "MONEY_TRANSFER_WITHDRAWAL"})
+        # TRANSACTION_TYPE que representan retiros a CVU/CBU externo
+        _WITHDRAWAL_TYPES = frozenset({
+            "PAYOUTS", "PAYOUT", "WITHDRAWAL", "MONEY_TRANSFER_WITHDRAWAL",
+        })
 
         try:
             reader = csv_mod.DictReader(io.StringIO(csv_text), delimiter=";")
@@ -774,12 +780,14 @@ class MercadoPagoScraper(BaseScraper):
                 amount    = _safe_float(row.get("TRANSACTION_AMOUNT", "0"))
                 net_amt   = _safe_float(row.get("SETTLEMENT_NET_AMOUNT", "0"))
                 currency  = (row.get("TRANSACTION_CURRENCY") or "ARS").strip()
+                metadata  = (row.get("METADATA")            or "").strip()
 
                 if debug:
                     log_fn(
-                        f"  [rpt] {tx_type:<28} src={source_id or '-':<14} "
+                        f"  [rpt] {tx_type:<12} src={source_id or '-':<15} "
                         f"{date_str} amt={amount:>14,.2f} {currency}"
-                        + (f"  ext={ext_ref[:30]}" if ext_ref else "")
+                        + (f"  ext={ext_ref[:25]}"  if ext_ref  else "")
+                        + (f"  meta={metadata[:25]}" if metadata else "")
                     )
 
                 # Ignorar filas sin fecha o sin monto
@@ -794,14 +802,23 @@ class MercadoPagoScraper(BaseScraper):
                     skipped += 1
                     continue
 
-                # Determinar dirección y descripción según TRANSACTION_TYPE
+                # Determinar dirección y descripción
                 effective_amount = abs(net_amt) if net_amt != 0 else abs(amount)
-                if tx_type in _EGRESO_TYPES or amount < 0:
-                    monto = round(effective_amount, 2)   # egreso: positivo
-                    desc  = "Retiro a CBU"
+                is_withdrawal    = tx_type in _WITHDRAWAL_TYPES
+                is_egreso        = is_withdrawal or amount < 0
+
+                if is_egreso:
+                    monto = round(effective_amount, 2)    # egreso: positivo
+                    desc  = "Retiro a CVU/CBU" if is_withdrawal else (
+                        _clean_report_desc(ext_ref) or "Egreso"
+                    )
                 else:
-                    monto = -round(effective_amount, 2)  # ingreso: negativo
-                    desc  = f"Liquidación {tx_type}".strip() if tx_type else "Liquidación"
+                    monto = -round(effective_amount, 2)   # ingreso: negativo
+                    # IDs de 13+ dígitos = timestamp interno MP (intereses, rendimientos)
+                    if len(source_id) >= 13 and source_id.isdigit():
+                        desc = "Intereses/Rendimientos"
+                    else:
+                        desc = _clean_report_desc(ext_ref) or "Liquidación"
 
                 moneda = "USD" if currency == "USD" else "ARS"
 
@@ -812,6 +829,7 @@ class MercadoPagoScraper(BaseScraper):
                     "source_id":        source_id or None,
                     "transaction_type": tx_type or None,
                     "external_ref":     ext_ref or None,
+                    "metadata":         metadata or None,
                 }
                 if self._default_usuario:
                     raw["usuario"] = self._default_usuario
