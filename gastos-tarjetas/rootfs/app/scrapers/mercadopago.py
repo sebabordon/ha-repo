@@ -639,7 +639,7 @@ class MercadoPagoScraper(BaseScraper):
             return []
 
         rdata     = resp.json() if resp.text else {}
-        file_name = (rdata.get("file_name") or rdata.get("id") or "").strip()
+        file_name = str(rdata.get("file_name") or rdata.get("id") or "").strip()
         if not file_name:
             log_fn("Release report: sin file_name en la respuesta — omitido")
             return []

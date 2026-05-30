@@ -1,3 +1,7 @@
+## 0.5.12
+
+- **Fix: crash en release report** (`'int' object has no attribute 'strip'`): la API de MP devuelve el ID del reporte como entero. Se agrega `str()` antes de `.strip()` al extraer `file_name`/`id` de la respuesta.
+
 ## 0.5.11
 
 - **MercadoPago: Release Report para transferencias a CVU/CBU externo**: implementa el flujo oficial de MP Reports API (`POST /v1/account/release_report` → polling → descarga CSV) para capturar transferencias salientes que no aparecen en `/v1/payments/search` (ej. retiros a cuenta bancaria de otra persona). El reporte se procesa de forma asincrónica con hasta ~60 s de espera; si el token no tiene permisos (403) o el reporte no está listo, se loguea y continúa sin error. La deduplicación cruza el `SOURCE_ID` del CSV contra los `payment_id` ya en la DB para evitar duplicar lo importado vía payments. El modo debug muestra cada fila del CSV con tag `[rpt]`.
