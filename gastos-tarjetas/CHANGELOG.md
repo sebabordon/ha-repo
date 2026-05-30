@@ -1,3 +1,7 @@
+## 0.5.20
+
+- **Log de ajuste de saldo visible en el panel**: el delta de saldo por movimientos nuevos ahora aparece en el log del scraper (antes se aplicaba silenciosamente DESPUÉS de guardar el log). La línea muestra saldo anterior, cantidad y suma de movimientos nuevos, delta aplicado y saldo nuevo, ej: `Delta saldo mercadopago (ARS): saldo_anterior=$5.000.000,00 | 4 mov. nuevos suma_montos=+$1.250.000,00 delta=-$1.250.000,00 saldo_nuevo=$3.750.000,00`. Además se agrega `get_cuenta_saldo()` a `db.py` para leer el saldo actual antes de modificarlo.
+
 ## 0.5.19
 
 - **Settlement report: retiros a CVU/CBU con monto en la descripción**: el CSV de PAYOUTS no incluye datos del destinatario (sin CBU, sin nombre). Para que el motor de reglas pueda distinguirlos, la descripción ahora incluye el monto: "Retiro a CVU/CBU $1.250.000". Así se pueden crear reglas específicas por importe ("$1.250.000 → Transferencia Magdalena").

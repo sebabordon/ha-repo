@@ -1007,6 +1007,20 @@ def adjust_cuenta_saldo(fuente: str, delta: float, moneda: str = "ARS") -> None:
         )
 
 
+def get_cuenta_saldo(fuente: str, moneda: str = "ARS") -> Optional[float]:
+    """Devuelve el saldo actual de la cuenta (None si no existe o auto_saldo=0)."""
+    field = "saldo_usd" if moneda == "USD" else "saldo"
+    try:
+        with _conn() as conn:
+            row = conn.execute(
+                f"SELECT {field} FROM cuentas WHERE fuente=? AND auto_saldo=1",
+                (fuente,),
+            ).fetchone()
+        return float(row[field]) if row and row[field] is not None else None
+    except Exception:
+        return None
+
+
 def upsert_cuenta_saldo(fuente: str, saldo: float, moneda: str = "ARS", fecha: str = None):
     from datetime import date
     fecha = fecha or str(date.today())

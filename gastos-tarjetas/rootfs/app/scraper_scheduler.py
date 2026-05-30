@@ -32,6 +32,58 @@ logger = logging.getLogger(__name__)
 
 _scheduler: Optional[AsyncIOScheduler] = None
 
+
+def _apply_saldo_delta(
+    fuente: str,
+    moneda: str,
+    movimientos: list,
+    log_lines: list,
+    adjust_fn,
+    get_saldo_fn,
+) -> None:
+    """
+    Calcula el delta neto de los movimientos nuevos para (fuente, moneda),
+    lo loguea en log_lines con detalle (saldo anterior, suma, delta, saldo nuevo)
+    y lo aplica vía adjust_fn.
+
+    Formato de la línea de log (fácil de parsear y copiar):
+      Delta saldo <fuente> (<moneda>):
+        saldo_anterior=$X  |  N mov. nuevos  suma_montos=$Y  delta=$Z  saldo_nuevo=$W
+    """
+    def _fmt(v: float) -> str:
+        """Formato argentino: $1.250.000,00"""
+        s = f"{abs(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        sign = "-" if v < 0 else ("+" if v > 0 else "")
+        return f"{sign}${s}"
+
+    movs = [m for m in movimientos if m.fuente == fuente and m.moneda == moneda]
+    if not movs:
+        return
+
+    suma  = round(sum(m.monto for m in movs), 2)
+    delta = -round(suma, 2)
+    saldo_ant = get_saldo_fn(fuente, moneda)
+
+    if saldo_ant is not None:
+        saldo_nuevo = round(saldo_ant + delta, 2)
+        log_lines.append(
+            f"Delta saldo {fuente} ({moneda}): "
+            f"saldo_anterior={_fmt(saldo_ant)}  |  "
+            f"{len(movs)} mov. nuevos  "
+            f"suma_montos={_fmt(suma)}  "
+            f"delta={_fmt(delta)}  "
+            f"saldo_nuevo={_fmt(saldo_nuevo)}"
+        )
+    else:
+        log_lines.append(
+            f"Delta saldo {fuente} ({moneda}): "
+            f"saldo_anterior=N/A (auto_saldo=0 o no existe)  |  "
+            f"{len(movs)} mov. nuevos  suma_montos={_fmt(suma)}  delta={_fmt(delta)}"
+        )
+
+    if delta:
+        adjust_fn(fuente, delta, moneda)
+
 _SCRAPER_CLASSES = {
     "amex":           "scrapers.amex:AmexScraper",
     "bbva":           "scrapers.bbva:BbvaScraper",
@@ -116,7 +168,7 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
     """
     from conciliacion import run_conciliation
     from scrapers_db import insert_movimientos_raw, auto_import_unmatched
-    from db import adjust_cuenta_saldo
+    from db import adjust_cuenta_saldo, get_cuenta_saldo
 
     # Setear contexto de usuario para que DB y archivos apunten al dir correcto
     from userctx import _user_data_dir
@@ -199,7 +251,17 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
                 logger.info("[scheduler] %s: %d movimientos auto-importados a gastos.",
                             f, imported)
 
-        # Actualizar status de la instancia
+        # Para fuentes sin saldo de API: calcular delta neto y ajustar saldo.
+        # Se hace ANTES de update_instance_status para que el log quede completo.
+        for fuente in emitted_fuentes:
+            if fuente not in result.saldos:
+                for moneda in ("ARS", "USD"):
+                    _apply_saldo_delta(
+                        fuente, moneda, result.movimientos,
+                        result.log_lines, adjust_cuenta_saldo, get_cuenta_saldo,
+                    )
+
+        # Actualizar status de la instancia (incluye el log del delta)
         from datetime import datetime as _dt
         now_iso = _dt.utcnow().isoformat()
         _any_saldo = next(iter(result.saldos.values()), {}) if result.saldos else {}
@@ -213,17 +275,6 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
             saldo_usd=_any_saldo.get("saldo_usd"),
             last_log="\n".join(result.log_lines) if result.log_lines else None,
         )
-
-        # Para fuentes sin saldo de API, actualizar el saldo de la cuenta
-        # aplicando el delta neto de los movimientos nuevos.
-        for fuente in emitted_fuentes:
-            if fuente not in result.saldos:
-                for moneda in ("ARS", "USD"):
-                    delta = -round(sum(
-                        m.monto for m in result.movimientos
-                        if m.fuente == fuente and m.moneda == moneda
-                    ), 2)
-                    adjust_cuenta_saldo(fuente, delta, moneda)
 
     finally:
         _user_data_dir.reset(token)
@@ -385,7 +436,7 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
         get_instance, get_cuentas_for_instance, update_instance_status,
     )
     from userctx import _user_data_dir, get_data_dir
-    from db import adjust_cuenta_saldo
+    from db import adjust_cuenta_saldo, get_cuenta_saldo
 
     effective_dir = data_dir or get_data_dir()
     token = _user_data_dir.set(effective_dir)
@@ -441,7 +492,17 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
                 conc_agg[k] += c.get(k, 0)
             auto_imported += auto_import_unmatched(f)
 
-        # Actualizar status
+        # Para fuentes sin saldo de API: calcular delta neto y ajustar saldo.
+        # Se hace ANTES de update_instance_status para que el log quede completo.
+        for fuente in emitted_fuentes:
+            if fuente not in result.saldos:
+                for moneda in ("ARS", "USD"):
+                    _apply_saldo_delta(
+                        fuente, moneda, result.movimientos,
+                        result.log_lines, adjust_cuenta_saldo, get_cuenta_saldo,
+                    )
+
+        # Actualizar status (incluye el log del delta de saldo)
         from datetime import datetime as _dt
         now_iso = _dt.utcnow().isoformat()
         _any_saldo = next(iter(result.saldos.values()), {}) if result.saldos else {}
@@ -456,17 +517,6 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
             movimientos_nuevos=inserted,
             last_log="\n".join(result.log_lines) if result.log_lines else None,
         )
-
-        # Para fuentes sin saldo de API, actualizar el saldo de la cuenta
-        # aplicando el delta neto de los movimientos nuevos.
-        for fuente in emitted_fuentes:
-            if fuente not in result.saldos:
-                for moneda in ("ARS", "USD"):
-                    delta = -round(sum(
-                        m.monto for m in result.movimientos
-                        if m.fuente == fuente and m.moneda == moneda
-                    ), 2)
-                    adjust_cuenta_saldo(fuente, delta, moneda)
 
         return {
             "ok":            True,
