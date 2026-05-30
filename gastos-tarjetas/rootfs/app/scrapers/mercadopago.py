@@ -1050,22 +1050,24 @@ def _clean_report_desc(desc: str) -> str:
 def _get_existing_payment_ids(dias: int) -> set:
     """
     Devuelve el conjunto de payment_id ya almacenados en movimientos_raw
-    para 'mercadopago' dentro del período consultado.
+    para 'mercadopago', sin filtro de fecha.
     Evita insertar duplicados en runs consecutivos.
+
+    Sin límite de fecha: el settlement report puede cubrir fechas anteriores
+    al período consultado por la API (ej. el CSV incluye el 30/04 pero la API
+    solo trae los últimos 30 días desde hoy = desde el 01/05).
 
     Incluye tanto IDs simples (int) como sub-IDs de cuotas (str "{id}_c{i}").
     """
     from scrapers_db import _conn
 
-    since = (datetime.now(_ART).date() - timedelta(days=dias - 1)).strftime("%Y-%m-%d")
     ids: set = set()
     try:
         with _conn() as conn:
             rows = conn.execute(
                 "SELECT raw_data FROM movimientos_raw "
-                "WHERE fuente='mercadopago' AND fecha >= ? "
+                "WHERE fuente='mercadopago' "
                 "AND estado IN ('new','imported','matched','ignored')",
-                (since,),
             ).fetchall()
         for row in rows:
             if row["raw_data"]:

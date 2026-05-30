@@ -1,3 +1,7 @@
+## 0.5.21
+
+- **Fix: settlement report detectaba 4 movimientos como nuevos en cada run**: `_get_existing_payment_ids` filtraba por `fecha >= hoy - dias`, por lo que entradas del settlement CSV con fecha fuera de esa ventana (ej. 30/04 cuando `dias=30` y hoy es 30/05) nunca aparecían en el set de IDs conocidos y se insertaban como nuevas cada vez. Se eliminó el filtro de fecha: ahora se cargan todos los `payment_id` de `fuente='mercadopago'` sin límite temporal.
+
 ## 0.5.20
 
 - **Log de ajuste de saldo visible en el panel**: el delta de saldo por movimientos nuevos ahora aparece en el log del scraper (antes se aplicaba silenciosamente DESPUÉS de guardar el log). La línea muestra saldo anterior, cantidad y suma de movimientos nuevos, delta aplicado y saldo nuevo, ej: `Delta saldo mercadopago (ARS): saldo_anterior=$5.000.000,00 | 4 mov. nuevos suma_montos=+$1.250.000,00 delta=-$1.250.000,00 saldo_nuevo=$3.750.000,00`. Además se agrega `get_cuenta_saldo()` a `db.py` para leer el saldo actual antes de modificarlo.
