@@ -1,3 +1,7 @@
+## 0.5.23
+
+- **Consolidación preserva categoría del scraper al reemplazar con PDF**: cuando `consolidate_scraper_duplicates` elimina un gasto del scraper y lo reemplaza con el del PDF, ahora hereda la categoría del scraper si corresponde. Reglas: categoría `manual` del scraper siempre gana sobre la del PDF (salvo que el PDF también sea `manual`); categoría por `regla` se copia solo si el PDF no tiene ninguna. Así las categorizaciones hechas a mano no se pierden al subir el resumen.
+
 ## 0.5.22
 
 - **Fix: saldo se reducía $5.000 en cada run por SUBE duplicado no insertado**: tres bugs combinados causaban que el movimiento `id=156859342409` (SUBE $5.000, 04/05) se detectara como nuevo en cada ejecución pero nunca se guardara en DB, y el delta de saldo igual se descontaba.

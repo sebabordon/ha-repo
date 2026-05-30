@@ -498,7 +498,7 @@ def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
         with _conn() as conn:
             # El gasto PDF recién insertado (el más reciente que NO es del scraper)
             pdf_gasto = conn.execute(
-                """SELECT id FROM gastos
+                """SELECT id, categoria, categoria_fuente FROM gastos
                    WHERE fuente=? AND moneda=?
                      AND ABS(CAST(monto AS REAL) - ?) < 0.02
                      AND fecha BETWEEN ? AND ?
@@ -508,11 +508,14 @@ def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
             ).fetchone()
             if not pdf_gasto:
                 continue
-            pdf_gasto_id = pdf_gasto["id"]
+            pdf_gasto_id       = pdf_gasto["id"]
+            pdf_cat            = pdf_gasto["categoria"]
+            pdf_cat_fuente     = pdf_gasto["categoria_fuente"]
 
             # Gastos con archivo_origen='scraper' que matcheen la misma transacción
             scraper_candidates = conn.execute(
-                """SELECT g.id AS gasto_id, g.descripcion, m.id AS raw_id
+                """SELECT g.id AS gasto_id, g.descripcion, g.categoria,
+                          g.categoria_fuente, m.id AS raw_id
                    FROM gastos g
                    JOIN movimientos_raw m ON m.gasto_id = g.id
                    WHERE g.fuente=? AND g.moneda=?
@@ -535,6 +538,28 @@ def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
                 ratio = difflib.SequenceMatcher(None, desc_sc, desc_pdf).ratio()
                 if ratio < 0.60:
                     continue
+
+                # Preservar categoría del gasto-scraper en el gasto-PDF si corresponde.
+                # Regla: la categoría 'manual' del scraper siempre gana sobre la del PDF
+                # (salvo que el PDF también sea 'manual'). Una categoría por 'regla'
+                # del scraper se copia solo si el PDF no tiene ninguna.
+                sc_cat        = sc["categoria"]
+                sc_cat_fuente = sc["categoria_fuente"]
+                if sc_cat:
+                    inherit = False
+                    if sc_cat_fuente == "manual" and pdf_cat_fuente != "manual":
+                        inherit = True
+                    elif sc_cat_fuente != "manual" and not pdf_cat:
+                        inherit = True
+                    if inherit:
+                        conn.execute(
+                            "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE id=?",
+                            (sc_cat, sc_cat_fuente, pdf_gasto_id),
+                        )
+                        logger.info(
+                            "[consolidate] %s: categoría '%s' (%s) copiada del scraper al PDF gasto id=%d",
+                            fuente, sc_cat, sc_cat_fuente, pdf_gasto_id,
+                        )
 
                 # PDF gana: borrar gasto scraper, raw pasa a matched
                 conn.execute("DELETE FROM gastos WHERE id=?", (sc["gasto_id"],))
