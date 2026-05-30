@@ -1,3 +1,7 @@
+## 0.5.17
+
+- **Settlement report: lectura de todas las columnas del CSV**: el parser ahora lee y almacena en `raw_data` todas las columnas disponibles (`PAYMENT_METHOD`, `PAYMENT_METHOD_TYPE`, `FEE_AMOUNT`, `REAL_AMOUNT`, `ORDER_ID`, `PACK_ID`, `SHIPPING_ID`, `INSTALLMENTS`, `COUPON_AMOUNT`, `MKP_FEE_AMOUNT`, `METADATA`). El log `[rpt]` en modo debug muestra todas las columnas no vacías por fila para facilitar el análisis de nuevos `TRANSACTION_TYPE`. Las claves con valor `None` se omiten del JSON para no inflar el almacenamiento.
+
 ## 0.5.16
 
 - **Settlement report: correcciones de clasificación**: agrega `PAYOUTS` (plural, el tipo real en producción) explícitamente al set de retiros bancarios; descripción de retiros cambia a "Retiro a CVU/CBU". SOURCE_IDs de 13+ dígitos (IDs internos de MP, ej. intereses de Mercado Crédito) se clasifican como "Intereses/Rendimientos" en vez de "Liquidación SETTLEMENT". El campo `METADATA` del CSV ahora se loguea en debug `[rpt]` y se guarda en `raw_data` para análisis posterior.

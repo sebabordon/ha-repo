@@ -773,22 +773,40 @@ class MercadoPagoScraper(BaseScraper):
         try:
             reader = csv_mod.DictReader(io.StringIO(csv_text), delimiter=";")
             for row in reader:
-                tx_type   = (row.get("TRANSACTION_TYPE")   or "").strip().upper()
-                source_id = (row.get("SOURCE_ID")          or "").strip()
-                ext_ref   = (row.get("EXTERNAL_REFERENCE") or "").strip()
-                date_str  = (row.get("TRANSACTION_DATE")   or "")[:10]
-                amount    = _safe_float(row.get("TRANSACTION_AMOUNT", "0"))
-                net_amt   = _safe_float(row.get("SETTLEMENT_NET_AMOUNT", "0"))
-                currency  = (row.get("TRANSACTION_CURRENCY") or "ARS").strip()
-                metadata  = (row.get("METADATA")            or "").strip()
+                # ── Leer TODAS las columnas disponibles ──────────────────────
+                tx_type    = (row.get("TRANSACTION_TYPE")    or "").strip().upper()
+                source_id  = (row.get("SOURCE_ID")           or "").strip()
+                ext_ref    = (row.get("EXTERNAL_REFERENCE")  or "").strip()
+                date_str   = (row.get("TRANSACTION_DATE")    or "")[:10]
+                amount     = _safe_float(row.get("TRANSACTION_AMOUNT",    "0"))
+                net_amt    = _safe_float(row.get("SETTLEMENT_NET_AMOUNT", "0"))
+                currency   = (row.get("TRANSACTION_CURRENCY") or "ARS").strip()
+                metadata   = (row.get("METADATA")            or "").strip()
+                pay_method = (row.get("PAYMENT_METHOD")      or "").strip()
+                pay_mtype  = (row.get("PAYMENT_METHOD_TYPE") or "").strip()
+                fee_amt    = _safe_float(row.get("FEE_AMOUNT",           "0"))
+                real_amt   = _safe_float(row.get("REAL_AMOUNT",          "0"))
+                order_id   = (row.get("ORDER_ID")            or "").strip()
+                pack_id    = (row.get("PACK_ID")             or "").strip()
+                ship_id    = (row.get("SHIPPING_ID")         or "").strip()
+                installm   = (row.get("INSTALLMENTS")        or "").strip()
+                coupon     = _safe_float(row.get("COUPON_AMOUNT",        "0"))
+                mkp_fee    = _safe_float(row.get("MKP_FEE_AMOUNT",       "0"))
 
                 if debug:
-                    log_fn(
-                        f"  [rpt] {tx_type:<12} src={source_id or '-':<15} "
+                    # Mostrar todas las columnas no vacías para facilitar análisis
+                    parts = [
+                        f"  [rpt] {tx_type:<14} src={source_id or '-':<15} "
                         f"{date_str} amt={amount:>14,.2f} {currency}"
-                        + (f"  ext={ext_ref[:25]}"  if ext_ref  else "")
-                        + (f"  meta={metadata[:25]}" if metadata else "")
-                    )
+                    ]
+                    if pay_mtype:  parts.append(f"pmt={pay_mtype}")
+                    if pay_method: parts.append(f"pm={pay_method}")
+                    if net_amt:    parts.append(f"net={net_amt:,.2f}")
+                    if fee_amt:    parts.append(f"fee={fee_amt:,.2f}")
+                    if ext_ref:    parts.append(f"ext={ext_ref[:30]}")
+                    if order_id:   parts.append(f"order={order_id}")
+                    if metadata:   parts.append(f"meta={metadata[:40]}")
+                    log_fn("  ".join(parts))
 
                 # Ignorar filas sin fecha o sin monto
                 if not date_str or len(date_str) < 10:
@@ -802,7 +820,7 @@ class MercadoPagoScraper(BaseScraper):
                     skipped += 1
                     continue
 
-                # Determinar dirección y descripción
+                # ── Determinar dirección y descripción ────────────────────────
                 effective_amount = abs(net_amt) if net_amt != 0 else abs(amount)
                 is_withdrawal    = tx_type in _WITHDRAWAL_TYPES
                 is_egreso        = is_withdrawal or amount < 0
@@ -818,19 +836,32 @@ class MercadoPagoScraper(BaseScraper):
                     if len(source_id) >= 13 and source_id.isdigit():
                         desc = "Intereses/Rendimientos"
                     else:
-                        desc = _clean_report_desc(ext_ref) or "Liquidación"
+                        desc = _clean_report_desc(ext_ref) or tx_type or "Liquidación"
 
                 moneda = "USD" if currency == "USD" else "ARS"
 
+                # ── raw_data: todas las columnas con valor ─────────────────────
                 raw: dict = {
                     # payment_id = source_id para que _get_existing_payment_ids
                     # lo reconozca en la próxima ejecución y no lo duplique.
-                    "payment_id":       src_int,
-                    "source_id":        source_id or None,
-                    "transaction_type": tx_type or None,
-                    "external_ref":     ext_ref or None,
-                    "metadata":         metadata or None,
+                    "payment_id":         src_int,
+                    "source_id":          source_id  or None,
+                    "transaction_type":   tx_type    or None,
+                    "external_ref":       ext_ref    or None,
+                    "payment_method":     pay_method or None,
+                    "payment_method_type":pay_mtype  or None,
+                    "order_id":           order_id   or None,
+                    "pack_id":            pack_id    or None,
+                    "shipping_id":        ship_id    or None,
+                    "installments":       installm   or None,
+                    "fee_amount":         fee_amt    or None,
+                    "real_amount":        real_amt   or None,
+                    "coupon_amount":      coupon     or None,
+                    "mkp_fee_amount":     mkp_fee    or None,
+                    "metadata":           metadata   or None,
                 }
+                # Limpiar claves con None para no inflar el JSON
+                raw = {k: v for k, v in raw.items() if v is not None}
                 if self._default_usuario:
                     raw["usuario"] = self._default_usuario
 
