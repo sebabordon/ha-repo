@@ -1,3 +1,10 @@
+## 0.5.22
+
+- **Fix: saldo se reducía $5.000 en cada run por SUBE duplicado no insertado**: tres bugs combinados causaban que el movimiento `id=156859342409` (SUBE $5.000, 04/05) se detectara como nuevo en cada ejecución pero nunca se guardara en DB, y el delta de saldo igual se descontaba.
+  - **Bug A** (`scrapers_db.py`): el LIKE de dedup buscaba `"payment_id": "123"` (string) pero MP guarda IDs como entero en JSON: `"payment_id": 123`. Ahora se buscan ambas formas.
+  - **Bug B** (`scrapers_db.py`): cuando fallaba el match por ID, caía al fallback por descriptor (fuente+fecha+monto+desc), que encontraba otro SUBE $5.000 del mismo día y asumía que era el mismo movimiento. Ahora el fallback por descriptor se salta cuando hay un `scraper_uid` (si el ID no está en DB es un movimiento nuevo, aunque coincida en descripción).
+  - **Bug C** (`scraper_scheduler.py`): `_apply_saldo_delta` usaba `result.movimientos` (todos los detectados por el scraper) en lugar de los efectivamente insertados en DB. Ahora `insert_movimientos_raw` acepta `_out_inserted` para devolver qué dicts se insertaron, y el scheduler usa esa lista para el delta.
+
 ## 0.5.21
 
 - **Fix: settlement report detectaba 4 movimientos como nuevos en cada run**: `_get_existing_payment_ids` filtraba por `fecha >= hoy - dias`, por lo que entradas del settlement CSV con fecha fuera de esa ventana (ej. 30/04 cuando `dias=30` y hoy es 30/05) nunca aparecían en el set de IDs conocidos y se insertaban como nuevas cada vez. Se eliminó el filtro de fecha: ahora se cargan todos los `payment_id` de `fuente='mercadopago'` sin límite temporal.

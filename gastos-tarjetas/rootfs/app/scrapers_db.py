@@ -222,7 +222,10 @@ def insert_movimiento_raw_single(m: dict) -> int:
         return cur.lastrowid
 
 
-def insert_movimientos_raw(movimientos: list[dict]) -> int:
+def insert_movimientos_raw(
+    movimientos: list[dict],
+    _out_inserted: list[dict] | None = None,
+) -> int:
     """
     Inserta una tanda de movimientos scrapeados.
     Cada dict debe tener: fuente, fecha, descripcion, monto, moneda.
@@ -234,6 +237,9 @@ def insert_movimientos_raw(movimientos: list[dict]) -> int:
     crear duplicados.  Si el scraper tiene un identificador único en raw_data
     (ej. numero_operacion para BBVA, payment_id para MP), se usa eso en lugar
     del descriptor para mejor precisión.
+
+    _out_inserted: si se pasa una lista, se le agregan los dicts efectivamente
+    insertados (útil para calcular delta de saldo solo sobre los reales nuevos).
 
     Devuelve cantidad de filas EFECTIVAMENTE insertadas (excluye duplicados).
     """
@@ -263,19 +269,39 @@ def insert_movimientos_raw(movimientos: list[dict]) -> int:
 
             existing = None
             if scraper_uid:
-                # Buscar por scraper UID dentro de raw_data (LIKE JSON match)
+                # Buscar por scraper UID dentro de raw_data.
+                # Matching tanto string ("123") como integer (123) porque
+                # json.dumps() serializa enteros sin comillas, pero la versión
+                # anterior del código los almacenaba como strings.
                 k, v = scraper_uid
-                like = f'%"{k}": "{v}"%'
-                like2 = f'%"{k}":"{v}"%'
                 existing = conn.execute(
                     """SELECT id FROM movimientos_raw
-                       WHERE fuente = ? AND (raw_data LIKE ? OR raw_data LIKE ?)
+                       WHERE fuente = ? AND (
+                         raw_data LIKE ? OR raw_data LIKE ? OR
+                         raw_data LIKE ? OR raw_data LIKE ?
+                       )
                        LIMIT 1""",
-                    (fuente, like, like2),
+                    (
+                        fuente,
+                        f'%"{k}": "{v}"%',   # string con espacio
+                        f'%"{k}":"{v}"%',    # string sin espacio
+                        f'%"{k}": {v},%',    # entero seguido de coma
+                        f'%"{k}":{v},%',     # entero sin espacio, coma
+                    ),
                 ).fetchone()
+                # Edge case: el campo es el último del objeto (termina en })
+                if not existing:
+                    existing = conn.execute(
+                        """SELECT id FROM movimientos_raw
+                           WHERE fuente = ? AND (raw_data LIKE ? OR raw_data LIKE ?)
+                           LIMIT 1""",
+                        (fuente, f'%"{k}": {v}' + '}%', f'%"{k}":{v}' + '}%'),
+                    ).fetchone()
 
-            if not existing:
-                # Fallback: dedup por descriptor (fuente + fecha + monto + descripción + moneda)
+            if not existing and not scraper_uid:
+                # Fallback descriptor solo cuando no hay UID único del scraper.
+                # Si hay scraper_uid y no se encontró, es un movimiento nuevo aunque
+                # coincida en fecha+monto+desc con otro (ej. dos SUBE el mismo día).
                 existing = conn.execute(
                     """SELECT id FROM movimientos_raw
                        WHERE fuente = ? AND fecha = ? AND moneda = ?
@@ -306,6 +332,8 @@ def insert_movimientos_raw(movimientos: list[dict]) -> int:
                 ),
             )
             inserted += 1
+            if _out_inserted is not None:
+                _out_inserted.append(m)
     return inserted
 
 

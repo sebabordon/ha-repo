@@ -228,9 +228,10 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
             )
 
         emitted_fuentes: set[str] = set()
+        inserted_dicts: list[dict] = []
         if result.movimientos:
             dicts = [m.to_dict() for m in result.movimientos]
-            count = insert_movimientos_raw(dicts)
+            count = insert_movimientos_raw(dicts, _out_inserted=inserted_dicts)
             emitted_fuentes = {d["fuente"] for d in dicts if d.get("fuente")}
             logger.info(
                 "[scheduler] instancia %d (%s): %d movimientos insertados (fuentes=%s).",
@@ -252,12 +253,20 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
                             f, imported)
 
         # Para fuentes sin saldo de API: calcular delta neto y ajustar saldo.
-        # Se hace ANTES de update_instance_status para que el log quede completo.
+        # Usar solo los movimientos efectivamente insertados en DB (inserted_dicts),
+        # no result.movimientos completo, para evitar descontar movimientos que el
+        # dedup de insert_movimientos_raw rechazó silenciosamente.
+        from scrapers.base import MovimientoRaw as _MRaw
+        inserted_movs = [
+            _MRaw(fuente=d["fuente"], fecha=d["fecha"], descripcion=d["descripcion"],
+                  monto=float(d["monto"]), moneda=d.get("moneda", "ARS"))
+            for d in inserted_dicts
+        ]
         for fuente in emitted_fuentes:
             if fuente not in result.saldos:
                 for moneda in ("ARS", "USD"):
                     _apply_saldo_delta(
-                        fuente, moneda, result.movimientos,
+                        fuente, moneda, inserted_movs,
                         result.log_lines, adjust_cuenta_saldo, get_cuenta_saldo,
                     )
 
@@ -479,9 +488,10 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
 
         inserted = 0
         emitted_fuentes: set[str] = set()
+        inserted_dicts: list[dict] = []
         if result.movimientos:
             dicts    = [m.to_dict() for m in result.movimientos]
-            inserted = insert_movimientos_raw(dicts)
+            inserted = insert_movimientos_raw(dicts, _out_inserted=inserted_dicts)
             emitted_fuentes = {d["fuente"] for d in dicts if d.get("fuente")}
 
         conc_agg = {"matched": 0, "unmatched": 0, "errors": 0}
@@ -492,13 +502,19 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
                 conc_agg[k] += c.get(k, 0)
             auto_imported += auto_import_unmatched(f)
 
-        # Para fuentes sin saldo de API: calcular delta neto y ajustar saldo.
-        # Se hace ANTES de update_instance_status para que el log quede completo.
+        # Para fuentes sin saldo de API: calcular delta solo sobre movimientos
+        # efectivamente insertados (no todos los detectados por el scraper).
+        from scrapers.base import MovimientoRaw as _MRaw
+        inserted_movs = [
+            _MRaw(fuente=d["fuente"], fecha=d["fecha"], descripcion=d["descripcion"],
+                  monto=float(d["monto"]), moneda=d.get("moneda", "ARS"))
+            for d in inserted_dicts
+        ]
         for fuente in emitted_fuentes:
             if fuente not in result.saldos:
                 for moneda in ("ARS", "USD"):
                     _apply_saldo_delta(
-                        fuente, moneda, result.movimientos,
+                        fuente, moneda, inserted_movs,
                         result.log_lines, adjust_cuenta_saldo, get_cuenta_saldo,
                     )
 
