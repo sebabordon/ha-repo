@@ -886,7 +886,11 @@ class MercadoPagoScraper(BaseScraper):
                     if description:
                         desc = description
                     elif is_withdrawal:
-                        desc = "Retiro a CVU/CBU"
+                        # Incluir el monto en la descripción para que el motor de
+                        # reglas pueda distinguir retiros de distinto valor (el CSV
+                        # no provee nombre del destinatario ni CBU).
+                        amt_str = f"${monto:,.0f}".replace(",", ".")
+                        desc = f"Retiro a CVU/CBU {amt_str}"
                     else:
                         desc = _clean_report_desc(ext_ref) or "Egreso"
 

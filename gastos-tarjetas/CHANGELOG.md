@@ -1,3 +1,7 @@
+## 0.5.19
+
+- **Settlement report: retiros a CVU/CBU con monto en la descripción**: el CSV de PAYOUTS no incluye datos del destinatario (sin CBU, sin nombre). Para que el motor de reglas pueda distinguirlos, la descripción ahora incluye el monto: "Retiro a CVU/CBU $1.250.000". Así se pueden crear reglas específicas por importe ("$1.250.000 → Transferencia Magdalena").
+
 ## 0.5.18
 
 - **Settlement report: parser completo según glosario oficial MP**: lee todas las columnas documentadas (`DESCRIPTION`, `PAYER_NAME`, `PAYER_ID_TYPE/NUMBER`, `POI_BANK_NAME`, `POI_WALLET_NAME`, `STORE_NAME/ID`, `POS_NAME/ID`, `FRANCHISE`, `LAST_FOUR_DIGITS`, `BUSINESS_UNIT`, `SUB_UNIT`, `TAXES_AMOUNT`, etc.). Descripción prioriza `DESCRIPTION` → `PAYER_NAME` → store/pos → fallback genérico. Manejo correcto de todos los `TRANSACTION_TYPE` del glosario: `REFUND`/`CHARGEBACK` → ingreso "Devolución/Contracargo", `WITHDRAWAL_CANCEL` → ingreso "Retiro cancelado". Pre-agrega filas con mismo `SOURCE_ID` (rendimientos de Mercado Crédito que MP divide en múltiples filas).
