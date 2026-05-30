@@ -37,9 +37,12 @@ class Gasto(BaseModel):
 
 
 class ReglaCategoria(BaseModel):
-    palabras: list[str]
+    palabras: list[str] = []
+    patron: Optional[str] = None   # backward compat: old regex-based rules
     categoria: str
     especial: bool = False
+    solo_egresos: Optional[bool] = None
+    fuentes: list[str] = []
 
 
 class ReglasCategorias(BaseModel):

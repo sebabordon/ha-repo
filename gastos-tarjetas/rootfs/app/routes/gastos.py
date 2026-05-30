@@ -8,7 +8,6 @@ from fastapi import APIRouter, Request, Query
 from fastapi.responses import StreamingResponse
 
 from auth import require_auth
-from categorizer import auto_add_keyword_to_rule
 from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, update_gasto_fecha, delete_all_gastos, get_gasto, delete_gasto_manual, list_importaciones, rename_categoria_in_gastos
 
 router = APIRouter()
@@ -169,10 +168,9 @@ def patch_categoria(gasto_id: int, body: dict, request: Request):
     categoria = body.get("categoria", "")
     gasto = get_gasto(gasto_id)
     update_categoria(gasto_id, categoria)
-    # Auto-learn: add description as keyword whenever the user sets a category manually
-    if categoria and gasto:
-        auto_add_keyword_to_rule(gasto["descripcion"], categoria)
-    return {"ok": True}
+    # Return suggestion so the frontend can prompt the user before adding to rules
+    sugerencia = gasto["descripcion"] if (categoria and gasto) else None
+    return {"ok": True, "sugerencia_keyword": sugerencia, "categoria": categoria}
 
 
 @router.patch("/gastos/{gasto_id}/fecha")

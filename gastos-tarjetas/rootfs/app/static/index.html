@@ -338,8 +338,10 @@
               <h2>Reglas de categorización</h2>
               <button id="btn-add-rule" class="btn">+ Nueva regla</button>
               <button id="btn-apply-rules" class="btn">Reaplicar a todos</button>
+              <button id="btn-export-rules" class="btn btn-sm">⬇ Exportar</button>
+              <label class="btn btn-sm" style="cursor:pointer">⬆ Importar<input type="file" id="inp-import-rules" accept=".yaml,.yml" style="display:none"></label>
             </div>
-            <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si alguna palabra aparece en la descripción del gasto. "Reaplicar a todos" categoriza los movimientos ya importados (respeta los que editaste a mano).</p>
+            <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si la palabra aparece (con límite de palabra) en la descripción del gasto. Arrastrá con <strong>⠿</strong> para reordenar — la primera regla que coincide gana. "Reaplicar a todos" respeta los categorizados a mano.</p>
             <div id="rules-list"></div>
           </div>
         </div>
@@ -651,6 +653,30 @@
       <div class="modal-footer">
         <button class="btn" onclick="closeTransferModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="confirmTransfers()">Marcar seleccionados</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule dry-run preview modal -->
+  <div id="rule-preview-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeRulePreview()">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="rp-title" class="modal-title">Probar regla</h3>
+        <button class="modal-close" onclick="closeRulePreview()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="rp-filters">
+          <label>Desde <input type="date" id="rp-desde"></label>
+          <label>Hasta <input type="date" id="rp-hasta"></label>
+          <label class="rp-manuales-label"><input type="checkbox" id="rp-manuales"> Incluir manuales</label>
+          <button id="btn-rp-run" class="btn btn-primary btn-sm" onclick="runRulePreview()">Buscar</button>
+        </div>
+        <div id="rp-results"></div>
+      </div>
+      <div class="modal-footer" id="rp-footer" style="display:none">
+        <button class="btn btn-primary" onclick="applySelectedPreview()">
+          Categorizar seleccionados (<span id="rp-count">0</span>)
+        </button>
       </div>
     </div>
   </div>

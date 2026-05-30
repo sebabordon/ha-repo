@@ -1,3 +1,19 @@
+## 0.5.24
+
+- **Fix: coincidencia parcial silenciosa en reglas de categorización** (`categorizer.py`): el regex no tenía word boundaries, por lo que "coto" matcheaba "PSICOTOLOGO", "dia" matcheaba "MEDIACION", etc. Ahora cada keyword se envuelve con `\b...\b` para coincidir solo en límites de palabra.
+- **Cache de reglas** (`categorizer.py`): `load_rules()` ya no lee y parsea el YAML en cada transacción. Cachea en memoria y usa `os.path.getmtime` para invalidar automáticamente cuando el archivo cambia.
+- **Auto-learn con confirmación editable**: al categorizar un gasto a mano, en lugar de agregar la descripción completa como keyword silenciosamente, ahora aparece un prompt en pantalla con el texto editable (pre-recortado a las 3 primeras palabras) para que el usuario confirme o ajuste antes de guardar en las reglas.
+- **Filtro por fuentes en reglas** (`ReglaCategoria`): nuevo campo `fuentes: list[str]` — si se completa, la regla solo aplica a movimientos de esas fuentes. Se configura desde un dropdown multi-select con checkboxes en cada tarjeta de regla.
+- **Filtro solo_egresos en reglas** (`ReglaCategoria`): nuevo campo `solo_egresos: bool` — cuando está marcado, la regla ignora ingresos (monto ≤ 0). Útil para distinguir pagos de cobros de la misma fuente (ej. MercadoPago).
+- **Drag-to-reorder en lista de reglas**: las tarjetas de regla tienen un handle `⠿` para reordenar por drag & drop. El orden importa: gana la primera regla que coincide.
+- **Estado de secciones persistido**: el expand/collapse de cada sección de Config se guarda en `localStorage` y se restaura al volver a la pestaña.
+- **Warning de keywords duplicadas**: si una keyword aparece en más de una regla, se marca en rojo en ambas tarjetas para alertar sobre ambigüedad.
+- **Export / Import de reglas**: botones "Exportar" e "Importar" en la cabecera de Reglas de categorización. Exporta el `rules.yaml` completo; importa desde archivo con validación.
+- **Dry-run por regla con rango de fechas** (`POST /api/rules/preview`): botón "Probar" en cada regla abre un modal para buscar qué movimientos coincidirían en un período, mostrando categoría actual vs. nueva. Se pueden seleccionar individualmente y aplicar con `POST /api/rules/apply-selected`.
+- **Nuevo campo `patron` en modelo** (`ReglaCategoria`): preserva reglas antiguas en formato regex al hacer PUT, evitando pérdida silenciosa de datos.
+- **`default_rules.yaml` ampliado**: agregados merchants argentinos faltantes y 6 categorías nuevas: Impuestos, Seguros, Hogar, Deporte, Mascotas, Belleza.
+- **`apply_rules_to_all` pasa monto y fuente** al categorizador para respetar los nuevos filtros `solo_egresos` y `fuentes` al reaplicar.
+
 ## 0.5.23
 
 - **Consolidación preserva categoría del scraper al reemplazar con PDF**: cuando `consolidate_scraper_duplicates` elimina un gasto del scraper y lo reemplaza con el del PDF, ahora hereda la categoría del scraper si corresponde. Reglas: categoría `manual` del scraper siempre gana sobre la del PDF (salvo que el PDF también sea `manual`); categoría por `regla` se copia solo si el PDF no tiene ninguna. Así las categorizaciones hechas a mano no se pierden al subir el resumen.

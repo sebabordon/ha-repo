@@ -1,3 +1,4 @@
+import os
 import re
 import yaml
 from typing import Optional
@@ -13,21 +14,49 @@ _PROMPT = (
     "Responde solo con la categoría, sin explicación."
 )
 
+# ── Rules cache ───────────────────────────────────────────────────────────────
+_rules_cache: dict = {"rules": None, "mtime": -1.0}
+
 
 def load_rules() -> list[dict]:
+    path = get_rules_file()
     try:
-        with open(get_rules_file()) as f:
+        mtime = os.path.getmtime(path)
+        if _rules_cache["mtime"] == mtime and _rules_cache["rules"] is not None:
+            return _rules_cache["rules"]
+        with open(path) as f:
             data = yaml.safe_load(f) or {}
-        return data.get("reglas", [])
-    except (FileNotFoundError, yaml.YAMLError):
+        rules = data.get("reglas", [])
+        _rules_cache["mtime"] = mtime
+        _rules_cache["rules"] = rules
+        return rules
+    except (FileNotFoundError, yaml.YAMLError, OSError):
         return []
 
 
-def categorize_by_rules(descripcion: str) -> Optional[str]:
+def _invalidate_rules_cache() -> None:
+    _rules_cache["mtime"] = -1.0
+    _rules_cache["rules"] = None
+
+
+def categorize_by_rules(
+    descripcion: str,
+    monto: float = 0.0,
+    fuente: str = "",
+) -> Optional[str]:
     for regla in load_rules():
+        # Fuentes filter
+        fuentes = regla.get("fuentes", [])
+        if fuentes and fuente and fuente not in fuentes:
+            continue
+        # solo_egresos filter
+        if regla.get("solo_egresos") and monto <= 0:
+            continue
+
         palabras = regla.get("palabras", [])
         if palabras:
-            pattern = "(?i)(" + "|".join(re.escape(str(p)) for p in palabras) + ")"
+            # \b word-boundaries prevent partial matches (e.g. "coto" in "PSICOTOLOGO")
+            pattern = "(?i)(" + "|".join(r"\b" + re.escape(str(p)) + r"\b" for p in palabras) + ")"
         elif "patron" in regla:
             pattern = regla["patron"]  # backward compat with old regex format
         else:
@@ -128,6 +157,7 @@ def auto_add_keyword_to_rule(descripcion: str, categoria: str) -> bool:
     data["reglas"] = reglas
     with open(get_rules_file(), "w") as f:
         yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+    _invalidate_rules_cache()
     return True
 
 

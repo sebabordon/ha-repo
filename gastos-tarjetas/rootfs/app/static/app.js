@@ -134,6 +134,22 @@ function showPrompt(msg, placeholder, onConfirm) {
   setTimeout(() => inp.focus(), 30);
 }
 
+function showLearnPrompt(keyword, categoria, onConfirm) {
+  const el = document.getElementById("toast");
+  el.innerHTML = `<span class="toast-msg">¿Agregar keyword a "<strong>${escHtml(categoria)}</strong>"?</span>
+    <input id="t-inp" type="text" value="${escHtml(keyword)}" style="max-width:180px">
+    <button class="btn btn-sm btn-primary" id="t-ok">Agregar</button>
+    <button class="btn btn-sm" onclick="document.getElementById('toast').classList.remove('show')">No</button>`;
+  el.className = "toast toast-info show";
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove("show"), 12000);
+  const inp = document.getElementById("t-inp");
+  const ok  = () => { const v = inp.value.trim(); el.classList.remove("show"); if (v) onConfirm(v); };
+  document.getElementById("t-ok").onclick = ok;
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") ok(); if (e.key === "Escape") el.classList.remove("show"); });
+  setTimeout(() => { inp.focus(); inp.select(); }, 30);
+}
+
 function showSelectPrompt(msg, options, onConfirm) {
   const el = document.getElementById("toast");
   const opts = options.map(o => `<option value="${o.value}">${escHtml(o.label)}</option>`).join("");
@@ -159,7 +175,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); }
+    if (tab.dataset.tab === "config")      { _restoreCfgSections(); loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); }
   });
 });
 
@@ -186,6 +202,17 @@ function toggleCfgSection(id) {
   const open = body.style.display !== "none";
   body.style.display = open ? "none" : "";
   if (arrow) arrow.textContent = open ? "+" : "−";
+  localStorage.setItem(`cfg-section-${id}`, open ? "0" : "1");
+}
+
+function _restoreCfgSections() {
+  ["reglas-cat", "reglas-match", "pers-list", "pers-rules"].forEach(id => {
+    if (localStorage.getItem(`cfg-section-${id}`) !== "1") return;
+    const body  = document.getElementById(`cfg-body-${id}`);
+    const arrow = document.getElementById(`cfg-arr-${id}`);
+    if (body)  body.style.display = "";
+    if (arrow) arrow.textContent  = "−";
+  });
 }
 
 // ── UI settings (Interfaz tab) ────────────────────────────────────────────────
@@ -1383,6 +1410,18 @@ async function saveCategoria(id, btn) {
   if (res.ok) {
     input.classList.remove("dirty"); btn.classList.remove("btn-dirty");
     loadMonthlyChart();
+    const data = await res.json();
+    if (data.sugerencia_keyword && data.categoria) {
+      const suggestion = data.sugerencia_keyword.split(/\s+/).slice(0, 3).join(" ").toLowerCase();
+      showLearnPrompt(suggestion, data.categoria, async kw => {
+        await fetch(`${BASE}/api/rules/learn`, {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({keyword: kw, categoria: data.categoria}),
+        });
+        showToast(`✓ "${kw}" agregado a ${data.categoria}`, "ok", 2500);
+        loadRules();
+      });
+    }
   }
   btn.textContent = res.ok ? "✓" : "✗";
   setTimeout(() => btn.textContent = "✓", 1500);
@@ -1635,9 +1674,12 @@ async function loadRules() {
   const res  = await fetch(`${BASE}/api/rules`);
   const data = await res.json();
   _rules = (data.reglas||[]).map(r => ({
-    palabras: Array.isArray(r.palabras) ? r.palabras.map(String) : _patternToWords(r.patron||""),
-    categoria: r.categoria||"",
-    especial: !!r.especial,
+    palabras:    Array.isArray(r.palabras) ? r.palabras.map(String) : _patternToWords(r.patron||""),
+    patron:      r.patron || null,
+    categoria:   r.categoria || "",
+    especial:    !!r.especial,
+    solo_egresos: !!r.solo_egresos,
+    fuentes:     Array.isArray(r.fuentes) ? r.fuentes : [],
   }));
   renderRules();
 }
@@ -1647,22 +1689,63 @@ function _patternToWords(patron) {
   return m ? m[1].split("|").map(w=>w.trim()).filter(Boolean) : patron ? [patron] : [];
 }
 
+let _dragSrcIdx = null;
+
+function _buildFuentesPickerHtml(i, selectedFuentes) {
+  const src   = (_cuentasData && _cuentasData.length > 0) ? _cuentasData : _FUENTES_FALLBACK;
+  const label = selectedFuentes.length === 0
+    ? "Todas las fuentes"
+    : `${selectedFuentes.length} fuente${selectedFuentes.length > 1 ? "s" : ""}`;
+  const opts = src.map(c => {
+    const chk = selectedFuentes.includes(c.fuente) ? "checked" : "";
+    return `<label class="fuentes-opt"><input type="checkbox" class="fuente-chk" value="${escHtml(c.fuente)}" ${chk}> ${escHtml(c.nombre||c.fuente)}</label>`;
+  }).join("");
+  return `<details class="fuentes-picker" data-i="${i}">
+    <summary class="fuentes-summary" title="Filtrar por fuente">${escHtml(label)}</summary>
+    <div class="fuentes-opts">${opts}</div>
+  </details>`;
+}
+
 function renderRules() {
+  // Build duplicate-word map for all rules
+  const wordMap = {};
+  _rules.forEach((r, i) => r.palabras.forEach(w => {
+    const k = w.toLowerCase();
+    if (!wordMap[k]) wordMap[k] = [];
+    wordMap[k].push(i);
+  }));
+  const dupes = new Set(Object.entries(wordMap).filter(([,v]) => v.length > 1).map(([k]) => k));
+
   const list = document.getElementById("rules-list");
   list.innerHTML = "";
-  _rules.forEach((rule,i) => {
+  _rules.forEach((rule, i) => {
     const card = document.createElement("div");
     card.className = "rule-card" + (rule.especial ? " rule-especial" : "");
-    const tagsHtml = rule.palabras.map((w,j) =>
-      `<span class="tag"><span class="tag-label" title="Doble clic para editar" ondblclick="editTag(${i},${j})">${escHtml(w)}</span><button class="tag-x" type="button" onclick="removeTag(${i},${j})">×</button></span>`
-    ).join("");
+    card.draggable = true;
+    card.dataset.ruleIdx = i;
+
+    const tagsHtml = rule.palabras.map((w, j) => {
+      const isDup = dupes.has(w.toLowerCase());
+      return `<span class="tag${isDup ? " tag-dup" : ""}" title="${isDup ? "Esta palabra ya está en otra regla" : ""}">
+        <span class="tag-label" title="Doble clic para editar" ondblclick="editTag(${i},${j})">${escHtml(w)}</span>
+        <button class="tag-x" type="button" onclick="removeTag(${i},${j})">×</button>
+      </span>`;
+    }).join("");
+
     card.innerHTML = `
       <div class="rule-header">
+        <span class="drag-handle" title="Arrastrar para reordenar">⠿</span>
+        <span class="rule-num">#${i + 1}</span>
         <input class="rule-cat" data-i="${i}" value="${escHtml(rule.categoria)}" placeholder="Nombre de categoría">
         <label class="rule-especial-label" title="Categoría especial: se excluye de totales y gráficos">
-          <input type="checkbox" class="rule-especial-chk" data-i="${i}" ${rule.especial?"checked":""}> Especial
+          <input type="checkbox" class="rule-especial-chk" data-i="${i}" ${rule.especial ? "checked" : ""}> Especial
         </label>
-        <button type="button" class="btn btn-danger btn-sm" onclick="removeRule(${i})">Eliminar</button>
+        <label class="rule-especial-label" title="Solo aplica a egresos (monto positivo)">
+          <input type="checkbox" class="rule-solo-egresos-chk" data-i="${i}" ${rule.solo_egresos ? "checked" : ""}> Solo egresos
+        </label>
+        ${_buildFuentesPickerHtml(i, rule.fuentes || [])}
+        <button type="button" class="btn btn-sm" onclick="openRulePreview(${i})">Probar</button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeRule(${i})">✕</button>
       </div>
       <div class="rule-tags" id="tags-${i}">${tagsHtml}</div>
       <div class="rule-add">
@@ -1670,22 +1753,57 @@ function renderRules() {
                onkeydown="addTag(event,${i})">
       </div>`;
     list.appendChild(card);
-  });
-  // Wire especial checkboxes immediately (they fire _scheduleSaveRules on change)
-  document.querySelectorAll(".rule-especial-chk").forEach(chk => {
-    chk.addEventListener("change", function() {
-      const i = parseInt(this.dataset.i);
+
+    // Drag events
+    card.addEventListener("dragstart", e => {
+      _dragSrcIdx = i;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", () => card.classList.remove("dragging"));
+    card.addEventListener("dragover", e => { e.preventDefault(); card.classList.add("drag-over"); });
+    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+    card.addEventListener("drop", e => {
+      e.preventDefault();
+      card.classList.remove("drag-over");
+      if (_dragSrcIdx === null || _dragSrcIdx === i) return;
       _syncRules();
-      _rules[i].especial = this.checked;
+      const [moved] = _rules.splice(_dragSrcIdx, 1);
+      _rules.splice(i, 0, moved);
+      _dragSrcIdx = null;
+      renderRules();
+      _scheduleSaveRules();
+    });
+
+    // Especial checkbox
+    card.querySelector(".rule-especial-chk").addEventListener("change", function() {
+      _syncRules();
+      _rules[parseInt(this.dataset.i)].especial = this.checked;
       this.closest(".rule-card").classList.toggle("rule-especial", this.checked);
       _scheduleSaveRules();
+    });
+
+    // Fuentes picker — update summary text on change
+    const picker = card.querySelector(".fuentes-picker");
+    picker.querySelectorAll(".fuente-chk").forEach(chk => {
+      chk.addEventListener("change", () => {
+        const checked = [...picker.querySelectorAll(".fuente-chk:checked")].map(c => c.value);
+        picker.querySelector(".fuentes-summary").textContent =
+          checked.length === 0 ? "Todas las fuentes" : `${checked.length} fuente${checked.length > 1 ? "s" : ""}`;
+        _scheduleSaveRules();
+      });
     });
   });
 }
 
 function _syncRules() {
-  document.querySelectorAll(".rule-cat").forEach((inp,i) => { if (_rules[i]) _rules[i].categoria = inp.value; });
-  document.querySelectorAll(".rule-especial-chk").forEach((chk,i) => { if (_rules[i]) _rules[i].especial = chk.checked; });
+  document.querySelectorAll(".rule-cat").forEach((inp, i) => { if (_rules[i]) _rules[i].categoria = inp.value; });
+  document.querySelectorAll(".rule-especial-chk").forEach((chk, i) => { if (_rules[i]) _rules[i].especial = chk.checked; });
+  document.querySelectorAll(".rule-solo-egresos-chk").forEach((chk, i) => { if (_rules[i]) _rules[i].solo_egresos = chk.checked; });
+  document.querySelectorAll(".fuentes-picker").forEach((picker, i) => {
+    if (!_rules[i]) return;
+    _rules[i].fuentes = [...picker.querySelectorAll(".fuente-chk:checked")].map(c => c.value);
+  });
 }
 
 // Auto-save with debounce
@@ -1696,9 +1814,15 @@ function _scheduleSaveRules() {
     _syncRules();
     const reglas = _rules
       .filter(r => r.palabras.length > 0 && r.categoria.trim())
-      .map(r => ({palabras: r.palabras, categoria: r.categoria, especial: !!r.especial}));
+      .map(r => ({
+        palabras:     r.palabras,
+        categoria:    r.categoria,
+        especial:     !!r.especial,
+        solo_egresos: r.solo_egresos || null,
+        fuentes:      r.fuentes || [],
+      }));
     const res = await fetch(`${BASE}/api/rules`, {
-      method:"PUT", headers:{"Content-Type":"application/json"},
+      method: "PUT", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({reglas}),
     });
     showToast(res.ok ? "✓ Reglas guardadas" : "❌ Error al guardar reglas", res.ok ? "ok" : "err", res.ok ? 2000 : 0);
@@ -1747,10 +1871,32 @@ function editTag(i, j) {
 }
 
 document.getElementById("btn-add-rule").addEventListener("click", () => {
-  _syncRules(); _rules.push({palabras:[],categoria:"",especial:false}); renderRules();
+  _syncRules();
+  _rules.push({palabras: [], categoria: "", especial: false, solo_egresos: false, fuentes: []});
+  renderRules();
   const el = document.querySelectorAll(".rule-cat").at(-1);
   el?.focus();
-  el?.scrollIntoView({behavior:"smooth", block:"nearest"});
+  el?.scrollIntoView({behavior: "smooth", block: "nearest"});
+});
+
+document.getElementById("btn-export-rules").addEventListener("click", () => {
+  window.location.href = `${BASE}/api/rules/export`;
+});
+
+document.getElementById("inp-import-rules").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append("file", file);
+  const res  = await fetch(`${BASE}/api/rules/import`, {method: "POST", body: fd});
+  const data = await res.json();
+  if (res.ok) {
+    showToast(`✓ ${data.reglas} reglas importadas`, "ok", 3000);
+    loadRules();
+  } else {
+    showToast(`❌ ${data.detail || "Error al importar"}`, "err", 0);
+  }
+  e.target.value = "";
 });
 
 document.getElementById("btn-apply-rules").addEventListener("click", async () => {
@@ -1765,6 +1911,94 @@ document.getElementById("btn-apply-rules").addEventListener("click", async () =>
 });
 
 loadRules();
+
+// ── Rule dry-run preview ──────────────────────────────────────────────────────
+let _previewRuleIdx = null;
+
+function openRulePreview(i) {
+  _syncRules();
+  _previewRuleIdx = i;
+  const rule = _rules[i];
+  document.getElementById("rp-title").textContent = `Probar regla: "${rule.categoria || "sin nombre"}"`;
+  document.getElementById("rp-results").innerHTML = "";
+  document.getElementById("rp-footer").style.display = "none";
+  document.getElementById("rule-preview-modal").style.display = "flex";
+}
+
+function closeRulePreview() {
+  document.getElementById("rule-preview-modal").style.display = "none";
+}
+
+async function runRulePreview() {
+  if (_previewRuleIdx === null) return;
+  const rule = _rules[_previewRuleIdx];
+  const desde    = document.getElementById("rp-desde").value;
+  const hasta    = document.getElementById("rp-hasta").value;
+  const manuales = document.getElementById("rp-manuales").checked;
+  const btn      = document.getElementById("btn-rp-run");
+  btn.disabled = true; btn.textContent = "Buscando…";
+  try {
+    const res  = await fetch(`${BASE}/api/rules/preview`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        regla: {palabras: rule.palabras, categoria: rule.categoria, fuentes: rule.fuentes || [], solo_egresos: !!rule.solo_egresos},
+        fecha_desde: desde, fecha_hasta: hasta, incluir_manuales: manuales,
+      }),
+    });
+    const data   = await res.json();
+    const gastos = data.gastos || [];
+    const results = document.getElementById("rp-results");
+    const footer  = document.getElementById("rp-footer");
+    if (!gastos.length) {
+      results.innerHTML = '<p class="rp-empty">No se encontraron movimientos que coincidan con esta regla en el período indicado.</p>';
+      footer.style.display = "none";
+      return;
+    }
+    results.innerHTML = `<table class="rp-table">
+      <thead><tr><th><input type="checkbox" id="rp-select-all" checked onchange="toggleSelectAllPreview(this.checked)"></th>
+        <th>Fecha</th><th>Descripción</th><th>Monto</th><th>Categoría actual</th><th>Nueva</th></tr></thead>
+      <tbody>${gastos.map(g => `
+        <tr data-id="${g.id}">
+          <td><input type="checkbox" class="rp-chk" checked onchange="updateRpCount()"></td>
+          <td>${escHtml(g.fecha)}</td>
+          <td class="rp-desc">${escHtml(g.descripcion)}</td>
+          <td class="rp-monto ${g.monto > 0 ? "monto-egreso" : "monto-ingreso"}">${g.monto > 0 ? "" : "+"}${Math.abs(g.monto).toFixed(2)}</td>
+          <td class="rp-cat-actual">${escHtml(g.categoria_actual || "—")}</td>
+          <td class="rp-cat-new">${escHtml(g.categoria_nueva)}</td>
+        </tr>`).join("")}
+      </tbody></table>`;
+    footer.style.display = "flex";
+    updateRpCount();
+  } finally {
+    btn.disabled = false; btn.textContent = "Buscar";
+  }
+}
+
+function updateRpCount() {
+  document.getElementById("rp-count").textContent = document.querySelectorAll(".rp-chk:checked").length;
+}
+
+function toggleSelectAllPreview(checked) {
+  document.querySelectorAll(".rp-chk").forEach(c => c.checked = checked);
+  updateRpCount();
+}
+
+async function applySelectedPreview() {
+  if (_previewRuleIdx === null) return;
+  const rule = _rules[_previewRuleIdx];
+  const ids  = [...document.querySelectorAll(".rp-chk:checked")]
+    .map(c => parseInt(c.closest("tr").dataset.id)).filter(Boolean);
+  if (!ids.length) { showToast("No hay movimientos seleccionados", "err"); return; }
+  const res  = await fetch(`${BASE}/api/rules/apply-selected`, {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ids, categoria: rule.categoria}),
+  });
+  const data = await res.json();
+  showToast(`✓ ${data.aplicados} movimientos categorizados`, "ok", 2500);
+  closeRulePreview();
+  loadGastos();
+  loadCategorias();
+}
 
 // ── Match rules ───────────────────────────────────────────────────────────────
 const _FUENTES_FALLBACK = [

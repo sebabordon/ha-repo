@@ -961,14 +961,14 @@ def apply_rules_to_all(categorize_fn) -> int:
     """
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT id, descripcion FROM gastos "
+            "SELECT id, descripcion, monto, fuente FROM gastos "
             "WHERE categoria_fuente IS NULL OR categoria_fuente NOT IN ('manual', 'auto')"
         ).fetchall()
 
     updates = []
     matched = 0
     for row in rows:
-        cat = categorize_fn(row["descripcion"])
+        cat = categorize_fn(row["descripcion"], monto=float(row["monto"] or 0), fuente=row["fuente"] or "")
         updates.append((cat, "regla" if cat else None, row["id"]))
         if cat:
             matched += 1
@@ -980,6 +980,82 @@ def apply_rules_to_all(categorize_fn) -> int:
                 updates,
             )
     return matched
+
+
+def preview_rule_matches(
+    regla: dict,
+    fecha_desde: str,
+    fecha_hasta: str,
+    incluir_manuales: bool,
+) -> list[dict]:
+    """Return gastos that would match a single rule (dry-run)."""
+    import re
+    palabras = regla.get("palabras", [])
+    patron   = regla.get("patron", "")
+    cat_nueva = regla.get("categoria", "")
+    fuentes   = regla.get("fuentes", [])
+    solo_egresos = regla.get("solo_egresos", False)
+
+    if palabras:
+        pattern = "(?i)(" + "|".join(r"\b" + re.escape(str(p)) + r"\b" for p in palabras) + ")"
+    elif patron:
+        pattern = patron
+    else:
+        return []
+
+    clauses, params = [], []
+    if fecha_desde:
+        clauses.append("fecha >= ?"); params.append(fecha_desde)
+    if fecha_hasta:
+        clauses.append("fecha <= ?"); params.append(fecha_hasta)
+    if not incluir_manuales:
+        clauses.append("(categoria_fuente IS NULL OR categoria_fuente != 'manual')")
+
+    sql = "SELECT id, fecha, descripcion, monto, moneda, fuente, categoria, categoria_fuente FROM gastos"
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY fecha DESC"
+
+    with _conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    result = []
+    for row in rows:
+        row_fuente = row["fuente"] or ""
+        row_monto  = float(row["monto"] or 0)
+        if fuentes and row_fuente and row_fuente not in fuentes:
+            continue
+        if solo_egresos and row_monto <= 0:
+            continue
+        try:
+            if not re.search(pattern, row["descripcion"] or ""):
+                continue
+        except re.error:
+            continue
+        result.append({
+            "id":                   row["id"],
+            "fecha":                str(row["fecha"]),
+            "descripcion":          row["descripcion"],
+            "monto":                row_monto,
+            "moneda":               row["moneda"],
+            "fuente":               row_fuente,
+            "categoria_actual":     row["categoria"],
+            "categoria_fuente_act": row["categoria_fuente"],
+            "categoria_nueva":      cat_nueva,
+        })
+    return result
+
+
+def apply_categoria_to_ids(ids: list, categoria: str) -> int:
+    if not ids:
+        return 0
+    placeholders = ",".join("?" * len(ids))
+    with _conn() as conn:
+        conn.execute(
+            f"UPDATE gastos SET categoria=?, categoria_fuente='regla' WHERE id IN ({placeholders})",
+            [categoria, *ids],
+        )
+    return len(ids)
 
 
 # ── Cuentas ────────────────────────────────────────────────────────────────────
