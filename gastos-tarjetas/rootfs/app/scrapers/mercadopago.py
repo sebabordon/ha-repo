@@ -639,16 +639,21 @@ class MercadoPagoScraper(BaseScraper):
             return []
 
         rdata     = resp.json() if resp.text else {}
-        file_name = str(rdata.get("file_name") or rdata.get("id") or "").strip()
-        if not file_name:
-            log_fn("Release report: sin file_name en la respuesta — omitido")
+        # El POST puede devolver el ID numérico antes de que el file_name exista.
+        # Guardamos ambos para matchear en la lista de polling.
+        report_id = rdata.get("id")
+        file_name = str(rdata.get("file_name") or "").strip()
+        if not report_id and not file_name:
+            log_fn("Release report: sin id ni file_name en la respuesta — omitido")
             return []
 
-        log_fn(f"Release report: esperando {file_name} …")
+        log_fn(f"Release report: esperando id={report_id} …")
 
-        # Polling con back-off lineal: hasta ~60 seg
+        # Polling con back-off lineal: hasta ~90 seg
+        # Matcheamos por id (siempre presente) y obtenemos el file_name real
+        # recién cuando el reporte está procesado.
         csv_text: Optional[str] = None
-        for attempt in range(20):
+        for attempt in range(30):
             await asyncio.sleep(3)
             try:
                 list_resp = await client.get(f"{_BASE}/v1/account/release_report/list")
@@ -657,20 +662,30 @@ class MercadoPagoScraper(BaseScraper):
             if list_resp.status_code != 200:
                 break
             for rpt in (list_resp.json() or []):
-                if rpt.get("file_name") == file_name:
-                    if rpt.get("status") == "processed":
-                        try:
-                            dl = await client.get(
-                                f"{_BASE}/v1/account/release_report/{file_name}",
-                                timeout=60,
-                            )
-                            if dl.status_code == 200:
-                                csv_text = dl.text
-                            else:
-                                log_fn(f"Release report: download status {dl.status_code}")
-                        except Exception as exc:
-                            log_fn(f"Release report: error descargando — {exc}")
-                    break  # found in list (may not be ready yet)
+                # Comparar por id (int o str) o por file_name si lo teníamos
+                rpt_id   = rpt.get("id")
+                rpt_file = str(rpt.get("file_name") or "").strip()
+                match = (
+                    (report_id and rpt_id == report_id) or
+                    (file_name and rpt_file == file_name)
+                )
+                if not match:
+                    continue
+                if rpt.get("status") == "processed":
+                    dl_name = rpt_file or file_name
+                    log_fn(f"Release report: descargando {dl_name} …")
+                    try:
+                        dl = await client.get(
+                            f"{_BASE}/v1/account/release_report/{dl_name}",
+                            timeout=60,
+                        )
+                        if dl.status_code == 200:
+                            csv_text = dl.text
+                        else:
+                            log_fn(f"Release report: download status {dl.status_code}")
+                    except Exception as exc:
+                        log_fn(f"Release report: error descargando — {exc}")
+                break  # encontrado en la lista (puede no estar listo aún)
             if csv_text is not None:
                 break
 

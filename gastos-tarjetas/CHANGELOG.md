@@ -1,3 +1,7 @@
+## 0.5.13
+
+- **Fix: release report timeout** (polling nunca matcheaba): el `POST` devuelve solo el ID numérico, no el `file_name`. El polling ahora matchea por `id` en la lista; una vez que el reporte está `processed` extrae el `file_name` real para la descarga. Timeout extendido a ~90 seg (30 × 3 s).
+
 ## 0.5.12
 
 - **Fix: crash en release report** (`'int' object has no attribute 'strip'`): la API de MP devuelve el ID del reporte como entero. Se agrega `str()` antes de `.strip()` al extraer `file_name`/`id` de la respuesta.
