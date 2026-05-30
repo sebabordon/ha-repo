@@ -927,28 +927,100 @@ def apply_user_rules(reglas: list[dict]) -> int:
     Rules are evaluated in order; the first matching rule wins.
     Returns the number of rows updated.
     """
+    import re
     if not reglas:
         return 0
     with _conn() as conn:
-        rows = conn.execute("SELECT id, descripcion FROM gastos").fetchall()
+        rows = conn.execute("SELECT id, descripcion, fuente FROM gastos").fetchall()
 
     updates = []
     for row in rows:
-        desc_upper = row["descripcion"].upper()
         for rule in reglas:
             palabras = rule.get("palabras", [])
+            fuentes  = rule.get("fuentes", [])
             if not palabras:
                 continue
-            if any(p.upper() in desc_upper for p in palabras):
-                usuario = rule.get("usuario", "")
-                if usuario:
-                    updates.append((usuario, row["id"]))
-                break
+            if fuentes and row["fuente"] and row["fuente"] not in fuentes:
+                continue
+            pattern = "(?i)(" + "|".join(r"\b" + re.escape(str(p)) + r"\b" for p in palabras) + ")"
+            try:
+                if re.search(pattern, row["descripcion"] or ""):
+                    usuario = rule.get("usuario", "")
+                    if usuario:
+                        updates.append((usuario, row["id"]))
+                    break
+            except re.error:
+                continue
 
     if updates:
         with _conn() as conn:
             conn.executemany("UPDATE gastos SET usuario=? WHERE id=?", updates)
     return len(updates)
+
+
+def preview_user_rule_matches(
+    regla: dict,
+    fecha_desde: str,
+    fecha_hasta: str,
+) -> list[dict]:
+    """Return gastos that would match a single user-assignment rule (dry-run)."""
+    import re
+    palabras     = regla.get("palabras", [])
+    usuario_nuevo = regla.get("usuario", "")
+    fuentes      = regla.get("fuentes", [])
+
+    if not palabras:
+        return []
+
+    pattern = "(?i)(" + "|".join(r"\b" + re.escape(str(p)) + r"\b" for p in palabras) + ")"
+
+    clauses, params = [], []
+    if fecha_desde:
+        clauses.append("fecha >= ?"); params.append(fecha_desde)
+    if fecha_hasta:
+        clauses.append("fecha <= ?"); params.append(fecha_hasta)
+
+    sql = "SELECT id, fecha, descripcion, monto, moneda, fuente, usuario FROM gastos"
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY fecha DESC"
+
+    with _conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    result = []
+    for row in rows:
+        row_fuente = row["fuente"] or ""
+        if fuentes and row_fuente and row_fuente not in fuentes:
+            continue
+        try:
+            if not re.search(pattern, row["descripcion"] or ""):
+                continue
+        except re.error:
+            continue
+        result.append({
+            "id":               row["id"],
+            "fecha":            str(row["fecha"]),
+            "descripcion":      row["descripcion"],
+            "monto":            float(row["monto"] or 0),
+            "moneda":           row["moneda"],
+            "fuente":           row_fuente,
+            "categoria_actual": row["usuario"],
+            "categoria_nueva":  usuario_nuevo,
+        })
+    return result
+
+
+def apply_usuario_to_ids(ids: list, usuario: str) -> int:
+    if not ids:
+        return 0
+    placeholders = ",".join("?" * len(ids))
+    with _conn() as conn:
+        conn.execute(
+            f"UPDATE gastos SET usuario=? WHERE id IN ({placeholders})",
+            [usuario, *ids],
+        )
+    return len(ids)
 
 
 def apply_rules_to_all(categorize_fn) -> int:

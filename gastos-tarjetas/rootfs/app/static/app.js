@@ -1912,15 +1912,34 @@ document.getElementById("btn-apply-rules").addEventListener("click", async () =>
 
 loadRules();
 
-// ── Rule dry-run preview ──────────────────────────────────────────────────────
+// ── Rule dry-run preview (shared modal for cat + user modes) ─────────────────
+let _previewMode    = "cat"; // "cat" | "user"
 let _previewRuleIdx = null;
 
 function openRulePreview(i) {
   _syncRules();
+  _previewMode    = "cat";
   _previewRuleIdx = i;
   const rule = _rules[i];
-  document.getElementById("rp-title").textContent = `Probar regla: "${rule.categoria || "sin nombre"}"`;
-  document.getElementById("rp-results").innerHTML = "";
+  document.getElementById("rp-title").textContent   = `Probar regla: "${rule.categoria || "sin nombre"}"`;
+  document.getElementById("rp-col-actual").textContent = "Categoría actual";
+  document.getElementById("rp-col-nueva").textContent  = "Nueva";
+  document.getElementById("rp-manuales-row").style.display = "";
+  document.getElementById("rp-results").innerHTML    = "";
+  document.getElementById("rp-footer").style.display = "none";
+  document.getElementById("rule-preview-modal").style.display = "flex";
+}
+
+function openUserRulePreview(i) {
+  _syncUserRules();
+  _previewMode    = "user";
+  _previewRuleIdx = i;
+  const rule = _userRules[i];
+  document.getElementById("rp-title").textContent   = `Probar regla persona: "${rule.usuario || "sin nombre"}"`;
+  document.getElementById("rp-col-actual").textContent = "Persona actual";
+  document.getElementById("rp-col-nueva").textContent  = "Nueva";
+  document.getElementById("rp-manuales-row").style.display = "none";
+  document.getElementById("rp-results").innerHTML    = "";
   document.getElementById("rp-footer").style.display = "none";
   document.getElementById("rule-preview-modal").style.display = "flex";
 }
@@ -1931,20 +1950,23 @@ function closeRulePreview() {
 
 async function runRulePreview() {
   if (_previewRuleIdx === null) return;
-  const rule = _rules[_previewRuleIdx];
+  const isCat  = _previewMode === "cat";
+  const rule   = isCat ? _rules[_previewRuleIdx] : _userRules[_previewRuleIdx];
   const desde    = document.getElementById("rp-desde").value;
   const hasta    = document.getElementById("rp-hasta").value;
   const manuales = document.getElementById("rp-manuales").checked;
   const btn      = document.getElementById("btn-rp-run");
   btn.disabled = true; btn.textContent = "Buscando…";
   try {
-    const res  = await fetch(`${BASE}/api/rules/preview`, {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        regla: {palabras: rule.palabras, categoria: rule.categoria, fuentes: rule.fuentes || [], solo_egresos: !!rule.solo_egresos},
-        fecha_desde: desde, fecha_hasta: hasta, incluir_manuales: manuales,
-      }),
-    });
+    let url, payload;
+    if (isCat) {
+      url     = `${BASE}/api/rules/preview`;
+      payload = {regla: {palabras: rule.palabras, categoria: rule.categoria, fuentes: rule.fuentes || [], solo_egresos: !!rule.solo_egresos}, fecha_desde: desde, fecha_hasta: hasta, incluir_manuales: manuales};
+    } else {
+      url     = `${BASE}/api/config/usuarios/preview`;
+      payload = {regla: {palabras: rule.palabras, usuario: rule.usuario, fuentes: rule.fuentes || []}, fecha_desde: desde, fecha_hasta: hasta};
+    }
+    const res    = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
     const data   = await res.json();
     const gastos = data.gastos || [];
     const results = document.getElementById("rp-results");
@@ -1955,8 +1977,12 @@ async function runRulePreview() {
       return;
     }
     results.innerHTML = `<table class="rp-table">
-      <thead><tr><th><input type="checkbox" id="rp-select-all" checked onchange="toggleSelectAllPreview(this.checked)"></th>
-        <th>Fecha</th><th>Descripción</th><th>Monto</th><th>Categoría actual</th><th>Nueva</th></tr></thead>
+      <thead><tr>
+        <th><input type="checkbox" id="rp-select-all" checked onchange="toggleSelectAllPreview(this.checked)"></th>
+        <th>Fecha</th><th>Descripción</th><th>Monto</th>
+        <th id="rp-col-actual-th">${escHtml(document.getElementById("rp-col-actual").textContent)}</th>
+        <th id="rp-col-nueva-th">${escHtml(document.getElementById("rp-col-nueva").textContent)}</th>
+      </tr></thead>
       <tbody>${gastos.map(g => `
         <tr data-id="${g.id}">
           <td><input type="checkbox" class="rp-chk" checked onchange="updateRpCount()"></td>
@@ -1985,19 +2011,29 @@ function toggleSelectAllPreview(checked) {
 
 async function applySelectedPreview() {
   if (_previewRuleIdx === null) return;
-  const rule = _rules[_previewRuleIdx];
-  const ids  = [...document.querySelectorAll(".rp-chk:checked")]
+  const isCat = _previewMode === "cat";
+  const rule  = isCat ? _rules[_previewRuleIdx] : _userRules[_previewRuleIdx];
+  const ids   = [...document.querySelectorAll(".rp-chk:checked")]
     .map(c => parseInt(c.closest("tr").dataset.id)).filter(Boolean);
   if (!ids.length) { showToast("No hay movimientos seleccionados", "err"); return; }
-  const res  = await fetch(`${BASE}/api/rules/apply-selected`, {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ids, categoria: rule.categoria}),
-  });
+  let res;
+  if (isCat) {
+    res = await fetch(`${BASE}/api/rules/apply-selected`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ids, categoria: rule.categoria}),
+    });
+  } else {
+    res = await fetch(`${BASE}/api/config/usuarios/apply-selected`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ids, usuario: rule.usuario}),
+    });
+  }
   const data = await res.json();
-  showToast(`✓ ${data.aplicados} movimientos categorizados`, "ok", 2500);
+  const n    = data.aplicados ?? data.asignados ?? ids.length;
+  showToast(`✓ ${n} movimientos ${isCat ? "categorizados" : "asignados"}`, "ok", 2500);
   closeRulePreview();
   loadGastos();
-  loadCategorias();
+  if (isCat) loadCategorias();
 }
 
 // ── Match rules ───────────────────────────────────────────────────────────────
@@ -3883,6 +3919,7 @@ async function loadUsuarios() {
   _userRules = (_usuariosConfig.reglas_usuario || []).map(r => ({
     palabras: Array.isArray(r.palabras) ? r.palabras.map(String) : [],
     usuario:  r.usuario || "",
+    fuentes:  Array.isArray(r.fuentes) ? r.fuentes : [],
   }));
   _populateUsuarioDropdowns();
   renderUsuarios();
@@ -4063,27 +4100,51 @@ loadImportaciones();
 
 // ── Reglas de asignación de persona ──────────────────────────────────────────
 
+let _dragUserSrcIdx = null;
+
 function renderUserRules() {
   const list = document.getElementById("user-rules-list");
   if (!list) return;
   const users = _usuariosConfig.usuarios || ["Titular", "Adicional"];
+
+  // Duplicate-word map
+  const wordMap = {};
+  _userRules.forEach((r, i) => r.palabras.forEach(w => {
+    const k = w.toLowerCase();
+    if (!wordMap[k]) wordMap[k] = [];
+    wordMap[k].push(i);
+  }));
+  const dupes = new Set(Object.entries(wordMap).filter(([, v]) => v.length > 1).map(([k]) => k));
+
   list.innerHTML = "";
   _userRules.forEach((rule, i) => {
     const card = document.createElement("div");
     card.className = "rule-card";
-    const tagsHtml = rule.palabras.map((w, j) =>
-      `<span class="tag"><span class="tag-label" title="Doble clic para editar" ondblclick="editUserTag(${i},${j})">${escHtml(w)}</span><button class="tag-x" type="button" onclick="removeUserTag(${i},${j})">×</button></span>`
-    ).join("");
+    card.draggable = true;
+
+    const tagsHtml = rule.palabras.map((w, j) => {
+      const isDup = dupes.has(w.toLowerCase());
+      return `<span class="tag${isDup ? " tag-dup" : ""}" title="${isDup ? "Esta palabra ya está en otra regla" : ""}">
+        <span class="tag-label" title="Doble clic para editar" ondblclick="editUserTag(${i},${j})">${escHtml(w)}</span>
+        <button class="tag-x" type="button" onclick="removeUserTag(${i},${j})">×</button>
+      </span>`;
+    }).join("");
+
     const userOpts = users.map(u =>
       `<option value="${escHtml(u)}" ${rule.usuario === u ? "selected" : ""}>${escHtml(u)}</option>`
     ).join("");
+
     card.innerHTML = `
       <div class="rule-header">
+        <span class="drag-handle" title="Arrastrar para reordenar">⠿</span>
+        <span class="rule-num">#${i + 1}</span>
         <select class="user-rule-sel" data-i="${i}" style="min-width:140px">
           <option value="">— Persona —</option>
           ${userOpts}
         </select>
-        <button type="button" class="btn btn-danger btn-sm" onclick="removeUserRule(${i})">Eliminar</button>
+        ${_buildFuentesPickerHtml(i, rule.fuentes || []).replace(/class="fuentes-picker"/g, 'class="fuentes-picker user-fuentes-picker"')}
+        <button type="button" class="btn btn-sm" onclick="openUserRulePreview(${i})">Probar</button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeUserRule(${i})">✕</button>
       </div>
       <div class="rule-tags" id="user-tags-${i}">${tagsHtml}</div>
       <div class="rule-add">
@@ -4092,12 +4153,44 @@ function renderUserRules() {
                onkeydown="addUserTag(event,${i})">
       </div>`;
     list.appendChild(card);
+
+    // Drag events
+    card.addEventListener("dragstart", e => { _dragUserSrcIdx = i; card.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
+    card.addEventListener("dragend",   () => card.classList.remove("dragging"));
+    card.addEventListener("dragover",  e => { e.preventDefault(); card.classList.add("drag-over"); });
+    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+    card.addEventListener("drop", e => {
+      e.preventDefault(); card.classList.remove("drag-over");
+      if (_dragUserSrcIdx === null || _dragUserSrcIdx === i) return;
+      _syncUserRules();
+      const [moved] = _userRules.splice(_dragUserSrcIdx, 1);
+      _userRules.splice(i, 0, moved);
+      _dragUserSrcIdx = null;
+      renderUserRules(); _scheduleSaveUserRules();
+    });
+
+    // Fuentes picker — update summary on change
+    const picker = card.querySelector(".user-fuentes-picker");
+    if (picker) {
+      picker.querySelectorAll(".fuente-chk").forEach(chk => {
+        chk.addEventListener("change", () => {
+          const checked = [...picker.querySelectorAll(".fuente-chk:checked")].map(c => c.value);
+          picker.querySelector(".fuentes-summary").textContent =
+            checked.length === 0 ? "Todas las fuentes" : `${checked.length} fuente${checked.length > 1 ? "s" : ""}`;
+          _scheduleSaveUserRules();
+        });
+      });
+    }
   });
 }
 
 function _syncUserRules() {
   document.querySelectorAll(".user-rule-sel").forEach((sel, i) => {
     if (_userRules[i]) _userRules[i].usuario = sel.value;
+  });
+  document.querySelectorAll(".user-fuentes-picker").forEach((picker, i) => {
+    if (!_userRules[i]) return;
+    _userRules[i].fuentes = [...picker.querySelectorAll(".fuente-chk:checked")].map(c => c.value);
   });
 }
 
@@ -4106,9 +4199,11 @@ function _scheduleSaveUserRules() {
   clearTimeout(_saveUserRulesTimer);
   _saveUserRulesTimer = setTimeout(async () => {
     _syncUserRules();
-    const reglas = _userRules.filter(r => r.palabras.length > 0 && r.usuario);
+    const reglas = _userRules
+      .filter(r => r.palabras.length > 0 && r.usuario)
+      .map(r => ({palabras: r.palabras, usuario: r.usuario, fuentes: r.fuentes || []}));
     const res = await fetch(`${BASE}/api/config/usuarios`, {
-      method: "PUT", headers: {"Content-Type":"application/json"},
+      method: "PUT", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({..._usuariosConfig, reglas_usuario: reglas}),
     });
     showToast(res.ok ? "✓ Reglas guardadas" : "❌ Error al guardar", res.ok ? "ok" : "err", res.ok ? 2000 : 0);
@@ -4158,11 +4253,31 @@ function editUserTag(i, j) {
 
 document.getElementById("btn-add-user-rule")?.addEventListener("click", () => {
   _syncUserRules();
-  _userRules.push({palabras: [], usuario: ""});
+  _userRules.push({palabras: [], usuario: "", fuentes: []});
   renderUserRules();
   const el = document.querySelectorAll(".user-rule-sel").at(-1);
   el?.focus();
   el?.scrollIntoView({behavior: "smooth", block: "nearest"});
+});
+
+document.getElementById("btn-export-user-rules")?.addEventListener("click", () => {
+  window.location.href = `${BASE}/api/config/usuarios/rules/export`;
+});
+
+document.getElementById("inp-import-user-rules")?.addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append("file", file);
+  const res  = await fetch(`${BASE}/api/config/usuarios/rules/import`, {method: "POST", body: fd});
+  const data = await res.json();
+  if (res.ok) {
+    showToast(`✓ ${data.reglas} reglas importadas`, "ok", 3000);
+    loadUsuarios();
+  } else {
+    showToast(`❌ ${data.detail || "Error al importar"}`, "err", 0);
+  }
+  e.target.value = "";
 });
 
 document.getElementById("btn-apply-user-rules")?.addEventListener("click", async () => {

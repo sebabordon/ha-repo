@@ -1,3 +1,14 @@
+## 0.5.25
+
+- **Reglas de persona: misma lógica que reglas de categorización** — todas las mejoras de v0.5.24 aplicadas a la sección "Reglas de asignación de persona":
+  - **Word boundary fix** (`db.py`): `apply_user_rules` usaba `p.upper() in desc_upper` (substring sin límite de palabra). Ahora usa `\b...\b` con regex, igual que el motor de categorías.
+  - **Filtro por fuentes** por regla: nuevo campo `fuentes` preservado en `PUT /config/usuarios` y pasado al motor. Si se completa, la regla solo aplica a movimientos de esas fuentes.
+  - **Drag-to-reorder** con handle `⠿` en cada tarjeta de persona.
+  - **Warning de keywords duplicadas** en rojo cuando una palabra aparece en más de una regla.
+  - **Export / Import** (`GET /config/usuarios/rules/export`, `POST /config/usuarios/rules/import`) con validación YAML.
+  - **Dry-run "Probar"** por regla: reutiliza el modal existente con modo `"user"` — muestra persona actual vs. nueva, selección por checkbox y `POST /config/usuarios/apply-selected` para aplicar los seleccionados.
+  - Número de orden `#N` visible en cada tarjeta.
+
 ## 0.5.24
 
 - **Fix: coincidencia parcial silenciosa en reglas de categorización** (`categorizer.py`): el regex no tenía word boundaries, por lo que "coto" matcheaba "PSICOTOLOGO", "dia" matcheaba "MEDIACION", etc. Ahora cada keyword se envuelve con `\b...\b` para coincidir solo en límites de palabra.

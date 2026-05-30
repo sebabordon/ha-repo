@@ -395,10 +395,12 @@
               <h2>Reglas de asignación de persona</h2>
               <button id="btn-add-user-rule" class="btn">+ Nueva regla</button>
               <button id="btn-apply-user-rules" class="btn">Reaplicar a todos</button>
+              <button id="btn-export-user-rules" class="btn btn-sm">⬇ Exportar</button>
+              <label class="btn btn-sm" style="cursor:pointer">⬆ Importar<input type="file" id="inp-import-user-rules" accept=".yaml,.yml" style="display:none"></label>
             </div>
             <p class="rules-hint">
               Definí palabras clave para asignar automáticamente una persona al importar.
-              La primera regla que coincida con la descripción del gasto gana.
+              La primera regla que coincida gana. Arrastrá con <strong>⠿</strong> para reordenar.
               "Reaplicar a todos" reasigna los movimientos ya importados.
             </p>
             <div id="user-rules-list"></div>
@@ -668,9 +670,12 @@
         <div class="rp-filters">
           <label>Desde <input type="date" id="rp-desde"></label>
           <label>Hasta <input type="date" id="rp-hasta"></label>
-          <label class="rp-manuales-label"><input type="checkbox" id="rp-manuales"> Incluir manuales</label>
+          <label class="rp-manuales-label" id="rp-manuales-row"><input type="checkbox" id="rp-manuales"> Incluir manuales</label>
           <button id="btn-rp-run" class="btn btn-primary btn-sm" onclick="runRulePreview()">Buscar</button>
         </div>
+        <!-- Hidden spans used to pass column header labels into the dynamically rendered table -->
+        <span id="rp-col-actual" style="display:none">Categoría actual</span>
+        <span id="rp-col-nueva"  style="display:none">Nueva</span>
         <div id="rp-results"></div>
       </div>
       <div class="modal-footer" id="rp-footer" style="display:none">
