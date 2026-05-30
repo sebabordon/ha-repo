@@ -13,18 +13,32 @@ Cómo obtener el Access Token:
 El token se envía como:  Authorization: Bearer {access_token}
 
 Endpoints usados:
-  GET /users/me                          → ID y datos del usuario autenticado
-  GET /v1/payments/search?payer.id=…    → pagos realizados (egresos)
-  GET /v1/payments/search?collector.id=… → cobros recibidos (ingresos)
-  GET /users/{user_id}/mercadopago_account/balance → saldo disponible
+  GET  /users/me                            → ID y datos del usuario autenticado
+  GET  /v1/payments/search?payer.id=…      → pagos realizados (egresos)
+  GET  /v1/payments/search?collector.id=…  → cobros recibidos (ingresos)
+  GET  /users/{user_id}/mercadopago_account/balance → saldo disponible
+  POST /v1/account/release_report          → solicitar reporte de movimientos
+  GET  /v1/account/release_report/list     → estado del reporte
+  GET  /v1/account/release_report/{file}   → descargar CSV del reporte
 
 Pagos con tarjeta de crédito (payment_type_id == "credit_card"):
   Se EXCLUYEN. Esos cargos aparecen en el resumen de la tarjeta (AMEX, BBVA,
   Galicia, etc.) y se importan vía PDF. Importarlos también desde MP sería
   un duplicado. Solo se importan pagos desde billetera (account_money),
   débito, transferencias, QR, etc.
+
+Release report:
+  Cubre movimientos que no aparecen en /v1/payments/search, principalmente
+  transferencias a CVU/CBU externo ("Retiro a CBU"). Se genera de forma
+  asincrónica: POST crea el reporte, se hace polling hasta que esté listo
+  (status="processed") y luego se descarga el CSV.
+  Dedup: filas cuyo SOURCE_ID coincide con un payment_id ya importado se
+  omiten; solo se importan los movimientos nuevos.
 """
 
+import asyncio
+import csv as csv_mod
+import io
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
@@ -102,7 +116,9 @@ class MercadoPagoScraper(BaseScraper):
                 existing_ids = _get_existing_payment_ids(dias)
                 _l(f"Payment IDs ya conocidos en DB: {len(existing_ids)}")
 
-                # 3. Egresos e ingresos
+                # 3. Egresos e ingresos vía /v1/payments/search
+                today_art  = datetime.now(_ART).date()
+                since_date = today_art - timedelta(days=dias - 1)
                 movimientos, stats = await self._fetch_all(
                     client, user_id, dias, existing_ids, _l, debug_log
                 )
@@ -111,6 +127,13 @@ class MercadoPagoScraper(BaseScraper):
                     f"{stats['ingresos']} ingresos "
                     f"({stats['skipped']} ya existían)"
                 )
+
+                # 3b. Release report: captura transferencias a CBU externo que
+                #     no aparecen en /v1/payments/search (ej. retiros a banco).
+                rpt_movs = await self._fetch_release_report(
+                    client, since_date, today_art, existing_ids, _l, debug_log
+                )
+                movimientos.extend(rpt_movs)
 
                 # 4. Saldo
                 saldos = await self._fetch_balance(client, user_id, _l)
@@ -564,6 +587,197 @@ class MercadoPagoScraper(BaseScraper):
             base += f" ({installments} cuotas)"
         return base
 
+    # ── Release report (transferencias a CBU externo) ─────────────────────────
+
+    async def _fetch_release_report(
+        self,
+        client: httpx.AsyncClient,
+        since_date: date,
+        until_date: date,
+        existing_ids: set,
+        log_fn,
+        debug: bool = False,
+    ) -> list[MovimientoRaw]:
+        """
+        Genera y descarga el release report de MP para el período.
+        Captura transferencias a CVU/CBU que no aparecen en /v1/payments/search.
+
+        Flujo:
+          1. POST /v1/account/release_report  → crea el reporte (async)
+          2. Polling GET /v1/account/release_report/list hasta status="processed"
+          3. GET /v1/account/release_report/{file_name}  → descarga el CSV
+          4. Parsea y devuelve movimientos no incluidos en existing_ids.
+
+        Si el token no tiene permisos (403/401) o el reporte no está listo en
+        ~60 segundos, loguea y devuelve lista vacía sin lanzar excepción.
+        """
+        # Convertir fechas ART a UTC para la API de reportes
+        since_dt = datetime(
+            since_date.year, since_date.month, since_date.day, 0, 0, 0, tzinfo=_ART
+        ).astimezone(timezone.utc)
+        until_dt = datetime(
+            until_date.year, until_date.month, until_date.day, 23, 59, 59, tzinfo=_ART
+        ).astimezone(timezone.utc)
+        since_utc = since_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        until_utc = until_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        log_fn("Release report: solicitando …")
+        try:
+            resp = await client.post(
+                f"{_BASE}/v1/account/release_report",
+                json={"begin_date": since_utc, "end_date": until_utc},
+            )
+        except Exception as exc:
+            log_fn(f"Release report: error de red — {exc}")
+            return []
+
+        if resp.status_code in (401, 403):
+            log_fn(f"Release report: sin permiso ({resp.status_code}) — omitido")
+            return []
+        if resp.status_code not in (200, 201, 202, 203):
+            log_fn(f"Release report: POST status {resp.status_code} — omitido")
+            return []
+
+        rdata     = resp.json() if resp.text else {}
+        file_name = (rdata.get("file_name") or rdata.get("id") or "").strip()
+        if not file_name:
+            log_fn("Release report: sin file_name en la respuesta — omitido")
+            return []
+
+        log_fn(f"Release report: esperando {file_name} …")
+
+        # Polling con back-off lineal: hasta ~60 seg
+        csv_text: Optional[str] = None
+        for attempt in range(20):
+            await asyncio.sleep(3)
+            try:
+                list_resp = await client.get(f"{_BASE}/v1/account/release_report/list")
+            except Exception:
+                continue
+            if list_resp.status_code != 200:
+                break
+            for rpt in (list_resp.json() or []):
+                if rpt.get("file_name") == file_name:
+                    if rpt.get("status") == "processed":
+                        try:
+                            dl = await client.get(
+                                f"{_BASE}/v1/account/release_report/{file_name}",
+                                timeout=60,
+                            )
+                            if dl.status_code == 200:
+                                csv_text = dl.text
+                            else:
+                                log_fn(f"Release report: download status {dl.status_code}")
+                        except Exception as exc:
+                            log_fn(f"Release report: error descargando — {exc}")
+                    break  # found in list (may not be ready yet)
+            if csv_text is not None:
+                break
+
+        if csv_text is None:
+            log_fn("Release report: timeout esperando procesamiento — omitido")
+            return []
+
+        return self._parse_release_csv(csv_text, existing_ids, log_fn, debug)
+
+    def _parse_release_csv(
+        self,
+        csv_text: str,
+        existing_ids: set,
+        log_fn,
+        debug: bool = False,
+    ) -> list[MovimientoRaw]:
+        """
+        Parsea el CSV del release report.
+
+        Solo importa filas que representan movimientos de dinero no ya capturados
+        por /v1/payments/search (dedup por SOURCE_ID vs existing_ids).
+
+        Columnas clave del CSV de MP:
+          DATE, SOURCE_ID, RECORD_TYPE, DESCRIPTION,
+          NET_DEBIT_AMOUNT, NET_CREDIT_AMOUNT, GROSS_AMOUNT
+        """
+        movs:    list[MovimientoRaw] = []
+        skipped: int = 0
+
+        # RECORD_TYPE que son solo marcadores de balance, sin movimiento de dinero real
+        _BALANCE_TYPES = frozenset({
+            "initial_available_balance",
+            "total",
+            "available_balance",
+        })
+
+        try:
+            reader = csv_mod.DictReader(io.StringIO(csv_text))
+            for row in reader:
+                record_type = (row.get("RECORD_TYPE")        or "").strip()
+                source_id   = (row.get("SOURCE_ID")          or "").strip()
+                date_str    = (row.get("DATE")               or "")[:10]
+                description = (row.get("DESCRIPTION")        or "").strip()
+                net_debit   = _safe_float(row.get("NET_DEBIT_AMOUNT",  "0"))
+                net_credit  = _safe_float(row.get("NET_CREDIT_AMOUNT", "0"))
+
+                if debug:
+                    log_fn(
+                        f"  [rpt] {record_type:<28} src={source_id or '-':<14} "
+                        f"{date_str} deb={net_debit:>12,.2f} "
+                        f"cre={net_credit:>12,.2f}  {description[:35]}"
+                    )
+
+                # Ignorar filas de balance (sin movimiento real)
+                if record_type in _BALANCE_TYPES:
+                    continue
+
+                # Ignorar filas sin movimiento neto ni fecha
+                if not date_str or len(date_str) < 10:
+                    continue
+                if net_debit == 0 and net_credit == 0:
+                    continue
+
+                # Dedup: si el SOURCE_ID ya está en existing_ids (importado desde
+                # payments/search), saltar para evitar duplicados
+                src_int = _try_int(source_id)
+                if src_int and src_int in existing_ids:
+                    skipped += 1
+                    continue
+
+                # Determinar signo, descripción y moneda
+                if net_debit > 0:
+                    monto = round(net_debit, 2)    # egreso: positivo
+                    desc  = _clean_report_desc(description) or "Retiro a CBU"
+                else:
+                    monto = -round(net_credit, 2)  # ingreso: negativo
+                    desc  = _clean_report_desc(description) or "Depósito bancario"
+
+                raw: dict = {
+                    # Almacenar como payment_id para que _get_existing_payment_ids
+                    # lo encuentre en la próxima ejecución y no duplique.
+                    "payment_id":  src_int,
+                    "source_id":   source_id or None,
+                    "record_type": record_type or None,
+                    "rpt_desc":    description or None,
+                }
+                if self._default_usuario:
+                    raw["usuario"] = self._default_usuario
+
+                movs.append(MovimientoRaw(
+                    fuente      = "mercadopago",
+                    fecha       = date_str,
+                    descripcion = desc,
+                    monto       = monto,
+                    moneda      = "ARS",
+                    raw_data    = raw,
+                ))
+                if src_int:
+                    existing_ids.add(src_int)
+
+        except Exception as exc:
+            log_fn(f"Release report: error parseando CSV — {exc}")
+
+        note = f" ({skipped} ya existían)" if skipped else ""
+        log_fn(f"Release report: {len(movs)} movimientos nuevos{note}")
+        return movs
+
     # ── Saldo ─────────────────────────────────────────────────────────────────
 
     async def _fetch_balance(
@@ -594,6 +808,37 @@ class MercadoPagoScraper(BaseScraper):
 
     def scrape(self, driver, config: dict) -> ScraperResult:
         return ScraperResult(fuente=self.fuente)
+
+
+# ── Helpers CSV ───────────────────────────────────────────────────────────────
+
+def _safe_float(s: object) -> float:
+    """Convierte a float tolerando coma decimal y valores vacíos."""
+    try:
+        return float(str(s or "0").replace(",", "."))
+    except Exception:
+        return 0.0
+
+
+def _try_int(s: str) -> Optional[int]:
+    """Convierte a int; devuelve None si no es posible."""
+    try:
+        return int(s)
+    except Exception:
+        return None
+
+
+def _clean_report_desc(desc: str) -> str:
+    """
+    Limpia descripciones técnicas del release report CSV.
+    Los prefijos pre_payout_/pos_payout_/payout_ no son útiles para el usuario.
+    """
+    if not desc:
+        return ""
+    for prefix in ("pre_payout_", "pos_payout_", "payout_"):
+        if desc.lower().startswith(prefix):
+            return "Retiro a CBU"
+    return desc
 
 
 # ── Helpers DB ────────────────────────────────────────────────────────────────
