@@ -734,7 +734,7 @@ class MercadoPagoScraper(BaseScraper):
             log_fn(f"Settlement report: error descargando — {exc}")
         return None
 
-    def _parse_settlement_csv(
+    def _parse_settlement_csv(  # noqa: C901 (long but linear)
         self,
         csv_text: str,
         existing_ids: set,
@@ -742,125 +742,220 @@ class MercadoPagoScraper(BaseScraper):
         debug: bool = False,
     ) -> list[MovimientoRaw]:
         """
-        Parsea el CSV del settlement report.
+        Parsea el CSV del settlement report usando TODAS las columnas del glosario oficial.
 
-        Formato real según la documentación oficial de MP:
-          - Separador: ";"
-          - Columnas clave: SOURCE_ID, TRANSACTION_DATE, TRANSACTION_AMOUNT,
-            TRANSACTION_CURRENCY, TRANSACTION_TYPE, EXTERNAL_REFERENCE,
-            SETTLEMENT_NET_AMOUNT, METADATA
+        Separador: ";"
+        Columnas usadas: todas las documentadas, con prioridad a DESCRIPTION y PAYER_NAME
+        para construir descripciones legibles.
 
-        TRANSACTION_TYPE observados en producción:
-          SETTLEMENT  → movimiento de billetera (pagos, transferencias, depósitos)
-          PAYOUTS     → retiro a CVU/CBU bancario externo (egreso)
-          WITHDRAWAL  → variante de retiro
-          PAYOUT      → variante de retiro
+        TRANSACTION_TYPE según glosario:
+          SETTLEMENT        → pago aprobado (sign determina egreso/ingreso)
+          REFUND            → devolución de dinero (ingreso)
+          CHARGEBACK        → contracargo (ingreso)
+          DISPUTE           → reclamo (ingreso o egreso según sign)
+          WITHDRAWAL        → retiro a cuenta bancaria (egreso)
+          WITHDRAWAL_CANCEL → retiro cancelado (ingreso — dinero que vuelve)
+          PAYOUT            → extracción de efectivo en ATM (egreso)
+          PAYOUTS           → variante argentina de WITHDRAWAL (egreso)
 
-        SOURCE_ID con 13+ dígitos = ID interno de MP (timestamp ms), no un
-        payment_id. Suelen ser intereses de Mercado Crédito o rendimientos.
+        SOURCE_ID con 13+ dígitos = ID interno MP (timestamp ms), no payment_id.
+        Suelen ser intereses de Mercado Crédito. Se agregan filas con mismo SOURCE_ID
+        para evitar importar parciales del mismo rendimiento.
 
-        Dedup: filas cuyo SOURCE_ID ya está en existing_ids (importadas vía
-        /v1/payments/search) se omiten para no duplicar.
+        Dedup: SOURCE_IDs ya en existing_ids se omiten.
         """
-        movs:    list[MovimientoRaw] = []
-        skipped: int = 0
-
-        # TRANSACTION_TYPE que representan retiros a CVU/CBU externo
+        # TRANSACTION_TYPE → clasificación
         _WITHDRAWAL_TYPES = frozenset({
             "PAYOUTS", "PAYOUT", "WITHDRAWAL", "MONEY_TRANSFER_WITHDRAWAL",
         })
+        _REFUND_TYPES   = frozenset({"REFUND", "CHARGEBACK"})
+        _CANCEL_TYPES   = frozenset({"WITHDRAWAL_CANCEL"})
+        _EMPTY_METADATA = frozenset({"[{}]", "{}", "[]", ""})
+
+        movs:    list[MovimientoRaw] = []
+        skipped: int = 0
+
+        # ── Pre-leer y agregar filas con mismo SOURCE_ID ──────────────────────
+        # Varios SOURCE_IDs de 13 dígitos (rendimientos) aparecen en múltiples
+        # filas con montos parciales. Los sumamos para importar el total correcto.
+        try:
+            raw_rows = list(csv_mod.DictReader(io.StringIO(csv_text), delimiter=";"))
+        except Exception as exc:
+            log_fn(f"Settlement report: error leyendo CSV — {exc}")
+            return []
+
+        # Agrupar: clave = source_id si no vacío, sino posición en la lista
+        aggregated: dict = {}
+        for i, row in enumerate(raw_rows):
+            sid = (row.get("SOURCE_ID") or "").strip()
+            key = sid if sid else f"__row_{i}"
+            if key in aggregated:
+                aggregated[key]["amount"] += _safe_float(
+                    row.get("TRANSACTION_AMOUNT", "0")
+                )
+                aggregated[key]["net_amt"] += _safe_float(
+                    row.get("SETTLEMENT_NET_AMOUNT", "0")
+                )
+            else:
+                aggregated[key] = {
+                    "row":    row,
+                    "amount": _safe_float(row.get("TRANSACTION_AMOUNT", "0")),
+                    "net_amt": _safe_float(row.get("SETTLEMENT_NET_AMOUNT", "0")),
+                }
 
         try:
-            reader = csv_mod.DictReader(io.StringIO(csv_text), delimiter=";")
-            for row in reader:
-                # ── Leer TODAS las columnas disponibles ──────────────────────
+            for key, agg in aggregated.items():
+                row     = agg["row"]
+                amount  = agg["amount"]
+                net_amt = agg["net_amt"]
+
+                # ── Leer todas las columnas del glosario ─────────────────────
                 tx_type    = (row.get("TRANSACTION_TYPE")    or "").strip().upper()
                 source_id  = (row.get("SOURCE_ID")           or "").strip()
                 ext_ref    = (row.get("EXTERNAL_REFERENCE")  or "").strip()
                 date_str   = (row.get("TRANSACTION_DATE")    or "")[:10]
-                amount     = _safe_float(row.get("TRANSACTION_AMOUNT",    "0"))
-                net_amt    = _safe_float(row.get("SETTLEMENT_NET_AMOUNT", "0"))
                 currency   = (row.get("TRANSACTION_CURRENCY") or "ARS").strip()
-                metadata   = (row.get("METADATA")            or "").strip()
+                description= (row.get("DESCRIPTION")         or "").strip()
+                payer_name = (row.get("PAYER_NAME")          or "").strip()
+                payer_id_t = (row.get("PAYER_ID_TYPE")       or "").strip()
+                payer_id_n = (row.get("PAYER_ID_NUMBER")     or "").strip()
                 pay_method = (row.get("PAYMENT_METHOD")      or "").strip()
                 pay_mtype  = (row.get("PAYMENT_METHOD_TYPE") or "").strip()
-                fee_amt    = _safe_float(row.get("FEE_AMOUNT",           "0"))
-                real_amt   = _safe_float(row.get("REAL_AMOUNT",          "0"))
+                poi_bank   = (row.get("POI_BANK_NAME")       or "").strip()
+                poi_wallet = (row.get("POI_WALLET_NAME")     or "").strip()
+                store_name = (row.get("STORE_NAME")          or "").strip()
+                store_id   = (row.get("STORE_ID")            or "").strip()
+                pos_name   = (row.get("POS_NAME")            or "").strip()
+                pos_id     = (row.get("POS_ID")              or "").strip()
                 order_id   = (row.get("ORDER_ID")            or "").strip()
                 pack_id    = (row.get("PACK_ID")             or "").strip()
                 ship_id    = (row.get("SHIPPING_ID")         or "").strip()
                 installm   = (row.get("INSTALLMENTS")        or "").strip()
-                coupon     = _safe_float(row.get("COUPON_AMOUNT",        "0"))
-                mkp_fee    = _safe_float(row.get("MKP_FEE_AMOUNT",       "0"))
+                franchise  = (row.get("FRANCHISE")           or "").strip()
+                last4      = (row.get("LAST_FOUR_DIGITS")    or "").strip()
+                bus_unit   = (row.get("BUSINESS_UNIT")       or "").strip()
+                sub_unit   = (row.get("SUB_UNIT")            or "").strip()
+                fee_amt    = _safe_float(row.get("FEE_AMOUNT",            "0"))
+                real_amt   = _safe_float(row.get("REAL_AMOUNT",           "0"))
+                coupon     = _safe_float(row.get("COUPON_AMOUNT",         "0"))
+                mkp_fee    = _safe_float(row.get("MKP_FEE_AMOUNT",        "0"))
+                tax_amt    = _safe_float(row.get("TAXES_AMOUNT",          "0"))
+                metadata   = (row.get("METADATA")            or "").strip()
 
                 if debug:
-                    # Mostrar todas las columnas no vacías para facilitar análisis
                     parts = [
-                        f"  [rpt] {tx_type:<14} src={source_id or '-':<15} "
+                        f"  [rpt] {tx_type:<16} src={source_id or '-':<15} "
                         f"{date_str} amt={amount:>14,.2f} {currency}"
                     ]
-                    if pay_mtype:  parts.append(f"pmt={pay_mtype}")
-                    if pay_method: parts.append(f"pm={pay_method}")
-                    if net_amt:    parts.append(f"net={net_amt:,.2f}")
-                    if fee_amt:    parts.append(f"fee={fee_amt:,.2f}")
-                    if ext_ref:    parts.append(f"ext={ext_ref[:30]}")
-                    if order_id:   parts.append(f"order={order_id}")
-                    if metadata:   parts.append(f"meta={metadata[:40]}")
+                    if pay_mtype:   parts.append(f"pmt={pay_mtype}")
+                    if description: parts.append(f"desc={description[:35]}")
+                    if payer_name:  parts.append(f"payer={payer_name[:20]}")
+                    if store_name:  parts.append(f"store={store_name[:20]}")
+                    if poi_bank:    parts.append(f"bank={poi_bank[:20]}")
+                    if ext_ref:     parts.append(f"ext={ext_ref[:25]}")
+                    if metadata and metadata not in _EMPTY_METADATA:
+                        parts.append(f"meta={metadata[:30]}")
                     log_fn("  ".join(parts))
 
-                # Ignorar filas sin fecha o sin monto
+                # Ignorar filas sin fecha o monto nulo
                 if not date_str or len(date_str) < 10:
                     continue
                 if amount == 0 and net_amt == 0:
                     continue
 
-                # Dedup: si el SOURCE_ID coincide con un payment ya importado → saltar
+                # Dedup
                 src_int = _try_int(source_id)
                 if src_int and src_int in existing_ids:
                     skipped += 1
                     continue
 
-                # ── Determinar dirección y descripción ────────────────────────
-                effective_amount = abs(net_amt) if net_amt != 0 else abs(amount)
-                is_withdrawal    = tx_type in _WITHDRAWAL_TYPES
-                is_egreso        = is_withdrawal or amount < 0
+                # ── Clasificar tipo de operación ──────────────────────────────
+                is_withdrawal = tx_type in _WITHDRAWAL_TYPES
+                is_refund     = tx_type in _REFUND_TYPES
+                is_cancel     = tx_type in _CANCEL_TYPES
+                is_egreso     = is_withdrawal or (
+                    not is_refund and not is_cancel and amount < 0
+                )
 
+                effective = abs(net_amt) if net_amt != 0 else abs(amount)
+
+                # ── Construir descripción ─────────────────────────────────────
+                # Prioridad: DESCRIPTION → PAYER_NAME → store/pos → ext_ref → genérico
                 if is_egreso:
-                    monto = round(effective_amount, 2)    # egreso: positivo
-                    desc  = "Retiro a CVU/CBU" if is_withdrawal else (
-                        _clean_report_desc(ext_ref) or "Egreso"
-                    )
-                else:
-                    monto = -round(effective_amount, 2)   # ingreso: negativo
-                    # IDs de 13+ dígitos = timestamp interno MP (intereses, rendimientos)
-                    if len(source_id) >= 13 and source_id.isdigit():
-                        desc = "Intereses/Rendimientos"
+                    monto = round(effective, 2)
+                    if description:
+                        desc = description
+                    elif is_withdrawal:
+                        desc = "Retiro a CVU/CBU"
                     else:
-                        desc = _clean_report_desc(ext_ref) or tx_type or "Liquidación"
+                        desc = _clean_report_desc(ext_ref) or "Egreso"
+
+                elif is_refund:
+                    monto = -round(effective, 2)
+                    desc  = description or "Devolución/Contracargo"
+
+                elif is_cancel:
+                    monto = -round(effective, 2)
+                    desc  = description or "Retiro cancelado"
+
+                elif len(source_id) >= 13 and source_id.isdigit():
+                    # ID interno MP (rendimientos/intereses Mercado Crédito)
+                    monto = -round(effective, 2)
+                    desc  = description or "Intereses/Rendimientos"
+
+                else:
+                    # Ingreso genérico: priorizar PAYER_NAME si viene
+                    monto = -round(effective, 2)
+                    if payer_name and description:
+                        desc = f"{payer_name} — {description}"
+                    elif payer_name:
+                        desc = payer_name
+                    elif description:
+                        desc = description
+                    else:
+                        desc = (
+                            store_name or pos_name or
+                            _clean_report_desc(ext_ref) or
+                            tx_type or "Ingreso"
+                        )
 
                 moneda = "USD" if currency == "USD" else "ARS"
 
-                # ── raw_data: todas las columnas con valor ─────────────────────
+                # ── raw_data: todas las columnas con valor ────────────────────
                 raw: dict = {
-                    # payment_id = source_id para que _get_existing_payment_ids
-                    # lo reconozca en la próxima ejecución y no lo duplique.
-                    "payment_id":         src_int,
-                    "source_id":          source_id  or None,
-                    "transaction_type":   tx_type    or None,
-                    "external_ref":       ext_ref    or None,
-                    "payment_method":     pay_method or None,
-                    "payment_method_type":pay_mtype  or None,
-                    "order_id":           order_id   or None,
-                    "pack_id":            pack_id    or None,
-                    "shipping_id":        ship_id    or None,
-                    "installments":       installm   or None,
-                    "fee_amount":         fee_amt    or None,
-                    "real_amount":        real_amt   or None,
-                    "coupon_amount":      coupon     or None,
-                    "mkp_fee_amount":     mkp_fee    or None,
-                    "metadata":           metadata   or None,
+                    "payment_id":          src_int,
+                    "source_id":           source_id   or None,
+                    "transaction_type":    tx_type     or None,
+                    "external_ref":        ext_ref     or None,
+                    "description":         description or None,
+                    "payer_name":          payer_name  or None,
+                    "payer_id":            (f"{payer_id_t}:{payer_id_n}"
+                                           if payer_id_t and payer_id_n else None),
+                    "payment_method":      pay_method  or None,
+                    "payment_method_type": pay_mtype   or None,
+                    "poi_bank_name":       poi_bank    or None,
+                    "poi_wallet_name":     poi_wallet  or None,
+                    "store_name":          store_name  or None,
+                    "store_id":            store_id    or None,
+                    "pos_name":            pos_name    or None,
+                    "pos_id":              pos_id      or None,
+                    "order_id":            order_id    or None,
+                    "pack_id":             pack_id     or None,
+                    "shipping_id":         ship_id     or None,
+                    "installments":        installm    or None,
+                    "franchise":           franchise   or None,
+                    "last_four_digits":    last4       or None,
+                    "business_unit":       bus_unit    or None,
+                    "sub_unit":            sub_unit    or None,
+                    "fee_amount":          fee_amt     or None,
+                    "real_amount":         real_amt    or None,
+                    "coupon_amount":       coupon      or None,
+                    "mkp_fee_amount":      mkp_fee     or None,
+                    "taxes_amount":        tax_amt     or None,
+                    "metadata": (
+                        metadata if metadata not in _EMPTY_METADATA else None
+                    ),
                 }
-                # Limpiar claves con None para no inflar el JSON
                 raw = {k: v for k, v in raw.items() if v is not None}
                 if self._default_usuario:
                     raw["usuario"] = self._default_usuario

@@ -1,3 +1,7 @@
+## 0.5.18
+
+- **Settlement report: parser completo según glosario oficial MP**: lee todas las columnas documentadas (`DESCRIPTION`, `PAYER_NAME`, `PAYER_ID_TYPE/NUMBER`, `POI_BANK_NAME`, `POI_WALLET_NAME`, `STORE_NAME/ID`, `POS_NAME/ID`, `FRANCHISE`, `LAST_FOUR_DIGITS`, `BUSINESS_UNIT`, `SUB_UNIT`, `TAXES_AMOUNT`, etc.). Descripción prioriza `DESCRIPTION` → `PAYER_NAME` → store/pos → fallback genérico. Manejo correcto de todos los `TRANSACTION_TYPE` del glosario: `REFUND`/`CHARGEBACK` → ingreso "Devolución/Contracargo", `WITHDRAWAL_CANCEL` → ingreso "Retiro cancelado". Pre-agrega filas con mismo `SOURCE_ID` (rendimientos de Mercado Crédito que MP divide en múltiples filas).
+
 ## 0.5.17
 
 - **Settlement report: lectura de todas las columnas del CSV**: el parser ahora lee y almacena en `raw_data` todas las columnas disponibles (`PAYMENT_METHOD`, `PAYMENT_METHOD_TYPE`, `FEE_AMOUNT`, `REAL_AMOUNT`, `ORDER_ID`, `PACK_ID`, `SHIPPING_ID`, `INSTALLMENTS`, `COUPON_AMOUNT`, `MKP_FEE_AMOUNT`, `METADATA`). El log `[rpt]` en modo debug muestra todas las columnas no vacías por fila para facilitar el análisis de nuevos `TRANSACTION_TYPE`. Las claves con valor `None` se omiten del JSON para no inflar el almacenamiento.
