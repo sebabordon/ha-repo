@@ -1649,17 +1649,31 @@ function _twMakeItem(g, side) {
 }
 
 function renderTwCandidates() {
-  const { egresos, ingresos } = _twData;
+  const { egresos, ingresos, suggestions } = _twData;
+  const showAll = document.getElementById("chk-tw-show-all")?.checked;
+
+  let visibleEgresos, visibleIngresos;
+  if (showAll) {
+    visibleEgresos  = egresos;
+    visibleIngresos = ingresos;
+  } else {
+    const sugOutIds = new Set(suggestions.map(s => s[0]));
+    const sugInIds  = new Set(suggestions.map(s => s[1]));
+    // Also keep anything already in the queue so it stays visible
+    visibleEgresos  = egresos.filter(e  => sugOutIds.has(e.id)  || _twQueuedIds.has(e.id));
+    visibleIngresos = ingresos.filter(i => sugInIds.has(i.id)   || _twQueuedIds.has(i.id));
+  }
+
   const eEl = document.getElementById("tw-egresos");
   const iEl = document.getElementById("tw-ingresos");
-  document.getElementById("tw-egreso-count").textContent  = egresos.length  ? `(${egresos.length})`  : "";
-  document.getElementById("tw-ingreso-count").textContent = ingresos.length ? `(${ingresos.length})` : "";
+  document.getElementById("tw-egreso-count").textContent  = visibleEgresos.length  ? `(${visibleEgresos.length})`  : "";
+  document.getElementById("tw-ingreso-count").textContent = visibleIngresos.length ? `(${visibleIngresos.length})` : "";
   eEl.innerHTML = "";
-  if (!egresos.length)  eEl.innerHTML = `<p class="tw-empty">Sin egresos sin parear</p>`;
-  else egresos.forEach(g => eEl.appendChild(_twMakeItem(g, "egreso")));
+  if (!visibleEgresos.length)  eEl.innerHTML = `<p class="tw-empty">Sin egresos sin parear</p>`;
+  else visibleEgresos.forEach(g => eEl.appendChild(_twMakeItem(g, "egreso")));
   iEl.innerHTML = "";
-  if (!ingresos.length) iEl.innerHTML = `<p class="tw-empty">Sin ingresos sin parear</p>`;
-  else ingresos.forEach(g => iEl.appendChild(_twMakeItem(g, "ingreso")));
+  if (!visibleIngresos.length) iEl.innerHTML = `<p class="tw-empty">Sin ingresos sin parear</p>`;
+  else visibleIngresos.forEach(g => iEl.appendChild(_twMakeItem(g, "ingreso")));
 }
 
 function _twSelectEgreso(g) {
@@ -1885,6 +1899,7 @@ document.getElementById("btn-tw-refresh").addEventListener("click", loadTransfer
 document.getElementById("btn-tw-confirm").addEventListener("click", twConfirm);
 document.getElementById("btn-tw-cancel-select").addEventListener("click", twCancelSelect);
 document.getElementById("btn-tw-mark-single").addEventListener("click", twMarkSingle);
+document.getElementById("chk-tw-show-all").addEventListener("change", renderTwCandidates);
 
 // ── Import batches ────────────────────────────────────────────────────────────
 const _FUENTE_LABEL = {

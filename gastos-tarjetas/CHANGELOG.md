@@ -1,3 +1,7 @@
+## 0.5.36
+
+- **Workspace transferencias: filtro por candidatos con match** (`app.js`, `index.html`): por defecto las columnas muestran solo los movimientos que tienen al menos un par detectado automáticamente, no todos los movimientos de cuentas. Checkbox "Mostrar todos" para ver el universo completo cuando sea necesario parear manualmente algo que no fue auto-detectado. Los ítems ya en la cola de confirmación siempre permanecen visibles.
+
 ## 0.5.35
 
 - **Workspace de transferencias inter-cuentas** (`static/index.html`, `app.js`, `db.py`, `routes/gastos.py`): reemplaza el modal de detección automática por un sub-tab "Transferencias" dentro de Gastos con interacción individual. Dos columnas (egresos / ingresos) con items clickeables para armar pares manualmente; botón "Auto-sugerir" pre-llena la cola con los pares detectados automáticamente; cola de confirmación con botón ✕ por par; sección colapsable "Ya emparejados" con botón "Deshacer" por par; "Marcar solo este" para transferencias sin contrapartida importada. La detección automática ya no está hardcodeada a bbva_cuenta↔mercadopago — ahora soporta cualquier par de cuentas no-tarjeta (bbva_cuenta, mercadopago, invertironline, etc.). Nuevos endpoints: `GET /api/gastos/transfer-workspace` y `POST /api/gastos/unmark-transfers`.
