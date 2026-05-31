@@ -21,6 +21,7 @@ de movimientos de tarjeta — el scraper importa todo lo que devuelve la API.
 """
 
 import logging
+import os
 import re
 from typing import Optional
 
@@ -118,79 +119,84 @@ class BbvaTarjetasScraper(BbvaScraper):
 
     def _extract_tarjetas(self, json_body: dict, log_fn) -> list[dict]:
         """
-        Parsea la respuesta de GET /cliente/productos/tarjetas y devuelve
-        lista de {id, tipo, nombre, raw}.
+        Parsea la respuesta de GET /cliente/productos/tarjetas.
 
-        Loguea la estructura completa para que el usuario pueda calibrar
-        los nombres de campos si BBVA los cambia.
+        BBVA devuelve las tarjetas en listas separadas por tipo bajo result:
+          "tarjetasCreditoVisa":       [...] → tipo VISA
+          "tarjetasCreditoMastercard": [...] → tipo MC
+          "tarjetasCreditoAmex":       [...] → (ignoradas, usa scraper amex)
+
+        El tipo se deduce del nombre de la clave; si no matchea, se intenta
+        por el texto de los campos del item.
         """
         result = json_body.get("result") or json_body
-
-        # La API puede devolver la lista bajo distintas claves
-        candidates = []
-        for key in ("tarjetas", "creditCards", "cards", "productos", "data"):
-            v = result.get(key) if isinstance(result, dict) else None
-            if isinstance(v, list) and v:
-                log_fn(f"  Lista de tarjetas en campo '{key}': {len(v)} items")
-                candidates = v
-                break
-
-        # Si no encontramos una lista conocida, intentar con el resultado directo
-        if not candidates and isinstance(result, list):
-            candidates = result
-
-        if not candidates:
-            log_fn(f"  [diag] Estructura completa del JSON: {str(json_body)[:2000]}")
+        if not isinstance(result, dict):
+            log_fn(f"  [diag] result no es dict: {str(json_body)[:500]}")
             return []
 
-        log_fn(f"  [diag] Keys del primer item: {sorted(candidates[0].keys()) if candidates else []}")
+        # Determinar tipo por nombre de clave
+        def _tipo_from_key(key: str) -> Optional[str]:
+            k = key.lower()
+            if "visa" in k:
+                return "VISA"
+            if "master" in k:
+                return "MC"
+            return None
 
         tarjetas = []
-        for item in candidates:
-            # ID de producto (múltiples nombres posibles)
-            id_tj = (
-                item.get("id") or item.get("idProducto") or
-                item.get("contractId") or item.get("contrato") or
-                item.get("numeroCuenta") or ""
-            )
-
-            # Texto descriptivo para detectar Visa vs MC
-            texto = " ".join(str(item.get(k) or "") for k in (
-                "descripcion", "description", "marca", "brand",
-                "alias", "nombre", "name", "tipo", "type",
-                "producto", "product",
-            ))
-
-            tipo = None
-            if _VISA_RE.search(texto):
-                tipo = "VISA"
-            elif _MC_RE.search(texto):
-                tipo = "MC"
-            else:
-                log_fn(f"  Tarjeta sin tipo reconocido — texto: {texto[:120]!r}")
-                log_fn(f"  [diag] Item completo: {item}")
+        for key, items in result.items():
+            if not isinstance(items, list) or not items:
                 continue
 
-            nombre = (
-                item.get("alias") or item.get("descripcion") or
-                item.get("description") or item.get("nombre") or
-                ("Tarjeta Visa" if tipo == "VISA" else "Tarjeta Mastercard")
-            )
+            tipo_key = _tipo_from_key(key)
+            if tipo_key is None and not any(
+                k in key.lower() for k in ("tarjeta", "credito", "credit", "card")
+            ):
+                continue  # no parece una lista de tarjetas
 
-            # Saldo actual (si lo devuelve la lista)
-            saldo_raw = (
-                item.get("saldo") or item.get("balance") or
-                item.get("saldoActual") or item.get("importe") or ""
-            )
+            log_fn(f"  Clave '{key}': {len(items)} items (tipo_key={tipo_key})")
 
-            tarjetas.append({
-                "id":        str(id_tj),
-                "tipo":      tipo,
-                "nombre":    str(nombre)[:80],
-                "saldo_raw": saldo_raw,
-                "raw":       item,
-            })
-            log_fn(f"  Tarjeta: tipo={tipo} nombre={nombre!r} id={id_tj}")
+            for item in items:
+                id_tj = (
+                    item.get("id") or item.get("idProducto") or
+                    item.get("contractId") or item.get("contrato") or ""
+                )
+
+                # Tipo: desde la clave o desde los campos del item
+                tipo = tipo_key
+                if tipo is None:
+                    texto = " ".join(str(item.get(k) or "") for k in (
+                        "alias", "descripcion", "description",
+                        "marca", "brand", "tipo", "type",
+                        "tipoProducto",
+                    ))
+                    # También buscar en tipoProducto anidado
+                    tp = item.get("tipoProducto") or {}
+                    if isinstance(tp, dict):
+                        texto += " " + str(tp.get("descripcion") or "")
+                    if _VISA_RE.search(texto):
+                        tipo = "VISA"
+                    elif _MC_RE.search(texto):
+                        tipo = "MC"
+                    else:
+                        log_fn(f"  Tipo no reconocido para item id={id_tj}: {str(item)[:200]}")
+                        continue
+
+                nombre = (
+                    item.get("alias") or
+                    (item.get("tipoProducto") or {}).get("descripcion") or
+                    item.get("descripcion") or
+                    ("Tarjeta Visa" if tipo == "VISA" else "Tarjeta Mastercard")
+                )
+                numero = item.get("numero") or ""
+
+                tarjetas.append({
+                    "id":     str(id_tj),
+                    "tipo":   tipo,
+                    "nombre": f"{nombre} {numero}".strip()[:80],
+                    "raw":    item,
+                })
+                log_fn(f"  Tarjeta: tipo={tipo} nombre={nombre!r} numero={numero} id={id_tj}")
 
         return tarjetas
 

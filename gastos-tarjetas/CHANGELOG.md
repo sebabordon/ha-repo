@@ -1,3 +1,7 @@
+## 0.5.31
+
+- **Fix scraper BBVA tarjetas: detección de tarjetas** (`scrapers/bbva_tarjetas.py`): la API devuelve las tarjetas bajo claves `tarjetasCreditoVisa` y `tarjetasCreditoMastercard` (no `tarjetas`). `_extract_tarjetas` ahora itera sobre todas las claves del `result` e infiere el tipo (VISA/MC) del nombre de la clave; como fallback busca en los campos `alias`/`tipoProducto.descripcion` del item.
+
 ## 0.5.30
 
 - **Scraper BBVA Tarjetas — reescritura con API via fetch()** (`scrapers/bbva_tarjetas.py`): abandona el enfoque DOM/shadow-DOM y adopta exactamente la misma estrategia que el scraper de cuentas: hereda `BbvaScraper` (login, sesión, `_api_request`) y solo overridea `scrape()` para llamar `GET /cliente/productos/tarjetas` y `POST /cliente/productos/tarjetas/movimientos`. Detecta Visa/MC por el texto del campo `marca`/`descripcion`/`alias` de la API. El primer run loguea la estructura completa del JSON para calibrar nombres de campos y endpoints si BBVA los cambia.
