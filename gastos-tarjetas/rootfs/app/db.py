@@ -73,6 +73,15 @@ def init_db():
         if "import_id" not in gcols:
             conn.execute("ALTER TABLE gastos ADD COLUMN import_id INTEGER")
 
+        # Confirmed transfer pairs — explicit link between egreso and ingreso sides
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS transfer_pairs (
+                id_out INTEGER NOT NULL,
+                id_in  INTEGER NOT NULL,
+                PRIMARY KEY (id_out, id_in)
+            )
+        """)
+
         # Ignored transfer suggestions — pairs the user dismissed as non-transfers
         conn.execute("""
             CREATE TABLE IF NOT EXISTS transfer_ignores (
@@ -844,7 +853,8 @@ def get_ignored_transfer_pairs() -> list[dict]:
 
 
 def mark_transfers(id_pairs: list[tuple[int, int]]):
-    """Mark both sides of each transfer pair as categoria='Transferencia Intercuentas'."""
+    """Mark both sides of each transfer pair as categoria='Transferencia Intercuentas'
+    and record the explicit link in transfer_pairs."""
     ids = list({i for pair in id_pairs for i in pair})
     if not ids:
         return
@@ -853,6 +863,10 @@ def mark_transfers(id_pairs: list[tuple[int, int]]):
         conn.execute(
             f"UPDATE gastos SET categoria='Transferencia Intercuentas', categoria_fuente='auto' WHERE id IN ({placeholders})",
             ids,
+        )
+        conn.executemany(
+            "INSERT OR IGNORE INTO transfer_pairs (id_out, id_in) VALUES (?,?)",
+            [(int(p[0]), int(p[1])) for p in id_pairs],
         )
 
 
@@ -883,26 +897,64 @@ def get_transfer_candidates() -> dict:
     return {"egresos": egresos, "ingresos": ingresos}
 
 
-def get_existing_transfer_pairs(days_window: int = 3) -> dict:
+def get_existing_transfer_pairs(days_window: int = 60) -> dict:
     """
-    Returns existing 'Transferencia Intercuentas' / 'Transferencia' transactions,
-    reconstructing pairs where possible by matching opposite-sign same-amount entries.
+    Returns existing 'Transferencia Intercuentas' / 'Transferencia' transactions.
+
+    Primary source: transfer_pairs table (explicit links written by mark_transfers).
+    Fallback: reconstruction by amount+date proximity for legacy pairs confirmed
+    before transfer_pairs existed.
     Returns {"pairs": [{"out": {...}, "in": {...}}, ...], "singles": [{...}, ...]}
     """
     from datetime import datetime as _dt
     with _conn() as conn:
-        rows = conn.execute(
-            "SELECT id, fecha, descripcion, monto, fuente, moneda "
-            "FROM gastos WHERE categoria IN ('Transferencia Intercuentas','Transferencia') "
-            "AND moneda='ARS' ORDER BY fecha DESC"
+        # 1. Explicit pairs from transfer_pairs table
+        explicit_rows = conn.execute("""
+            SELECT tp.id_out, tp.id_in,
+                   a.fecha AS fecha_out, a.descripcion AS desc_out,
+                   a.monto AS monto_out, a.fuente AS fuente_out,
+                   b.fecha AS fecha_in,  b.descripcion AS desc_in,
+                   b.monto AS monto_in,  b.fuente AS fuente_in
+            FROM transfer_pairs tp
+            JOIN gastos a ON a.id = tp.id_out
+            JOIN gastos b ON b.id = tp.id_in
+            ORDER BY a.fecha DESC
+        """).fetchall()
+
+        # 2. All marked transactions not already in an explicit pair
+        paired_ids = {r["id_out"] for r in explicit_rows} | {r["id_in"] for r in explicit_rows}
+        ph = ",".join("?" * len(paired_ids)) if paired_ids else "NULL"
+        legacy_rows = conn.execute(
+            f"SELECT id, fecha, descripcion, monto, fuente, moneda "
+            f"FROM gastos WHERE categoria IN ('Transferencia Intercuentas','Transferencia') "
+            f"AND moneda='ARS'"
+            + (f" AND id NOT IN ({ph})" if paired_ids else "") +
+            " ORDER BY fecha DESC",
+            list(paired_ids),
         ).fetchall()
-    rows = [dict(r) for r in rows]
+
+    pairs  = [{"out": dict(r), "in": dict(r)} for r in explicit_rows]  # placeholder, fixed below
+    pairs  = [{"out": {k: r[f"{k}_out"] if f"{k}_out" in r.keys() else r[k]
+                        for k in ("id_out","fecha_out","desc_out","monto_out","fuente_out")},
+               "in":  {k: r[f"{k}_in"]  if f"{k}_in"  in r.keys() else r[k]
+                        for k in ("id_in","fecha_in","desc_in","monto_in","fuente_in")}}
+              for r in explicit_rows]
+    # Clean up key names
+    pairs = [{"out": {"id": p["out"]["id_out"], "fecha": p["out"]["fecha_out"],
+                      "descripcion": p["out"]["desc_out"], "monto": p["out"]["monto_out"],
+                      "fuente": p["out"]["fuente_out"]},
+              "in":  {"id": p["in"]["id_in"],  "fecha": p["in"]["fecha_in"],
+                      "descripcion": p["in"]["desc_in"],  "monto": p["in"]["monto_in"],
+                      "fuente": p["in"]["fuente_in"]}}
+             for p in pairs]
+
+    # Legacy fallback: reconstruct unpaired marked transactions by amount+date
+    legacy = [dict(r) for r in legacy_rows]
     cc = _CC_FUENTES
-    out_rows = [r for r in rows if float(r["monto"]) > 0 and r["fuente"] not in cc]
-    in_rows  = [r for r in rows if float(r["monto"]) < 0 and r["fuente"] not in cc]
+    out_rows = [r for r in legacy if float(r["monto"]) > 0 and r["fuente"] not in cc]
+    in_rows  = [r for r in legacy if float(r["monto"]) < 0 and r["fuente"] not in cc]
     used_out: set = set()
     used_in:  set = set()
-    pairs = []
     for o in out_rows:
         for i in in_rows:
             if i["id"] in used_in:
@@ -920,12 +972,12 @@ def get_existing_transfer_pairs(days_window: int = 3) -> dict:
             used_out.add(o["id"])
             used_in.add(i["id"])
             break
-    singles = [r for r in rows if r["id"] not in used_out and r["id"] not in used_in]
+    singles = [r for r in legacy if r["id"] not in used_out and r["id"] not in used_in]
     return {"pairs": pairs, "singles": singles}
 
 
 def unmark_transfers(ids: list[int]) -> int:
-    """Remove transfer category from given transaction IDs. Returns count updated."""
+    """Remove transfer category from given transaction IDs and delete their pair link."""
     if not ids:
         return 0
     ph = ",".join("?" * len(ids))
@@ -933,6 +985,11 @@ def unmark_transfers(ids: list[int]) -> int:
         cur = conn.execute(
             f"UPDATE gastos SET categoria=NULL, categoria_fuente=NULL WHERE id IN ({ph})",
             ids,
+        )
+        # Remove any transfer_pairs rows that involve these IDs
+        conn.execute(
+            f"DELETE FROM transfer_pairs WHERE id_out IN ({ph}) OR id_in IN ({ph})",
+            ids + ids,
         )
         return cur.rowcount
 

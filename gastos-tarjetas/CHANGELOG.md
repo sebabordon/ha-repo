@@ -1,3 +1,7 @@
+## 0.5.44
+
+- **Tabla transfer_pairs: vínculo explícito entre los dos lados de cada par** (`db.py`, `routes/gastos.py`): `mark_transfers` ahora escribe en la nueva tabla `transfer_pairs(id_out, id_in)` además de setear la categoría. `get_existing_transfer_pairs` lee primero de esa tabla (exacto, sin límite de fechas) y solo usa reconstrucción por monto+fecha para los pares legacy confirmados antes de esta versión. `unmark_transfers` también borra la fila de `transfer_pairs`. Esto elimina el workaround de la ventana de 60 días y los pares con cualquier diferencia de fechas se muestran siempre juntos.
+
 ## 0.5.43
 
 - **Fix workspace transferencias: pares con más de 3 días de diferencia aparecen como "sueltos"** (`routes/gastos.py`): la reconstrucción de pares ya confirmados usaba la misma ventana de 3 días que la detección automática. Como el usuario ya confirmó esos pares, la reconstrucción para display ahora usa 60 días — así pares entre BBVA y MP con 4, 5 o más días de diferencia aparecen juntos en el mismo renglón de "Ya emparejados". La ventana de detección de nuevas sugerencias sigue siendo 3 días.

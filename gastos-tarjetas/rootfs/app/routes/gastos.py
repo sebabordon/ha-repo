@@ -138,7 +138,7 @@ def get_transfer_workspace(request: Request, days: int = Query(3)):
     require_auth(request)
     candidates = get_transfer_candidates()
     suggestions = detect_transfers(days_window=days)
-    existing = get_existing_transfer_pairs(days_window=60)  # reconstruction uses wide window — user already confirmed these
+    existing = get_existing_transfer_pairs()
     return {
         "egresos":     candidates["egresos"],
         "ingresos":    candidates["ingresos"],
