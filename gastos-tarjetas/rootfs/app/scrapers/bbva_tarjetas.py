@@ -40,7 +40,7 @@ _MC_RE   = re.compile(r"\bmastercard\b|\bmaster\b", re.IGNORECASE)
 
 # Endpoints (se ajustan con el diagnóstico del primer run)
 _EP_TARJETAS  = "/cliente/productos/tarjetas"
-_EP_CONSUMOS  = "/cliente/productos/tarjetas/movimientos"
+_EP_CONSUMOS  = "/cliente/productos/tarjetas/consumos"
 
 
 class BbvaTarjetasScraper(BbvaScraper):
@@ -149,6 +149,9 @@ class BbvaTarjetasScraper(BbvaScraper):
                 continue
 
             tipo_key = _tipo_from_key(key)
+            # Ignorar tarjetas de débito y otras listas no relacionadas con crédito
+            if "debito" in key.lower() or "debit" in key.lower():
+                continue
             if tipo_key is None and not any(
                 k in key.lower() for k in ("tarjeta", "credito", "credit", "card")
             ):

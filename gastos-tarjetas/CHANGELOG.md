@@ -1,3 +1,7 @@
+## 0.5.32
+
+- **Fix scraper BBVA tarjetas: endpoint consumos** (`scrapers/bbva_tarjetas.py`): el endpoint correcto es `/cliente/productos/tarjetas/consumos` (no `/movimientos`). También se ignoran explícitamente las `tarjetasDebito` para no generar ruido en el log.
+
 ## 0.5.31
 
 - **Fix scraper BBVA tarjetas: detección de tarjetas** (`scrapers/bbva_tarjetas.py`): la API devuelve las tarjetas bajo claves `tarjetasCreditoVisa` y `tarjetasCreditoMastercard` (no `tarjetas`). `_extract_tarjetas` ahora itera sobre todas las claves del `result` e infiere el tipo (VISA/MC) del nombre de la clave; como fallback busca en los campos `alias`/`tipoProducto.descripcion` del item.
