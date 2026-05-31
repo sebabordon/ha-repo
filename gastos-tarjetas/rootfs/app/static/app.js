@@ -1650,6 +1650,7 @@ async function loadTransferWorkspace() {
   renderTwCandidates();
   renderTwQueue();
   renderTwExisting();
+  renderTwIgnored();
 }
 
 function _twFuenteLabel(f) {
@@ -1716,10 +1717,30 @@ function twPairSuggestion(idx) {
   renderTwQueue();
 }
 
-function twIgnoreSuggestion(idx) {
+async function twIgnoreSuggestion(idx) {
+  const [outId, inId] = _twData.suggestions[idx];
+  const res = await fetch(`${BASE}/api/gastos/ignore-transfer`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id_out: outId, id_in: inId }),
+  });
+  if (!res.ok) { showToast("Error al ignorar", "err"); return; }
   _twData.suggestions.splice(idx, 1);
+  // Add to local ignored list for immediate UI update
+  const eMap = Object.fromEntries(_twData.egresos.map(e => [e.id, e]));
+  const iMap = Object.fromEntries(_twData.ingresos.map(i => [i.id, i]));
+  const out = eMap[outId], inp = iMap[inId];
+  if (out && inp) {
+    _twData.ignored.push({
+      id_out: outId, id_in: inId,
+      fecha_out: out.fecha, desc_out: out.descripcion,
+      monto_out: out.monto, fuente_out: out.fuente,
+      fecha_in: inp.fecha,  desc_in: inp.descripcion,
+      monto_in: inp.monto,  fuente_in: inp.fuente,
+    });
+  }
   renderTwSuggestions();
   renderTwCandidates();
+  renderTwIgnored();
 }
 
 function twPairAll() {
@@ -2000,6 +2021,60 @@ function twToggleExisting() {
   const open  = list.style.display === "none";
   list.style.display  = open ? "" : "none";
   arrow.textContent   = open ? "▾" : "▸";
+}
+
+function renderTwIgnored() {
+  const ignored = _twData.ignored || [];
+  const zone  = document.getElementById("tw-ignored-zone");
+  const list  = document.getElementById("tw-ignored-list");
+  document.getElementById("tw-ignored-count").textContent = ignored.length ? `(${ignored.length})` : "";
+  if (!ignored.length) { zone.style.display = "none"; return; }
+  zone.style.display = "";
+  list.innerHTML = "";
+  ignored.forEach(p => {
+    const row = document.createElement("div");
+    row.className = "tw-pair-row tw-existing-row";
+    const amtOut = _fmtNum2(Math.abs(parseFloat(p.monto_out)));
+    const amtIn  = _fmtNum2(Math.abs(parseFloat(p.monto_in)));
+    row.innerHTML =
+      `<div class="tw-pair-side">` +
+        `<span class="tw-item-date">${p.fecha_out}</span>` +
+        `<span class="badge badge-${p.fuente_out}">${_twFuenteLabel(p.fuente_out)}</span>` +
+        `<span class="tw-item-desc">${escHtml((p.desc_out||"").slice(0,28))}</span>` +
+        `<span class="tw-item-amount tw-amt-egreso">−${amtOut}</span>` +
+      `</div>` +
+      `<span class="tw-pair-arrow">⇄</span>` +
+      `<div class="tw-pair-side">` +
+        `<span class="tw-item-date">${p.fecha_in}</span>` +
+        `<span class="badge badge-${p.fuente_in}">${_twFuenteLabel(p.fuente_in)}</span>` +
+        `<span class="tw-item-desc">${escHtml((p.desc_in||"").slice(0,28))}</span>` +
+        `<span class="tw-item-amount tw-amt-ingreso">+${amtIn}</span>` +
+      `</div>`;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-sm tw-unmark-btn";
+    btn.textContent = "Restaurar";
+    btn.onclick = () => twUnignore(p.id_out, p.id_in);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+}
+
+async function twUnignore(id_out, id_in) {
+  const res = await fetch(`${BASE}/api/gastos/ignore-transfer`, {
+    method: "DELETE", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id_out, id_in }),
+  });
+  if (!res.ok) { showToast("Error al restaurar", "err"); return; }
+  showToast("Sugerencia restaurada", "ok");
+  await loadTransferWorkspace();
+}
+
+function twToggleIgnored() {
+  const list  = document.getElementById("tw-ignored-list");
+  const arrow = document.getElementById("tw-ignored-arrow");
+  const open  = list.style.display === "none";
+  list.style.display = open ? "" : "none";
+  arrow.textContent  = open ? "▾" : "▸";
 }
 
 document.getElementById("btn-tw-autosugerir").addEventListener("click", twAutoSuggest);

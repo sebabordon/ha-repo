@@ -73,6 +73,15 @@ def init_db():
         if "import_id" not in gcols:
             conn.execute("ALTER TABLE gastos ADD COLUMN import_id INTEGER")
 
+        # Ignored transfer suggestions — pairs the user dismissed as non-transfers
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS transfer_ignores (
+                id_out INTEGER NOT NULL,
+                id_in  INTEGER NOT NULL,
+                PRIMARY KEY (id_out, id_in)
+            )
+        """)
+
         # Import batches tracking table
         conn.execute("""
             CREATE TABLE IF NOT EXISTS importaciones (
@@ -779,6 +788,9 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
     params = cc_list + cc_list + excl_params
     with _conn() as conn:
         rows = conn.execute(query, params).fetchall()
+        ignored = {(r[0], r[1]) for r in conn.execute(
+            "SELECT id_out, id_in FROM transfer_ignores"
+        ).fetchall()}
     seen = set()
     result = []
     seen_out: set = set()
@@ -787,11 +799,48 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
         key = tuple(sorted([r["id_out"], r["id_in"]]))
         if key in seen or r["id_out"] in seen_out or r["id_in"] in seen_in:
             continue
+        if (r["id_out"], r["id_in"]) in ignored:
+            continue
         seen.add(key)
         seen_out.add(r["id_out"])
         seen_in.add(r["id_in"])
         result.append(dict(r))
     return result
+
+
+def ignore_transfer_pair(id_out: int, id_in: int) -> None:
+    """Persist a user-dismissed transfer suggestion so it never reappears."""
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO transfer_ignores (id_out, id_in) VALUES (?,?)",
+            (id_out, id_in),
+        )
+
+
+def unignore_transfer_pair(id_out: int, id_in: int) -> None:
+    """Remove a previously ignored transfer suggestion."""
+    with _conn() as conn:
+        conn.execute(
+            "DELETE FROM transfer_ignores WHERE id_out=? AND id_in=?",
+            (id_out, id_in),
+        )
+
+
+def get_ignored_transfer_pairs() -> list[dict]:
+    """Return ignored suggestions whose gastos still exist, with gasto details."""
+    with _conn() as conn:
+        rows = conn.execute("""
+            SELECT ti.id_out, ti.id_in,
+                   a.fecha AS fecha_out, a.descripcion AS desc_out,
+                   a.monto AS monto_out, a.fuente AS fuente_out,
+                   b.fecha AS fecha_in,  b.descripcion AS desc_in,
+                   b.monto AS monto_in,  b.fuente AS fuente_in
+            FROM transfer_ignores ti
+            JOIN gastos a ON a.id = ti.id_out
+            JOIN gastos b ON b.id = ti.id_in
+            ORDER BY a.fecha DESC
+        """).fetchall()
+    return [dict(r) for r in rows]
 
 
 def mark_transfers(id_pairs: list[tuple[int, int]]):

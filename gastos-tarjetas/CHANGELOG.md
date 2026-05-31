@@ -1,3 +1,7 @@
+## 0.5.42
+
+- **Workspace transferencias: Ignorar persiste en DB** (`db.py`, `routes/gastos.py`, `index.html`, `app.js`): el botón "Ignorar" en sugerencias automáticas ahora guarda el par en la tabla `transfer_ignores` — persiste entre recargas y el par no vuelve a aparecer en sugerencias. Nueva sección colapsable "Sugerencias ignoradas" al pie del workspace con botón "Restaurar" para reactivar cualquier par ignorado. `detect_transfers` excluye automáticamente los pares en `transfer_ignores`.
+
 ## 0.5.41
 
 - **Fix dedup BBVA: priorizar descripción estable sobre la temporal** (`db.py`, `scrapers/bbva.py`): "DB TRF INM COE Nro:…" y "TRANSF DEBITO Nro:…" son descripciones que BBVA asigna transitoriamente y reemplaza después por "Transferencia inmediata" / "TRANSFERENCIA". La migración `dedup_bbva_same_saldo_v1` y el dedup in-batch del scraper ahora penalizan las descripciones con "Nro:" o prefijo "DB TRF"/"TRANSF DEBITO", conservando la descripción estable. Si en el mismo batch el duplicado tiene la descripción estable y el ya-almacenado es temporal, el scraper actualiza la descripción on the fly (log `[dup→stable]`).

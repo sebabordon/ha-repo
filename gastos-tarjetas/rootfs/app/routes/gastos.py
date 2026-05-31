@@ -11,6 +11,7 @@ from auth import require_auth
 from db import (list_gastos, list_categorias, monthly_summary,
                 detect_transfers, mark_transfers,
                 get_transfer_candidates, get_existing_transfer_pairs, unmark_transfers,
+                ignore_transfer_pair, unignore_transfer_pair, get_ignored_transfer_pairs,
                 update_categoria, update_usuario, update_gasto_fecha,
                 delete_all_gastos, get_gasto, delete_gasto_manual,
                 list_importaciones, rename_categoria_in_gastos)
@@ -143,6 +144,7 @@ def get_transfer_workspace(request: Request, days: int = Query(3)):
         "ingresos":    candidates["ingresos"],
         "suggestions": [[s["id_out"], s["id_in"]] for s in suggestions],
         "existing":    existing,
+        "ignored":     get_ignored_transfer_pairs(),
     }
 
 
@@ -167,6 +169,28 @@ def post_unmark_transfers(body: dict, request: Request):
     ids = [int(i) for i in body.get("ids", []) if str(i).lstrip("-").isdigit()]
     count = unmark_transfers(ids)
     return {"ok": True, "desmarcados": count}
+
+
+@router.post("/gastos/ignore-transfer")
+def post_ignore_transfer(body: dict, request: Request):
+    require_auth(request)
+    id_out = body.get("id_out")
+    id_in  = body.get("id_in")
+    if not id_out or not id_in:
+        return {"ok": False}
+    ignore_transfer_pair(int(id_out), int(id_in))
+    return {"ok": True}
+
+
+@router.delete("/gastos/ignore-transfer")
+def delete_ignore_transfer(body: dict, request: Request):
+    require_auth(request)
+    id_out = body.get("id_out")
+    id_in  = body.get("id_in")
+    if not id_out or not id_in:
+        return {"ok": False}
+    unignore_transfer_pair(int(id_out), int(id_in))
+    return {"ok": True}
 
 
 @router.delete("/gastos")
