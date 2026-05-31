@@ -331,163 +331,263 @@ class BbvaTarjetasScraper(BaseScraper):
 
     # ── Detección de tarjetas ─────────────────────────────────────────────────
 
+    # JS que recorre todo el DOM incluyendo shadow roots de Lit/Web Components.
+    # Devuelve lista de {href, text, tag} para todos los <a> y elementos
+    # clicables encontrados en cualquier nivel de shadow DOM.
+    _JS_FIND_LINKS = """
+    (function() {
+        var results = [];
+        var seen = new Set();
+        function traverse(root) {
+            if (!root) return;
+            // Links y elementos navegables
+            var links;
+            try { links = root.querySelectorAll('a, [role="link"]'); } catch(e) { links = []; }
+            for (var i = 0; i < links.length; i++) {
+                var a = links[i];
+                var href = a.href || a.getAttribute('href') || '';
+                var text = (a.innerText || a.textContent || '').trim().slice(0, 150);
+                var key  = href + '|' + text.slice(0, 40);
+                if (!seen.has(key) && (href || text)) {
+                    seen.add(key);
+                    results.push({href: href, text: text, tag: (a.tagName||'').toLowerCase()});
+                }
+            }
+            // Recorrer shadow roots
+            var all;
+            try { all = root.querySelectorAll('*'); } catch(e) { all = []; }
+            for (var j = 0; j < all.length; j++) {
+                if (all[j].shadowRoot) traverse(all[j].shadowRoot);
+            }
+        }
+        traverse(document.body);
+        return results;
+    })();
+    """
+
+    # JS que extrae el texto completo del DOM incluyendo shadow roots.
+    # Útil para verificar si "visa" / "mastercard" aparecen en algún lugar.
+    _JS_DEEP_TEXT = """
+    (function() {
+        var parts = [];
+        function traverse(root) {
+            if (!root) return;
+            try {
+                var t = root.innerText || root.textContent || '';
+                if (t.trim()) parts.push(t.trim().slice(0, 200));
+            } catch(e) {}
+            var all;
+            try { all = root.querySelectorAll('*'); } catch(e) { all = []; }
+            for (var i = 0; i < all.length; i++) {
+                if (all[i].shadowRoot) traverse(all[i].shadowRoot);
+            }
+        }
+        traverse(document.body);
+        return parts.join(' ');
+    })();
+    """
+
+    # JS que devuelve el innerHTML del MFE de posición global + sus shadow roots
+    _JS_GP_DUMP = """
+    (function() {
+        var gp = document.getElementById('@bbva/global-position');
+        var root = gp || document.body;
+        var parts = [root.innerHTML ? root.innerHTML.slice(0, 3000) : ''];
+        function shadowDump(node, depth) {
+            if (depth > 6) return;
+            var all;
+            try { all = node.querySelectorAll('*'); } catch(e) { return; }
+            for (var i = 0; i < all.length && parts.join('').length < 8000; i++) {
+                if (all[i].shadowRoot) {
+                    parts.push('<!--shadow:' + (all[i].tagName||'?') + '-->');
+                    parts.push(all[i].shadowRoot.innerHTML.slice(0, 800));
+                    shadowDump(all[i].shadowRoot, depth + 1);
+                }
+            }
+        }
+        shadowDump(root, 0);
+        return parts.join('');
+    })();
+    """
+
     def _find_credit_cards(self, driver, log_fn) -> list[dict]:
         """
         Navega al dashboard de BBVA y busca las tarjetas de crédito visibles.
 
         Devuelve lista de dicts:
-          {"tipo": "VISA"|"MC", "nombre": str, "url": str|None, "element": WebElement|None}
+          {"tipo": "VISA"|"MC", "nombre": str, "url": str|None}
 
         Estrategia:
-          1. Navegar a /fnetcore/ y esperar que Angular renderice los productos.
-          2. Buscar elementos que mencionen "visa" o "mastercard" en el DOM.
-          3. Intentar también las URLs canónicas de tarjeta para descubrir IDs.
+          A. Esperar que el MFE @bbva/global-position renderice contenido real,
+             usando JS para verificar el tamaño del innerHTML.
+          B. Recorrer TODO el shadow DOM via JS para encontrar links con texto
+             "visa" o "mastercard".
+          C. Si hay texto pero no links: hacer click sobre el primer elemento
+             que mencione "visa"/"mastercard" y observar a qué URL navega.
+          D. Log de diagnóstico amplio para calibrar si nada funciona.
         """
-        from selenium.webdriver.common.by import By
+        log_fn("Navegando al dashboard…")
+        driver.get(f"{_BASE_URL}/fnetcore/#/globalposition")
 
-        log_fn("Navegando al dashboard para encontrar tarjetas…")
-        driver.get(f"{_BASE_URL}/fnetcore/")
-        time.sleep(5)
-
-        # Esperar a que Angular monte la posición global (hasta 20s)
-        for _ in range(20):
-            el = self.find(driver,
-                "[id='@bbva/global-position'], "
-                "[id='@bbva/cards'], "
-                "bbva-web-global-position"
-            )
-            if el:
-                break
-            # También aceptar si ya hay contenido de productos en el DOM
-            if self.find(driver, "[class*='product'], [class*='card-item'], bbva-product"):
-                break
-            time.sleep(1)
-
-        # Pausa adicional para que los MFEs terminen de renderizar
-        time.sleep(3)
-
-        log_fn(f"URL tras carga dashboard: {(driver.current_url or '')[:150]}")
-
-        # Volcar diagnóstico del DOM visible
-        try:
-            body_html = driver.execute_script(
-                "return document.body.innerHTML.slice(0, 2000)"
-            )
-            log_fn(f"[diag] body[:2000]: {body_html}")
-        except Exception:
-            pass
-
-        cards: list[dict] = []
-        seen_urls: set[str] = set()
-
-        # ── Estrategia A: buscar por texto de tarjeta en el DOM ───────────────
-        # BBVA renderiza sus productos en web components; el texto del producto
-        # (ej. "Visa Signature", "Mastercard Black") es accesible via innerText.
-        card_selectors = [
-            # Elementos con clases de producto / tarjeta de BBVA
-            "[class*='product-item']",
-            "[class*='card-product']",
-            "[class*='tarjeta']",
-            "bbva-product-card",
-            "bbva-web-product-card",
-            # Links que llevan al detalle de tarjeta
-            "a[href*='tarjeta']",
-            "a[href*='card']",
-            # Cualquier elemento clicable con texto de Visa/MC
-            "[role='listitem']",
-            "[role='article']",
-            "li",
-        ]
-
-        candidates = []
-        for sel in card_selectors:
+        # ── A. Esperar que el MFE renderice contenido (hasta 25s) ────────────
+        # El MFE @bbva/global-position tarda varios segundos en montar.
+        # Lo detectamos por el tamaño del innerHTML del div contenedor.
+        for i in range(25):
             try:
-                els = driver.find_elements(By.CSS_SELECTOR, sel)
-                if els:
-                    log_fn(f"[diag] selector '{sel}': {len(els)} elementos")
-                    candidates.extend(els)
+                length = driver.execute_script(
+                    "var el = document.getElementById('@bbva/global-position');"
+                    "return el ? el.innerHTML.length : 0;"
+                )
+                if length and length > 500:
+                    log_fn(f"MFE global-position listo ({length} chars) tras {i+1}s")
+                    break
             except Exception:
                 pass
+            time.sleep(1)
+        else:
+            log_fn("Timeout esperando MFE global-position (continuando igual)")
 
-        for el in candidates:
-            try:
-                text = (el.text or "").strip()
-                if not text:
-                    # Intentar innerText vía JS
-                    text = driver.execute_script(
-                        "return arguments[0].innerText || ''", el
-                    ) or ""
-                if not text:
-                    continue
+        # Pausa extra para shadow DOM
+        time.sleep(3)
+        log_fn(f"URL: {(driver.current_url or '')[:150]}")
 
-                tipo = None
-                if _VISA_RE.search(text):
-                    tipo = "VISA"
-                elif _MC_RE.search(text):
-                    tipo = "MC"
-                else:
-                    continue
+        # ── Dump diagnóstico (shadow DOM incluido) ────────────────────────────
+        try:
+            dump = driver.execute_script(self._JS_GP_DUMP) or ""
+            log_fn(f"[diag] DOM global-position+shadow[:8000]: {dump[:8000]}")
+        except Exception as exc:
+            log_fn(f"[diag] dump error: {exc}")
 
-                # Obtener URL de destino
-                href = el.get_attribute("href") or ""
-                if not href:
-                    # Buscar el primer <a> hijo
-                    try:
-                        a = el.find_element(By.TAG_NAME, "a")
-                        href = a.get_attribute("href") or ""
-                    except Exception:
-                        pass
+        # ── B. Buscar links con texto Visa/MC en todo el shadow DOM ──────────
+        try:
+            all_links = driver.execute_script(self._JS_FIND_LINKS) or []
+            log_fn(f"[diag] Total links en shadow DOM: {len(all_links)}")
+            log_fn(f"[diag] Primeros 20 links: {all_links[:20]}")
+        except Exception as exc:
+            log_fn(f"[diag] JS_FIND_LINKS error: {exc}")
+            all_links = []
 
-                # Normalizar nombre (primera línea del texto)
-                nombre = text.split("\n")[0].strip()[:80]
+        cards: list[dict] = []
+        seen: set[str] = set()
 
-                key = href or nombre
-                if key in seen_urls:
-                    continue
-                seen_urls.add(key)
+        for item in all_links:
+            text = (item.get("text") or "").strip()
+            href = (item.get("href") or "").strip()
+            tipo = None
+            if _VISA_RE.search(text):
+                tipo = "VISA"
+            elif _MC_RE.search(text):
+                tipo = "MC"
+            else:
+                continue
 
-                cards.append({
-                    "tipo":    tipo,
-                    "nombre":  nombre,
-                    "url":     href or None,
-                    "element": el,
-                })
-                log_fn(f"  Encontrada: tipo={tipo} nombre={nombre!r} url={href[:80]}")
-            except Exception as exc:
-                logger.debug("[bbva-tj] error procesando candidato: %s", exc)
+            key = href or text[:40]
+            if key in seen:
+                continue
+            seen.add(key)
+            nombre = text.split("\n")[0].strip()[:80]
+            cards.append({"tipo": tipo, "nombre": nombre, "url": href or None})
+            log_fn(f"  [B] Encontrada: {tipo} — {nombre!r} → {href[:80]}")
 
-        # ── Estrategia B: URLs canónicas de tarjetas (si A no encontró nada) ──
-        if not cards:
-            log_fn("Estrategia A sin resultados — intentando URLs canónicas…")
-            cards = self._discover_cards_by_url(driver, log_fn)
+        if cards:
+            return cards
 
-        return cards
+        # ── C. Texto sin link: verificar qué texto hay y hacer click ─────────
+        try:
+            deep_text = driver.execute_script(self._JS_DEEP_TEXT) or ""
+            log_fn(f"[diag] Texto completo (shadow, primeros 3000 chars): {deep_text[:3000]}")
+        except Exception as exc:
+            log_fn(f"[diag] JS_DEEP_TEXT error: {exc}")
+            deep_text = ""
 
-    def _discover_cards_by_url(self, driver, log_fn) -> list[dict]:
+        # Si hay texto de tarjeta en el DOM, intentar click-y-observar
+        if _VISA_RE.search(deep_text) or _MC_RE.search(deep_text):
+            log_fn("Texto de tarjeta detectado — intentando click-y-observar URL…")
+            cards = self._find_cards_by_clicking(driver, log_fn)
+            if cards:
+                return cards
+
+        # ── D. Nada encontrado — dejar log para diagnóstico manual ───────────
+        log_fn(
+            "⚠ No se encontraron tarjetas. Revisar el [diag] del DOM para "
+            "identificar los selectores correctos de este BBVA build."
+        )
+        return []
+
+    def _find_cards_by_clicking(self, driver, log_fn) -> list[dict]:
         """
-        Intenta navegar a URLs conocidas de tarjetas BBVA y confirma si carga.
-        Fallback cuando la detección por DOM no funciona.
+        Estrategia de último recurso: busca en el shadow DOM CUALQUIER elemento
+        cuyo innerText contenga "visa" o "mastercard", hace click en él y observa
+        a qué URL navegó el browser. Esa URL se usa como destino de la tarjeta.
         """
-        candidates = [
-            # Rutas hash comunes del SPA de BBVA Argentina
-            (f"{_BASE_URL}/fnetcore/#/tarjeta-credito/visa",        "VISA"),
-            (f"{_BASE_URL}/fnetcore/#/tarjeta-credito/mastercard",  "MC"),
-            (f"{_BASE_URL}/fnetcore/#/tarjetas/credito/visa",       "VISA"),
-            (f"{_BASE_URL}/fnetcore/#/tarjetas/credito/mastercard", "MC"),
-        ]
+        # JS que devuelve el elemento más pequeño (leaf) con texto Visa/MC
+        js_find_el = """
+        (function(pattern) {
+            var re = new RegExp(pattern, 'i');
+            var best = null;
+            function traverse(root) {
+                var all;
+                try { all = root.querySelectorAll('*'); } catch(e) { return; }
+                for (var i = 0; i < all.length; i++) {
+                    var el = all[i];
+                    var t  = (el.innerText || el.textContent || '').trim();
+                    if (re.test(t) && t.length < 200) {
+                        // Preferir el elemento más pequeño (menos texto = más específico)
+                        if (!best || t.length < (best._len || 9999)) {
+                            el._len = t.length;
+                            best = el;
+                        }
+                    }
+                    if (el.shadowRoot) traverse(el.shadowRoot);
+                }
+            }
+            traverse(document.body);
+            return best;
+        })(arguments[0]);
+        """
+
         cards = []
-        for url, tipo in candidates:
+        for tipo, pattern in [("VISA", r"visa"), ("MC", r"mastercard|master\b")]:
             try:
-                driver.get(url)
-                time.sleep(3)
-                cur = driver.current_url or ""
-                # Si la URL se mantuvo y no volvimos al login → válida
-                if "login" not in cur.lower() and url.split("#")[1] in cur:
-                    nombre = "Tarjeta Visa" if tipo == "VISA" else "Tarjeta Mastercard"
-                    cards.append({"tipo": tipo, "nombre": nombre, "url": url, "element": None})
-                    log_fn(f"  URL canónica válida: {url}")
+                url_before = driver.current_url or ""
+                el = driver.execute_script(js_find_el, pattern)
+                if not el:
+                    log_fn(f"  [C] No se encontró elemento con texto '{pattern}'")
+                    continue
+
+                text = driver.execute_script(
+                    "return (arguments[0].innerText || arguments[0].textContent || '').trim()", el
+                ) or ""
+                log_fn(f"  [C] Elemento encontrado para {tipo}: {text[:60]!r}")
+
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+                time.sleep(0.5)
+                driver.execute_script("arguments[0].click();", el)
+                time.sleep(4)
+
+                url_after = driver.current_url or ""
+                log_fn(f"  [C] URL tras click: {url_after[:150]}")
+
+                if url_after != url_before and "login" not in url_after.lower():
+                    nombre = text.split("\n")[0].strip()[:80] or (
+                        "Tarjeta Visa" if tipo == "VISA" else "Tarjeta Mastercard"
+                    )
+                    cards.append({"tipo": tipo, "nombre": nombre, "url": url_after})
+                    # Volver al dashboard para buscar la siguiente tarjeta
+                    driver.get(f"{_BASE_URL}/fnetcore/#/globalposition")
+                    time.sleep(5)
+                else:
+                    log_fn(f"  [C] URL no cambió tras click en {tipo} — puede ser modal")
+                    # Si abrió un modal, intentar extraer el URL del panel activo
+                    cur = driver.current_url or ""
+                    if url_after == url_before:
+                        # Buscar si hay un panel/modal abierto y capturar su URL interna
+                        nombre = "Tarjeta Visa" if tipo == "VISA" else "Tarjeta Mastercard"
+                        cards.append({"tipo": tipo, "nombre": nombre, "url": None, "_modal": True})
+
             except Exception as exc:
-                log_fn(f"  URL {url} falló: {exc}")
+                log_fn(f"  [C] Error en click para {tipo}: {exc}")
+
         return cards
 
     # ── Scraping de una tarjeta ───────────────────────────────────────────────
@@ -506,46 +606,42 @@ class BbvaTarjetasScraper(BaseScraper):
         """
         nombre = card["nombre"]
         url    = card.get("url")
-        el     = card.get("element")
 
-        # Navegar a la tarjeta
+        # Navegar a la tarjeta (si tenemos URL directa)
         if url:
             log_fn(f"  Navegando a {url[:100]}")
             driver.get(url)
-        elif el:
-            log_fn("  Haciendo click en el elemento de la tarjeta")
-            try:
-                self._click_element(driver, el)
-            except Exception as exc:
-                log_fn(f"  Click falló: {exc} — intentando JS click")
-                driver.execute_script("arguments[0].click();", el)
+            time.sleep(4)
+        elif card.get("_modal"):
+            # La tarjeta se abrió como modal — el contenido ya está en pantalla.
+            # El scraper ya hizo el click en _find_cards_by_clicking.
+            log_fn("  Modo modal — extrayendo de la vista actual")
         else:
-            log_fn("  Sin URL ni elemento — saltando")
+            log_fn("  Sin URL ni modo modal — saltando")
             return [], None
 
-        # Esperar que el detalle de la tarjeta cargue
-        time.sleep(3)
-        for _ in range(15):
-            # Buscar elementos típicos de la vista de movimientos
-            if self.find(driver,
-                "[class*='movement'], [class*='movimiento'], "
-                "[class*='transaction'], [class*='transaccion'], "
-                "bbva-web-movement-card, bbva-movement, "
-                "table[class*='movement'], ul[class*='movement']"
-            ):
-                break
+        # Esperar que el contenido de movimientos renderice (shadow DOM incluido)
+        # Verificamos via JS si hay texto de movimiento en el DOM profundo.
+        for i in range(15):
+            try:
+                deep = driver.execute_script(self._JS_DEEP_TEXT) or ""
+                # Heurística: si hay al menos 3 fechas DD/MM → probablemente cargó
+                fechas = re.findall(r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", deep)
+                if len(fechas) >= 3:
+                    log_fn(f"  Contenido de movimientos detectado tras {i+1}s ({len(fechas)} fechas)")
+                    break
+            except Exception:
+                pass
             time.sleep(1)
 
         log_fn(f"  URL detalle: {(driver.current_url or '')[:150]}")
 
-        # Diagnóstico del DOM de la vista de tarjeta
+        # Diagnóstico del DOM (shadow incluido)
         try:
-            body_html = driver.execute_script(
-                "return document.body.innerHTML.slice(0, 3000)"
-            )
-            log_fn(f"  [diag] body[:3000]: {body_html}")
-        except Exception:
-            pass
+            dump = driver.execute_script(self._JS_GP_DUMP) or ""
+            log_fn(f"  [diag] DOM tarjeta+shadow[:8000]: {dump[:8000]}")
+        except Exception as exc:
+            log_fn(f"  [diag] dump error: {exc}")
 
         saldo = self._extract_saldo(driver, log_fn)
         movimientos = self._extract_movimientos(driver, fuente, usuario_default, log_fn, nombre)
@@ -555,39 +651,123 @@ class BbvaTarjetasScraper(BaseScraper):
 
     def _extract_saldo(self, driver, log_fn) -> Optional[float]:
         """
-        Intenta leer el saldo total a pagar de la tarjeta.
-        Busca el importe destacado en la cabecera de detalle de la tarjeta.
+        Intenta leer el saldo total a pagar usando el texto profundo del shadow DOM.
+        Busca el primer importe monetario grande que aparezca en la cabecera.
         """
-        selectors = [
-            # Clases típicas de BBVA para el saldo principal
-            "[class*='balance'] [class*='amount']",
-            "[class*='balance']",
-            "[class*='saldo']",
-            "[class*='total-pagar']",
-            "[class*='total']",
-            # Web components de BBVA
-            "bbva-web-amount",
-            "bbva-amount",
-        ]
-        from selenium.webdriver.common.by import By
-        for sel in selectors:
-            try:
-                els = driver.find_elements(By.CSS_SELECTOR, sel)
-                for el in els:
-                    text = (el.text or "").strip()
-                    if not text:
-                        continue
-                    # Buscar un importe monetario en el texto (tiene coma decimal)
-                    m = re.search(r"[\d.]+,\d{2}", text.replace("\xa0", ""))
-                    if m:
-                        val = self.parse_amount(m.group(0))
-                        if val > 0:
-                            log_fn(f"  Saldo detectado: {text!r} → {val}")
-                            return val
-            except Exception:
-                pass
+        try:
+            deep_text = driver.execute_script(self._JS_DEEP_TEXT) or ""
+            # Buscar montos en formato argentino: ej. "123.456,78" o "1.234,56"
+            amounts = re.findall(r"[\d]{1,3}(?:[.]\d{3})*,\d{2}", deep_text.replace("\xa0", ""))
+            if amounts:
+                # Elegir el monto más grande (probablemente el saldo total)
+                vals = []
+                for a in amounts:
+                    v = self.parse_amount(a)
+                    if v and v > 0:
+                        vals.append(v)
+                if vals:
+                    saldo = max(vals)
+                    log_fn(f"  Saldo detectado: {saldo:.2f} (candidatos: {vals[:5]})")
+                    return saldo
+        except Exception as exc:
+            log_fn(f"  Saldo error: {exc}")
         log_fn("  Saldo no detectado")
         return None
+
+    # JS que extrae los movimientos de BBVA usando shadow DOM traversal.
+    # BBVA Argentina renderiza cada movimiento como un web component con
+    # atributos de datos (date, concept/description, amount) O como un
+    # elemento de lista con sub-elementos de fecha/concepto/importe.
+    # Este JS recorre toda la jerarquía shadow DOM y devuelve lo que encuentra.
+    _JS_EXTRACT_MOVEMENTS = """
+    (function() {
+        var results = [];
+        var dateRe   = /^\\d{1,2}[\\/-]\\d{1,2}([\\/-]\\d{2,4})?$|^\\d{4}-\\d{2}-\\d{2}$|^\\d{1,2}-[A-Za-z]{3}-\\d{2,4}$/;
+        var amountRe = /^-?[\\d.]+,[\\d]{2}$|^-?[\\d]+,[\\d]{2}$/;
+
+        function getAttr(el, names) {
+            for (var i = 0; i < names.length; i++) {
+                var v = el.getAttribute(names[i]);
+                if (v && v.trim()) return v.trim();
+            }
+            return '';
+        }
+
+        function traverse(root) {
+            if (!root) return;
+            var all;
+            try { all = root.querySelectorAll('*'); } catch(e) { return; }
+
+            for (var i = 0; i < all.length; i++) {
+                var el = all[i];
+                var tag = (el.tagName || '').toLowerCase();
+
+                // ── Estrategia 1: web component con atributos de datos ──────────
+                if (tag.indexOf('bbva') >= 0 || tag.indexOf('movement') >= 0) {
+                    var fecha  = getAttr(el, ['date','transaction-date','fecha','purchase-date']);
+                    var desc   = getAttr(el, ['concept','description','descripcion','title','name']);
+                    var amount = getAttr(el, ['amount','monto','importe','total']);
+                    if ((fecha && dateRe.test(fecha)) && (amount && amountRe.test(amount))) {
+                        results.push({fecha: fecha, desc: desc, amount: amount, src: 'attr:'+tag});
+                        continue;
+                    }
+                }
+
+                // ── Estrategia 2: shadow DOM (li, div, tr con texto de mov.) ──
+                if (el.shadowRoot) {
+                    traverse(el.shadowRoot);
+                }
+            }
+
+            // ── Estrategia 3: texto directo de elementos tipo lista ───────────
+            // Buscar <li> o divs donde el texto completo parezca un movimiento
+            var candidates;
+            try {
+                candidates = root.querySelectorAll(
+                    'li, [class*="movement-item"], [class*="MovementItem"], ' +
+                    '[class*="transaction-item"], [class*="TransactionItem"], ' +
+                    '[class*="movimiento-item"], [class*="consumo-item"]'
+                );
+            } catch(e) { candidates = []; }
+
+            for (var j = 0; j < candidates.length; j++) {
+                var cel = candidates[j];
+                var text = (cel.innerText || cel.textContent || '').trim();
+                if (!text || text.length > 500 || text.length < 5) continue;
+
+                var lines = text.split(/\\n|\\r/).map(function(l){return l.trim();}).filter(Boolean);
+                if (lines.length < 2) continue;
+
+                // Buscar fecha (DD/MM o DD/MM/YYYY) y monto ($X.XXX,XX) en las líneas
+                var fechaL  = '';
+                var descL   = '';
+                var amountL = '';
+
+                for (var k = 0; k < lines.length; k++) {
+                    var l = lines[k];
+                    if (!fechaL && dateRe.test(l)) { fechaL = l; continue; }
+                    if (!amountL && /[\\d.,]{4,}/.test(l) && /,\\d{2}$/.test(l)) { amountL = l; continue; }
+                    if (!descL && l.length > 2 && !dateRe.test(l)) { descL = l; }
+                }
+
+                if (fechaL && (descL || amountL)) {
+                    results.push({fecha: fechaL, desc: descL, amount: amountL, src: 'text'});
+                }
+            }
+        }
+
+        traverse(document.body);
+
+        // Deduplicar por fecha+desc+amount
+        var seen = {};
+        var unique = [];
+        results.forEach(function(r) {
+            var key = r.fecha + '|' + r.desc + '|' + r.amount;
+            if (!seen[key]) { seen[key] = true; unique.push(r); }
+        });
+        return unique;
+    })();
+    """
 
     # ── Extracción de movimientos ─────────────────────────────────────────────
 
@@ -600,248 +780,32 @@ class BbvaTarjetasScraper(BaseScraper):
         nombre_tarjeta: str,
     ) -> list[MovimientoRaw]:
         """
-        Extrae todos los movimientos del período en curso de la vista actual.
-
-        BBVA puede renderizarlos de varias formas según la versión del SPA:
-          A. Lista de web components bbva-web-movement-card / bbva-movement
-          B. Una <ul>/<ol> con <li> por movimiento
-          C. Una <table> con filas de movimientos
-          D. Divs con clases como 'movement-item', 'transaction-item', etc.
-
-        Se intentan todas las estrategias y se devuelve la primera que
-        produzca resultados. Con el log de diagnóstico el usuario puede
-        calibrar los selectores exactos.
+        Extrae los movimientos del período en curso usando shadow DOM JS traversal.
         """
-        from selenium.webdriver.common.by import By
-
         movimientos: list[MovimientoRaw] = []
 
-        # Cada estrategia devuelve lista de (fecha_str, desc, monto_str) o similar
-        strategies = [
-            self._parse_web_components,
-            self._parse_list_items,
-            self._parse_table_rows,
-            self._parse_generic_divs,
-        ]
-
-        for strategy in strategies:
-            try:
-                rows = strategy(driver, log_fn)
-                if rows:
-                    log_fn(f"  Estrategia {strategy.__name__}: {len(rows)} filas")
-                    for row in rows:
-                        mov = self._build_movimiento(row, fuente, usuario_default, nombre_tarjeta)
-                        if mov:
-                            movimientos.append(mov)
-                    if movimientos:
-                        return movimientos
-                    log_fn(f"  {strategy.__name__}: filas encontradas pero ninguna parseada")
-            except Exception as exc:
-                log_fn(f"  {strategy.__name__} error: {exc}")
-
-        log_fn("  ⚠ Sin movimientos — revisar selectores (ver [diag] del DOM)")
-        return []
-
-    def _parse_web_components(self, driver, log_fn) -> list[dict]:
-        """
-        Parsea movimientos renderizados como web components de BBVA:
-          <bbva-web-movement-card> o <bbva-movement>
-        """
-        from selenium.webdriver.common.by import By
-
-        selectors = [
-            "bbva-web-movement-card",
-            "bbva-movement-card",
-            "bbva-movement",
-            "[is='bbva-movement']",
-        ]
-        rows = []
-        for sel in selectors:
-            els = driver.find_elements(By.CSS_SELECTOR, sel)
-            if not els:
-                continue
-            log_fn(f"  WC selector '{sel}': {len(els)} elementos")
-            for el in els:
-                # Los web components de BBVA exponen sus datos como atributos
-                fecha = (
-                    el.get_attribute("date") or
-                    el.get_attribute("transaction-date") or
-                    el.get_attribute("fecha") or ""
-                )
-                desc = (
-                    el.get_attribute("concept") or
-                    el.get_attribute("description") or
-                    el.get_attribute("descripcion") or
-                    el.text or ""
-                ).strip().split("\n")[0]
-                amount = (
-                    el.get_attribute("amount") or
-                    el.get_attribute("monto") or
-                    el.get_attribute("importe") or ""
-                )
-                if fecha or desc:
-                    rows.append({"fecha": fecha, "desc": desc, "amount": amount, "raw_el": el})
-            if rows:
-                return rows
-        return rows
-
-    def _parse_list_items(self, driver, log_fn) -> list[dict]:
-        """
-        Parsea movimientos renderizados como <li> dentro de una lista de movimientos.
-        Busca la lista más probable y extrae fecha/descripción/monto de cada ítem.
-        """
-        from selenium.webdriver.common.by import By
-
-        list_selectors = [
-            "[class*='movement-list'] li",
-            "[class*='movimiento-list'] li",
-            "[class*='transaction-list'] li",
-            "ul[class*='movement'] li",
-            "ul[class*='transaction'] li",
-            "[class*='movements'] [class*='item']",
-            "[class*='transactions'] [class*='item']",
-        ]
-        for sel in list_selectors:
-            els = driver.find_elements(By.CSS_SELECTOR, sel)
-            if not els:
-                continue
-            log_fn(f"  LI selector '{sel}': {len(els)} elementos")
-            rows = []
-            for el in els:
-                row = self._extract_row_data(driver, el)
-                if row:
-                    rows.append(row)
-            if rows:
-                return rows
-        return []
-
-    def _parse_table_rows(self, driver, log_fn) -> list[dict]:
-        """
-        Parsea movimientos en formato de tabla HTML (<table><tr>).
-        """
-        from selenium.webdriver.common.by import By
-
-        table_selectors = [
-            "table[class*='movement'] tr",
-            "table[class*='transaction'] tr",
-            "table tr",
-        ]
-        for sel in table_selectors:
-            rows_els = driver.find_elements(By.CSS_SELECTOR, sel)
-            if len(rows_els) < 2:
-                continue
-            log_fn(f"  TABLE selector '{sel}': {len(rows_els)} filas")
-            rows = []
-            for tr in rows_els:
-                try:
-                    cells = tr.find_elements(By.TAG_NAME, "td")
-                    if len(cells) < 2:
-                        continue
-                    texts = [c.text.strip() for c in cells]
-                    # Heurística: primera celda con fecha, segunda con descripción,
-                    # última con importe
-                    fecha  = texts[0] if texts else ""
-                    desc   = texts[1] if len(texts) > 1 else ""
-                    amount = texts[-1] if len(texts) > 2 else ""
-                    if fecha or desc:
-                        rows.append({"fecha": fecha, "desc": desc, "amount": amount})
-                except Exception:
-                    pass
-            if rows:
-                return rows
-        return []
-
-    def _parse_generic_divs(self, driver, log_fn) -> list[dict]:
-        """
-        Parsea movimientos renderizados como divs con clases de movimiento.
-        Última estrategia de fallback.
-        """
-        from selenium.webdriver.common.by import By
-
-        div_selectors = [
-            "[class*='movement-item']",
-            "[class*='movimiento-item']",
-            "[class*='transaction-item']",
-            "[class*='TransactionItem']",
-            "[class*='MovementItem']",
-            "[class*='movement-row']",
-            "[class*='transaction-row']",
-        ]
-        for sel in div_selectors:
-            els = driver.find_elements(By.CSS_SELECTOR, sel)
-            if not els:
-                continue
-            log_fn(f"  DIV selector '{sel}': {len(els)} elementos")
-            rows = []
-            for el in els:
-                row = self._extract_row_data(driver, el)
-                if row:
-                    rows.append(row)
-            if rows:
-                return rows
-        return []
-
-    def _extract_row_data(self, driver, el) -> Optional[dict]:
-        """
-        Extrae fecha, descripción e importe de un elemento de movimiento genérico.
-        Busca sub-elementos con clases relacionadas o parsea el texto completo.
-        """
-        from selenium.webdriver.common.by import By
         try:
-            text = (el.text or "").strip()
-            if not text:
-                return None
-
-            # Intentar extraer sub-elementos con clases específicas
-            fecha  = ""
-            desc   = ""
-            amount = ""
-
-            for date_sel in ["[class*='date']", "[class*='fecha']", "time"]:
-                try:
-                    d = el.find_element(By.CSS_SELECTOR, date_sel)
-                    fecha = (d.get_attribute("datetime") or d.text or "").strip()
-                    if fecha:
-                        break
-                except Exception:
-                    pass
-
-            for desc_sel in ["[class*='concept']", "[class*='description']",
-                             "[class*='descripcion']", "[class*='title']", "span", "p"]:
-                try:
-                    d = el.find_element(By.CSS_SELECTOR, desc_sel)
-                    desc = (d.text or "").strip()
-                    if desc and not re.match(r"^[\d,.$-]+$", desc):
-                        break
-                except Exception:
-                    pass
-
-            for amt_sel in ["[class*='amount']", "[class*='importe']",
-                            "[class*='monto']", "[class*='price']"]:
-                try:
-                    d = el.find_element(By.CSS_SELECTOR, amt_sel)
-                    amount = (d.text or "").strip()
-                    if amount:
-                        break
-                except Exception:
-                    pass
-
-            # Si no encontramos sub-elementos, intentar parsear el texto completo
-            if not fecha and not desc and not amount:
-                lines = [l.strip() for l in text.split("\n") if l.strip()]
-                if len(lines) >= 2:
-                    fecha  = lines[0]
-                    desc   = lines[1]
-                    amount = lines[-1] if len(lines) > 2 else ""
-
-            if not desc and not amount:
-                return None
-
-            return {"fecha": fecha, "desc": desc, "amount": amount, "raw_text": text}
-
+            rows = driver.execute_script(self._JS_EXTRACT_MOVEMENTS) or []
         except Exception as exc:
-            logger.debug("[bbva-tj] _extract_row_data error: %s", exc)
-            return None
+            log_fn(f"  JS_EXTRACT_MOVEMENTS error: {exc}")
+            rows = []
+
+        log_fn(f"  JS encontró {len(rows)} filas brutas")
+        if rows:
+            log_fn(f"  Primeras 5 filas: {rows[:5]}")
+
+        for row in rows:
+            mov = self._build_movimiento(row, fuente, usuario_default, nombre_tarjeta)
+            if mov:
+                movimientos.append(mov)
+
+        if not movimientos and rows:
+            log_fn("  Filas encontradas pero ninguna parseada — ver [diag] para ajustar")
+
+        if not movimientos:
+            log_fn("  ⚠ Sin movimientos — revisar [diag] del DOM de la tarjeta")
+
+        return movimientos
 
     # ── Construcción de MovimientoRaw ─────────────────────────────────────────
 

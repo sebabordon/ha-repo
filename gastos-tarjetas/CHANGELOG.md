@@ -1,3 +1,7 @@
+## 0.5.29
+
+- **Scraper BBVA Tarjetas — shadow DOM traversal** (`scrapers/bbva_tarjetas.py`): reescritura completa de la detección de tarjetas y extracción de movimientos para atravesar el shadow DOM de los Lit web components de BBVA. Tres estrategias en cascada: (A) links con texto Visa/MC en shadow DOM via JS, (B) deep text scan + click-y-observar-URL si hay texto pero no links, (C) dump diagnóstico amplio para calibración manual. Los movimientos se extraen con `_JS_EXTRACT_MOVEMENTS` que recorre shadow roots buscando web components con atributos `date`/`concept`/`amount` y lista items con fecha+descripción+monto en el texto. El dump de diagnóstico ahora incluye hasta 8000 chars del shadow DOM del MFE de tarjetas.
+
 ## 0.5.28
 
 - **Nuevo scraper BBVA Tarjetas de Crédito** (`scrapers/bbva_tarjetas.py`): scraper Selenium que navega el homebanking BBVA Argentina y extrae los movimientos del período en curso de las tarjetas Visa y Mastercard directamente desde el DOM (sin API). Registrado como `"bbva_tarjetas"` en el scheduler y con su propia entrada en Scrapers con los mismos campos de credenciales que BBVA Cuentas. Emite movimientos con `fuente="bbva_visa"` y `fuente="bbva_mc"`, compatibles con los PDFs existentes. El mapeo tarjeta→fuente se puede overridear vía `product_key` en la tab Cuentas (VISA o MC). Incluye múltiples estrategias de extracción del DOM (web components, listas, tablas, divs) con log de diagnóstico para calibrar selectores tras el primer run.
