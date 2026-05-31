@@ -1,6 +1,7 @@
 ## 0.5.34
 
 - **Fix: "Último intento" y "Último OK" mostraban hora UTC en lugar de hora local**: los timestamps se guardaban como UTC (`datetime.utcnow()`) y se mostraban con un simple `.replace('T',' ').slice(0,16)` sin conversión de zona horaria. Ahora se usa `new Date(iso + 'Z').toLocaleString('es-AR')` igual que ya se hacía con `scraped_at` y el próximo run, mostrando siempre la hora de Argentina.
+- **Scraper BBVA tarjetas: discovery de endpoint consumos** (`scrapers/bbva_tarjetas.py`): prueba múltiples candidatos de endpoint en orden (`tarjetasCreditoVisa/consumos`, `tarjetasCreditoMastercard/consumos`, etc.) hasta encontrar el que devuelva HTTP 200. Si ninguno funciona, activa un interceptor de `window.fetch` que loguea todas las llamadas que hace el SPA al navegar a la página de consumos, mostrando el endpoint real en el log.
 
 ## 0.5.33
 

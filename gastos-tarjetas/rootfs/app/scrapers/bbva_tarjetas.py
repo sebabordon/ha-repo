@@ -40,7 +40,17 @@ _MC_RE   = re.compile(r"\bmastercard\b|\bmaster\b", re.IGNORECASE)
 
 # Endpoints (se ajustan con el diagnóstico del primer run)
 _EP_TARJETAS  = "/cliente/productos/tarjetas"
-_EP_CONSUMOS  = "/cliente/productos/tarjetas/consumos"
+
+# Candidatos de endpoint de consumos, en orden de probabilidad.
+# Se prueban todos hasta encontrar el primero que devuelva HTTP 200.
+# El tipo de tarjeta se interpola como {tipo_lower} / {tipo_clave}.
+_EP_CONSUMOS_CANDIDATES = [
+    "/cliente/productos/tarjetasCredito{tipo_clave}/consumos",  # tarjetasCreditoVisa / tarjetasCreditoMastercard
+    "/cliente/productos/tarjetas/consumos",
+    "/cliente/productos/tarjetas{tipo_clave}/consumos",         # tarjetasVisa / tarjetasMastercard
+    "/cliente/tarjetas/credito/consumos",
+    "/cliente/tarjetas/consumos",
+]
 
 
 class BbvaTarjetasScraper(BbvaScraper):
@@ -193,11 +203,16 @@ class BbvaTarjetasScraper(BbvaScraper):
                 )
                 numero = item.get("numero") or ""
 
+                # tipo_clave: la parte del nombre de clave de la API que identifica
+                # el tipo, ej. "Visa" → "CreditoVisa", "MC" → "CreditoMastercard"
+                tipo_clave = "CreditoVisa" if tipo == "VISA" else "CreditoMastercard"
+
                 tarjetas.append({
-                    "id":     str(id_tj),
-                    "tipo":   tipo,
-                    "nombre": f"{nombre} {numero}".strip()[:80],
-                    "raw":    item,
+                    "id":         str(id_tj),
+                    "tipo":       tipo,
+                    "tipo_clave": tipo_clave,
+                    "nombre":     f"{nombre} {numero}".strip()[:80],
+                    "raw":        item,
                 })
                 log_fn(f"  Tarjeta: tipo={tipo} nombre={nombre!r} numero={numero} id={id_tj}")
 
@@ -214,27 +229,77 @@ class BbvaTarjetasScraper(BbvaScraper):
         log_fn,
     ) -> tuple[list[MovimientoRaw], Optional[float]]:
         """
-        Llama al endpoint de consumos de la tarjeta y parsea los movimientos.
-
-        El cuerpo del POST se calibra con el primer run: el log diagnóstico
-        muestra qué campos devuelve la API para que podamos ajustar.
+        Prueba los candidatos de endpoint de consumos en orden hasta que uno
+        responda HTTP 200. Si ninguno funciona, activa el interceptor de fetch
+        del SPA para descubrir el endpoint real navegando al browser.
         """
-        id_tj = tj["id"]
+        import time as _time
 
-        # Payload tentativo — ajustar con lo que muestre el [diag] del primer run
-        payload = {
-            "idProducto": id_tj,
-        }
+        id_tj      = tj["id"]
+        tipo_clave = tj.get("tipo_clave", "")
+        payload    = {"idProducto": id_tj}
 
-        resp = self._api_request(driver, _EP_CONSUMOS, method="POST", json_body=payload)
-        log_fn(f"  POST {_EP_CONSUMOS} (id={id_tj}) → HTTP {resp['status']}")
-        log_fn(f"  [diag] body[:2000]: {resp['body'][:2000]}")
+        for ep_tpl in _EP_CONSUMOS_CANDIDATES:
+            ep = ep_tpl.format(tipo_clave=tipo_clave)
+            resp = self._api_request(driver, ep, method="POST", json_body=payload)
+            log_fn(f"  POST {ep} → HTTP {resp['status']}")
+            if resp["status"] == 200 and resp["json"]:
+                log_fn(f"  ✓ Endpoint encontrado: {ep}")
+                log_fn(f"  [diag] body[:2000]: {resp['body'][:2000]}")
+                return self._parse_consumos(resp["json"], fuente, usuario_default, log_fn, tj["nombre"])
+            if resp["status"] not in (404, 0):
+                # Error inesperado (no 404) — loguear y parar
+                log_fn(f"  [diag] body[:500]: {resp['body'][:500]}")
 
-        if resp["status"] != 200 or not resp["json"]:
-            log_fn(f"  ⚠ Sin respuesta válida — revisar endpoint y payload")
-            return [], None
+        # Ningún candidato funcionó — interceptar fetch del SPA para descubrir el endpoint
+        log_fn("  Todos los candidatos dieron 404 — activando interceptor fetch del SPA…")
+        self._intercept_spa_consumos(driver, tj, log_fn)
+        return [], None
 
-        return self._parse_consumos(resp["json"], fuente, usuario_default, log_fn, tj["nombre"])
+    def _intercept_spa_consumos(self, driver, tj: dict, log_fn) -> None:
+        """
+        Inyecta un monkey-patch sobre window.fetch en el browser, navega a la
+        página de consumos de la tarjeta, y loguea todas las llamadas fetch que
+        hace el SPA para que podamos identificar el endpoint correcto.
+        """
+        import time as _time
+        _BASE_URL = "https://online.bbva.com.ar"
+
+        # 1. Inyectar el interceptor
+        driver.execute_script("""
+            window.__fetchLog = [];
+            var _orig = window.fetch;
+            window.fetch = function(url, opts) {
+                opts = opts || {};
+                window.__fetchLog.push({
+                    url:    String(url),
+                    method: String(opts.method || 'GET'),
+                    body:   String(opts.body   || '')
+                });
+                return _orig.apply(this, arguments);
+            };
+        """)
+
+        # 2. Navegar al dashboard y hacer click en la tarjeta
+        driver.get(f"{_BASE_URL}/fnetcore/#/globalposition")
+        _time.sleep(8)
+
+        # Intentar navegar directo a una URL de consumos conocida para el id
+        driver.get(f"{_BASE_URL}/fnetcore/")
+        _time.sleep(5)
+
+        # 3. Recolectar lo que capturó el interceptor
+        try:
+            fetch_log = driver.execute_script("return window.__fetchLog || [];") or []
+            log_fn(f"  [intercept] {len(fetch_log)} calls fetch capturadas")
+            for call in fetch_log:
+                url = call.get("url", "")
+                if "servicios" in url or "tarjeta" in url.lower() or "consumo" in url.lower():
+                    log_fn(f"  [intercept] {call.get('method')} {url}")
+                    if call.get("body") and call["body"] != "null":
+                        log_fn(f"  [intercept]   body: {call['body'][:300]}")
+        except Exception as exc:
+            log_fn(f"  [intercept] error leyendo log: {exc}")
 
     def _parse_consumos(
         self,
