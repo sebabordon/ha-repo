@@ -1605,10 +1605,38 @@ document.getElementById("btn-save-new-mov").addEventListener("click", async () =
 });
 
 // ── Transfer workspace ─────────────────────────────────────────────────────────
-let _twData   = null;
-let _twSelA   = null;          // selected egreso (full object), or null
-let _twQueue  = [];            // [{out: {...}, in: {...}}]
-let _twQueuedIds = new Set();  // IDs already in the queue
+let _twData      = null;
+let _twSelA      = null;          // selected egreso (full object), or null
+let _twQueue     = [];            // [{out: {...}, in: {...}}]
+let _twQueuedIds = new Set();     // IDs already in the queue
+let _twSortField = 'monto';
+let _twSortDir   = 'desc';
+
+function _twSortItems(items) {
+  return [...items].sort((a, b) => {
+    let va, vb;
+    if (_twSortField === 'monto') {
+      va = Math.abs(parseFloat(a.monto));
+      vb = Math.abs(parseFloat(b.monto));
+    } else {
+      va = (a[_twSortField] || '').toLowerCase();
+      vb = (b[_twSortField] || '').toLowerCase();
+    }
+    if (va < vb) return _twSortDir === 'asc' ? -1 : 1;
+    if (va > vb) return _twSortDir === 'asc' ?  1 : -1;
+    return 0;
+  });
+}
+
+function _twUpdateSortIndicators() {
+  const labels = { fecha: 'Fecha', descripcion: 'Descripción', monto: 'Monto' };
+  document.querySelectorAll('.tw-sh[data-twsort]').forEach(el => {
+    const field    = el.dataset.twsort;
+    const isActive = field === _twSortField;
+    el.classList.toggle('active', isActive);
+    el.textContent = labels[field] + (isActive ? (' ' + (_twSortDir === 'asc' ? '▲' : '▼')) : '');
+  });
+}
 
 async function loadTransferWorkspace() {
   const res = await fetch(`${BASE}/api/gastos/transfer-workspace`);
@@ -1668,12 +1696,17 @@ function renderTwCandidates() {
   const iEl = document.getElementById("tw-ingresos");
   document.getElementById("tw-egreso-count").textContent  = visibleEgresos.length  ? `(${visibleEgresos.length})`  : "";
   document.getElementById("tw-ingreso-count").textContent = visibleIngresos.length ? `(${visibleIngresos.length})` : "";
+  visibleEgresos  = _twSortItems(visibleEgresos);
+  visibleIngresos = _twSortItems(visibleIngresos);
+
   eEl.innerHTML = "";
   if (!visibleEgresos.length)  eEl.innerHTML = `<p class="tw-empty">Sin egresos sin parear</p>`;
   else visibleEgresos.forEach(g => eEl.appendChild(_twMakeItem(g, "egreso")));
   iEl.innerHTML = "";
   if (!visibleIngresos.length) iEl.innerHTML = `<p class="tw-empty">Sin ingresos sin parear</p>`;
   else visibleIngresos.forEach(g => iEl.appendChild(_twMakeItem(g, "ingreso")));
+
+  _twUpdateSortIndicators();
 }
 
 function _twSelectEgreso(g) {
@@ -1910,6 +1943,14 @@ document.getElementById("btn-tw-confirm").addEventListener("click", twConfirm);
 document.getElementById("btn-tw-cancel-select").addEventListener("click", twCancelSelect);
 document.getElementById("btn-tw-mark-single").addEventListener("click", twMarkSingle);
 document.getElementById("chk-tw-show-all").addEventListener("change", renderTwCandidates);
+document.querySelectorAll(".tw-sh[data-twsort]").forEach(el => {
+  el.addEventListener("click", () => {
+    const field = el.dataset.twsort;
+    if (_twSortField === field) _twSortDir = _twSortDir === 'desc' ? 'asc' : 'desc';
+    else { _twSortField = field; _twSortDir = 'desc'; }
+    if (_twData) renderTwCandidates();
+  });
+});
 
 // ── Import batches ────────────────────────────────────────────────────────────
 const _FUENTE_LABEL = {

@@ -2049,3 +2049,24 @@ tbody tr:hover { background: #fafbff; }
   .tw-columns { grid-template-columns: 1fr; }
   .tw-item-date { min-width: 4rem; font-size: .72rem; }
 }
+
+/* ── Transfer workspace sort bar ─────────────────────────────────────────────── */
+.tw-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .22rem .55rem;
+  background: #f0f4f8;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: .72rem;
+  font-weight: 600;
+  color: #64748b;
+}
+.tw-sh { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-sh[data-twsort] { cursor: pointer; }
+.tw-sh[data-twsort]:hover { color: #1a1a2e; }
+.tw-sh.active { color: #1a1a2e; }
+.tw-sh-date   { flex-shrink: 0; min-width: 5.3rem; }
+.tw-sh-fuente { flex-shrink: 0; min-width: 4.5rem; }
+.tw-sh-desc   { flex: 1; }
+.tw-sh-amt    { flex-shrink: 0; }

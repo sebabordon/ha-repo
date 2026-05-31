@@ -1,3 +1,7 @@
+## 0.5.38
+
+- **Workspace transferencias: columnas con headers y sort** (`index.html`, `app.js`, `style.css`): las columnas de egresos e ingresos ahora tienen una barra de encabezados con Fecha / Fuente / Descripción / Monto. Click en cualquier encabezado ordena ambas columnas (click repetido invierte dirección). Orden por defecto: monto descendente (mayor primero).
+
 ## 0.5.37
 
 - **Fix workspace transferencias: «Deshacer» activa «Mostrar todos» si el movimiento desmarcado no tiene match automático** (`app.js`): cuando se desmarca una transferencia «suelta» (sin contrapartida en sugerencias), el movimiento quedaba invisible porque el filtro por defecto solo muestra candidatos con match. Ahora `twUnmark` detecta ese caso y activa el checkbox «Mostrar todos» automáticamente con un toast informativo.
