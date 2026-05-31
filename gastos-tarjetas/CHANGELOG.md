@@ -1,3 +1,7 @@
+## 0.5.45
+
+- **BBVA scraper: captura campos extra del endpoint de movimientos** (`scrapers/bbva.py`): se agregan a `raw_data` los campos `denominacionCuenta`, `numeroCuenta`, `claveOperacion`, `codigoSucursal`, `origen`, `procedencia`, `numeroCheque` y `codigoAccionDetalleMovimientoCuenta`, que ya venían en la respuesta API pero no se guardaban. En el log se emite una línea `[extra]` por movimiento mostrando los campos no vacíos, para evaluar qué datos trae cada tipo de operación y decidir si incorporarlos a la descripción.
+
 ## 0.5.44
 
 - **Tabla transfer_pairs: vínculo explícito entre los dos lados de cada par** (`db.py`, `routes/gastos.py`): `mark_transfers` ahora escribe en la nueva tabla `transfer_pairs(id_out, id_in)` además de setear la categoría. `get_existing_transfer_pairs` lee primero de esa tabla (exacto, sin límite de fechas) y solo usa reconstrucción por monto+fecha para los pares legacy confirmados antes de esta versión. `unmark_transfers` también borra la fila de `transfer_pairs`. Esto elimina el workaround de la ventana de 60 días y los pares con cualquier diferencia de fechas se muestran siempre juntos.

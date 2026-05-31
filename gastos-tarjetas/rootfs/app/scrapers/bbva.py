@@ -919,12 +919,36 @@ class BbvaScraper(BaseScraper):
             sign, reason = self._detect_sign(mov, mov_older, importe_signed)
             monto = importe_abs * sign
 
+            denominacion_cuenta = (mov.get("denominacionCuenta") or "").strip()
+            numero_cuenta       = (mov.get("numeroCuenta")       or "").strip()
+            clave_operacion     = (mov.get("claveOperacion")     or "").strip()
+            codigo_sucursal     = str(mov.get("codigoSucursal")  or "").strip()
+            origen              = (mov.get("origen")             or "").strip()
+            procedencia         = (mov.get("procedencia")        or "").strip()
+            numero_cheque       = str(mov.get("numeroCheque")    or "").strip()
+            codigo_accion       = str(mov.get("codigoAccionDetalleMovimientoCuenta") or "").strip()
+
             if log_fn:
                 tag = "ingreso" if sign < 0 else "egreso"
                 log_fn(
                     f"    mov fecha={fecha} importe={importe_signed:+.2f} "
                     f"saldo={mov.get('saldo')} → {tag} ({reason})"
                 )
+                extras = {
+                    "denominacionCuenta": denominacion_cuenta,
+                    "numeroCuenta":       numero_cuenta,
+                    "claveOperacion":     clave_operacion,
+                    "codigoSucursal":     codigo_sucursal,
+                    "origen":             origen,
+                    "procedencia":        procedencia,
+                    "numeroCheque":       numero_cheque,
+                    "codigoAccion":       codigo_accion,
+                }
+                extras_str = "  ".join(
+                    f"{k}={v!r}" for k, v in extras.items() if v and v != "0"
+                )
+                if extras_str:
+                    log_fn(f"      [extra] {extras_str}")
 
             raw_data = {
                 "saldo":                  mov.get("saldo"),
@@ -932,7 +956,15 @@ class BbvaScraper(BaseScraper):
                 "numero_operacion":       mov.get("numeroOperacion") or None,
                 "referencia":             mov.get("referencia")      or None,
                 "clave_concepto":         mov.get("claveConcepto")   or None,
+                "clave_operacion":        clave_operacion or None,
                 "codigo_tipo_movimiento": mov.get("codigoTipoMovimiento") or None,
+                "codigo_sucursal":        codigo_sucursal or None,
+                "codigo_accion_detalle":  codigo_accion or None,
+                "denominacion_cuenta":    denominacion_cuenta or None,
+                "numero_cuenta":          numero_cuenta or None,
+                "origen":                 origen or None,
+                "procedencia":            procedencia or None,
+                "numero_cheque":          numero_cheque if numero_cheque and numero_cheque != "0" else None,
                 "tiene_detalle":          mov.get("tieneDetalle"),
                 "sign_reason":            reason,
                 "usuario":                usuario_default,   # None si no hay config
