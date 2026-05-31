@@ -1406,6 +1406,48 @@ function _setupCatAC(input, origCat, saveBtn = null, gastoId = null) {
   });
 }
 
+async function _ensureRulesLoaded() {
+  if (_rules.length > 0) return;
+  const res  = await fetch(`${BASE}/api/rules`);
+  const data = await res.json();
+  _rules = (data.reglas || []).map(r => ({
+    palabras:    Array.isArray(r.palabras) ? r.palabras.map(String) : _patternToWords(r.patron || ""),
+    patron:      r.patron || null,
+    categoria:   r.categoria || "",
+    especial:    !!r.especial,
+    solo_egresos: !!r.solo_egresos,
+    fuentes:     Array.isArray(r.fuentes) ? r.fuentes : [],
+  }));
+}
+
+async function _moveKeywordBetweenRules(keyword, fromCat, toCat) {
+  const fromRule = _rules.find(r => r.categoria === fromCat);
+  if (fromRule) {
+    fromRule.palabras = fromRule.palabras.filter(p => p.toLowerCase() !== keyword.toLowerCase());
+  }
+  let toRule = _rules.find(r => r.categoria === toCat);
+  if (!toRule) {
+    toRule = {palabras: [], categoria: toCat, especial: false, solo_egresos: false, fuentes: []};
+    _rules.push(toRule);
+  }
+  if (!toRule.palabras.some(p => p.toLowerCase() === keyword.toLowerCase())) {
+    toRule.palabras.push(keyword);
+  }
+  const reglas = _rules
+    .filter(r => r.palabras.length > 0 && r.categoria.trim())
+    .map(r => ({palabras: r.palabras, categoria: r.categoria, especial: !!r.especial, solo_egresos: r.solo_egresos || null, fuentes: r.fuentes || []}));
+  const res = await fetch(`${BASE}/api/rules`, {
+    method: "PUT", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({reglas}),
+  });
+  if (res.ok) {
+    showToast(`✓ "${keyword}" movido de "${fromCat}" a "${toCat}"`, "ok", 2500);
+    loadRules();
+  } else {
+    showToast("Error al mover keyword", "err", 0);
+  }
+}
+
 async function saveCategoria(id, btn) {
   const input = document.querySelector(`.cat-input[data-id="${id}"]`);
   const res   = await fetch(`${BASE}/api/gastos/${id}/categoria`, {
@@ -1417,15 +1459,38 @@ async function saveCategoria(id, btn) {
     loadMonthlyChart();
     const data = await res.json();
     if (data.sugerencia_keyword && data.categoria) {
-      const suggestion = data.sugerencia_keyword.split(/\s+/).slice(0, 3).join(" ").toLowerCase();
-      showLearnPrompt(suggestion, data.categoria, async kw => {
-        await fetch(`${BASE}/api/rules/learn`, {
-          method: "POST", headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({keyword: kw, categoria: data.categoria}),
+      const kw      = data.sugerencia_keyword.split(/\s+/).slice(0, 3).join(" ").toLowerCase();
+      const kwWords = kw.split(/\s+/);
+      await _ensureRulesLoaded();
+
+      // Check if any word in the suggestion matches a keyword in any existing rule
+      let conflictKeyword = null, conflictRule = null, alreadyInTarget = false;
+      for (const rule of _rules) {
+        for (const p of rule.palabras) {
+          if (kwWords.includes(p.toLowerCase())) {
+            if (rule.categoria === data.categoria) { alreadyInTarget = true; }
+            else if (!conflictRule)               { conflictKeyword = p; conflictRule = rule; }
+          }
+        }
+      }
+
+      if (alreadyInTarget) {
+        // keyword already in the right rule — nothing to do
+      } else if (conflictRule) {
+        showConfirm(
+          `"${conflictKeyword}" ya está en la categoría "${conflictRule.categoria}". ¿Moverlo a "${data.categoria}"?`,
+          () => _moveKeywordBetweenRules(conflictKeyword, conflictRule.categoria, data.categoria)
+        );
+      } else {
+        showLearnPrompt(kw, data.categoria, async kw2 => {
+          await fetch(`${BASE}/api/rules/learn`, {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({keyword: kw2, categoria: data.categoria}),
+          });
+          showToast(`✓ "${kw2}" agregado a ${data.categoria}`, "ok", 2500);
+          loadRules();
         });
-        showToast(`✓ "${kw}" agregado a ${data.categoria}`, "ok", 2500);
-        loadRules();
-      });
+      }
     }
   }
   btn.textContent = res.ok ? "✓" : "✗";

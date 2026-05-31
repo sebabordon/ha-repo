@@ -1,3 +1,11 @@
+## 0.5.27
+
+- **Auto-learn inteligente: detecta si el keyword ya existe en otra categoría** (`app.js`): al categorizar un gasto a mano, en lugar de ofrecer siempre "¿Agregar?", ahora el flujo es:
+  - Si alguna palabra del keyword sugerido ya está en la misma categoría destino → no pregunta nada (regla ya cubre el caso).
+  - Si está en una categoría distinta → muestra "¿Mover 'X' de '[CategoriaOrigen]' a '[CategoriaDestino]'?" con Confirmar/Cancelar. Al confirmar, elimina la palabra de la regla origen y la agrega a la destino, guardando en un solo PUT.
+  - Si no está en ninguna regla → comportamiento anterior: prompt editable para agregar.
+  - Las reglas se cargan lazy si el tab Config no fue abierto aún.
+
 ## 0.5.26
 
 - **Filtro ingreso/egreso en solapa Gastos** (`index.html`, `app.js`): nuevo selector "Todos / Egreso / Ingreso" en la barra de filtros. Se aplica client-side sobre los datos ya cargados (sin re-fetch). Default: Todos.
