@@ -1,3 +1,7 @@
+## 0.5.30
+
+- **Scraper BBVA Tarjetas — reescritura con API via fetch()** (`scrapers/bbva_tarjetas.py`): abandona el enfoque DOM/shadow-DOM y adopta exactamente la misma estrategia que el scraper de cuentas: hereda `BbvaScraper` (login, sesión, `_api_request`) y solo overridea `scrape()` para llamar `GET /cliente/productos/tarjetas` y `POST /cliente/productos/tarjetas/movimientos`. Detecta Visa/MC por el texto del campo `marca`/`descripcion`/`alias` de la API. El primer run loguea la estructura completa del JSON para calibrar nombres de campos y endpoints si BBVA los cambia.
+
 ## 0.5.29
 
 - **Scraper BBVA Tarjetas — shadow DOM traversal** (`scrapers/bbva_tarjetas.py`): reescritura completa de la detección de tarjetas y extracción de movimientos para atravesar el shadow DOM de los Lit web components de BBVA. Tres estrategias en cascada: (A) links con texto Visa/MC en shadow DOM via JS, (B) deep text scan + click-y-observar-URL si hay texto pero no links, (C) dump diagnóstico amplio para calibración manual. Los movimientos se extraen con `_JS_EXTRACT_MOVEMENTS` que recorre shadow roots buscando web components con atributos `date`/`concept`/`amount` y lista items con fecha+descripción+monto en el texto. El dump de diagnóstico ahora incluye hasta 8000 chars del shadow DOM del MFE de tarjetas.
