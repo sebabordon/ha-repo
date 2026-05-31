@@ -1,3 +1,7 @@
+## 0.5.41
+
+- **Fix dedup BBVA: priorizar descripción estable sobre la temporal** (`db.py`, `scrapers/bbva.py`): "DB TRF INM COE Nro:…" y "TRANSF DEBITO Nro:…" son descripciones que BBVA asigna transitoriamente y reemplaza después por "Transferencia inmediata" / "TRANSFERENCIA". La migración `dedup_bbva_same_saldo_v1` y el dedup in-batch del scraper ahora penalizan las descripciones con "Nro:" o prefijo "DB TRF"/"TRANSF DEBITO", conservando la descripción estable. Si en el mismo batch el duplicado tiene la descripción estable y el ya-almacenado es temporal, el scraper actualiza la descripción on the fly (log `[dup→stable]`).
+
 ## 0.5.40
 
 - **Fix: BBVA importa la misma transferencia con dos descripciones distintas** (`scrapers/bbva.py`, `db.py`): la API de BBVA devuelve el mismo movimiento con dos valores de `concepto` diferentes (p.ej. "Transferencia inmediata" + "DB TRF INM COE Nro:XXXXXX"). El scraper ahora deduplica dentro del mismo batch usando `(fecha, abs_importe, saldo_resultante)` como clave — mismo saldo post-transacción = mismo movimiento real. Además, se agrega la migración `dedup_bbva_same_saldo_v1` que limpia los duplicados ya existentes en la DB: para cada grupo `(fuente, fecha, monto, moneda)` con más de una entrada, conserva la descripción más específica (tiene número de referencia) o la categorizada por el usuario, y borra las demás preservando la categoría en la entrada que queda.

@@ -320,11 +320,20 @@ def _run_migrations(conn):
 
             def _score(e):
                 _, cat, cat_src, desc = e
+                # "DB TRF INM COE Nro:…" / "TRANSF DEBITO Nro:…" are BBVA
+                # temporary descriptions replaced after a few days by the stable
+                # name ("Transferencia inmediata", "TRANSFERENCIA").  Penalise
+                # them so the stable description wins and is what persists in DB.
+                is_temp = (
+                    desc.startswith("DB TRF") or
+                    desc.startswith("TRANSF DEBITO") or
+                    "Nro:" in desc
+                )
                 return (
-                    2 if cat_src == "user" else 0,    # user-set category first
-                    1 if cat else 0,                   # then any category
-                    1 if any(c.isdigit() for c in desc) else 0,  # specific desc
-                    -e[0],                             # lower id = older = prefer
+                    2 if cat_src == "user" else 0,  # user-set category always wins
+                    1 if cat else 0,                 # then any category
+                    0 if is_temp else 1,             # prefer stable description
+                    -e[0],                           # lower id as tiebreaker
                 )
 
             entries.sort(key=_score, reverse=True)
@@ -346,6 +355,40 @@ def _run_migrations(conn):
             dedup_deleted += len(del_ids)
         logger.info(f"[dedup_bbva_same_saldo_v1] eliminados {dedup_deleted} gastos duplicados de cuenta")
         conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_bbva_same_saldo_v1')")
+
+    if "dedup_bbva_desc_normalize_v1" not in done:
+        # v0.5.41: the v1 migration kept the description with digits ("DB TRF INM
+        # COE Nro:XXXXXX") over the generic one ("Transferencia inmediata"),
+        # creating inconsistency with older movements.  Re-run dedup keeping the
+        # LOWER id (first imported) instead — no digit preference.
+        # Also rename any leftover "DB TRF INM COE*" / "TRANSF DEBITO Nro:*"
+        # descriptions on bbva_cuenta back to their generic form if a matching
+        # (same fuente, fecha, monto) entry with a generic description was deleted.
+        # Since we can't recover deleted rows, we just fix remaining orphan
+        # specific-description entries that have no generic sibling.
+        import re as _re
+        _SPECIFIC_PAT = _re.compile(
+            r"^(DB TRF INM COE|TRANSF DEBITO|DB TRF|TRANSFERENCIA INMEDIATA COE)\s+\w",
+            _re.IGNORECASE,
+        )
+        _GENERIC_MAP = {
+            r"^DB TRF INM COE\b":   "Transferencia inmediata",
+            r"^TRANSF DEBITO\b":    "Transferencia inmediata",
+        }
+        rows = conn.execute(
+            "SELECT id, descripcion FROM gastos "
+            "WHERE fuente = 'bbva_cuenta' AND archivo_origen = 'scraper'"
+        ).fetchall()
+        for r in rows:
+            desc = r["descripcion"] or ""
+            for pat, replacement in _GENERIC_MAP.items():
+                if _re.match(pat, desc, _re.IGNORECASE):
+                    conn.execute(
+                        "UPDATE gastos SET descripcion=? WHERE id=?",
+                        (replacement, r["id"]),
+                    )
+                    break
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_bbva_desc_normalize_v1')")
 
     if "scraper_instances_v1" not in done:
         # v0.4.0: refactor multi-instancia.  Cada cuenta auto-fed apunta a una

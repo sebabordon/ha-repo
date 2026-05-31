@@ -869,7 +869,10 @@ class BbvaScraper(BaseScraper):
         # AND "DB TRF INM COE Nro:XXXXXX").  The post-transaction balance (saldo)
         # is unique per real operation, so (fecha, abs_importe, saldo) is a
         # reliable same-transaction fingerprint.
-        _seen_saldo: set = set()
+        # "DB TRF INM" / "TRANSF DEBITO Nro:…" are TEMPORARY — BBVA replaces
+        # them with the stable description after a few days.  When we see both,
+        # keep the stable one.
+        _seen_saldo: dict = {}  # key → index in result
 
         for i, mov in enumerate(batch):
             fecha = self.parse_date_ar(mov.get("fecha", ""))
@@ -882,16 +885,32 @@ class BbvaScraper(BaseScraper):
 
             saldo_raw = mov.get("saldo")
             saldo_val = BbvaScraper._safe_parse_amount(str(saldo_raw)) if saldo_raw is not None else None
+            concepto = (mov.get("concepto") or "").strip()
+            canal    = (mov.get("canal")    or "").strip()
+            desc     = concepto or canal or "Movimiento BBVA"
+
             if saldo_val is not None:
                 _key = (fecha, round(importe_abs, 2), round(saldo_val, 2))
                 if _key in _seen_saldo:
-                    if log_fn:
-                        log_fn(
-                            f"    [skip dup] {fecha} {importe_abs:.2f} "
-                            f"saldo={saldo_val:.2f} — concepto duplicado omitido"
-                        )
+                    # Duplicate found — if the already-stored entry has a
+                    # temporary description and this one is stable, replace it.
+                    _is_temp = lambda d: d.startswith("DB TRF") or d.startswith("TRANSF DEBITO") or "Nro:" in d
+                    prev_idx = _seen_saldo[_key]
+                    if _is_temp(result[prev_idx].descripcion) and not _is_temp(desc):
+                        result[prev_idx].descripcion = desc
+                        if log_fn:
+                            log_fn(
+                                f"    [dup→stable] {fecha} {importe_abs:.2f} "
+                                f"saldo={saldo_val:.2f} desc actualizada: {desc!r}"
+                            )
+                    else:
+                        if log_fn:
+                            log_fn(
+                                f"    [skip dup] {fecha} {importe_abs:.2f} "
+                                f"saldo={saldo_val:.2f} — concepto duplicado omitido"
+                            )
                     continue
-                _seen_saldo.add(_key)
+                _seen_saldo[_key] = len(result)  # will be appended below
 
             # mov_older = el siguiente en el array newest-first (= movimiento
             # inmediatamente anterior en el tiempo, su saldo es el "antes" del
@@ -906,10 +925,6 @@ class BbvaScraper(BaseScraper):
                     f"    mov fecha={fecha} importe={importe_signed:+.2f} "
                     f"saldo={mov.get('saldo')} → {tag} ({reason})"
                 )
-
-            concepto = (mov.get("concepto") or "").strip()
-            canal    = (mov.get("canal")    or "").strip()
-            desc     = concepto or canal or "Movimiento BBVA"
 
             raw_data = {
                 "saldo":                  mov.get("saldo"),
