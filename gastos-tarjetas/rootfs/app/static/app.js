@@ -1824,8 +1824,18 @@ async function twUnmark(ids) {
     body: JSON.stringify({ ids }),
   });
   if (!res.ok) { showToast("Error al desmarcar", "err"); return; }
-  showToast("Desmarcado", "ok");
   await loadTransferWorkspace();
+  // If the unmarked IDs have no auto-match, they won't appear in the filtered
+  // view — auto-enable "Mostrar todos" so the user can find them.
+  const idSet = new Set(ids);
+  const haveMatch = _twData.suggestions.some(s => idSet.has(s[0]) || idSet.has(s[1]));
+  if (!haveMatch) {
+    document.getElementById("chk-tw-show-all").checked = true;
+    renderTwCandidates();
+    showToast("Desmarcado — sin match automático, activé «Mostrar todos»", "ok");
+  } else {
+    showToast("Desmarcado", "ok");
+  }
   loadGastos(); loadMonthlyChart();
 }
 

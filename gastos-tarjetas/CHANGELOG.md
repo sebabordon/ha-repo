@@ -1,3 +1,7 @@
+## 0.5.37
+
+- **Fix workspace transferencias: «Deshacer» activa «Mostrar todos» si el movimiento desmarcado no tiene match automático** (`app.js`): cuando se desmarca una transferencia «suelta» (sin contrapartida en sugerencias), el movimiento quedaba invisible porque el filtro por defecto solo muestra candidatos con match. Ahora `twUnmark` detecta ese caso y activa el checkbox «Mostrar todos» automáticamente con un toast informativo.
+
 ## 0.5.36
 
 - **Workspace transferencias: filtro por candidatos con match** (`app.js`, `index.html`): por defecto las columnas muestran solo los movimientos que tienen al menos un par detectado automáticamente, no todos los movimientos de cuentas. Checkbox "Mostrar todos" para ver el universo completo cuando sea necesario parear manualmente algo que no fue auto-detectado. Los ítems ya en la cola de confirmación siempre permanecen visibles.
