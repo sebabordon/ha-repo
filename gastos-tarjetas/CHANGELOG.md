@@ -1,3 +1,7 @@
+## 0.5.43
+
+- **Fix workspace transferencias: pares con más de 3 días de diferencia aparecen como "sueltos"** (`routes/gastos.py`): la reconstrucción de pares ya confirmados usaba la misma ventana de 3 días que la detección automática. Como el usuario ya confirmó esos pares, la reconstrucción para display ahora usa 60 días — así pares entre BBVA y MP con 4, 5 o más días de diferencia aparecen juntos en el mismo renglón de "Ya emparejados". La ventana de detección de nuevas sugerencias sigue siendo 3 días.
+
 ## 0.5.42
 
 - **Workspace transferencias: Ignorar persiste en DB** (`db.py`, `routes/gastos.py`, `index.html`, `app.js`): el botón "Ignorar" en sugerencias automáticas ahora guarda el par en la tabla `transfer_ignores` — persiste entre recargas y el par no vuelve a aparecer en sugerencias. Nueva sección colapsable "Sugerencias ignoradas" al pie del workspace con botón "Restaurar" para reactivar cualquier par ignorado. `detect_transfers` excluye automáticamente los pares en `transfer_ignores`.
