@@ -631,20 +631,17 @@ def monthly_summary(excluir_especiales: bool = True) -> list[dict]:
 
 def detect_transfers(days_window: int = 3) -> list[dict]:
     """
-    Find candidate inter-account transfer pairs:
-    a BBVA Cuenta egreso matched to a MercadoPago ingreso (or vice versa)
+    Find candidate inter-account transfer pairs across any non-CC cuenta sources
     with the same absolute ARS amount within `days_window` days.
     Returns only pairs where neither transaction is already a special category.
     """
-    # After normalize_signs_v1: positive monto = egreso for all sources.
-    # A transfer from bbva_cuenta to mercadopago (or vice-versa) appears as
-    # an outflow (monto > 0) on the sending side and an inflow (monto < 0) on
-    # the receiving side.
     specials = get_special_categorias()
+    cc_ph = ",".join("?" * len(_CC_FUENTES))
+    cc_list = list(_CC_FUENTES)
     if specials:
-        ph = ",".join("?" * len(specials))
-        excl_a = f"AND (a.categoria IS NULL OR a.categoria NOT IN ({ph}))"
-        excl_b = f"AND (b.categoria IS NULL OR b.categoria NOT IN ({ph}))"
+        sph = ",".join("?" * len(specials))
+        excl_a = f"AND (a.categoria IS NULL OR a.categoria NOT IN ({sph}))"
+        excl_b = f"AND (b.categoria IS NULL OR b.categoria NOT IN ({sph}))"
         excl_params = list(specials) + list(specials)
     else:
         excl_a = excl_b = ""
@@ -666,19 +663,18 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
             ABS(CAST(a.monto AS REAL)) = ABS(CAST(b.monto AS REAL))
             AND ABS(julianday(a.fecha) - julianday(b.fecha)) <= {days_window}
             AND a.moneda = 'ARS' AND b.moneda = 'ARS'
-            AND (
-                (a.fuente = 'bbva_cuenta' AND CAST(a.monto AS REAL) > 0
-                 AND b.fuente = 'mercadopago' AND CAST(b.monto AS REAL) < 0)
-                OR
-                (a.fuente = 'mercadopago' AND CAST(a.monto AS REAL) > 0
-                 AND b.fuente = 'bbva_cuenta' AND CAST(b.monto AS REAL) < 0)
-            )
+            AND CAST(a.monto AS REAL) > 0
+            AND CAST(b.monto AS REAL) < 0
+            AND a.fuente != b.fuente
+            AND a.fuente NOT IN ({cc_ph})
+            AND b.fuente NOT IN ({cc_ph})
             {excl_a}
             {excl_b}
         ORDER BY a.fecha DESC
     """
+    params = cc_list + cc_list + excl_params
     with _conn() as conn:
-        rows = conn.execute(query, excl_params).fetchall()
+        rows = conn.execute(query, params).fetchall()
     seen = set()
     result = []
     for r in rows:
@@ -701,6 +697,87 @@ def mark_transfers(id_pairs: list[tuple[int, int]]):
             f"UPDATE gastos SET categoria='Transferencia Intercuentas', categoria_fuente='auto' WHERE id IN ({placeholders})",
             ids,
         )
+
+
+def get_transfer_candidates() -> dict:
+    """
+    Returns all non-CC cuenta transactions without special categories,
+    split into egresos (monto > 0) and ingresos (monto < 0).
+    Used by the transfer workspace UI.
+    """
+    specials = get_special_categorias()
+    cc_ph = ",".join("?" * len(_CC_FUENTES))
+    cc_list = list(_CC_FUENTES)
+    excl = ""
+    spec_params: list = []
+    if specials:
+        sph = ",".join("?" * len(specials))
+        excl = f"AND (categoria IS NULL OR categoria NOT IN ({sph}))"
+        spec_params = list(specials)
+    base = (
+        f"SELECT id, fecha, descripcion, monto, fuente, moneda, categoria "
+        f"FROM gastos WHERE fuente NOT IN ({cc_ph}) AND moneda='ARS' {excl} "
+        f"ORDER BY fecha DESC"
+    )
+    with _conn() as conn:
+        all_rows = conn.execute(base, cc_list + spec_params).fetchall()
+    egresos  = [dict(r) for r in all_rows if float(r["monto"]) > 0]
+    ingresos = [dict(r) for r in all_rows if float(r["monto"]) < 0]
+    return {"egresos": egresos, "ingresos": ingresos}
+
+
+def get_existing_transfer_pairs(days_window: int = 3) -> dict:
+    """
+    Returns existing 'Transferencia Intercuentas' / 'Transferencia' transactions,
+    reconstructing pairs where possible by matching opposite-sign same-amount entries.
+    Returns {"pairs": [{"out": {...}, "in": {...}}, ...], "singles": [{...}, ...]}
+    """
+    from datetime import datetime as _dt
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT id, fecha, descripcion, monto, fuente, moneda "
+            "FROM gastos WHERE categoria IN ('Transferencia Intercuentas','Transferencia') "
+            "AND moneda='ARS' ORDER BY fecha DESC"
+        ).fetchall()
+    rows = [dict(r) for r in rows]
+    cc = _CC_FUENTES
+    out_rows = [r for r in rows if float(r["monto"]) > 0 and r["fuente"] not in cc]
+    in_rows  = [r for r in rows if float(r["monto"]) < 0 and r["fuente"] not in cc]
+    used_out: set = set()
+    used_in:  set = set()
+    pairs = []
+    for o in out_rows:
+        for i in in_rows:
+            if i["id"] in used_in:
+                continue
+            if abs(abs(float(o["monto"])) - abs(float(i["monto"]))) > 0.01:
+                continue
+            try:
+                d_o = _dt.strptime(o["fecha"], "%Y-%m-%d").date()
+                d_i = _dt.strptime(i["fecha"], "%Y-%m-%d").date()
+                if abs((d_o - d_i).days) > days_window:
+                    continue
+            except ValueError:
+                pass
+            pairs.append({"out": o, "in": i})
+            used_out.add(o["id"])
+            used_in.add(i["id"])
+            break
+    singles = [r for r in rows if r["id"] not in used_out and r["id"] not in used_in]
+    return {"pairs": pairs, "singles": singles}
+
+
+def unmark_transfers(ids: list[int]) -> int:
+    """Remove transfer category from given transaction IDs. Returns count updated."""
+    if not ids:
+        return 0
+    ph = ",".join("?" * len(ids))
+    with _conn() as conn:
+        cur = conn.execute(
+            f"UPDATE gastos SET categoria=NULL, categoria_fuente=NULL WHERE id IN ({ph})",
+            ids,
+        )
+        return cur.rowcount
 
 
 def get_gasto(gasto_id: int) -> Optional[dict]:

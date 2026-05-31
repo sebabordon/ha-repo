@@ -196,100 +196,162 @@
     <!-- ── Tab: Gastos ────────────────────────────────────────────────── -->
     <section id="tab-gastos" class="tab-content">
 
-      <div class="filter-bar">
-        <div id="gastos-summary"></div>
-        <div style="display:flex;gap:.5rem">
-          <button id="btn-new-mov" class="btn btn-sm">+ Movimiento</button>
-          <button id="btn-detect-transfers" class="btn btn-sm">🔁 Transferencias</button>
-          <button id="btn-toggle-filters" class="btn btn-sm" aria-expanded="true">Filtros ▴</button>
-        </div>
+      <!-- Gastos sub-tabs -->
+      <div class="gtabs">
+        <button class="gtab active" data-gtab="movimientos">Movimientos</button>
+        <button class="gtab" data-gtab="transferencias">⇄ Transferencias</button>
       </div>
 
-      <div id="new-mov-panel" style="display:none">
-        <div class="mov-add-form" style="margin-bottom:.75rem">
-          <select id="nm-cuenta" style="min-width:130px">
-            <option value="">— Cuenta manual —</option>
-          </select>
-          <input id="nm-fecha" class="f-fecha" type="date">
-          <input id="nm-desc"  class="f-desc"  type="text" placeholder="Descripción">
-          <select id="nm-tipo" class="f-tipo">
-            <option value="egreso">Egreso (−)</option>
-            <option value="ingreso">Ingreso (+)</option>
-          </select>
-          <input id="nm-monto" class="f-monto" type="number" placeholder="Monto" min="0" step="0.01">
-          <input id="nm-cat"   class="f-cat"   type="text"   placeholder="Categoría" list="cat-datalist" autocomplete="off">
-          <select id="nm-mon">
-            <option value="ARS">ARS</option>
-            <option value="USD">USD</option>
-          </select>
-          <button id="btn-save-new-mov" class="btn btn-sm btn-primary">Guardar</button>
-        </div>
-      </div>
+      <!-- Sub-tab: Movimientos -->
+      <div id="gtab-movimientos" class="gtab-content active">
 
-      <div id="filter-panel">
-        <div class="filters">
-          <select id="filter-fuente">
-            <option value="">Todas las fuentes</option>
-            <option value="amex">AMEX</option>
-            <option value="bbva_mc">BBVA Mastercard</option>
-            <option value="bbva_visa">BBVA Visa</option>
-            <option value="bbva_cuenta">BBVA Cuenta</option>
-            <option value="galicia_mc">Galicia Mastercard</option>
-            <option value="mercadopago">MercadoPago</option>
-          </select>
-          <select id="filter-usuario">
-            <option value="">Todos</option>
-          </select>
-          <select id="filter-mes">
-            <option value="">Todos los meses</option>
-          </select>
-          <select id="filter-moneda">
-            <option value="">Todas</option>
-            <option value="ARS">ARS $</option>
-            <option value="USD">USD $</option>
-          </select>
-          <select id="filter-tipo">
-            <option value="">Todos</option>
-            <option value="egreso">Egreso</option>
-            <option value="ingreso">Ingreso</option>
-          </select>
-          <button id="btn-load" class="btn">↺</button>
-          <button id="btn-export" class="btn">Exportar Excel</button>
-          <label class="chk-especiales" title="Ocultar categorías especiales (Transferencias, Pagos de tarjeta, etc.)">
-            <input type="checkbox" id="chk-excluir-especiales" checked> Sin especiales
-          </label>
-          <button id="btn-toggle-import-filter" class="btn btn-sm" title="Filtrar por importación" aria-expanded="false">+</button>
-        </div>
-        <div id="import-filter-row" style="display:none;padding:.25rem 0 .1rem">
-          <select id="filter-import" style="min-width:280px;max-width:100%">
-            <option value="">Todas las importaciones</option>
-          </select>
-        </div>
-        <div class="cat-slicer">
-          <span class="cat-label">Categorías:</span>
-          <div id="cat-chips">
-            <span class="cat-chip cat-todos active" onclick="toggleAllCats()">Todas</span>
+        <div class="filter-bar">
+          <div id="gastos-summary"></div>
+          <div style="display:flex;gap:.5rem">
+            <button id="btn-new-mov" class="btn btn-sm">+ Movimiento</button>
+            <button id="btn-toggle-filters" class="btn btn-sm" aria-expanded="true">Filtros ▴</button>
           </div>
         </div>
-      </div>
 
-      <div class="table-wrap">
-        <table id="gastos-table">
-          <thead>
-            <tr>
-              <th class="th-sort" onclick="sortGastos('fecha')">Fecha<span class="sort-ind" id="gsort-fecha"></span></th>
-              <th class="th-sort" onclick="sortGastos('descripcion')">Descripción<span class="sort-ind" id="gsort-descripcion"></span></th>
-              <th class="th-sort" onclick="sortGastos('monto')">Monto<span class="sort-ind" id="gsort-monto"></span></th>
-              <th class="col-moneda">Mon.</th>
-              <th>Fuente</th>
-              <th class="th-sort" onclick="sortGastos('usuario')">Persona<span class="sort-ind" id="gsort-usuario"></span></th>
-              <th class="th-sort" onclick="sortGastos('categoria')">Categoría<span class="sort-ind" id="gsort-categoria"></span></th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="gastos-body"></tbody>
-        </table>
-      </div>
+        <div id="new-mov-panel" style="display:none">
+          <div class="mov-add-form" style="margin-bottom:.75rem">
+            <select id="nm-cuenta" style="min-width:130px">
+              <option value="">— Cuenta manual —</option>
+            </select>
+            <input id="nm-fecha" class="f-fecha" type="date">
+            <input id="nm-desc"  class="f-desc"  type="text" placeholder="Descripción">
+            <select id="nm-tipo" class="f-tipo">
+              <option value="egreso">Egreso (−)</option>
+              <option value="ingreso">Ingreso (+)</option>
+            </select>
+            <input id="nm-monto" class="f-monto" type="number" placeholder="Monto" min="0" step="0.01">
+            <input id="nm-cat"   class="f-cat"   type="text"   placeholder="Categoría" list="cat-datalist" autocomplete="off">
+            <select id="nm-mon">
+              <option value="ARS">ARS</option>
+              <option value="USD">USD</option>
+            </select>
+            <button id="btn-save-new-mov" class="btn btn-sm btn-primary">Guardar</button>
+          </div>
+        </div>
+
+        <div id="filter-panel">
+          <div class="filters">
+            <select id="filter-fuente">
+              <option value="">Todas las fuentes</option>
+              <option value="amex">AMEX</option>
+              <option value="bbva_mc">BBVA Mastercard</option>
+              <option value="bbva_visa">BBVA Visa</option>
+              <option value="bbva_cuenta">BBVA Cuenta</option>
+              <option value="galicia_mc">Galicia Mastercard</option>
+              <option value="mercadopago">MercadoPago</option>
+            </select>
+            <select id="filter-usuario">
+              <option value="">Todos</option>
+            </select>
+            <select id="filter-mes">
+              <option value="">Todos los meses</option>
+            </select>
+            <select id="filter-moneda">
+              <option value="">Todas</option>
+              <option value="ARS">ARS $</option>
+              <option value="USD">USD $</option>
+            </select>
+            <select id="filter-tipo">
+              <option value="">Todos</option>
+              <option value="egreso">Egreso</option>
+              <option value="ingreso">Ingreso</option>
+            </select>
+            <button id="btn-load" class="btn">↺</button>
+            <button id="btn-export" class="btn">Exportar Excel</button>
+            <label class="chk-especiales" title="Ocultar categorías especiales (Transferencias, Pagos de tarjeta, etc.)">
+              <input type="checkbox" id="chk-excluir-especiales" checked> Sin especiales
+            </label>
+            <button id="btn-toggle-import-filter" class="btn btn-sm" title="Filtrar por importación" aria-expanded="false">+</button>
+          </div>
+          <div id="import-filter-row" style="display:none;padding:.25rem 0 .1rem">
+            <select id="filter-import" style="min-width:280px;max-width:100%">
+              <option value="">Todas las importaciones</option>
+            </select>
+          </div>
+          <div class="cat-slicer">
+            <span class="cat-label">Categorías:</span>
+            <div id="cat-chips">
+              <span class="cat-chip cat-todos active" onclick="toggleAllCats()">Todas</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="gastos-table">
+            <thead>
+              <tr>
+                <th class="th-sort" onclick="sortGastos('fecha')">Fecha<span class="sort-ind" id="gsort-fecha"></span></th>
+                <th class="th-sort" onclick="sortGastos('descripcion')">Descripción<span class="sort-ind" id="gsort-descripcion"></span></th>
+                <th class="th-sort" onclick="sortGastos('monto')">Monto<span class="sort-ind" id="gsort-monto"></span></th>
+                <th class="col-moneda">Mon.</th>
+                <th>Fuente</th>
+                <th class="th-sort" onclick="sortGastos('usuario')">Persona<span class="sort-ind" id="gsort-usuario"></span></th>
+                <th class="th-sort" onclick="sortGastos('categoria')">Categoría<span class="sort-ind" id="gsort-categoria"></span></th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="gastos-body"></tbody>
+          </table>
+        </div>
+
+      </div><!-- /gtab-movimientos -->
+
+      <!-- Sub-tab: Transferencias -->
+      <div id="gtab-transferencias" class="gtab-content">
+
+        <div class="tw-toolbar">
+          <button id="btn-tw-autosugerir" class="btn btn-sm btn-primary">⚡ Auto-sugerir</button>
+          <button id="btn-tw-refresh" class="btn btn-sm">↺ Actualizar</button>
+        </div>
+
+        <!-- Queue section (hidden until pairs are assembled) -->
+        <div id="tw-queue-section" class="tw-queue-section" style="display:none">
+          <div class="tw-zone-title">Cola de confirmación</div>
+          <div id="tw-queue-list" class="tw-queue-list"></div>
+          <div class="tw-queue-footer">
+            <button id="btn-tw-confirm" class="btn btn-primary btn-sm">Confirmar pares</button>
+          </div>
+        </div>
+
+        <!-- Selection status bar -->
+        <div id="tw-selection-bar" class="tw-selection-bar" style="display:none">
+          <span id="tw-selection-label">Seleccionado: —</span>
+          <button id="btn-tw-mark-single" class="btn btn-sm">Marcar solo este</button>
+          <button id="btn-tw-cancel-select" class="btn btn-sm">✕ Cancelar</button>
+        </div>
+
+        <!-- Two-column candidates -->
+        <div class="tw-columns">
+          <div class="tw-col">
+            <div class="tw-col-header">
+              Egresos sin parear <span class="tw-col-count" id="tw-egreso-count"></span>
+            </div>
+            <div id="tw-egresos" class="tw-items"></div>
+          </div>
+          <div class="tw-col">
+            <div class="tw-col-header">
+              Ingresos sin parear <span class="tw-col-count" id="tw-ingreso-count"></span>
+            </div>
+            <div id="tw-ingresos" class="tw-items"></div>
+          </div>
+        </div>
+
+        <!-- Already paired (collapsible) -->
+        <div class="tw-zone">
+          <div class="tw-zone-title tw-zone-toggle" onclick="twToggleExisting()">
+            Ya emparejados <span class="tw-col-count" id="tw-existing-count"></span>
+            <span id="tw-existing-arrow" class="tw-arrow">▸</span>
+          </div>
+          <div id="tw-existing-list" style="display:none"></div>
+        </div>
+
+      </div><!-- /gtab-transferencias -->
+
     </section>
 
     <!-- ── Tab: Cuentas ──────────────────────────────────────────────── -->
@@ -650,19 +712,6 @@
     <button id="btn-scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Volver arriba">↑</button>
 
   </main>
-
-  <!-- Transfer detection modal -->
-  <div id="transfer-modal" class="modal-backdrop" style="display:none">
-    <div class="modal">
-      <h3>Transferencias detectadas</h3>
-      <p class="modal-hint">Marcá los pares que son transferencias entre cuentas. Se excluirán del gráfico mensual.</p>
-      <div id="transfer-list"></div>
-      <div class="modal-footer">
-        <button class="btn" onclick="closeTransferModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="confirmTransfers()">Marcar seleccionados</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Rule dry-run preview modal -->
   <div id="rule-preview-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeRulePreview()">

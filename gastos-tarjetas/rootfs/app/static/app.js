@@ -179,6 +179,17 @@ document.querySelectorAll(".tab").forEach(tab => {
   });
 });
 
+// ── Gastos sub-tabs ────────────────────────────────────────────────────────────
+document.querySelectorAll(".gtab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".gtab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".gtab-content").forEach(p => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById(`gtab-${tab.dataset.gtab}`).classList.add("active");
+    if (tab.dataset.gtab === "transferencias") loadTransferWorkspace();
+  });
+});
+
 // ── Config sub-tabs ───────────────────────────────────────────────────────────
 function switchCfgTab(id) {
   document.querySelectorAll(".cfg-tab").forEach(t => t.classList.remove("active"));
@@ -1593,58 +1604,287 @@ document.getElementById("btn-save-new-mov").addEventListener("click", async () =
   }
 });
 
-// ── Transfer detection modal ──────────────────────────────────────────────────
-let _transferPairs = [];
+// ── Transfer workspace ─────────────────────────────────────────────────────────
+let _twData   = null;
+let _twSelA   = null;          // selected egreso (full object), or null
+let _twQueue  = [];            // [{out: {...}, in: {...}}]
+let _twQueuedIds = new Set();  // IDs already in the queue
 
-document.getElementById("btn-detect-transfers").addEventListener("click", async () => {
-  const res = await fetch(`${BASE}/api/gastos/detect-transfers`);
-  _transferPairs = await res.json();
-  const list = document.getElementById("transfer-list");
-  if (!_transferPairs.length) {
-    list.innerHTML = `<p style="color:#888;padding:.5rem 0">No se encontraron transferencias candidatas sin categorizar.</p>`;
-  } else {
-    list.innerHTML = _transferPairs.map((p,i) => `
-      <div class="transfer-row">
-        <input type="checkbox" id="tp-${i}" checked />
-        <label for="tp-${i}" class="transfer-pair">
-          <div class="transfer-pair-line">
-            <span class="t-date">${p.fecha_out}</span>
-            <span class="badge badge-${p.fuente_out}">${p.fuente_out.replace("_"," ")}</span>
-            ${escHtml(p.desc_out)}
-            <span class="t-amt"> −${_fmtNum2(Math.abs(p.monto_out))}</span>
-          </div>
-          <div class="transfer-pair-line" style="color:#888;font-size:.8rem;margin-top:.15rem">
-            <span class="transfer-arrow">↕</span>
-            <span class="t-date">${p.fecha_in}</span>
-            <span class="badge badge-${p.fuente_in}">${p.fuente_in.replace("_"," ")}</span>
-            ${escHtml(p.desc_in)}
-            <span class="t-amt"> +${_fmtNum2(Math.abs(p.monto_in))}</span>
-          </div>
-        </label>
-      </div>`).join("");
-  }
-  document.getElementById("transfer-modal").style.display = "flex";
-});
+async function loadTransferWorkspace() {
+  const res = await fetch(`${BASE}/api/gastos/transfer-workspace`);
+  if (!res.ok) { showToast("Error al cargar workspace", "err"); return; }
+  _twData = await res.json();
+  _twSelA = null;
+  _twQueue = [];
+  _twQueuedIds = new Set();
+  document.getElementById("tw-selection-bar").style.display = "none";
+  renderTwCandidates();
+  renderTwQueue();
+  renderTwExisting();
+}
 
-function closeTransferModal() { document.getElementById("transfer-modal").style.display = "none"; }
+function _twFuenteLabel(f) {
+  return _FUENTE_LABEL[f] || f.replace(/_/g, " ");
+}
 
-async function confirmTransfers() {
-  const selected = _transferPairs
-    .filter((_,i) => document.getElementById(`tp-${i}`)?.checked)
-    .map(p => [p.id_out, p.id_in]);
-  if (!selected.length) { closeTransferModal(); return; }
-  const res  = await fetch(`${BASE}/api/gastos/mark-transfers`, {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({pairs: selected}),
+function _twMakeItem(g, side) {
+  const div = document.createElement("div");
+  div.className = "tw-item" + (_twData.suggestions.some(s => s[0] === g.id || s[1] === g.id) ? " suggested" : "");
+  div.dataset.id = g.id;
+  if (_twQueuedIds.has(g.id)) div.classList.add("queued");
+  const amt  = Math.abs(parseFloat(g.monto));
+  const sign = side === "egreso" ? "−" : "+";
+  const cls  = side === "egreso" ? "tw-amt-egreso" : "tw-amt-ingreso";
+  div.innerHTML =
+    `<span class="tw-item-date">${g.fecha}</span>` +
+    `<span class="badge badge-${g.fuente}">${_twFuenteLabel(g.fuente)}</span>` +
+    `<span class="tw-item-desc">${escHtml(g.descripcion || "")}</span>` +
+    `<span class="tw-item-amount ${cls}">${sign}${_fmtNum2(amt)}</span>`;
+  div.addEventListener("click", () => {
+    if (_twQueuedIds.has(g.id)) return;
+    if (side === "egreso") _twSelectEgreso(g);
+    else _twSelectIngreso(g);
   });
-  const data = await res.json();
-  closeTransferModal();
-  showToast(`✓ ${data.marcados} movimientos marcados como Transferencia`, "ok");
+  return div;
+}
+
+function renderTwCandidates() {
+  const { egresos, ingresos } = _twData;
+  const eEl = document.getElementById("tw-egresos");
+  const iEl = document.getElementById("tw-ingresos");
+  document.getElementById("tw-egreso-count").textContent  = egresos.length  ? `(${egresos.length})`  : "";
+  document.getElementById("tw-ingreso-count").textContent = ingresos.length ? `(${ingresos.length})` : "";
+  eEl.innerHTML = "";
+  if (!egresos.length)  eEl.innerHTML = `<p class="tw-empty">Sin egresos sin parear</p>`;
+  else egresos.forEach(g => eEl.appendChild(_twMakeItem(g, "egreso")));
+  iEl.innerHTML = "";
+  if (!ingresos.length) iEl.innerHTML = `<p class="tw-empty">Sin ingresos sin parear</p>`;
+  else ingresos.forEach(g => iEl.appendChild(_twMakeItem(g, "ingreso")));
+}
+
+function _twSelectEgreso(g) {
+  document.querySelectorAll(".tw-item.selected").forEach(el => el.classList.remove("selected"));
+  if (_twSelA && _twSelA.id === g.id) {
+    _twSelA = null;
+    document.getElementById("tw-selection-bar").style.display = "none";
+    return;
+  }
+  _twSelA = g;
+  const el = document.querySelector(`.tw-item[data-id="${g.id}"]`);
+  if (el) el.classList.add("selected");
+  const amt = _fmtNum2(Math.abs(parseFloat(g.monto)));
+  document.getElementById("tw-selection-label").textContent =
+    `Seleccionado: ${(g.descripcion || "—").slice(0, 35)} −${amt}`;
+  document.getElementById("tw-selection-bar").style.display = "flex";
+}
+
+function _twSelectIngreso(g) {
+  if (!_twSelA) { showToast("Primero seleccioná un egreso (columna izquierda)", "info"); return; }
+  const amtOut = Math.abs(parseFloat(_twSelA.monto));
+  const amtIn  = Math.abs(parseFloat(g.monto));
+  const pct    = Math.abs(amtOut - amtIn) / Math.max(amtOut, amtIn);
+  if (pct > 0.02) {
+    if (!confirm(`Los montos difieren (−${_fmtNum2(amtOut)} vs +${_fmtNum2(amtIn)}). ¿Confirmar igual?`)) return;
+  }
+  _twQueue.push({ out: _twSelA, in: g });
+  _twQueuedIds.add(_twSelA.id);
+  _twQueuedIds.add(g.id);
+  const elOut = document.querySelector(`.tw-item[data-id="${_twSelA.id}"]`);
+  const elIn  = document.querySelector(`.tw-item[data-id="${g.id}"]`);
+  if (elOut) { elOut.classList.remove("selected"); elOut.classList.add("queued"); }
+  if (elIn)  elIn.classList.add("queued");
+  _twSelA = null;
+  document.getElementById("tw-selection-bar").style.display = "none";
+  renderTwQueue();
+}
+
+function twCancelSelect() {
+  document.querySelectorAll(".tw-item.selected").forEach(el => el.classList.remove("selected"));
+  _twSelA = null;
+  document.getElementById("tw-selection-bar").style.display = "none";
+}
+
+async function twMarkSingle() {
+  if (!_twSelA) return;
+  if (!confirm(`¿Marcar "${(_twSelA.descripcion||"").slice(0,40)}" como transferencia sin par?`)) return;
+  const res = await fetch(`${BASE}/api/gastos/mark-transfers`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pairs: [[_twSelA.id, _twSelA.id]] }),
+  });
+  if (!res.ok) { showToast("Error al marcar", "err"); return; }
+  showToast("Marcado como transferencia (suelto)", "ok");
+  await loadTransferWorkspace();
   loadGastos(); loadMonthlyChart();
 }
-document.getElementById("transfer-modal").addEventListener("click", function(e) {
-  if (e.target === this) closeTransferModal();
-});
+
+function twRemoveFromQueue(idx) {
+  const pair = _twQueue[idx];
+  _twQueuedIds.delete(pair.out.id);
+  _twQueuedIds.delete(pair.in.id);
+  _twQueue.splice(idx, 1);
+  [pair.out.id, pair.in.id].forEach(id => {
+    const el = document.querySelector(`.tw-item[data-id="${id}"]`);
+    if (el) el.classList.remove("queued");
+  });
+  renderTwQueue();
+}
+
+function renderTwQueue() {
+  const section = document.getElementById("tw-queue-section");
+  const list    = document.getElementById("tw-queue-list");
+  const btn     = document.getElementById("btn-tw-confirm");
+  if (!_twQueue.length) { section.style.display = "none"; return; }
+  section.style.display = "";
+  btn.textContent = `Confirmar ${_twQueue.length} par${_twQueue.length !== 1 ? "es" : ""}`;
+  list.innerHTML = "";
+  _twQueue.forEach((pair, i) => {
+    const row = document.createElement("div");
+    row.className = "tw-pair-row";
+    const amtOut = _fmtNum2(Math.abs(parseFloat(pair.out.monto)));
+    const amtIn  = _fmtNum2(Math.abs(parseFloat(pair.in.monto)));
+    row.innerHTML =
+      `<div class="tw-pair-side">` +
+        `<span class="tw-item-date">${pair.out.fecha}</span>` +
+        `<span class="badge badge-${pair.out.fuente}">${_twFuenteLabel(pair.out.fuente)}</span>` +
+        `<span class="tw-item-desc">${escHtml((pair.out.descripcion||"").slice(0,28))}</span>` +
+        `<span class="tw-item-amount tw-amt-egreso">−${amtOut}</span>` +
+      `</div>` +
+      `<span class="tw-pair-arrow">⇄</span>` +
+      `<div class="tw-pair-side">` +
+        `<span class="tw-item-date">${pair.in.fecha}</span>` +
+        `<span class="badge badge-${pair.in.fuente}">${_twFuenteLabel(pair.in.fuente)}</span>` +
+        `<span class="tw-item-desc">${escHtml((pair.in.descripcion||"").slice(0,28))}</span>` +
+        `<span class="tw-item-amount tw-amt-ingreso">+${amtIn}</span>` +
+      `</div>`;
+    const rmBtn = document.createElement("button");
+    rmBtn.className = "tw-remove-btn";
+    rmBtn.textContent = "✕";
+    rmBtn.onclick = () => twRemoveFromQueue(i);
+    row.appendChild(rmBtn);
+    list.appendChild(row);
+  });
+}
+
+function twAutoSuggest() {
+  if (!_twData) return;
+  const { suggestions, egresos, ingresos } = _twData;
+  if (!suggestions.length) { showToast("No hay sugerencias automáticas", "info"); return; }
+  const eMap = Object.fromEntries(egresos.map(e => [e.id, e]));
+  const iMap = Object.fromEntries(ingresos.map(i => [i.id, i]));
+  let added = 0;
+  for (const [outId, inId] of suggestions) {
+    if (_twQueuedIds.has(outId) || _twQueuedIds.has(inId)) continue;
+    const out = eMap[outId], inp = iMap[inId];
+    if (!out || !inp) continue;
+    _twQueue.push({ out, in: inp });
+    _twQueuedIds.add(outId);
+    _twQueuedIds.add(inId);
+    const elOut = document.querySelector(`.tw-item[data-id="${outId}"]`);
+    const elIn  = document.querySelector(`.tw-item[data-id="${inId}"]`);
+    if (elOut) elOut.classList.add("queued");
+    if (elIn)  elIn.classList.add("queued");
+    added++;
+  }
+  if (!added) { showToast("Todas las sugerencias ya están en cola", "info"); return; }
+  renderTwQueue();
+  showToast(`${added} par${added !== 1 ? "es" : ""} agregado${added !== 1 ? "s" : ""} a la cola`, "ok");
+}
+
+async function twConfirm() {
+  if (!_twQueue.length) return;
+  const pairs = _twQueue.map(p => [p.out.id, p.in.id]);
+  const res = await fetch(`${BASE}/api/gastos/mark-transfers`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pairs }),
+  });
+  if (!res.ok) { showToast("Error al guardar", "err"); return; }
+  const data = await res.json();
+  showToast(`✓ ${data.marcados} movimientos marcados`, "ok");
+  await loadTransferWorkspace();
+  loadGastos(); loadMonthlyChart();
+}
+
+async function twUnmark(ids) {
+  const res = await fetch(`${BASE}/api/gastos/unmark-transfers`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) { showToast("Error al desmarcar", "err"); return; }
+  showToast("Desmarcado", "ok");
+  await loadTransferWorkspace();
+  loadGastos(); loadMonthlyChart();
+}
+
+function renderTwExisting() {
+  const { pairs, singles } = _twData.existing;
+  const count = pairs.length + singles.length;
+  document.getElementById("tw-existing-count").textContent = count ? `(${count})` : "";
+  const list = document.getElementById("tw-existing-list");
+  if (!count) { list.innerHTML = `<p class="tw-empty">Sin transferencias marcadas aún</p>`; return; }
+  list.innerHTML = "";
+  for (const pair of pairs) {
+    const row = document.createElement("div");
+    row.className = "tw-pair-row tw-existing-row";
+    const amtOut = _fmtNum2(Math.abs(parseFloat(pair.out.monto)));
+    const amtIn  = _fmtNum2(Math.abs(parseFloat(pair.in.monto)));
+    row.innerHTML =
+      `<div class="tw-pair-side">` +
+        `<span class="tw-item-date">${pair.out.fecha}</span>` +
+        `<span class="badge badge-${pair.out.fuente}">${_twFuenteLabel(pair.out.fuente)}</span>` +
+        `<span class="tw-item-desc">${escHtml((pair.out.descripcion||"").slice(0,28))}</span>` +
+        `<span class="tw-item-amount tw-amt-egreso">−${amtOut}</span>` +
+      `</div>` +
+      `<span class="tw-pair-arrow">⇄</span>` +
+      `<div class="tw-pair-side">` +
+        `<span class="tw-item-date">${pair.in.fecha}</span>` +
+        `<span class="badge badge-${pair.in.fuente}">${_twFuenteLabel(pair.in.fuente)}</span>` +
+        `<span class="tw-item-desc">${escHtml((pair.in.descripcion||"").slice(0,28))}</span>` +
+        `<span class="tw-item-amount tw-amt-ingreso">+${amtIn}</span>` +
+      `</div>`;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-sm tw-unmark-btn";
+    btn.textContent = "Deshacer";
+    btn.onclick = () => twUnmark([pair.out.id, pair.in.id]);
+    row.appendChild(btn);
+    list.appendChild(row);
+  }
+  for (const g of singles) {
+    const row = document.createElement("div");
+    row.className = "tw-pair-row tw-existing-row";
+    const amt  = _fmtNum2(Math.abs(parseFloat(g.monto)));
+    const sign = parseFloat(g.monto) > 0 ? "−" : "+";
+    const cls  = parseFloat(g.monto) > 0 ? "tw-amt-egreso" : "tw-amt-ingreso";
+    row.innerHTML =
+      `<div class="tw-pair-side">` +
+        `<span class="tw-item-date">${g.fecha}</span>` +
+        `<span class="badge badge-${g.fuente}">${_twFuenteLabel(g.fuente)}</span>` +
+        `<span class="tw-item-desc">${escHtml((g.descripcion||"").slice(0,28))}</span>` +
+        `<span class="tw-item-amount ${cls}">${sign}${amt}</span>` +
+      `</div>` +
+      `<span class="tw-single-badge">suelto</span>` +
+      `<div class="tw-pair-side"></div>`;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-sm tw-unmark-btn";
+    btn.textContent = "Deshacer";
+    btn.onclick = () => twUnmark([g.id]);
+    row.appendChild(btn);
+    list.appendChild(row);
+  }
+}
+
+function twToggleExisting() {
+  const list  = document.getElementById("tw-existing-list");
+  const arrow = document.getElementById("tw-existing-arrow");
+  const open  = list.style.display === "none";
+  list.style.display  = open ? "" : "none";
+  arrow.textContent   = open ? "▾" : "▸";
+}
+
+document.getElementById("btn-tw-autosugerir").addEventListener("click", twAutoSuggest);
+document.getElementById("btn-tw-refresh").addEventListener("click", loadTransferWorkspace);
+document.getElementById("btn-tw-confirm").addEventListener("click", twConfirm);
+document.getElementById("btn-tw-cancel-select").addEventListener("click", twCancelSelect);
+document.getElementById("btn-tw-mark-single").addEventListener("click", twMarkSingle);
 
 // ── Import batches ────────────────────────────────────────────────────────────
 const _FUENTE_LABEL = {

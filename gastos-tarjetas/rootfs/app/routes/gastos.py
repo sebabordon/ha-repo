@@ -8,7 +8,12 @@ from fastapi import APIRouter, Request, Query
 from fastapi.responses import StreamingResponse
 
 from auth import require_auth
-from db import list_gastos, list_categorias, monthly_summary, detect_transfers, mark_transfers, update_categoria, update_usuario, update_gasto_fecha, delete_all_gastos, get_gasto, delete_gasto_manual, list_importaciones, rename_categoria_in_gastos
+from db import (list_gastos, list_categorias, monthly_summary,
+                detect_transfers, mark_transfers,
+                get_transfer_candidates, get_existing_transfer_pairs, unmark_transfers,
+                update_categoria, update_usuario, update_gasto_fecha,
+                delete_all_gastos, get_gasto, delete_gasto_manual,
+                list_importaciones, rename_categoria_in_gastos)
 
 router = APIRouter()
 
@@ -127,6 +132,20 @@ def get_gastos(
     )
 
 
+@router.get("/gastos/transfer-workspace")
+def get_transfer_workspace(request: Request, days: int = Query(3)):
+    require_auth(request)
+    candidates = get_transfer_candidates()
+    suggestions = detect_transfers(days_window=days)
+    existing = get_existing_transfer_pairs(days_window=days)
+    return {
+        "egresos":     candidates["egresos"],
+        "ingresos":    candidates["ingresos"],
+        "suggestions": [[s["id_out"], s["id_in"]] for s in suggestions],
+        "existing":    existing,
+    }
+
+
 @router.get("/gastos/detect-transfers")
 def get_detect_transfers(request: Request, days: int = Query(3)):
     require_auth(request)
@@ -140,6 +159,14 @@ def post_mark_transfers(body: dict, request: Request):
     id_pairs = [(p[0], p[1]) for p in pairs if len(p) == 2]
     mark_transfers(id_pairs)
     return {"ok": True, "marcados": len(id_pairs) * 2}
+
+
+@router.post("/gastos/unmark-transfers")
+def post_unmark_transfers(body: dict, request: Request):
+    require_auth(request)
+    ids = [int(i) for i in body.get("ids", []) if str(i).lstrip("-").isdigit()]
+    count = unmark_transfers(ids)
+    return {"ok": True, "desmarcados": count}
 
 
 @router.delete("/gastos")

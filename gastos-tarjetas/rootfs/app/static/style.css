@@ -1914,3 +1914,138 @@ tbody tr:hover { background: #fafbff; }
 }
 .cp-msg.ok  { color: #16a34a; }
 .cp-msg.err { color: #b91c1c; }
+
+/* ── Gastos sub-tabs ──────────────────────────────────────────────────────────── */
+.gtabs {
+  display: flex;
+  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 1rem;
+}
+.gtab {
+  padding: .4rem 1.1rem;
+  font-size: .85rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  color: #64748b;
+  font-weight: 500;
+}
+.gtab:hover  { color: #1a1a2e; }
+.gtab.active { color: #1a1a2e; border-bottom-color: #3b82f6; font-weight: 600; }
+.gtab-content          { display: none; }
+.gtab-content.active   { display: block; }
+
+/* ── Transfer workspace ───────────────────────────────────────────────────────── */
+.tw-toolbar { display: flex; gap: .5rem; margin-bottom: .85rem; }
+
+.tw-queue-section {
+  margin-bottom: .85rem;
+  padding: .65rem .75rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+}
+.tw-queue-list { margin-bottom: .5rem; }
+
+.tw-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .45rem .75rem;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  margin-bottom: .75rem;
+  font-size: .85rem;
+  flex-wrap: wrap;
+}
+#tw-selection-label { flex: 1; color: #92400e; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tw-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .85rem;
+  margin-bottom: .85rem;
+}
+.tw-col { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
+.tw-col-header {
+  padding: .45rem .7rem;
+  background: #f8fafc;
+  font-weight: 600;
+  font-size: .8rem;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+.tw-col-count { color: #6b7280; font-weight: 400; font-size: .75rem; }
+.tw-items { max-height: 360px; overflow-y: auto; }
+
+.tw-item {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .3rem .55rem;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  font-size: .78rem;
+}
+.tw-item:last-child { border-bottom: none; }
+.tw-item:hover { background: #f8fafc; }
+.tw-item.suggested { background: #fefce8; }
+.tw-item.suggested:hover { background: #fef9c3; }
+.tw-item.selected { background: #dbeafe !important; outline: 2px solid #3b82f6; outline-offset: -2px; }
+.tw-item.queued { opacity: .4; cursor: not-allowed; background: #f0fdf4 !important; }
+.tw-item-date  { color: #6b7280; flex-shrink: 0; min-width: 5.3rem; }
+.tw-item-desc  { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #374151; }
+.tw-item-amount { font-variant-numeric: tabular-nums; font-weight: 600; flex-shrink: 0; }
+.tw-amt-egreso  { color: #b91c1c; }
+.tw-amt-ingreso { color: #16a34a; }
+
+.tw-zone {
+  margin-bottom: .85rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.tw-zone-title {
+  padding: .45rem .75rem;
+  background: #f8fafc;
+  font-weight: 600;
+  font-size: .82rem;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+.tw-zone-toggle { cursor: pointer; user-select: none; }
+.tw-zone-toggle:hover { background: #f1f5f9; }
+.tw-arrow { margin-left: auto; font-size: .75rem; color: #9ca3af; }
+
+.tw-pair-row {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .3rem .55rem;
+  border-bottom: 1px solid #f0f4f8;
+  font-size: .78rem;
+}
+.tw-pair-row:last-child { border-bottom: none; }
+.tw-existing-row { background: #fafafa; }
+.tw-pair-side { flex: 1; display: flex; align-items: center; gap: .3rem; min-width: 0; overflow: hidden; }
+.tw-pair-arrow { color: #9ca3af; flex-shrink: 0; }
+.tw-remove-btn { background: none; border: none; color: #9ca3af; cursor: pointer; padding: .1rem .25rem; font-size: .8rem; flex-shrink: 0; }
+.tw-remove-btn:hover { color: #b91c1c; }
+.tw-unmark-btn { flex-shrink: 0; font-size: .73rem; padding: .12rem .45rem; }
+.tw-single-badge { font-size: .7rem; color: #9ca3af; background: #f1f5f9; padding: .1rem .4rem; border-radius: 4px; flex-shrink: 0; }
+
+.tw-empty { color: #9ca3af; padding: .65rem; font-size: .82rem; text-align: center; margin: 0; }
+
+@media (max-width: 640px) {
+  .tw-columns { grid-template-columns: 1fr; }
+  .tw-item-date { min-width: 4rem; font-size: .72rem; }
+}

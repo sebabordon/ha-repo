@@ -1,3 +1,7 @@
+## 0.5.35
+
+- **Workspace de transferencias inter-cuentas** (`static/index.html`, `app.js`, `db.py`, `routes/gastos.py`): reemplaza el modal de detección automática por un sub-tab "Transferencias" dentro de Gastos con interacción individual. Dos columnas (egresos / ingresos) con items clickeables para armar pares manualmente; botón "Auto-sugerir" pre-llena la cola con los pares detectados automáticamente; cola de confirmación con botón ✕ por par; sección colapsable "Ya emparejados" con botón "Deshacer" por par; "Marcar solo este" para transferencias sin contrapartida importada. La detección automática ya no está hardcodeada a bbva_cuenta↔mercadopago — ahora soporta cualquier par de cuentas no-tarjeta (bbva_cuenta, mercadopago, invertironline, etc.). Nuevos endpoints: `GET /api/gastos/transfer-workspace` y `POST /api/gastos/unmark-transfers`.
+
 ## 0.5.34
 
 - **Fix: "Último intento" y "Último OK" mostraban hora UTC en lugar de hora local**: los timestamps se guardaban como UTC (`datetime.utcnow()`) y se mostraban con un simple `.replace('T',' ').slice(0,16)` sin conversión de zona horaria. Ahora se usa `new Date(iso + 'Z').toLocaleString('es-AR')` igual que ya se hacía con `scraped_at` y el próximo run, mostrando siempre la hora de Argentina.
