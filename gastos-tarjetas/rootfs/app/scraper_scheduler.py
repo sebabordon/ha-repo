@@ -85,11 +85,12 @@ def _apply_saldo_delta(
         adjust_fn(fuente, delta, moneda)
 
 _SCRAPER_CLASSES = {
-    "amex":           "scrapers.amex:AmexScraper",
-    "bbva":           "scrapers.bbva:BbvaScraper",
-    "galicia":        "scrapers.galicia:GaliciaScraper",
-    "mercadopago":    "scrapers.mercadopago:MercadoPagoScraper",
-    "invertironline": "scrapers.invertironline:InvertirOnlineScraper",
+    "amex":            "scrapers.amex:AmexScraper",
+    "bbva":            "scrapers.bbva:BbvaScraper",
+    "bbva_tarjetas":   "scrapers.bbva_tarjetas:BbvaTarjetasScraper",
+    "galicia":         "scrapers.galicia:GaliciaScraper",
+    "mercadopago":     "scrapers.mercadopago:MercadoPagoScraper",
+    "invertironline":  "scrapers.invertironline:InvertirOnlineScraper",
 }
 
 # Default fuente que emite cada scraper "estándar" cuando no hay overriding por
@@ -100,7 +101,7 @@ _BANCO_DEFAULT_FUENTE = {
     "galicia":        "galicia_mc",
     "mercadopago":    "mercadopago",
     "invertironline": "invertironline",
-    # BBVA NO está acá porque hace remap per-product internamente.
+    # BBVA y bbva_tarjetas NO están acá porque hacen remap per-product internamente.
 }
 
 

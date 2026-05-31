@@ -94,6 +94,25 @@ BANKS: dict[str, dict] = {
             },
         ],
     },
+    "bbva_tarjetas": {
+        "nombre":   "BBVA Argentina — Tarjetas de Crédito",
+        "schedule": "07:20",
+        "campos": [
+            {"key": "usuario",     "label": "Número de DNI",       "type": "text",     "required": True,
+             "hint": "Solo el número, sin puntos (ej. 12345678)"},
+            {"key": "tercer_dato", "label": "Usuario BBVA",        "type": "text",     "required": True,
+             "hint": "El nombre de usuario que configuraste en homebanking (no el DNI)"},
+            {"key": "password",    "label": "Contraseña",          "type": "password", "required": True},
+            {
+                "key":         "usuario_default",
+                "label":       "Usuario para los gastos importados",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "Titular",
+                "hint":        "Nombre que verán los gastos importados (ej. Titular, Sebastián).",
+            },
+        ],
+    },
     "galicia": {
         "nombre":   "Banco Galicia",
         "schedule": "07:30",
@@ -262,6 +281,7 @@ def set_bank_config(banco: str, updates: dict, data_dir: str | None = None) -> N
             # Crear instancia + linkear cuenta default del banco
             _DEFAULT_LINK = {
                 "bbva":           ("bbva_cuenta",    "ARS"),
+                "bbva_tarjetas":  ("bbva_visa",      "VISA"),
                 "amex":           ("amex",           "main"),
                 "galicia":        ("galicia_mc",     "main"),
                 "mercadopago":    ("mercadopago",    "main"),

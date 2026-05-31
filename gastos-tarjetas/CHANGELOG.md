@@ -1,3 +1,7 @@
+## 0.5.28
+
+- **Nuevo scraper BBVA Tarjetas de Crédito** (`scrapers/bbva_tarjetas.py`): scraper Selenium que navega el homebanking BBVA Argentina y extrae los movimientos del período en curso de las tarjetas Visa y Mastercard directamente desde el DOM (sin API). Registrado como `"bbva_tarjetas"` en el scheduler y con su propia entrada en Scrapers con los mismos campos de credenciales que BBVA Cuentas. Emite movimientos con `fuente="bbva_visa"` y `fuente="bbva_mc"`, compatibles con los PDFs existentes. El mapeo tarjeta→fuente se puede overridear vía `product_key` en la tab Cuentas (VISA o MC). Incluye múltiples estrategias de extracción del DOM (web components, listas, tablas, divs) con log de diagnóstico para calibrar selectores tras el primer run.
+
 ## 0.5.27
 
 - **Auto-learn inteligente: detecta si el keyword ya existe en otra categoría** (`app.js`): al categorizar un gasto a mano, en lugar de ofrecer siempre "¿Agregar?", ahora el flujo es:
