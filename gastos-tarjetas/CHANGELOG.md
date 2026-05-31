@@ -1,3 +1,7 @@
+## 0.5.34
+
+- **Fix: "Último intento" y "Último OK" mostraban hora UTC en lugar de hora local**: los timestamps se guardaban como UTC (`datetime.utcnow()`) y se mostraban con un simple `.replace('T',' ').slice(0,16)` sin conversión de zona horaria. Ahora se usa `new Date(iso + 'Z').toLocaleString('es-AR')` igual que ya se hacía con `scraped_at` y el próximo run, mostrando siempre la hora de Argentina.
+
 ## 0.5.33
 
 - **Parser Galicia MC: intereses de financiación y punitorios** (`parsers/galicia.py`): cuando no se paga el saldo completo, los intereses aparecen solo en el resumen CONSOLIDADO (sin fila con fecha en DETALLE). Se agregan dos nuevos patrones regex (`_INTERES_FINANC_RE`, `_INTERES_PUNITOR_RE`) y la función `_extract_intereses()` que los extrae del texto de las primeras páginas. Si están presentes, se registran como egresos individuales en la fecha de cierre del resumen, igual que la comisión. El saldo pendiente no se agrega porque ya figura en los gastos del mes anterior.

@@ -410,6 +410,11 @@ function _fmtSaldo(n) {
   const dec = Math.abs(v) >= 10000 ? 0 : 2;
   return v.toLocaleString("es-AR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
 }
+function _fmtTs(iso) {
+  if (!iso) return "";
+  const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
+  return d.toLocaleString("es-AR", {dateStyle:"short", timeStyle:"short"});
+}
 
 let _monthFilterReady = false;
 
@@ -3385,8 +3390,8 @@ function _renderInstanceFullPanel(c, inst) {
   const nextRun = _instanceJobs[String(inst.id)];
   const statusInfo = `
     <div class="scraper-status-info">
-      ${inst.ultimo_run ? `<span title="Cuándo arrancó el último run">▶ Último intento: ${escHtml(inst.ultimo_run.replace('T',' ').slice(0,16))}</span>` : ""}
-      ${inst.ultimo_ok  ? `<span style="color:#16a34a">✓ Último OK: ${escHtml(inst.ultimo_ok.replace('T',' ').slice(0,16))}</span>` : ""}
+      ${inst.ultimo_run ? `<span title="Cuándo arrancó el último run">▶ Último intento: ${escHtml(_fmtTs(inst.ultimo_run))}</span>` : ""}
+      ${inst.ultimo_ok  ? `<span style="color:#16a34a">✓ Último OK: ${escHtml(_fmtTs(inst.ultimo_ok))}</span>` : ""}
       ${nextRun ? `<span style="color:#2563eb">⏱ Próximo: ${escHtml(new Date(nextRun).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}))}</span>` : ""}
     </div>
     ${inst.error_msg ? `<p style="font-size:.8rem;color:#b91c1c;margin-top:.4rem">Último error: ${escHtml(inst.error_msg)}</p>` : ""}`;
@@ -4524,8 +4529,8 @@ function _buildScraperCard(banco, data) {
       ${st.error_msg ? `<p style="font-size:.8rem;color:#b91c1c;margin-top:.5rem">
         Último error: ${escHtml(st.error_msg)}</p>` : ""}
       <div style="font-size:.78rem;color:#888;margin-top:.4rem;display:flex;flex-wrap:wrap;gap:.75rem">
-        ${st.ultimo_run ? `<span title="Cuándo arrancó el último run (puede haber sido exitoso o fallido)">▶ Último intento: ${escHtml(st.ultimo_run.replace('T',' ').slice(0,16))}</span>` : ""}
-        ${st.ultimo_ok  ? `<span title="Cuándo finalizó el último run exitoso" style="color:#16a34a">✓ Último OK: ${escHtml(st.ultimo_ok.replace('T',' ').slice(0,16))}</span>` : ""}
+        ${st.ultimo_run ? `<span title="Cuándo arrancó el último run (puede haber sido exitoso o fallido)">▶ Último intento: ${escHtml(_fmtTs(st.ultimo_run))}</span>` : ""}
+        ${st.ultimo_ok  ? `<span title="Cuándo finalizó el último run exitoso" style="color:#16a34a">✓ Último OK: ${escHtml(_fmtTs(st.ultimo_ok))}</span>` : ""}
         ${_scraperJobs[banco] ? `<span title="Próximo run programado por el scheduler" style="color:#2563eb">⏱ Próximo run: ${escHtml(new Date(_scraperJobs[banco]).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}))}</span>` : (st.estado !== 'idle' ? "" : `<span style="color:#f59e0b" title="El scheduler no tiene este banco programado — verificá las credenciales">⚠ No programado</span>`)}
       </div>
       ${st.last_log ? `<details class="scraper-log-details">
