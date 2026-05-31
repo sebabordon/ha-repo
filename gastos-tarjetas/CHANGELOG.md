@@ -1,3 +1,7 @@
+## 0.5.47
+
+- **BBVA scraper: no guardar sesión al terminar el run** (`scrapers/base.py`, `scrapers/bbva.py`): se agrega `save_session: bool = True` a `BaseScraper`; cuando es `False`, al terminar el run se borra cualquier sesión en disco en lugar de guardar las cookies nuevas. `BbvaScraper` lo setea en `False` y elimina el `session_ttl_seconds` que ya no tiene sentido: con sesiones de 5 min y runs cada 30+ min las cookies siempre estaban vencidas y solo generaban redirects a `/desconexion.html`.
+
 ## 0.5.46
 
 - **Fix: transferencia a Reserva MP aparecía como ingreso en lugar de egreso** (`scrapers/mercadopago.py`): `partition_transfer` (mover dinero a la Reserva de MP) aparece en ambas queries de la API (payer=user, collector=user). El código lo deferiba en la query de payer y lo capturaba en la de collector con `sign=-1` (ingreso). Corrección: se difiere en la collector query y se captura en la payer (sign=+1, egreso), generando correctamente "Transferencia hacia Reserva" con monto positivo.

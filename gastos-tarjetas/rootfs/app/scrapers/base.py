@@ -103,6 +103,10 @@ class BaseScraper(ABC):
     nombre:              str = ""
     login_origin:        str = ""   # ej. "https://www.bbva.com.ar"
     session_ttl_seconds: Optional[int] = None
+    # Si False, la sesión NO se guarda al terminar el run.  Útil para bancos con
+    # timeouts de sesión muy cortos (ej. BBVA 5 min) donde guardar cookies stale
+    # solo genera redirects a /desconexion.html en el siguiente run.
+    save_session:        bool = True
 
     def __init__(self):
         os.makedirs(_SESSIONS_DIR, exist_ok=True)
@@ -346,9 +350,13 @@ class BaseScraper(ABC):
             result = self.scrape(driver, config)
             result.log_lines = log + result.log_lines
 
-            # Persistir sesión actualizada
-            self._save_session(driver)
-            _log(f"Sesión guardada. Movimientos encontrados: {len(result.movimientos)}")
+            # Persistir sesión actualizada (si el scraper lo permite)
+            if self.save_session:
+                self._save_session(driver)
+                _log(f"Sesión guardada. Movimientos encontrados: {len(result.movimientos)}")
+            else:
+                self.clear_session()   # borrar cualquier sesión stale que pudiera existir
+                _log(f"Sesión no persistida (save_session=False). Movimientos encontrados: {len(result.movimientos)}")
 
             logger.info(
                 "[%s] OK — %d movimientos, saldos: %s",
