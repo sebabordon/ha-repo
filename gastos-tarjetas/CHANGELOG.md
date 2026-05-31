@@ -1,3 +1,7 @@
+## 0.5.46
+
+- **Fix: transferencia a Reserva MP aparecía como ingreso en lugar de egreso** (`scrapers/mercadopago.py`): `partition_transfer` (mover dinero a la Reserva de MP) aparece en ambas queries de la API (payer=user, collector=user). El código lo deferiba en la query de payer y lo capturaba en la de collector con `sign=-1` (ingreso). Corrección: se difiere en la collector query y se captura en la payer (sign=+1, egreso), generando correctamente "Transferencia hacia Reserva" con monto positivo.
+
 ## 0.5.45
 
 - **BBVA scraper: captura campos extra del endpoint de movimientos** (`scrapers/bbva.py`): se agregan a `raw_data` los campos `denominacionCuenta`, `numeroCuenta`, `claveOperacion`, `codigoSucursal`, `origen`, `procedencia`, `numeroCheque` y `codigoAccionDetalleMovimientoCuenta`, que ya venían en la respuesta API pero no se guardaban. En el log se emite una línea `[extra]` por movimiento mostrando los campos no vacíos, para evaluar qué datos trae cada tipo de operación y decidir si incorporarlos a la descripción.

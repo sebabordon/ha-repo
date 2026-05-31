@@ -320,9 +320,10 @@ class MercadoPagoScraper(BaseScraper):
                     continue
 
                 # partition_transfer: aparece en ambas queries (payer=user, collector=user).
-                # Siempre es movimiento interno → diferir a la query de collector.
-                if op_type == "partition_transfer" and sign == +1:
-                    _dbg("DEFER-IN")
+                # Es siempre "main account → Reserva" (egreso). Capturar en la query
+                # de payer (sign=+1) y diferir en la de collector para no duplicar.
+                if op_type == "partition_transfer" and sign == -1:
+                    _dbg("DEFER-OUT")
                     continue
 
                 # account_fund en payer query: diferir solo si el ID apareció en la
