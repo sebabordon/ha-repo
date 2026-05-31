@@ -1,3 +1,7 @@
+## 0.5.26
+
+- **Filtro ingreso/egreso en solapa Gastos** (`index.html`, `app.js`): nuevo selector "Todos / Egreso / Ingreso" en la barra de filtros. Se aplica client-side sobre los datos ya cargados (sin re-fetch). Default: Todos.
+
 ## 0.5.25
 
 - **Reglas de persona: misma lógica que reglas de categorización** — todas las mejoras de v0.5.24 aplicadas a la sección "Reglas de asignación de persona":

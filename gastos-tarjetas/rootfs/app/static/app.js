@@ -1228,6 +1228,11 @@ async function loadGastos() {
 function _renderGastos() {
   let gastos = _gastosData;
 
+  // Filter by tipo (ingreso/egreso) client-side
+  const tipo = document.getElementById("filter-tipo").value;
+  if (tipo === "egreso")  gastos = gastos.filter(g => _isEgreso(g.monto));
+  else if (tipo === "ingreso") gastos = gastos.filter(g => !_isEgreso(g.monto));
+
   // Sort client-side
   if (_gastosSort.col) {
     const col = _gastosSort.col, dir = _gastosSort.dir;
@@ -1450,6 +1455,7 @@ async function saveUsuario(id, sel) {
 
 ["filter-fuente","filter-usuario","filter-mes","filter-moneda","filter-import"].forEach(id =>
   document.getElementById(id).addEventListener("change", function() { this.blur(); loadGastos(); }));
+document.getElementById("filter-tipo").addEventListener("change", function() { this.blur(); _renderGastos(); });
 document.getElementById("chk-excluir-especiales").addEventListener("change", loadGastos);
 document.getElementById("chk-excluir-especiales-graf").addEventListener("change", loadCharts);
 document.getElementById("btn-load").addEventListener("click", loadGastos);
