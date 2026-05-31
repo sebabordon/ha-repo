@@ -1,3 +1,7 @@
+## 0.5.40
+
+- **Fix: BBVA importa la misma transferencia con dos descripciones distintas** (`scrapers/bbva.py`, `db.py`): la API de BBVA devuelve el mismo movimiento con dos valores de `concepto` diferentes (p.ej. "Transferencia inmediata" + "DB TRF INM COE Nro:XXXXXX"). El scraper ahora deduplica dentro del mismo batch usando `(fecha, abs_importe, saldo_resultante)` como clave — mismo saldo post-transacción = mismo movimiento real. Además, se agrega la migración `dedup_bbva_same_saldo_v1` que limpia los duplicados ya existentes en la DB: para cada grupo `(fuente, fecha, monto, moneda)` con más de una entrada, conserva la descripción más específica (tiene número de referencia) o la categorizada por el usuario, y borra las demás preservando la categoría en la entrada que queda.
+
 ## 0.5.39
 
 - **Workspace transferencias: sección "Sugerencias automáticas" con Parear/Ignorar** (`index.html`, `app.js`, `style.css`): las sugerencias auto-detectadas ahora se muestran como lista de pares antes de las columnas, con botón "Parear" (agrega a cola) e "Ignorar" (descarta la sugerencia de la sesión) por fila. El botón "Auto-sugerir" de la toolbar y el botón "Agregar todas a cola" de la sección hacen lo mismo. Las columnas de candidatos ya no muestran ítems en amarillo si la sugerencia fue ignorada.

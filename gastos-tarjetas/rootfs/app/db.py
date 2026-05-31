@@ -286,6 +286,67 @@ def _run_migrations(conn):
                 deleted += 1
         conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_scraper_gastos_v1')")
 
+    if "dedup_bbva_same_saldo_v1" not in done:
+        # v0.5.40: BBVA API returns the same transaction with two different
+        # `concepto` values (e.g. "Transferencia inmediata" + "DB TRF INM COE
+        # Nro:XXXXXX").  Both passed the previous dedup (different description).
+        # Strategy: for cuenta sources, group by (fuente, fecha, monto, moneda);
+        # when count > 1 keep the most informative entry (description has digits
+        # → specific ref number) or the categorized one; preserve any user-set
+        # category; delete the rest.
+        _GENERIC = {"TRANSFERENCIA", "Transferencia inmediata", "Transferencia",
+                    "Movimiento BBVA", "MOVIMIENTO BBVA", "PAGO"}
+        dup_rows = conn.execute("""
+            SELECT fuente, fecha, CAST(monto AS REAL) AS m, moneda,
+                   GROUP_CONCAT(id, ',')          AS ids,
+                   GROUP_CONCAT(COALESCE(categoria,''), ',') AS cats,
+                   GROUP_CONCAT(COALESCE(categoria_fuente,''), ',') AS cat_srcs,
+                   GROUP_CONCAT(descripcion, '||') AS descs
+            FROM gastos
+            WHERE fuente NOT IN ('amex','bbva_mc','bbva_visa','galicia_mc')
+              AND archivo_origen = 'scraper'
+            GROUP BY fuente, fecha, CAST(monto AS REAL), moneda
+            HAVING COUNT(*) > 1
+        """).fetchall()
+        dedup_deleted = 0
+        for row in dup_rows:
+            ids       = [int(x) for x in str(row["ids"]).split(",") if x]
+            cats      = str(row["cats"]).split(",")
+            cat_srcs  = str(row["cat_srcs"]).split(",")
+            descs     = str(row["descs"]).split("||")
+            if len(ids) < 2:
+                continue
+            entries = list(zip(ids, cats, cat_srcs, descs))
+
+            def _score(e):
+                _, cat, cat_src, desc = e
+                return (
+                    2 if cat_src == "user" else 0,    # user-set category first
+                    1 if cat else 0,                   # then any category
+                    1 if any(c.isdigit() for c in desc) else 0,  # specific desc
+                    -e[0],                             # lower id = older = prefer
+                )
+
+            entries.sort(key=_score, reverse=True)
+            keep_id, keep_cat, keep_src, keep_desc = entries[0]
+            # If keep has no category but a deleted entry has one, transfer it
+            if not keep_cat:
+                for _, d_cat, d_src, _ in entries[1:]:
+                    if d_cat:
+                        conn.execute(
+                            "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE id=?",
+                            (d_cat, d_src, keep_id),
+                        )
+                        break
+            del_ids = [e[0] for e in entries[1:]]
+            ph = ",".join("?" * len(del_ids))
+            conn.execute(f"DELETE FROM gastos WHERE id IN ({ph})", del_ids)
+            for did in del_ids:
+                conn.execute("DELETE FROM movimientos_raw WHERE gasto_id=?", (did,))
+            dedup_deleted += len(del_ids)
+        logger.info(f"[dedup_bbva_same_saldo_v1] eliminados {dedup_deleted} gastos duplicados de cuenta")
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_bbva_same_saldo_v1')")
+
     if "scraper_instances_v1" not in done:
         # v0.4.0: refactor multi-instancia.  Cada cuenta auto-fed apunta a una
         # `scraper_instance` que tiene su propio set de credenciales/config y

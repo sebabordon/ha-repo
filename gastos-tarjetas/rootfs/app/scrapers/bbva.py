@@ -864,6 +864,12 @@ class BbvaScraper(BaseScraper):
           monto < 0 = ingreso  (plata que entra)
         """
         result: list[MovimientoRaw] = []
+        # Dedup within this batch: BBVA sometimes returns the same transaction
+        # twice with different `concepto` values (e.g. "Transferencia inmediata"
+        # AND "DB TRF INM COE Nro:XXXXXX").  The post-transaction balance (saldo)
+        # is unique per real operation, so (fecha, abs_importe, saldo) is a
+        # reliable same-transaction fingerprint.
+        _seen_saldo: set = set()
 
         for i, mov in enumerate(batch):
             fecha = self.parse_date_ar(mov.get("fecha", ""))
@@ -873,6 +879,19 @@ class BbvaScraper(BaseScraper):
             importe_str    = str(mov.get("importe", "0") or "0")
             importe_signed = self.parse_amount(importe_str)
             importe_abs    = abs(importe_signed)
+
+            saldo_raw = mov.get("saldo")
+            saldo_val = BbvaScraper._safe_parse_amount(str(saldo_raw)) if saldo_raw is not None else None
+            if saldo_val is not None:
+                _key = (fecha, round(importe_abs, 2), round(saldo_val, 2))
+                if _key in _seen_saldo:
+                    if log_fn:
+                        log_fn(
+                            f"    [skip dup] {fecha} {importe_abs:.2f} "
+                            f"saldo={saldo_val:.2f} — concepto duplicado omitido"
+                        )
+                    continue
+                _seen_saldo.add(_key)
 
             # mov_older = el siguiente en el array newest-first (= movimiento
             # inmediatamente anterior en el tiempo, su saldo es el "antes" del
