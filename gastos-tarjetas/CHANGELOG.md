@@ -1,3 +1,7 @@
+## 0.5.33
+
+- **Parser Galicia MC: intereses de financiación y punitorios** (`parsers/galicia.py`): cuando no se paga el saldo completo, los intereses aparecen solo en el resumen CONSOLIDADO (sin fila con fecha en DETALLE). Se agregan dos nuevos patrones regex (`_INTERES_FINANC_RE`, `_INTERES_PUNITOR_RE`) y la función `_extract_intereses()` que los extrae del texto de las primeras páginas. Si están presentes, se registran como egresos individuales en la fecha de cierre del resumen, igual que la comisión. El saldo pendiente no se agrega porque ya figura en los gastos del mes anterior.
+
 ## 0.5.32
 
 - **Fix scraper BBVA tarjetas: endpoint consumos** (`scrapers/bbva_tarjetas.py`): el endpoint correcto es `/cliente/productos/tarjetas/consumos` (no `/movimientos`). También se ignoran explícitamente las `tarjetasDebito` para no generar ruido en el log.

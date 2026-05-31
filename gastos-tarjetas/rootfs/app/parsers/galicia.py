@@ -32,6 +32,11 @@ Commission (COMISION MANT DE CTA) handling:
     them from the page text and add them as egresos at the statement date.
   - Net result: months with bonif → commission shows as egreso + ingreso = 0;
     months without bonif → commission shows as egreso only.
+
+Interest charges (INTERESES DE FINANCIACION / INTERESES PUNITORIOS) handling:
+  - These only appear in the CONSOLIDADO summary (no date row in DETALLE).
+  - Extracted via regex from the page text and added as separate egresos at
+    the statement close date, so they are visible and categorizable.
 """
 import calendar
 import re
@@ -63,9 +68,11 @@ _ARS_X0 = 440.0
 _ARS_X1 = 530.0
 _USD_X0 = 530.0
 
-# Patterns to extract commission + IVA from the CONSOLIDADO summary text
-_COMISION_RE   = re.compile(r"COMISION\s+MANT\s+DE\s+CTA\s+([\d\.]+,\d+)", re.IGNORECASE)
-_IVA_RE        = re.compile(r"I\.V\.A\.\s+[\d,]+%\s+([\d\.]+,\d+)", re.IGNORECASE)
+# Patterns to extract charges from the CONSOLIDADO summary text
+_COMISION_RE         = re.compile(r"COMISION\s+MANT\s+DE\s+CTA\s+([\d\.]+,\d+)", re.IGNORECASE)
+_IVA_RE              = re.compile(r"I\.V\.A\.\s+[\d,]+%\s+([\d\.]+,\d+)", re.IGNORECASE)
+_INTERES_FINANC_RE   = re.compile(r"INTERESES\s+DE\s+FINANCIACION\s+([\d\.]+,\d+)", re.IGNORECASE)
+_INTERES_PUNITOR_RE  = re.compile(r"INTERESES\s+PUNITORIOS\s+([\d\.]+,\d+)", re.IGNORECASE)
 # TOTAL A PAGAR line: "TOTAL A PAGAR 497.631,26 0,00"
 _TOTAL_PAGAR_RE = re.compile(r"TOTAL\s+A\s+PAGAR\s+([\d\.]+,\d+)(?:\s+([\d\.]+,\d+))?", re.IGNORECASE)
 
@@ -131,6 +138,30 @@ def _extract_comision(pdf) -> Optional[float]:
     return total if found else None
 
 
+def _extract_intereses(pdf) -> tuple[Optional[float], Optional[float]]:
+    """
+    Scan CONSOLIDADO section for interest charges that only appear in the
+    summary (no date row in DETALLE).  Returns (financiacion, punitorios).
+    """
+    financiacion = None
+    punitorios = None
+    for page in pdf.pages[:2]:
+        txt = page.extract_text() or ""
+        if financiacion is None:
+            m = _INTERES_FINANC_RE.search(txt)
+            if m:
+                v = parse_ar_amount(m.group(1))
+                if v:
+                    financiacion = float(v)
+        if punitorios is None:
+            m = _INTERES_PUNITOR_RE.search(txt)
+            if m:
+                v = parse_ar_amount(m.group(1))
+                if v:
+                    punitorios = float(v)
+    return financiacion, punitorios
+
+
 def _installment_date(original: date, stmt: date) -> date:
     """Return a date in stmt's year/month, capping day to the last valid day."""
     last = calendar.monthrange(stmt.year, stmt.month)[1]
@@ -147,6 +178,7 @@ class GaliciaParser(BaseParser):
             stmt_date, self.fecha_vencimiento = _detect_statement_dates(pdf)
             self.stmt_total_ars, self.stmt_total_usd = _detect_total_galicia(pdf)
             comision  = _extract_comision(pdf)
+            interes_financ, interes_punitor = _extract_intereses(pdf)
 
             # Add commission as egreso at the statement close date (when charged).
             # Months where the bonif appears in DETALLE will produce an offsetting
@@ -154,6 +186,16 @@ class GaliciaParser(BaseParser):
             if comision and stmt_date:
                 gastos.append(self._gasto(
                     stmt_date, "COMISION MANT DE CTA", comision, Moneda.ARS, filename
+                ))
+
+            # Interest charges only appear in CONSOLIDADO (no DETALLE row).
+            if interes_financ and stmt_date:
+                gastos.append(self._gasto(
+                    stmt_date, "INTERESES DE FINANCIACION", interes_financ, Moneda.ARS, filename
+                ))
+            if interes_punitor and stmt_date:
+                gastos.append(self._gasto(
+                    stmt_date, "INTERESES PUNITORIOS", interes_punitor, Moneda.ARS, filename
                 ))
 
             for page in pdf.pages:
