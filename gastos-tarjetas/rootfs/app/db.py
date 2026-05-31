@@ -677,11 +677,15 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
         rows = conn.execute(query, params).fetchall()
     seen = set()
     result = []
+    seen_out: set = set()
+    seen_in:  set = set()
     for r in rows:
         key = tuple(sorted([r["id_out"], r["id_in"]]))
-        if key in seen:
+        if key in seen or r["id_out"] in seen_out or r["id_in"] in seen_in:
             continue
         seen.add(key)
+        seen_out.add(r["id_out"])
+        seen_in.add(r["id_in"])
         result.append(dict(r))
     return result
 

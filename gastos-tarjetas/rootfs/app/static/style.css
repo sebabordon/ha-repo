@@ -2070,3 +2070,8 @@ tbody tr:hover { background: #fafbff; }
 .tw-sh-fuente { flex-shrink: 0; min-width: 4.5rem; }
 .tw-sh-desc   { flex: 1; }
 .tw-sh-amt    { flex-shrink: 0; }
+.tw-sug-row { background: #fefce8; }
+.tw-sug-row:hover { background: #fef9c3; }
+.tw-sug-btn-pair { font-size: .73rem; padding: .12rem .45rem; flex-shrink: 0; }
+.tw-sug-btn-ign  { font-size: .73rem; padding: .12rem .45rem; flex-shrink: 0; color: #6b7280; background: none; border: 1px solid #d1d5db; }
+.tw-sug-btn-ign:hover { color: #b91c1c; border-color: #fca5a5; background: #fff1f2; }

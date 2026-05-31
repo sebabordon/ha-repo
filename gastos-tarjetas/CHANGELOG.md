@@ -1,3 +1,8 @@
+## 0.5.39
+
+- **Workspace transferencias: sección "Sugerencias automáticas" con Parear/Ignorar** (`index.html`, `app.js`, `style.css`): las sugerencias auto-detectadas ahora se muestran como lista de pares antes de las columnas, con botón "Parear" (agrega a cola) e "Ignorar" (descarta la sugerencia de la sesión) por fila. El botón "Auto-sugerir" de la toolbar y el botón "Agregar todas a cola" de la sección hacen lo mismo. Las columnas de candidatos ya no muestran ítems en amarillo si la sugerencia fue ignorada.
+- **Fix detect_transfers: evitar que el mismo ID aparezca en dos pares** (`db.py`): el dedup ahora también excluye `id_out` e `id_in` ya usados en pares anteriores del mismo resultado, eliminando la causa de "sueltos duplicados" cuando BBVA tiene dos entradas con el mismo monto el mismo día.
+
 ## 0.5.38
 
 - **Workspace transferencias: columnas con headers y sort** (`index.html`, `app.js`, `style.css`): las columnas de egresos e ingresos ahora tienen una barra de encabezados con Fecha / Fuente / Descripción / Monto. Click en cualquier encabezado ordena ambas columnas (click repetido invierte dirección). Orden por defecto: monto descendente (mayor primero).

@@ -1646,6 +1646,7 @@ async function loadTransferWorkspace() {
   _twQueue = [];
   _twQueuedIds = new Set();
   document.getElementById("tw-selection-bar").style.display = "none";
+  renderTwSuggestions();
   renderTwCandidates();
   renderTwQueue();
   renderTwExisting();
@@ -1653,6 +1654,93 @@ async function loadTransferWorkspace() {
 
 function _twFuenteLabel(f) {
   return _FUENTE_LABEL[f] || f.replace(/_/g, " ");
+}
+
+function _twSugPairSide(g, amtSign, amtCls) {
+  const amt = _fmtNum2(Math.abs(parseFloat(g.monto)));
+  return `<div class="tw-pair-side">` +
+    `<span class="tw-item-date">${g.fecha}</span>` +
+    `<span class="badge badge-${g.fuente}">${_twFuenteLabel(g.fuente)}</span>` +
+    `<span class="tw-item-desc">${escHtml((g.descripcion || "").slice(0, 28))}</span>` +
+    `<span class="tw-item-amount ${amtCls}">${amtSign}${amt}</span>` +
+    `</div>`;
+}
+
+function renderTwSuggestions() {
+  const sugs = _twData.suggestions;
+  const sec  = document.getElementById("tw-sug-section");
+  const list = document.getElementById("tw-sug-list");
+  document.getElementById("tw-sug-count").textContent = sugs.length ? `(${sugs.length})` : "";
+
+  if (!sugs.length) { sec.style.display = "none"; return; }
+  sec.style.display = "";
+
+  const eMap = Object.fromEntries(_twData.egresos.map(e => [e.id, e]));
+  const iMap = Object.fromEntries(_twData.ingresos.map(i => [i.id, i]));
+
+  list.innerHTML = "";
+  sugs.forEach(([outId, inId], idx) => {
+    const out = eMap[outId], inp = iMap[inId];
+    if (!out || !inp) return;
+    const row = document.createElement("div");
+    row.className = "tw-pair-row tw-sug-row";
+    row.innerHTML =
+      _twSugPairSide(out, "−", "tw-amt-egreso") +
+      `<span class="tw-pair-arrow">⇄</span>` +
+      _twSugPairSide(inp, "+", "tw-amt-ingreso");
+    const btnPar = document.createElement("button");
+    btnPar.className = "btn btn-sm tw-sug-btn-pair";
+    btnPar.textContent = "Parear";
+    btnPar.onclick = () => twPairSuggestion(idx);
+    const btnIgn = document.createElement("button");
+    btnIgn.className = "btn btn-sm tw-sug-btn-ign";
+    btnIgn.textContent = "Ignorar";
+    btnIgn.onclick = () => twIgnoreSuggestion(idx);
+    row.appendChild(btnPar);
+    row.appendChild(btnIgn);
+    list.appendChild(row);
+  });
+}
+
+function twPairSuggestion(idx) {
+  const [outId, inId] = _twData.suggestions[idx];
+  const out = _twData.egresos.find(e => e.id === outId);
+  const inp = _twData.ingresos.find(i => i.id === inId);
+  if (!out || !inp || _twQueuedIds.has(outId) || _twQueuedIds.has(inId)) return;
+  _twQueue.push({ out, in: inp });
+  _twQueuedIds.add(outId);
+  _twQueuedIds.add(inId);
+  _twData.suggestions.splice(idx, 1);
+  renderTwSuggestions();
+  renderTwCandidates();
+  renderTwQueue();
+}
+
+function twIgnoreSuggestion(idx) {
+  _twData.suggestions.splice(idx, 1);
+  renderTwSuggestions();
+  renderTwCandidates();
+}
+
+function twPairAll() {
+  const eMap = Object.fromEntries(_twData.egresos.map(e => [e.id, e]));
+  const iMap = Object.fromEntries(_twData.ingresos.map(i => [i.id, i]));
+  let added = 0;
+  for (const [outId, inId] of [..._twData.suggestions]) {
+    if (_twQueuedIds.has(outId) || _twQueuedIds.has(inId)) continue;
+    const out = eMap[outId], inp = iMap[inId];
+    if (!out || !inp) continue;
+    _twQueue.push({ out, in: inp });
+    _twQueuedIds.add(outId);
+    _twQueuedIds.add(inId);
+    added++;
+  }
+  if (!added) { showToast("Todas las sugerencias ya están en cola", "info"); return; }
+  _twData.suggestions = [];
+  renderTwSuggestions();
+  renderTwCandidates();
+  renderTwQueue();
+  showToast(`${added} par${added !== 1 ? "es" : ""} agregado${added !== 1 ? "s" : ""} a la cola`, "ok");
 }
 
 function _twMakeItem(g, side) {
@@ -1812,30 +1900,7 @@ function renderTwQueue() {
   });
 }
 
-function twAutoSuggest() {
-  if (!_twData) return;
-  const { suggestions, egresos, ingresos } = _twData;
-  if (!suggestions.length) { showToast("No hay sugerencias automáticas", "info"); return; }
-  const eMap = Object.fromEntries(egresos.map(e => [e.id, e]));
-  const iMap = Object.fromEntries(ingresos.map(i => [i.id, i]));
-  let added = 0;
-  for (const [outId, inId] of suggestions) {
-    if (_twQueuedIds.has(outId) || _twQueuedIds.has(inId)) continue;
-    const out = eMap[outId], inp = iMap[inId];
-    if (!out || !inp) continue;
-    _twQueue.push({ out, in: inp });
-    _twQueuedIds.add(outId);
-    _twQueuedIds.add(inId);
-    const elOut = document.querySelector(`.tw-item[data-id="${outId}"]`);
-    const elIn  = document.querySelector(`.tw-item[data-id="${inId}"]`);
-    if (elOut) elOut.classList.add("queued");
-    if (elIn)  elIn.classList.add("queued");
-    added++;
-  }
-  if (!added) { showToast("Todas las sugerencias ya están en cola", "info"); return; }
-  renderTwQueue();
-  showToast(`${added} par${added !== 1 ? "es" : ""} agregado${added !== 1 ? "s" : ""} a la cola`, "ok");
-}
+function twAutoSuggest() { if (_twData) twPairAll(); }
 
 async function twConfirm() {
   if (!_twQueue.length) return;
@@ -1938,6 +2003,7 @@ function twToggleExisting() {
 }
 
 document.getElementById("btn-tw-autosugerir").addEventListener("click", twAutoSuggest);
+document.getElementById("btn-tw-pair-all").addEventListener("click", twPairAll);
 document.getElementById("btn-tw-refresh").addEventListener("click", loadTransferWorkspace);
 document.getElementById("btn-tw-confirm").addEventListener("click", twConfirm);
 document.getElementById("btn-tw-cancel-select").addEventListener("click", twCancelSelect);
