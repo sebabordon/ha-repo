@@ -1,3 +1,7 @@
+## 0.5.51
+
+- **BBVA scraper: endpoint de detalle de servicios** (`scrapers/bbva.py`): reemplaza la implementación incorrecta de 0.5.50. Análisis de HAR confirmó que el endpoint real para pagos de servicios es `POST /banelco/detalleservicio` (no `/movimientodetalle`), con parámetros `fecha/claveConcepto/codigoTipoMovimiento/procedencia`. El trigger correcto es `procedencia ~ "OP\d+"` (codigoAccion=02 "OPERACION EN EFECTIVO TARJE" y codigoAccion=03 "PAGO DE SERVICIOS TARJETA"). La respuesta incluye el campo `servicio` con el nombre del servicio pagado (ej. "SJOSE P DIOS"), que se incorpora a la descripción del movimiento y se guarda en `raw_data["servicio"]`. También se guardan `cajero_entidad` y `hora_operacion`.
+
 ## 0.5.50
 
 - **BBVA scraper: endpoint de detalle de movimiento** (`scrapers/bbva.py`): se agregan `_fetch_detalle`, `_extract_nombre_detalle` y `_enrich_with_detalle`. Para cada movimiento que tenga `codigoAccionDetalleMovimientoCuenta` y `numeroOperacion`, se llama a `POST /cliente/productos/cuentas/movimientodetalle` y se loguea la respuesta completa `[detalle]`. Si se detecta un nombre de contraparte (destinatario/remitente), se agrega a `raw_data["destinatario"]` y se incorpora a la descripción ("concepto — Nombre"). El endpoint y los campos de respuesta se validan en esta primera corrida.

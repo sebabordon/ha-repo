@@ -775,32 +775,61 @@ class BbvaScraper(BaseScraper):
         return all_movs
 
     # ── detalle de movimiento ─────────────────────────────────────────────────
+    #
+    # BBVA expone distintos endpoints de detalle según el tipo de operación.
+    # El campo `codigoAccionDetalleMovimientoCuenta` indica si el mov tiene
+    # detalle, pero el endpoint correcto se deduce del campo `procedencia`:
+    #
+    #   procedencia = "OP\d+"  →  codigoAccion 02/03
+    #     → POST /banelco/detalleservicio
+    #     → devuelve: servicio (nombre del servicio), cajeroEntidad, hora,
+    #                 numeroTarjeta, importe
+    #     → codigoAccion=03: PAGO DE SERVICIOS TARJETA
+    #     → codigoAccion=02: OPERACION EN EFECTIVO TARJE
+    #
+    #   codigoAccion=06, claveConcepto=136  →  transferencia inmediata saliente
+    #     → POST /banelco/transferencias/detalleinmediataemitida
+    #     → devuelve: cbuDestino (CBU, sin nombre)
+    #     → no implementado aún (solo CBU, bajo valor para categorización)
+    #
+    #   codigoAccion=32/10/13/05/14: endpoints no confirmados por HAR aún.
 
-    def _fetch_detalle(
+    def _fetch_detalleservicio(
         self,
         driver,
         id_producto: str,
-        numero_operacion: str,
-        codigo_accion: str,
+        mov: "MovimientoRaw",
         log_fn=None,
     ) -> Optional[dict]:
         """
-        Llama al endpoint de detalle de un movimiento BBVA.
-        Solo se invoca cuando `codigoAccionDetalleMovimientoCuenta` está presente.
+        Llama a `/banelco/detalleservicio` para movimientos de pago de servicios
+        (codigoAccion=02 OPERACION EFECTIVO TARJE, codigoAccion=03 PAGO SERVICIOS).
 
-        El resultado suele incluir nombre/denominación del destinatario o remitente,
-        CBU/CVU, CUIT/CUIL, banco destino y concepto.
+        Parámetros requeridos por la API (confirmados por HAR):
+          idProducto, fecha (DD/MM/YYYY), claveConcepto, codigoTipoMovimiento,
+          procedencia (e.g. "OP6561").
 
-        Retorna el dict `result` de la respuesta, o None si falla.
+        Respuesta (campo `detalleMovBanelcoServicio`):
+          servicio, cajeroEntidad, hora, numeroTarjeta, importe.
         """
+        rd = mov.raw_data or {}
+        # Convertir fecha ISO → DD/MM/YYYY
+        try:
+            from datetime import date as _date
+            fecha_ar = _date.fromisoformat(mov.fecha).strftime("%d/%m/%Y")
+        except Exception:
+            fecha_ar = mov.fecha
+
         payload = {
-            "idProducto":                          id_producto,
-            "numeroOperacion":                     numero_operacion,
-            "codigoAccionDetalleMovimientoCuenta": codigo_accion,
+            "idProducto":           id_producto,
+            "fecha":                fecha_ar,
+            "claveConcepto":        str(rd.get("clave_concepto")        or ""),
+            "codigoTipoMovimiento": str(rd.get("codigo_tipo_movimiento") or ""),
+            "procedencia":          str(rd.get("procedencia")           or "").strip(),
         }
         resp = self._api_request(
             driver,
-            "/cliente/productos/cuentas/movimientodetalle",
+            "/cliente/productos/cuentas/movimientos/banelco/detalleservicio",
             method="POST",
             json_body=payload,
             timeout=15,
@@ -808,71 +837,60 @@ class BbvaScraper(BaseScraper):
         if resp["status"] != 200:
             if log_fn:
                 log_fn(
-                    f"      [detalle] HTTP {resp['status']} nroOp={numero_operacion} "
-                    f"accion={codigo_accion} — {resp['body'][:150]}"
+                    f"      [detalleservicio] HTTP {resp['status']} "
+                    f"fecha={fecha_ar} proc={payload['procedencia']} — {resp['body'][:150]}"
                 )
             return None
-        result = (resp["json"] or {}).get("result") or {}
+
+        detalle = ((resp["json"] or {}).get("result") or {}).get(
+            "detalleMovBanelcoServicio"
+        ) or {}
         if log_fn:
             log_fn(
-                f"      [detalle] nroOp={numero_operacion} accion={codigo_accion} "
-                f"→ {_json.dumps(result, ensure_ascii=False)[:400]}"
+                f"      [detalleservicio] {_json.dumps(detalle, ensure_ascii=False)[:300]}"
             )
-        return result or None
-
-    @staticmethod
-    def _extract_nombre_detalle(detalle: dict) -> Optional[str]:
-        """
-        Extrae el nombre de la contraparte del dict de detalle.
-        Prueba los campos más comunes del API BBVA en orden de preferencia.
-        """
-        for k in (
-            "denominacion", "nombreDestinatario", "nombreBeneficiario",
-            "razonSocial", "nombre", "titularCuenta", "nombreTitular",
-            "denominacionBeneficiario", "denominacionDestinatario",
-            "descripcionDestinatario", "cuentaDestinatario",
-        ):
-            v = detalle.get(k)
-            if v and isinstance(v, str) and v.strip():
-                return v.strip()
-        return None
+        return detalle or None
 
     def _enrich_with_detalle(
         self,
         driver,
         id_producto: str,
-        movs: list[MovimientoRaw],
+        movs: list["MovimientoRaw"],
         log_fn=None,
     ) -> None:
         """
-        Para cada MovimientoRaw que tenga `codigo_accion_detalle` y
-        `numero_operacion` en raw_data, llama al endpoint de detalle y:
-          - Loguea la respuesta completa (para descubrimiento de campos).
-          - Si encuentra un nombre de contraparte, lo agrega a raw_data["destinatario"]
-            y lo apenda a la descripción ("concepto — Nombre Contraparte").
-          - Guarda el dict de detalle completo en raw_data["detalle"].
+        Enriquece movimientos con datos del endpoint de detalle correspondiente.
+
+        Ruteo por `procedencia`:
+          - procedencia ~ "OP\\d+" → _fetch_detalleservicio → agrega
+            raw_data["servicio"] y actualiza la descripción con el nombre
+            del servicio pagado (e.g. "SJOSE P DIOS").
+          - Otros tipos de detalle (transferencias, etc.) no implementados aún.
         """
         for mov in movs:
             rd = mov.raw_data or {}
             codigo_accion = str(rd.get("codigo_accion_detalle") or "").strip()
-            numero_op     = str(rd.get("numero_operacion")      or "").strip()
-            if not codigo_accion or not numero_op:
+            if not codigo_accion:
                 continue
 
-            detalle = self._fetch_detalle(
-                driver, id_producto, numero_op, codigo_accion, log_fn
-            )
-            if not detalle:
-                continue
+            procedencia = str(rd.get("procedencia") or "").strip()
 
-            mov.raw_data["detalle"] = detalle
-
-            nombre = self._extract_nombre_detalle(detalle)
-            if nombre:
-                mov.raw_data["destinatario"] = nombre
-                # Incorporar a la descripción si no está ya
-                if nombre.upper() not in mov.descripcion.upper():
-                    mov.descripcion = f"{mov.descripcion} — {nombre}"
+            # Pagos de servicios: procedencia tiene patrón "OP\d+"
+            if re.match(r"^OP\d+$", procedencia):
+                detalle = self._fetch_detalleservicio(driver, id_producto, mov, log_fn)
+                if not detalle:
+                    continue
+                servicio = (detalle.get("servicio") or "").strip()
+                if servicio:
+                    mov.raw_data["servicio"] = servicio
+                    if servicio.upper() not in mov.descripcion.upper():
+                        mov.descripcion = f"{mov.descripcion} — {servicio}"
+                cajero = (detalle.get("cajeroEntidad") or "").strip()
+                if cajero:
+                    mov.raw_data["cajero_entidad"] = cajero
+                hora = (detalle.get("hora") or "").strip()
+                if hora:
+                    mov.raw_data["hora_operacion"] = hora
 
     # ── parsing de un batch ───────────────────────────────────────────────────
 
