@@ -1,3 +1,8 @@
+## 0.5.55
+
+- **AMEX parser: captura "Cuota NN de NN" de líneas de continuación** (`parsers/amex.py`): AMEX imprime el indicador de cuota en una línea ~8pt debajo de la línea de la transacción (e.g. "Cuota 02 de 02" o "Plan de Cuotas . Cuota 01 de 03"). El parser ahora inspecciona hasta 3 filas de continuación buscando ese patrón y lo normaliza a "CUOTA NN/NN" al final de la descripción. Cubre cuota anual (2 cuotas) y compras en cuotas ("Plan de Cuotas"). Las descripciones resultantes son detectables por el tab Cuotas.
+- **cuotas.py: excluye rangos de fechas de la detección de cuotas** (`routes/cuotas.py`): patrones del tipo "04/26 - 03/27" (período de vigencia de la cuota anual AMEX) ya no son detectados falsamente como "cuota 4 de 26". El `_DATE_RANGE_RE` los elimina antes de aplicar `_FRAC_CAP`.
+
 ## 0.5.54
 
 - **BBVA parser: preserva indicador de cuotas en descripción** (`parsers/bbva.py`): en lugar de borrar el sufijo `C.03/12` al importar el PDF, ahora lo normaliza al formato `03/12` al final de la descripción (consistente con Galicia). Esto hace que las cuotas BBVA aparezcan en el nuevo tab Cuotas. El cambio mejora además la conciliación: el tie-breaker `_CUOTA_RE` de `conciliacion.py` ahora puede distinguir cuota 3/12 de cuota 7/12 del mismo comercio y evitar falsos matches. Los PDFs ya importados necesitan re-importarse para ver las cuotas BBVA en el tab.

@@ -230,6 +230,28 @@ class AmexParser(BaseParser):
                     description = re.sub(r"\s+\d+[.,]\d+\s+US\s+DOLL.*$", "", description)
                     description = re.sub(r"\s+\d+\s+US\s+DOLL.*$", "", description)
 
+                    # Peek at continuation rows for "Cuota NN de NN" installment info.
+                    # AMEX renders this on a separate line ~8pt below the transaction line
+                    # e.g. "Cuota 02 de 02" (annual fee) or "Plan de Cuotas . Cuota 01 de 03"
+                    for j in range(i + 1, min(i + 4, len(rows))):
+                        cont_row = rows[j]
+                        if not cont_row:
+                            break
+                        if (_DATE_RE.match(cont_row[0]["text"])
+                                and len(cont_row) > 1
+                                and cont_row[1]["text"].lower() == "de"):
+                            break  # next transaction starts here
+                        cont_text = " ".join(w["text"] for w in cont_row)
+                        m_cont = re.search(
+                            r'\bCuota\s+(\d{1,2})\s+de\s+(\d{1,2})\b',
+                            cont_text, re.IGNORECASE,
+                        )
+                        if m_cont:
+                            cur_n = int(m_cont.group(1))
+                            tot_n = int(m_cont.group(2))
+                            description += f" CUOTA {cur_n:02d}/{tot_n:02d}"
+                            break
+
                     fecha = parse_date_dmy_long(int(first), month_name, facturacion_year)
                     if fecha is None:
                         continue

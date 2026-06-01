@@ -1,11 +1,12 @@
 """
 Endpoint /api/cuotas — calcula cuotas pendientes a partir de los gastos.
 
-Detecta dos formatos de cuotas en las descripciones:
-  - AMEX: "CUOTA 01/12 DESCRIPCION"  (número actual / total)
-  - Galicia: "DESCRIPCION 03/12"     (número actual / total, standalone)
+Detecta tres formatos de cuotas en las descripciones:
+  - AMEX explicit:  "DESCRIPCION CUOTA 01/06"  (agregado por el parser amex.py)
+  - BBVA / Galicia: "DESCRIPCION 03/12"        (standalone fraction)
 
-BBVA no es detectado porque el parser ya strippea el indicador "C.03/12".
+Para AMEX, el parser captura la línea de continuación "Cuota NN de NN" y la
+normaliza a "CUOTA NN/NN" al final de la descripción.
 
 Para cada compra agrupa por (desc_base, total_cuotas, fuente, moneda, usuario)
 y toma el estado más reciente (cuota más alta vista), luego proyecta los
@@ -22,24 +23,29 @@ from db import list_gastos
 
 router = APIRouter()
 
-# AMEX: "CUOTA 01/12 ..."
+# Explicit marker added by parsers (AMEX / BBVA): "CUOTA 01/06"
 _CUOTA_CAP = re.compile(r'\bCUOTA\s+(\d{1,3})/(\d{1,3})\b', re.IGNORECASE)
-# Galicia: standalone "03/12" (no precedido/seguido de otro dígito o "/")
+# Galicia-style standalone fraction: "03/12" (not preceded/followed by digit or "/")
 _FRAC_CAP  = re.compile(r'(?<![/\d])(\d{1,2})/(\d{2,3})(?![/\d])')
+# Date ranges like "04/26 - 03/27" that must NOT be misread as installments
+_DATE_RANGE_RE = re.compile(r'\d{1,2}/\d{2,4}\s*[-–]\s*\d{1,2}/\d{2,4}')
 
-# Versiones "strip" para normalizar la descripción base
+# Strip versions for normalising the base description
 _CUOTA_STRIP = re.compile(r'\s*\bCUOTA\s+\d{1,3}/\d{1,3}\b\s*', re.IGNORECASE)
 _FRAC_STRIP  = re.compile(r'\s*(?<![/\d])\d{1,2}/\d{2,3}(?![/\d])\s*')
 
 
 def _parse_installment(desc: str):
     """Retorna (cuota_actual, total_cuotas) o None."""
+    # Explicit CUOTA marker takes priority (AMEX / BBVA parser output)
     m = _CUOTA_CAP.search(desc)
     if m:
         cur, tot = int(m.group(1)), int(m.group(2))
         if tot >= 2:
             return cur, tot
-    m = _FRAC_CAP.search(desc)
+    # Galicia-style: remove date ranges first to avoid "04/26 - 03/27" false positives
+    clean = _DATE_RANGE_RE.sub(' ', desc)
+    m = _FRAC_CAP.search(clean)
     if m:
         cur, tot = int(m.group(1)), int(m.group(2))
         if tot >= 2 and cur <= tot:
@@ -50,6 +56,7 @@ def _parse_installment(desc: str):
 def _base_desc(desc: str) -> str:
     """Elimina el indicador de cuota para obtener la descripción base."""
     d = _CUOTA_STRIP.sub(' ', desc)
+    d = _DATE_RANGE_RE.sub(' ', d)   # remove date ranges before stripping fractions
     d = _FRAC_STRIP.sub(' ', d)
     return ' '.join(d.split())
 
