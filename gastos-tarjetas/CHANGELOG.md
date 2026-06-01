@@ -1,3 +1,8 @@
+## 0.5.49
+
+- **Fix: "Último intento" mostraba siempre la misma fecha que "Último OK"** (`scraper_scheduler.py`): en los 4 paths de error (excepción + `result.error`, tanto en run manual como en job programado), `update_instance_status` no actualizaba `ultimo_run`. Al fallar un run, la UI mostraba el timestamp del último run exitoso en ambos campos. Corrección: todos los paths de error ahora pasan `ultimo_run=now_iso`.
+- **Fix: año de 2 dígitos en timestamps de scrapers** (`static/app.js`): `_fmtTs()` usaba `dateStyle:"short"` que en `es-AR` genera año de 2 dígitos ("31/5/26"). Cambiado a opciones explícitas con `year:"numeric"` → "31/5/2026, 8:34 p. m.".
+
 ## 0.5.48
 
 - **Fix: BBVA sigue viendo "Sesión guardada en disco: sí" tras 0.5.47** (`scrapers/base.py`): `clear_session()` se llamaba solo al *terminar* el run, pero el archivo stale del deploy anterior ya se había restaurado al *iniciar*. Corrección: cuando `save_session=False`, se borra el archivo de sesión al inicio de `_run_sync`, antes de intentar cualquier restore — garantizando que BBVA siempre arranque con login limpio.

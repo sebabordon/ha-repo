@@ -208,14 +208,18 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
         except Exception as exc:
             logger.exception("[scheduler] Error ejecutando instancia %d (%s): %s",
                              instance_id, banco, exc)
-            update_instance_status(instance_id, estado="error", error_msg=str(exc))
+            from datetime import datetime as _dt
+            update_instance_status(instance_id, estado="error", error_msg=str(exc),
+                                   ultimo_run=_dt.utcnow().isoformat())
             return
 
         if result.error:
             logger.warning("[scheduler] instancia %d (%s) terminó con error: %s",
                            instance_id, banco, result.error)
+            from datetime import datetime as _dt
             update_instance_status(
                 instance_id, estado="error", error_msg=result.error,
+                ultimo_run=_dt.utcnow().isoformat(),
                 last_log="\n".join(result.log_lines) if result.log_lines else None,
             )
             return
@@ -469,12 +473,16 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
         except Exception as exc:
             msg = f"Error al ejecutar scraper: {exc}"
             logger.exception(msg)
-            update_instance_status(instance_id, estado="error", error_msg=str(exc))
+            from datetime import datetime as _dt
+            update_instance_status(instance_id, estado="error", error_msg=str(exc),
+                                   ultimo_run=_dt.utcnow().isoformat())
             return {"ok": False, "error": msg}
 
         if result.error:
+            from datetime import datetime as _dt
             update_instance_status(
                 instance_id, estado="error", error_msg=result.error,
+                ultimo_run=_dt.utcnow().isoformat(),
                 last_log="\n".join(result.log_lines) if result.log_lines else None,
             )
             return {"ok": False, "error": result.error,

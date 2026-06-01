@@ -424,7 +424,7 @@ function _fmtSaldo(n) {
 function _fmtTs(iso) {
   if (!iso) return "";
   const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
-  return d.toLocaleString("es-AR", {dateStyle:"short", timeStyle:"short"});
+  return d.toLocaleString("es-AR", {day:"numeric", month:"numeric", year:"numeric", hour:"2-digit", minute:"2-digit"});
 }
 
 let _monthFilterReady = false;
