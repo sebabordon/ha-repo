@@ -1,3 +1,7 @@
+## 0.5.67
+
+- **Mejora: settlement report incluye EXTERNAL_REFERENCE automáticamente** (`mercadopago.py`): al inicio de cada fetch del settlement report, se consulta la config de columnas en la API de MP y si `EXTERNAL_REFERENCE` no está, se agrega con un PUT (idempotente — después del primer run no hace nada). Permite cruzar las transferencias del reporte con la referencia externa del pago original.
+
 ## 0.5.66
 
 - **Fix: settlement report se regenera en cada ejecución** (`mercadopago.py`): el código anterior usaba el reporte existente como primera opción y solo generaba uno nuevo si no había ninguno, lo que resultaba en reutilizar indefinidamente el reporte más viejo (ej. del 29-05) y no capturar transferencias CBU/CVU posteriores. Ahora siempre se descarga el reporte disponible (paso 1) y además se dispara la generación de uno nuevo sin esperar (paso 2), de modo que la próxima ejecución siempre tiene un reporte actualizado — diseño "generar hoy, usar mañana".

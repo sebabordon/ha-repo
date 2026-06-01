@@ -614,6 +614,9 @@ class MercadoPagoScraper(BaseScraper):
         """
         _URL = f"{_BASE}/v1/account/settlement_report"
 
+        # ── Paso 0: asegurar que EXTERNAL_REFERENCE esté en la config ───────────
+        await self._ensure_settlement_config(client, _URL, log_fn)
+
         # ── Paso 1: usar el reporte existente más reciente ────────────────────
         csv_text: Optional[str] = await self._download_latest_settlement(
             client, _URL, log_fn
@@ -626,6 +629,36 @@ class MercadoPagoScraper(BaseScraper):
         await self._request_settlement_report(client, _URL, log_fn)
 
         return result
+
+    async def _ensure_settlement_config(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        log_fn,
+    ) -> None:
+        """
+        Asegura que EXTERNAL_REFERENCE esté en las columnas del settlement report.
+        GET config → si ya está, no hace nada. Si falta, agrega la columna y hace PUT.
+        El campo `scheduled` es read-only y se omite del PUT.
+        """
+        config_url = f"{base_url}/config"
+        try:
+            resp = await client.get(config_url)
+            if resp.status_code != 200:
+                return
+            config  = resp.json() or {}
+            columns = config.get("columns") or []
+            if any(c.get("key") == "EXTERNAL_REFERENCE" for c in columns):
+                return  # ya configurado, nada que hacer
+            config["columns"] = columns + [{"key": "EXTERNAL_REFERENCE"}]
+            config.pop("scheduled", None)  # read-only, no enviar en PUT
+            put = await client.put(config_url, json=config)
+            if put.status_code == 200:
+                log_fn("Settlement report: config actualizada — agregado EXTERNAL_REFERENCE")
+            else:
+                log_fn(f"Settlement report: no se pudo actualizar config ({put.status_code})")
+        except Exception as exc:
+            log_fn(f"Settlement report: error actualizando config — {exc}")
 
     async def _request_settlement_report(
         self,
