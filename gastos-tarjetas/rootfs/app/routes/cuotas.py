@@ -92,11 +92,13 @@ def get_cuotas(
     # (o la más reciente en caso de empate).
     groups: dict = {}
     for g in all_gastos:
-        info = _parse_installment(g['descripcion'])
+        # Use user-edited description if set, falling back to the original
+        desc = g.get('descripcion_editada') or g['descripcion']
+        info = _parse_installment(desc)
         if not info:
             continue
         cur, tot = info
-        base = _base_desc(g['descripcion'])
+        base = _base_desc(desc)
         key = (base, tot, g['fuente'], g['moneda'], g.get('usuario') or '')
 
         prev = groups.get(key)

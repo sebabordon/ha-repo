@@ -13,6 +13,7 @@ from db import (list_gastos, list_categorias, monthly_summary,
                 get_transfer_candidates, get_existing_transfer_pairs, unmark_transfers,
                 ignore_transfer_pair, unignore_transfer_pair, get_ignored_transfer_pairs,
                 update_categoria, update_usuario, update_gasto_fecha,
+                update_descripcion_editada,
                 delete_all_gastos, get_gasto, delete_gasto_manual,
                 list_importaciones, rename_categoria_in_gastos)
 
@@ -239,4 +240,11 @@ def patch_fecha(gasto_id: int, body: dict, request: Request):
 def patch_usuario(gasto_id: int, body: dict, request: Request):
     require_auth(request)
     update_usuario(gasto_id, body.get("usuario", ""))
+    return {"ok": True}
+
+
+@router.patch("/gastos/{gasto_id}/descripcion")
+def patch_descripcion(gasto_id: int, body: dict, request: Request):
+    require_auth(request)
+    update_descripcion_editada(gasto_id, body.get("descripcion_editada", "") or None)
     return {"ok": True}

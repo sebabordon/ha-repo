@@ -1300,7 +1300,9 @@ function _renderGastos() {
     const displayStr   = egreso ? _fmtNum2(displayMonto) : `+${_fmtNum2(displayMonto)}`;
     tr.innerHTML = `
       <td><input class="fecha-input" data-id="${g.id}" type="date" value="${g.fecha}"></td>
-      <td>${escHtml(g.descripcion)}</td>
+      <td class="desc-cell" data-id="${g.id}" data-original="${escHtml(g.descripcion)}" data-edited="${escHtml(g.descripcion_editada||"")}">
+        <span class="desc-display${g.descripcion_editada?" desc-overridden":""}" title="${g.descripcion_editada?"Original: "+escHtml(g.descripcion):"Click para editar descripción"}">${escHtml(g.descripcion_editada||g.descripcion)}</span>${g.descripcion_editada?'<span class="desc-edit-mark" title="Descripción editada — click para modificar">✏</span>':''}
+      </td>
       <td class="monto ${g.moneda==="USD"?"usd":""} ${egreso?"egreso":"ingreso"}">${displayStr}</td>
       <td class="col-moneda">${g.moneda}</td>
       <td><span class="badge badge-${g.fuente}">${g.fuente.replace("_"," ")}</span></td>
@@ -1331,6 +1333,9 @@ function _renderGastos() {
     fechaInput.addEventListener("change", () => {
       if (fechaInput.value !== origFecha) saveFecha(g.id, fechaInput);
     });
+
+    const descCell = tr.querySelector(".desc-cell");
+    descCell.onclick = () => _editDescripcion(descCell, g.id);
 
     tbody.appendChild(tr);
   });
@@ -1533,6 +1538,68 @@ async function saveUsuario(id, sel) {
     method:"PATCH", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({usuario: sel.value}),
   });
+}
+
+function _renderDescCell(cell, original, edited) {
+  cell.dataset.edited = edited || "";
+  const display  = edited || original;
+  const hasEdit  = !!edited;
+  cell.innerHTML = `<span class="desc-display${hasEdit?" desc-overridden":""}" title="${hasEdit?"Original: "+escHtml(original):"Click para editar descripción"}">${escHtml(display)}</span>${hasEdit?'<span class="desc-edit-mark" title="Descripción editada — click para modificar">✏</span>':""}`;
+  cell.onclick   = () => _editDescripcion(cell, parseInt(cell.dataset.id));
+}
+
+function _editDescripcion(cell, gastoId) {
+  cell.onclick = null;
+  const original = cell.dataset.original;
+  const edited   = cell.dataset.edited;
+  const current  = edited || original;
+
+  cell.innerHTML = "";
+
+  const inp = document.createElement("input");
+  inp.type        = "text";
+  inp.className   = "desc-input";
+  inp.value       = current;
+  inp.placeholder = original;
+  inp.title       = "Vaciar y confirmar restaura el texto original";
+
+  const saveBtn   = document.createElement("button");
+  saveBtn.className   = "btn btn-sm btn-action";
+  saveBtn.textContent = "✓";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className   = "btn btn-sm btn-action";
+  cancelBtn.textContent = "✕";
+  cancelBtn.title       = "Cancelar (sin guardar)";
+
+  cell.appendChild(inp);
+  cell.appendChild(saveBtn);
+  cell.appendChild(cancelBtn);
+  inp.focus();
+  inp.select();
+
+  cancelBtn.onclick = e => { e.stopPropagation(); _renderDescCell(cell, original, edited); };
+  saveBtn.onclick   = e => { e.stopPropagation(); _saveDescripcion(cell, gastoId, inp.value.trim(), original); };
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter")  { e.preventDefault(); _saveDescripcion(cell, gastoId, inp.value.trim(), original); }
+    if (e.key === "Escape") { e.preventDefault(); _renderDescCell(cell, original, edited); }
+  });
+}
+
+async function _saveDescripcion(cell, gastoId, newValue, original) {
+  // Empty or identical to original → clear override (NULL in DB)
+  const override = (newValue && newValue !== original) ? newValue : "";
+  const res = await fetch(`${BASE}/api/gastos/${gastoId}/descripcion`, {
+    method:"PATCH", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({descripcion_editada: override}),
+  });
+  if (res.ok) {
+    _renderDescCell(cell, original, override);
+    showToast(override ? "✓ Descripción editada" : "✓ Descripción restaurada al original", "ok", 1800);
+  } else {
+    showToast("Error al guardar descripción", "err");
+    _renderDescCell(cell, original, cell.dataset.edited);
+  }
 }
 
 ["filter-fuente","filter-usuario","filter-mes","filter-moneda","filter-import"].forEach(id =>

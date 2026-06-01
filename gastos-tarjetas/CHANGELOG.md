@@ -1,3 +1,7 @@
+## 0.5.59
+
+- **gastos: edición inline de descripción** (`db.py`, `routes/gastos.py`, `routes/cuotas.py`, `static/app.js`, `static/style.css`): se agrega la posibilidad de editar el texto descriptivo de cualquier gasto sin perder el original. Se guarda en el nuevo campo `descripcion_editada` (NULL = sin cambios). El motor de cuotas (`cuotas.py`) usa el texto editado si existe para detectar patrones de cuota (uso principal: gastos importados sin formato `NN/NN` que igual se van a ver en cuotas). La conciliación contra el scraper sigue usando el texto original para evitar falsos no-matches. UI: click en la descripción abre un input inline; confirmar con ✓ o Enter, cancelar con ✕ o Escape; vaciar y confirmar restaura el original. Los gastos con descripción editada se muestran en itálica con ícono ✏ y tooltip con el texto original.
+
 ## 0.5.58
 
 - **motor de reglas: keywords con caracteres especiales no matcheaban** (`categorizer.py`, `db.py`): el patrón usaba `\b` (word boundary), que falla cuando el keyword empieza o termina con un carácter no-alfanumérico (`%`, `=`, `*`, `.`, etc.). Por ejemplo `\bIVA 21%\b` nunca matcheaba porque el `\b` final requiere un alfanumérico después de `%`. Se reemplaza `\b` por lookarounds `(?<!\w)` / `(?!\w)` que funcionan con cualquier carácter y mantienen la protección contra partial matches (ej. "coto" en "PSICOTOLOGO"). Afecta `categorize_by_rules`, `apply_match_rules`, `preview_user_rule_matches` y `preview_rule_matches`.

@@ -429,6 +429,14 @@ tbody tr:hover { background: #fafbff; }
 .cat-input { border: 1px solid #ddd; border-radius: 4px; padding: .2rem .5rem; width: 130px; font-size: .85rem; }
 .cat-input.dirty { border-color: #f59e0b; }
 
+/* Description inline edit */
+.desc-cell { cursor: pointer; max-width: 280px; }
+.desc-cell:hover .desc-display:not(.desc-overridden) { text-decoration: underline dotted #9ca3af; }
+.desc-overridden { font-style: italic; color: #4f46e5; }
+.desc-edit-mark { margin-left: .3rem; font-size: .72rem; opacity: .6; vertical-align: middle; }
+.desc-input { border: 1px solid #6366f1; border-radius: 4px; padding: .2rem .4rem; font-size: .85rem; width: 200px; }
+.desc-input:focus { outline: none; box-shadow: 0 0 0 2px #c7d2fe; }
+
 /* ── Category autocomplete floating dropdown ─────────────────────────────────*/
 .cat-ac {
   position: absolute;

@@ -31,6 +31,7 @@ class Gasto(BaseModel):
     categoria_fuente: Optional[str] = None  # "regla", "claude", "manual"
     archivo_origen: Optional[str] = None
     usuario: Optional[str] = None
+    descripcion_editada: Optional[str] = None
 
     class Config:
         json_encoders = {Decimal: str}

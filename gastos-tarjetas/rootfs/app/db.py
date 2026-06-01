@@ -72,6 +72,8 @@ def init_db():
             conn.execute("ALTER TABLE gastos ADD COLUMN usuario TEXT")
         if "import_id" not in gcols:
             conn.execute("ALTER TABLE gastos ADD COLUMN import_id INTEGER")
+        if "descripcion_editada" not in gcols:
+            conn.execute("ALTER TABLE gastos ADD COLUMN descripcion_editada TEXT")
 
         # Confirmed transfer pairs — explicit link between egreso and ingreso sides
         conn.execute("""
@@ -1026,6 +1028,12 @@ def update_gasto_fecha(gasto_id: int, fecha: str):
 def update_usuario(gasto_id: int, usuario: str):
     with _conn() as conn:
         conn.execute("UPDATE gastos SET usuario = ? WHERE id = ?", (usuario or None, gasto_id))
+
+
+def update_descripcion_editada(gasto_id: int, descripcion_editada: Optional[str]):
+    val = descripcion_editada.strip() if descripcion_editada and descripcion_editada.strip() else None
+    with _conn() as conn:
+        conn.execute("UPDATE gastos SET descripcion_editada = ? WHERE id = ?", (val, gasto_id))
 
 
 def rename_categoria_in_gastos(old: str, new: Optional[str]) -> int:
