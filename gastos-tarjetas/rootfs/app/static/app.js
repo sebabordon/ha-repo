@@ -2367,12 +2367,14 @@ function renderRules() {
       _scheduleSaveRules();
     });
 
-    // Especial checkbox
+    // Especial checkbox — save immediately (no debounce) so the state is
+    // persisted even if the user refreshes right after clicking.
     card.querySelector(".rule-especial-chk").addEventListener("change", function() {
       _syncRules();
       _rules[parseInt(this.dataset.i)].especial = this.checked;
       this.closest(".rule-card").classList.toggle("rule-especial", this.checked);
-      _scheduleSaveRules();
+      clearTimeout(_saveRulesTimer);
+      _doSaveRules();
     });
 
     // Fuentes picker — update summary text on change
@@ -2400,25 +2402,26 @@ function _syncRules() {
 
 // Auto-save with debounce
 let _saveRulesTimer = null;
+async function _doSaveRules() {
+  _syncRules();
+  const reglas = _rules
+    .filter(r => r.categoria.trim() && (r.palabras.length > 0 || r.especial))
+    .map(r => ({
+      palabras:     r.palabras,
+      categoria:    r.categoria,
+      especial:     !!r.especial,
+      solo_egresos: r.solo_egresos || null,
+      fuentes:      r.fuentes || [],
+    }));
+  const res = await fetch(`${BASE}/api/rules`, {
+    method: "PUT", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({reglas}),
+  });
+  showToast(res.ok ? "✓ Reglas guardadas" : "❌ Error al guardar reglas", res.ok ? "ok" : "err", res.ok ? 2000 : 0);
+}
 function _scheduleSaveRules() {
   clearTimeout(_saveRulesTimer);
-  _saveRulesTimer = setTimeout(async () => {
-    _syncRules();
-    const reglas = _rules
-      .filter(r => r.categoria.trim() && (r.palabras.length > 0 || r.especial))
-      .map(r => ({
-        palabras:     r.palabras,
-        categoria:    r.categoria,
-        especial:     !!r.especial,
-        solo_egresos: r.solo_egresos || null,
-        fuentes:      r.fuentes || [],
-      }));
-    const res = await fetch(`${BASE}/api/rules`, {
-      method: "PUT", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({reglas}),
-    });
-    showToast(res.ok ? "✓ Reglas guardadas" : "❌ Error al guardar reglas", res.ok ? "ok" : "err", res.ok ? 2000 : 0);
-  }, 800);
+  _saveRulesTimer = setTimeout(_doSaveRules, 800);
 }
 // Save on any focusout inside the rules list
 document.getElementById("rules-list").addEventListener("focusout", _scheduleSaveRules);

@@ -1,3 +1,7 @@
+## 0.5.64
+
+- **Fix: checkbox "Especial" no guardaba si se hacía Ctrl+R antes de 800ms** (`app.js`): la lógica de guardado estaba completamente debounceada (800ms). Al tildar "Especial", si el usuario refrescaba antes de que el timer disparara, el cambio se perdía aunque hubiera visto un toast de "reglas guardadas" de un save previo. Fix: se extrae `_doSaveRules()` como función directa; los checkboxes "Especial" cancelan el debounce pendiente y guardan de inmediato, sin esperar los 800ms. Los inputs de texto siguen usando el debounce normal.
+
 ## 0.5.63
 
 - **UX: botón "Nueva regla" hace scroll y foco automático** (`app.js`): al agregar una regla nueva, la card ahora se centra en pantalla (`block: "center"` en lugar de `"nearest"`) y el campo de categoría recibe el foco de inmediato, evitando tener que hacer scroll manual.
