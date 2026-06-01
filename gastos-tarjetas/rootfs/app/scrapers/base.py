@@ -327,6 +327,11 @@ class BaseScraper(ABC):
             _log("Iniciando WebDriver…")
             driver = self._create_driver()
 
+            # Si este scraper no persiste sesión, borrar cualquier archivo stale
+            # antes de intentar nada — así no se restauran cookies vencidas.
+            if not self.save_session:
+                self.clear_session()
+
             # Intentar restaurar sesión y verificar validez
             has_session = self._has_session()
             _log(f"Sesión guardada en disco: {'sí' if has_session else 'no'}")

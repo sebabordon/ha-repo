@@ -1,3 +1,7 @@
+## 0.5.48
+
+- **Fix: BBVA sigue viendo "Sesión guardada en disco: sí" tras 0.5.47** (`scrapers/base.py`): `clear_session()` se llamaba solo al *terminar* el run, pero el archivo stale del deploy anterior ya se había restaurado al *iniciar*. Corrección: cuando `save_session=False`, se borra el archivo de sesión al inicio de `_run_sync`, antes de intentar cualquier restore — garantizando que BBVA siempre arranque con login limpio.
+
 ## 0.5.47
 
 - **BBVA scraper: no guardar sesión al terminar el run** (`scrapers/base.py`, `scrapers/bbva.py`): se agrega `save_session: bool = True` a `BaseScraper`; cuando es `False`, al terminar el run se borra cualquier sesión en disco en lugar de guardar las cookies nuevas. `BbvaScraper` lo setea en `False` y elimina el `session_ttl_seconds` que ya no tiene sentido: con sesiones de 5 min y runs cada 30+ min las cookies siempre estaban vencidas y solo generaban redirects a `/desconexion.html`.
