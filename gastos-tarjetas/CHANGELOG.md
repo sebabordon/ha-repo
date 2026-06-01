@@ -1,3 +1,8 @@
+## 0.5.57
+
+- **categorizer: reglas "Solo egresos" se saltean al importar PDF** (`categorizer.py`, `routes/upload.py`): `categorize()` recibía siempre `monto=0.0` por defecto, lo que hacía que el filtro `solo_egresos` skipeara esas reglas en cada importación de PDF (el `monto <= 0` era siempre True). Se agrega `monto` y `fuente` como parámetros a `categorize()`, y `upload.py` calcula el monto efectivo (normalizado al convenio `>0=egreso`) antes de categorizar, igual a como lo hace `apply_rules_to_all()`.
+- **UX: toast informativo cuando el keyword ya está registrado** (`app.js`): al guardar una categoría a mano, si el keyword ya existe en la regla correcta el sistema ahora muestra un toast "keyword ya registrado en X" en vez de hacer silencio, explicando por qué no apareció el prompt de aprendizaje.
+
 ## 0.5.56
 
 - **cuotas.py: excluye fechas de servicio tipo "MM/26"** (`routes/cuotas.py`): descripciones como `PERSFLOW49010001 03/26` (servicio mensual Galicia donde el denominador es el año 2026) dejaban de ser detectadas como cuota 3 de 26. La regla es: para fracciones standalone (`_FRAC_CAP`), solo se acepta `2 ≤ total ≤ 24`; cualquier total ≥ 25 es interpretado como año (`25`=2025, `26`=2026, …) y se descarta. Los planes reales de cuotas en tarjetas argentinas son de 2–24 meses. El umbral mantiene planes de 24 cuotas que sí existen.

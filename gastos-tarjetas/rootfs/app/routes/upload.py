@@ -72,7 +72,10 @@ async def upload_file(
 
     records = []
     for g in gastos:
-        cat, fuente_cat = await categorize(g.descripcion)
+        # Normalize to our sign convention (>0=egreso) before categorizing so
+        # that solo_egresos rules fire correctly for non-CC parsers too.
+        eff_monto = -float(g.monto) if (needs_flip and g.monto != 0) else float(g.monto)
+        cat, fuente_cat = await categorize(g.descripcion, monto=eff_monto, fuente=effective_fuente)
         d = g.model_dump()
         d["categoria"] = cat
         d["categoria_fuente"] = fuente_cat

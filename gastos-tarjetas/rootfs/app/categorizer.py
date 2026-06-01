@@ -161,9 +161,9 @@ def auto_add_keyword_to_rule(descripcion: str, categoria: str) -> bool:
     return True
 
 
-async def categorize(descripcion: str) -> tuple[Optional[str], Optional[str]]:
+async def categorize(descripcion: str, monto: float = 0.0, fuente: str = "") -> tuple[Optional[str], Optional[str]]:
     """Returns (categoria, fuente). Tries: reglas → Groq → Gemini → Claude."""
-    cat = categorize_by_rules(descripcion)
+    cat = categorize_by_rules(descripcion, monto=monto, fuente=fuente)
     if cat:
         return cat, "regla"
     if GROQ_API_KEY:

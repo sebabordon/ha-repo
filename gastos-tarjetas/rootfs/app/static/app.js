@@ -1492,7 +1492,7 @@ async function saveCategoria(id, btn) {
       }
 
       if (alreadyInTarget) {
-        // keyword already in the right rule — nothing to do
+        showToast(`keyword ya registrado en "${escHtml(data.categoria)}"`, "ok", 2500);
       } else if (conflictRule) {
         showConfirm(
           `"${conflictKeyword}" ya está en la categoría "${conflictRule.categoria}". ¿Moverlo a "${data.categoria}"?`,
