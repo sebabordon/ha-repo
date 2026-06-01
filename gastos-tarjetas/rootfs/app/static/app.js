@@ -2405,7 +2405,7 @@ function _scheduleSaveRules() {
   _saveRulesTimer = setTimeout(async () => {
     _syncRules();
     const reglas = _rules
-      .filter(r => r.palabras.length > 0 && r.categoria.trim())
+      .filter(r => r.categoria.trim() && (r.palabras.length > 0 || r.especial))
       .map(r => ({
         palabras:     r.palabras,
         categoria:    r.categoria,

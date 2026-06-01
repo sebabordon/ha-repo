@@ -1,3 +1,7 @@
+## 0.5.62
+
+- **Fix: regla nueva marcada como "especial" desaparecía al guardar** (`app.js`): el filtro previo al save exigía `palabras.length > 0`, descartando silenciosamente cualquier regla sin palabras clave aunque tuviera categoría y `especial=true`. Ahora se permite guardar reglas con `especial=true` y categoría aunque no tengan palabras clave, ya que su función es marcar esa categoría como excluida de gráficos/totales.
+
 ## 0.5.61
 
 - **Fix: movimientos_raw huérfanos bloqueaban re-importación del scraper** (`db.py`): `delete_all_gastos()` borraba registros de la tabla `gastos` (al re-subir un PDF o borrar una importación) sin actualizar `movimientos_raw`. Los registros quedaban con `estado='imported'/'matched'` apuntando a `gasto_id` inexistentes, impidiendo que el scraper los volviera a insertar (bloqueados por dedup) y que `auto_import_unmatched` los procesara (no estaban en `'unmatched'`). Fix: al borrar gastos, `delete_all_gastos()` ahora resetea a `'unmatched'` todos los movimientos_raw con referencias huérfanas. Se agrega migración `fix_orphaned_movimientos_raw_v1` que corrige el estado actual de las DBs afectadas.
