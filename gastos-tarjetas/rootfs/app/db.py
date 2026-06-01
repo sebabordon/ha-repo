@@ -1233,7 +1233,7 @@ def apply_user_rules(reglas: list[dict]) -> int:
                 continue
             if fuentes and row["fuente"] and row["fuente"] not in fuentes:
                 continue
-            pattern = "(?i)(" + "|".join(r"\b" + re.escape(str(p)) + r"\b" for p in palabras) + ")"
+            pattern = "(?i)(" + "|".join(r"(?<!\w)" + re.escape(str(p)) + r"(?!\w)" for p in palabras) + ")"
             try:
                 if re.search(pattern, row["descripcion"] or ""):
                     usuario = rule.get("usuario", "")
@@ -1263,7 +1263,7 @@ def preview_user_rule_matches(
     if not palabras:
         return []
 
-    pattern = "(?i)(" + "|".join(r"\b" + re.escape(str(p)) + r"\b" for p in palabras) + ")"
+    pattern = "(?i)(" + "|".join(r"(?<!\w)" + re.escape(str(p)) + r"(?!\w)" for p in palabras) + ")"
 
     clauses, params = [], []
     if fecha_desde:
@@ -1360,7 +1360,7 @@ def preview_rule_matches(
     solo_egresos = regla.get("solo_egresos", False)
 
     if palabras:
-        pattern = "(?i)(" + "|".join(r"\b" + re.escape(str(p)) + r"\b" for p in palabras) + ")"
+        pattern = "(?i)(" + "|".join(r"(?<!\w)" + re.escape(str(p)) + r"(?!\w)" for p in palabras) + ")"
     elif patron:
         pattern = patron
     else:

@@ -55,8 +55,9 @@ def categorize_by_rules(
 
         palabras = regla.get("palabras", [])
         if palabras:
-            # \b word-boundaries prevent partial matches (e.g. "coto" in "PSICOTOLOGO")
-            pattern = "(?i)(" + "|".join(r"\b" + re.escape(str(p)) + r"\b" for p in palabras) + ")"
+            # (?<!\w)/(?!\w) lookarounds prevent partial matches ("coto" in "PSICOTOLOGO")
+            # and also work when keywords start/end with non-word chars like %, =, *, etc.
+            pattern = "(?i)(" + "|".join(r"(?<!\w)" + re.escape(str(p)) + r"(?!\w)" for p in palabras) + ")"
         elif "patron" in regla:
             pattern = regla["patron"]  # backward compat with old regex format
         else:

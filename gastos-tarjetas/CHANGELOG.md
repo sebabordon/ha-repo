@@ -1,3 +1,7 @@
+## 0.5.58
+
+- **motor de reglas: keywords con caracteres especiales no matcheaban** (`categorizer.py`, `db.py`): el patrón usaba `\b` (word boundary), que falla cuando el keyword empieza o termina con un carácter no-alfanumérico (`%`, `=`, `*`, `.`, etc.). Por ejemplo `\bIVA 21%\b` nunca matcheaba porque el `\b` final requiere un alfanumérico después de `%`. Se reemplaza `\b` por lookarounds `(?<!\w)` / `(?!\w)` que funcionan con cualquier carácter y mantienen la protección contra partial matches (ej. "coto" en "PSICOTOLOGO"). Afecta `categorize_by_rules`, `apply_match_rules`, `preview_user_rule_matches` y `preview_rule_matches`.
+
 ## 0.5.57
 
 - **categorizer: reglas "Solo egresos" se saltean al importar PDF** (`categorizer.py`, `routes/upload.py`): `categorize()` recibía siempre `monto=0.0` por defecto, lo que hacía que el filtro `solo_egresos` skipeara esas reglas en cada importación de PDF (el `monto <= 0` era siempre True). Se agrega `monto` y `fuente` como parámetros a `categorize()`, y `upload.py` calcula el monto efectivo (normalizado al convenio `>0=egreso`) antes de categorizar, igual a como lo hace `apply_rules_to_all()`.
