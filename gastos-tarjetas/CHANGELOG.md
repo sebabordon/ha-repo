@@ -1,3 +1,7 @@
+## 0.5.61
+
+- **Fix: movimientos_raw huérfanos bloqueaban re-importación del scraper** (`db.py`): `delete_all_gastos()` borraba registros de la tabla `gastos` (al re-subir un PDF o borrar una importación) sin actualizar `movimientos_raw`. Los registros quedaban con `estado='imported'/'matched'` apuntando a `gasto_id` inexistentes, impidiendo que el scraper los volviera a insertar (bloqueados por dedup) y que `auto_import_unmatched` los procesara (no estaban en `'unmatched'`). Fix: al borrar gastos, `delete_all_gastos()` ahora resetea a `'unmatched'` todos los movimientos_raw con referencias huérfanas. Se agrega migración `fix_orphaned_movimientos_raw_v1` que corrige el estado actual de las DBs afectadas.
+
 ## 0.5.60
 
 - **Fix: tooltip de categoría mostraba fuente desactualizada** (`app.js`): al editar la categoría de un gasto manualmente, el tooltip del input (que dice "Fuente: regla" / "Fuente: manual") no se actualizaba porque la tabla de gastos no se recarga tras el PATCH. Ahora se actualiza el `title` del input directamente en el DOM al guardar con éxito, reflejando inmediatamente "Fuente: manual" (o vacío si se limpió la categoría). El valor en DB siempre fue correcto; solo era un bug visual de stale data.

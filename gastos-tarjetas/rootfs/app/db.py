@@ -560,6 +560,27 @@ def _run_migrations(conn):
             )
         conn.execute("INSERT INTO db_migrations (name) VALUES ('cuentas_parser_type_v1')")
 
+    if "fix_orphaned_movimientos_raw_v1" not in done:
+        # v0.5.61: delete_all_gastos no actualizaba movimientos_raw, dejando
+        # registros con estado='imported'/'matched' apuntando a gasto_id
+        # inexistentes.  El scraper los detectaba pero el dedup los bloqueaba
+        # (ya estaban en movimientos_raw) y auto_import no los procesaba
+        # (no estaban en 'unmatched').  Resetear los huérfanos a 'unmatched'
+        # para que el próximo run del scraper los re-importe.
+        conn.execute("""
+            UPDATE movimientos_raw SET estado='unmatched', gasto_id=NULL
+            WHERE estado IN ('imported', 'matched')
+              AND gasto_id IS NOT NULL
+              AND gasto_id NOT IN (SELECT id FROM gastos)
+        """)
+        fixed = conn.execute("SELECT changes()").fetchone()[0]
+        if fixed:
+            import logging as _log
+            _log.getLogger(__name__).info(
+                "[fix_orphaned_movimientos_raw_v1] %d registro(s) reseteados a 'unmatched'", fixed
+            )
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('fix_orphaned_movimientos_raw_v1')")
+
 
 @contextmanager
 def _conn():
@@ -1960,5 +1981,12 @@ def delete_all_gastos(fuente: str = None, import_id: int = None) -> int:
         conn.execute("""
             DELETE FROM importaciones
             WHERE id NOT IN (SELECT DISTINCT import_id FROM gastos WHERE import_id IS NOT NULL)
+        """)
+        # Reset movimientos_raw that now point to non-existent gastos
+        conn.execute("""
+            UPDATE movimientos_raw SET estado='unmatched', gasto_id=NULL
+            WHERE estado IN ('imported', 'matched')
+              AND gasto_id IS NOT NULL
+              AND gasto_id NOT IN (SELECT id FROM gastos)
         """)
         return deleted
