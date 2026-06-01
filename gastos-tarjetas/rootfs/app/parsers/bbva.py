@@ -193,11 +193,19 @@ class BBVAParser(BaseParser):
                     desc_words = words_in_band(row, 110.0, 390.0)
                     desc_raw = " ".join(w["text"] for w in desc_words).strip()
 
-                    # Detect installment BEFORE stripping suffix
-                    is_installment = bool(_INSTALL_RE.search(desc_raw))
-
-                    # Remove installment suffix (C.03/12) from stored description
-                    description = _INSTALL_RE.sub("", desc_raw).strip()
+                    # Normalise installment suffix: "C.03/12" → "03/12" at end.
+                    # Keeping the fraction makes the cuotas projection work and
+                    # prevents conciliation from matching different installments of
+                    # the same purchase against each other.
+                    m_inst = _INSTALL_RE.search(desc_raw)
+                    is_installment = bool(m_inst)
+                    if m_inst:
+                        base = _INSTALL_RE.sub("", desc_raw).strip()
+                        cur_n = int(m_inst.group(1))
+                        tot_n = int(m_inst.group(2))
+                        description = f"{base} {cur_n:02d}/{tot_n:02d}"
+                    else:
+                        description = desc_raw
 
                     if not description or _SKIP_RE.match(description):
                         continue

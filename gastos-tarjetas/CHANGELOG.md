@@ -1,3 +1,7 @@
+## 0.5.54
+
+- **BBVA parser: preserva indicador de cuotas en descripción** (`parsers/bbva.py`): en lugar de borrar el sufijo `C.03/12` al importar el PDF, ahora lo normaliza al formato `03/12` al final de la descripción (consistente con Galicia). Esto hace que las cuotas BBVA aparezcan en el nuevo tab Cuotas. El cambio mejora además la conciliación: el tie-breaker `_CUOTA_RE` de `conciliacion.py` ahora puede distinguir cuota 3/12 de cuota 7/12 del mismo comercio y evitar falsos matches. Los PDFs ya importados necesitan re-importarse para ver las cuotas BBVA en el tab.
+
 ## 0.5.53
 
 - **Tab Cuotas** (`routes/cuotas.py`, `index.html`, `app.js`, `style.css`): nuevo tab a la derecha de Gastos que calcula cuotas pendientes en cuotas detectadas en las descripciones. Detecta formato AMEX (`CUOTA 01/12 DESCRIPCION`) y Galicia (`DESCRIPCION 03/12`). Agrupa por compra tomando la cuota más alta vista en el historial, proyecta los pagos restantes mes a mes y muestra: tarjetas de resumen (próximo mes + total adeudado separados por ARS/USD), tabla por mes con totales por tarjeta, y tabla de detalle por compra con cuota actual/total, monto por cuota, cuotas restantes y total adeudado. Los mismos filtros de Gastos (fuente, persona, moneda, sin especiales). Filas de meses pasados se muestran en gris (implica cuotas no importadas aún).
