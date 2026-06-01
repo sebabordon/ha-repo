@@ -1,3 +1,7 @@
+## 0.5.60
+
+- **Fix: tooltip de categoría mostraba fuente desactualizada** (`app.js`): al editar la categoría de un gasto manualmente, el tooltip del input (que dice "Fuente: regla" / "Fuente: manual") no se actualizaba porque la tabla de gastos no se recarga tras el PATCH. Ahora se actualiza el `title` del input directamente en el DOM al guardar con éxito, reflejando inmediatamente "Fuente: manual" (o vacío si se limpió la categoría). El valor en DB siempre fue correcto; solo era un bug visual de stale data.
+
 ## 0.5.59
 
 - **gastos: edición inline de descripción** (`db.py`, `routes/gastos.py`, `routes/cuotas.py`, `static/app.js`, `static/style.css`): se agrega la posibilidad de editar el texto descriptivo de cualquier gasto sin perder el original. Se guarda en el nuevo campo `descripcion_editada` (NULL = sin cambios). El motor de cuotas (`cuotas.py`) usa el texto editado si existe para detectar patrones de cuota (uso principal: gastos importados sin formato `NN/NN` que igual se van a ver en cuotas). La conciliación contra el scraper sigue usando el texto original para evitar falsos no-matches. UI: click en la descripción abre un input inline; confirmar con ✓ o Enter, cancelar con ✕ o Escape; vaciar y confirmar restaura el original. Los gastos con descripción editada se muestran en itálica con ícono ✏ y tooltip con el texto original.

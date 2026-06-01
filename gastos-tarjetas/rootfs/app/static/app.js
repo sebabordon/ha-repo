@@ -1478,6 +1478,7 @@ async function saveCategoria(id, btn) {
   });
   if (res.ok) {
     input.classList.remove("dirty"); btn.classList.remove("btn-dirty");
+    input.title = input.value.trim() ? "Fuente: manual" : "";
     loadMonthlyChart();
     const data = await res.json();
     if (data.sugerencia_keyword && data.categoria) {
