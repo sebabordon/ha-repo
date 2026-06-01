@@ -602,91 +602,64 @@ class MercadoPagoScraper(BaseScraper):
         """
         Descarga el settlement report de MP para capturar retiros a CVU/CBU externo.
 
-        Estrategia (evita esperas en el caso normal):
-          1. GET /list → si hay algún reporte ya generado, descargar el más reciente
-             directamente (0 s de espera). El dedup por existing_ids maneja solapamiento.
-          2. Si la lista está vacía o no hay ninguno listo: POST para crear un reporte
-             de los últimos 10 días y hacer polling hasta que aparezca en la lista.
+        Estrategia "generar hoy, usar mañana":
+          1. GET /list → descargar el reporte más reciente disponible (0 s de espera).
+          2. POST para solicitar un reporte nuevo de los últimos 10 días (sin esperar).
+             Estará disponible en la próxima ejecución.
 
-        El reporte aparece en la lista solo cuando está listo (no hay campo "status").
+        Ambos pasos corren siempre: el paso 1 usa lo que hay ahora; el paso 2 asegura
+        que la próxima ejecución tenga un reporte actualizado. El dedup por existing_ids
+        maneja cualquier solapamiento entre reportes consecutivos.
         Si el token no tiene permiso (401/403) se loguea y se devuelve lista vacía.
         """
         _URL = f"{_BASE}/v1/account/settlement_report"
 
-        # ── Paso 1: intentar usar un reporte ya existente ─────────────────────
+        # ── Paso 1: usar el reporte existente más reciente ────────────────────
         csv_text: Optional[str] = await self._download_latest_settlement(
             client, _URL, log_fn
         )
+        result = []
         if csv_text is not None:
-            return self._parse_settlement_csv(csv_text, existing_ids, log_fn, debug)
+            result = self._parse_settlement_csv(csv_text, existing_ids, log_fn, debug)
 
-        # ── Paso 2: solicitar reporte de los últimos 10 días ─────────────────
-        # Ventana fija de 10 días: el dedup evita duplicados con imports anteriores.
-        today_art  = datetime.now(_ART).date()
-        win_since  = today_art - timedelta(days=9)
-        since_utc  = datetime(
+        # ── Paso 2: solicitar reporte nuevo (sin esperar — disponible mañana) ─
+        await self._request_settlement_report(client, _URL, log_fn)
+
+        return result
+
+    async def _request_settlement_report(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        log_fn,
+    ) -> None:
+        """Solicita un nuevo settlement report de los últimos 10 días sin esperar resultado."""
+        today_art = datetime.now(_ART).date()
+        win_since = today_art - timedelta(days=9)
+        since_utc = datetime(
             win_since.year, win_since.month, win_since.day, 0, 0, 0, tzinfo=_ART
         ).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        until_utc  = datetime(
+        until_utc = datetime(
             today_art.year, today_art.month, today_art.day, 23, 59, 59, tzinfo=_ART
         ).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        log_fn("Settlement report: solicitando (últimos 10 días) …")
+        log_fn("Settlement report: solicitando nuevo reporte (disponible en próxima ejecución) …")
         try:
             resp = await client.post(
-                _URL, json={"begin_date": since_utc, "end_date": until_utc},
+                base_url, json={"begin_date": since_utc, "end_date": until_utc},
             )
         except Exception as exc:
-            log_fn(f"Settlement report: error de red — {exc}")
-            return []
+            log_fn(f"Settlement report: error solicitando nuevo — {exc}")
+            return
 
         if resp.status_code in (401, 403):
-            log_fn(f"Settlement report: sin permiso ({resp.status_code}) — omitido")
-            return []
-        if resp.status_code not in (200, 201, 202, 203):
-            log_fn(f"Settlement report: POST status {resp.status_code} — omitido")
-            return []
-
-        rdata     = resp.json() if resp.text else {}
-        report_id = rdata.get("id")
-        file_name = str(rdata.get("file_name") or "").strip()
-        if not report_id and not file_name:
-            log_fn("Settlement report: sin id ni file_name en la respuesta — omitido")
-            return []
-
-        log_fn(f"Settlement report: generando id={report_id}, esperando …")
-
-        # Polling: el reporte aparece en la lista solo cuando está completamente listo.
-        for _attempt in range(30):          # máx ~90 s (30 × 3 s)
-            await asyncio.sleep(3)
-            try:
-                list_resp = await client.get(f"{_URL}/list")
-            except Exception:
-                continue
-            if list_resp.status_code != 200:
-                break
-            for rpt in (list_resp.json() or []):
-                rpt_id   = rpt.get("id")
-                rpt_file = str(rpt.get("file_name") or "").strip()
-                match = (
-                    (report_id and rpt_id == report_id) or
-                    (file_name and rpt_file == file_name)
-                )
-                if not match:
-                    continue
-                if rpt_file:
-                    csv_text = await self._download_settlement_file(
-                        client, _URL, rpt_file, log_fn
-                    )
-                break
-            if csv_text is not None:
-                break
-
-        if csv_text is None:
-            log_fn("Settlement report: timeout esperando procesamiento — omitido")
-            return []
-
-        return self._parse_settlement_csv(csv_text, existing_ids, log_fn, debug)
+            log_fn(f"Settlement report: sin permiso para solicitar ({resp.status_code})")
+        elif resp.status_code in (200, 201, 202, 203):
+            rdata     = resp.json() if resp.text else {}
+            report_id = rdata.get("id") or rdata.get("file_name") or "?"
+            log_fn(f"Settlement report: nuevo solicitado id={report_id}")
+        else:
+            log_fn(f"Settlement report: POST status {resp.status_code}")
 
     async def _download_latest_settlement(
         self,

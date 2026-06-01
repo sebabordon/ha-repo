@@ -1,3 +1,7 @@
+## 0.5.66
+
+- **Fix: settlement report se regenera en cada ejecución** (`mercadopago.py`): el código anterior usaba el reporte existente como primera opción y solo generaba uno nuevo si no había ninguno, lo que resultaba en reutilizar indefinidamente el reporte más viejo (ej. del 29-05) y no capturar transferencias CBU/CVU posteriores. Ahora siempre se descarga el reporte disponible (paso 1) y además se dispara la generación de uno nuevo sin esperar (paso 2), de modo que la próxima ejecución siempre tiene un reporte actualizado — diseño "generar hoy, usar mañana".
+
 ## 0.5.65
 
 - **Fix: acciones discretas en reglas ahora guardan inmediato** (`app.js`): el mismo problema de debounce de 0.5.64 afectaba a todas las acciones no-textuales: agregar keyword (Enter), eliminar keyword, eliminar regla, drag-and-drop, checkbox "Solo egresos" (que además no tenía listener propio y dependía solo del focusout). Ahora todas estas acciones llaman `_doSaveRules()` directamente. El debounce de 800ms queda solo para los campos de texto (nombre de categoría) donde sí tiene sentido.
