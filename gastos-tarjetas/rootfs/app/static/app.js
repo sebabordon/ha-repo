@@ -2364,17 +2364,20 @@ function renderRules() {
       _rules.splice(i, 0, moved);
       _dragSrcIdx = null;
       renderRules();
-      _scheduleSaveRules();
+      clearTimeout(_saveRulesTimer); _doSaveRules();
     });
 
-    // Especial checkbox — save immediately (no debounce) so the state is
-    // persisted even if the user refreshes right after clicking.
+    // Checkboxes — save immediately (no debounce) so refreshing right after
+    // clicking doesn't lose the change.
     card.querySelector(".rule-especial-chk").addEventListener("change", function() {
       _syncRules();
       _rules[parseInt(this.dataset.i)].especial = this.checked;
       this.closest(".rule-card").classList.toggle("rule-especial", this.checked);
-      clearTimeout(_saveRulesTimer);
-      _doSaveRules();
+      clearTimeout(_saveRulesTimer); _doSaveRules();
+    });
+    card.querySelector(".rule-solo-egresos-chk").addEventListener("change", function() {
+      _syncRules();
+      clearTimeout(_saveRulesTimer); _doSaveRules();
     });
 
     // Fuentes picker — update summary text on change
@@ -2426,8 +2429,8 @@ function _scheduleSaveRules() {
 // Save on any focusout inside the rules list
 document.getElementById("rules-list").addEventListener("focusout", _scheduleSaveRules);
 
-function removeRule(i)  { _syncRules(); _rules.splice(i,1); renderRules(); _scheduleSaveRules(); }
-function removeTag(i,j) { _syncRules(); _rules[i].palabras.splice(j,1); renderRules(); _scheduleSaveRules(); }
+function removeRule(i)  { _syncRules(); _rules.splice(i,1); renderRules(); clearTimeout(_saveRulesTimer); _doSaveRules(); }
+function removeTag(i,j) { _syncRules(); _rules[i].palabras.splice(j,1); renderRules(); clearTimeout(_saveRulesTimer); _doSaveRules(); }
 function addTag(event,i) {
   if (event.key !== "Enter") return;
   event.preventDefault();
@@ -2437,7 +2440,7 @@ function addTag(event,i) {
   if (!_rules[i].palabras.includes(word)) _rules[i].palabras.push(word);
   renderRules();
   document.querySelectorAll(".tag-input")[i]?.focus();
-  _scheduleSaveRules();
+  clearTimeout(_saveRulesTimer); _doSaveRules();
 }
 function editTag(i, j) {
   _syncRules();
@@ -2454,7 +2457,7 @@ function editTag(i, j) {
     const val = inp.value.trim();
     if (!val) { _rules[i].palabras.splice(j, 1); }
     else       { _rules[i].palabras[j] = val; }
-    renderRules(); _scheduleSaveRules();
+    renderRules(); clearTimeout(_saveRulesTimer); _doSaveRules();
   }
   inp.addEventListener("keydown", e => {
     if (e.key === "Enter")  { e.preventDefault(); doSave(); }

@@ -1,3 +1,7 @@
+## 0.5.65
+
+- **Fix: acciones discretas en reglas ahora guardan inmediato** (`app.js`): el mismo problema de debounce de 0.5.64 afectaba a todas las acciones no-textuales: agregar keyword (Enter), eliminar keyword, eliminar regla, drag-and-drop, checkbox "Solo egresos" (que además no tenía listener propio y dependía solo del focusout). Ahora todas estas acciones llaman `_doSaveRules()` directamente. El debounce de 800ms queda solo para los campos de texto (nombre de categoría) donde sí tiene sentido.
+
 ## 0.5.64
 
 - **Fix: checkbox "Especial" no guardaba si se hacía Ctrl+R antes de 800ms** (`app.js`): la lógica de guardado estaba completamente debounceada (800ms). Al tildar "Especial", si el usuario refrescaba antes de que el timer disparara, el cambio se perdía aunque hubiera visto un toast de "reglas guardadas" de un save previo. Fix: se extrae `_doSaveRules()` como función directa; los checkboxes "Especial" cancelan el debounce pendiente y guardan de inmediato, sin esperar los 800ms. Los inputs de texto siguen usando el debounce normal.
