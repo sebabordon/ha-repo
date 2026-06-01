@@ -2467,8 +2467,8 @@ document.getElementById("btn-add-rule").addEventListener("click", () => {
   _rules.push({palabras: [], categoria: "", especial: false, solo_egresos: false, fuentes: []});
   renderRules();
   const el = document.querySelectorAll(".rule-cat").at(-1);
+  el?.scrollIntoView({behavior: "smooth", block: "center"});
   el?.focus();
-  el?.scrollIntoView({behavior: "smooth", block: "nearest"});
 });
 
 document.getElementById("btn-export-rules").addEventListener("click", () => {

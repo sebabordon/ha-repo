@@ -1,3 +1,7 @@
+## 0.5.63
+
+- **UX: botón "Nueva regla" hace scroll y foco automático** (`app.js`): al agregar una regla nueva, la card ahora se centra en pantalla (`block: "center"` en lugar de `"nearest"`) y el campo de categoría recibe el foco de inmediato, evitando tener que hacer scroll manual.
+
 ## 0.5.62
 
 - **Fix: regla nueva marcada como "especial" desaparecía al guardar** (`app.js`): el filtro previo al save exigía `palabras.length > 0`, descartando silenciosamente cualquier regla sin palabras clave aunque tuviera categoría y `especial=true`. Ahora se permite guardar reglas con `especial=true` y categoría aunque no tengan palabras clave, ya que su función es marcar esa categoría como excluida de gráficos/totales.
