@@ -756,11 +756,13 @@ class BbvaScraper(BaseScraper):
             else:
                 hit_out_of_range = False
 
-            all_movs.extend(self._parse_batch(
+            batch_movs = self._parse_batch(
                 batch_in_range, log_fn,
                 moneda=moneda, usuario_default=usuario_default,
                 fuente_target=fuente_target,
-            ))
+            )
+            self._enrich_with_detalle(driver, id_producto, batch_movs, log_fn)
+            all_movs.extend(batch_movs)
 
             # Stop conditions:
             #   - llegamos al final de la página (menos de _PAGE_SIZE devueltos)
@@ -771,6 +773,106 @@ class BbvaScraper(BaseScraper):
             ultimo += len(batch)
 
         return all_movs
+
+    # ── detalle de movimiento ─────────────────────────────────────────────────
+
+    def _fetch_detalle(
+        self,
+        driver,
+        id_producto: str,
+        numero_operacion: str,
+        codigo_accion: str,
+        log_fn=None,
+    ) -> Optional[dict]:
+        """
+        Llama al endpoint de detalle de un movimiento BBVA.
+        Solo se invoca cuando `codigoAccionDetalleMovimientoCuenta` está presente.
+
+        El resultado suele incluir nombre/denominación del destinatario o remitente,
+        CBU/CVU, CUIT/CUIL, banco destino y concepto.
+
+        Retorna el dict `result` de la respuesta, o None si falla.
+        """
+        payload = {
+            "idProducto":                          id_producto,
+            "numeroOperacion":                     numero_operacion,
+            "codigoAccionDetalleMovimientoCuenta": codigo_accion,
+        }
+        resp = self._api_request(
+            driver,
+            "/cliente/productos/cuentas/movimientodetalle",
+            method="POST",
+            json_body=payload,
+            timeout=15,
+        )
+        if resp["status"] != 200:
+            if log_fn:
+                log_fn(
+                    f"      [detalle] HTTP {resp['status']} nroOp={numero_operacion} "
+                    f"accion={codigo_accion} — {resp['body'][:150]}"
+                )
+            return None
+        result = (resp["json"] or {}).get("result") or {}
+        if log_fn:
+            log_fn(
+                f"      [detalle] nroOp={numero_operacion} accion={codigo_accion} "
+                f"→ {_json.dumps(result, ensure_ascii=False)[:400]}"
+            )
+        return result or None
+
+    @staticmethod
+    def _extract_nombre_detalle(detalle: dict) -> Optional[str]:
+        """
+        Extrae el nombre de la contraparte del dict de detalle.
+        Prueba los campos más comunes del API BBVA en orden de preferencia.
+        """
+        for k in (
+            "denominacion", "nombreDestinatario", "nombreBeneficiario",
+            "razonSocial", "nombre", "titularCuenta", "nombreTitular",
+            "denominacionBeneficiario", "denominacionDestinatario",
+            "descripcionDestinatario", "cuentaDestinatario",
+        ):
+            v = detalle.get(k)
+            if v and isinstance(v, str) and v.strip():
+                return v.strip()
+        return None
+
+    def _enrich_with_detalle(
+        self,
+        driver,
+        id_producto: str,
+        movs: list[MovimientoRaw],
+        log_fn=None,
+    ) -> None:
+        """
+        Para cada MovimientoRaw que tenga `codigo_accion_detalle` y
+        `numero_operacion` en raw_data, llama al endpoint de detalle y:
+          - Loguea la respuesta completa (para descubrimiento de campos).
+          - Si encuentra un nombre de contraparte, lo agrega a raw_data["destinatario"]
+            y lo apenda a la descripción ("concepto — Nombre Contraparte").
+          - Guarda el dict de detalle completo en raw_data["detalle"].
+        """
+        for mov in movs:
+            rd = mov.raw_data or {}
+            codigo_accion = str(rd.get("codigo_accion_detalle") or "").strip()
+            numero_op     = str(rd.get("numero_operacion")      or "").strip()
+            if not codigo_accion or not numero_op:
+                continue
+
+            detalle = self._fetch_detalle(
+                driver, id_producto, numero_op, codigo_accion, log_fn
+            )
+            if not detalle:
+                continue
+
+            mov.raw_data["detalle"] = detalle
+
+            nombre = self._extract_nombre_detalle(detalle)
+            if nombre:
+                mov.raw_data["destinatario"] = nombre
+                # Incorporar a la descripción si no está ya
+                if nombre.upper() not in mov.descripcion.upper():
+                    mov.descripcion = f"{mov.descripcion} — {nombre}"
 
     # ── parsing de un batch ───────────────────────────────────────────────────
 

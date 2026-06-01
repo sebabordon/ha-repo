@@ -1,3 +1,7 @@
+## 0.5.50
+
+- **BBVA scraper: endpoint de detalle de movimiento** (`scrapers/bbva.py`): se agregan `_fetch_detalle`, `_extract_nombre_detalle` y `_enrich_with_detalle`. Para cada movimiento que tenga `codigoAccionDetalleMovimientoCuenta` y `numeroOperacion`, se llama a `POST /cliente/productos/cuentas/movimientodetalle` y se loguea la respuesta completa `[detalle]`. Si se detecta un nombre de contraparte (destinatario/remitente), se agrega a `raw_data["destinatario"]` y se incorpora a la descripción ("concepto — Nombre"). El endpoint y los campos de respuesta se validan en esta primera corrida.
+
 ## 0.5.49
 
 - **Fix: "Último intento" mostraba siempre la misma fecha que "Último OK"** (`scraper_scheduler.py`): en los 4 paths de error (excepción + `result.error`, tanto en run manual como en job programado), `update_instance_status` no actualizaba `ultimo_run`. Al fallar un run, la UI mostraba el timestamp del último run exitoso en ambos campos. Corrección: todos los paths de error ahora pasan `ultimo_run=now_iso`.
