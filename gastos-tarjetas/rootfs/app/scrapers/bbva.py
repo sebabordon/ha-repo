@@ -851,6 +851,67 @@ class BbvaScraper(BaseScraper):
             )
         return detalle or None
 
+    def _fetch_detalleinmediata(
+        self,
+        driver,
+        id_producto: str,
+        mov: "MovimientoRaw",
+        log_fn=None,
+    ) -> Optional[dict]:
+        """
+        POST /banelco/transferencias/detalleinmediataemitida
+        Para codigoAccion=06 (TRANSFERENCIA saliente inmediata, claveConcepto=136).
+
+        Parámetros (confirmados por HAR):
+          idProducto, fecha (DD/MM/YYYY), claveConcepto, codigoTipoMovimiento,
+          procedencia, importe (string original API), referencia, origen.
+
+        Respuesta (campo `detalleMovBanelcoTransferenciaInmEmi`):
+          cbuDestino — CBU de la cuenta destino (22 dígitos).
+        """
+        rd = mov.raw_data or {}
+        try:
+            from datetime import date as _date
+            fecha_ar = _date.fromisoformat(mov.fecha).strftime("%d/%m/%Y")
+        except Exception:
+            fecha_ar = mov.fecha
+
+        payload = {
+            "idProducto":           id_producto,
+            "fecha":                fecha_ar,
+            "claveConcepto":        str(rd.get("clave_concepto")        or ""),
+            "codigoTipoMovimiento": str(rd.get("codigo_tipo_movimiento") or ""),
+            "procedencia":          str(rd.get("procedencia")           or "").strip(),
+            "importe":              str(rd.get("importe_raw")           or ""),
+            "referencia":           str(rd.get("referencia")            or ""),
+            "origen":               str(rd.get("origen")               or ""),
+        }
+        resp = self._api_request(
+            driver,
+            "/cliente/productos/cuentas/movimientos/banelco/transferencias/detalleinmediataemitida",
+            method="POST",
+            json_body=payload,
+            timeout=15,
+        )
+        if resp["status"] != 200:
+            if log_fn:
+                log_fn(
+                    f"      [detalleinmediata] HTTP {resp['status']} "
+                    f"fecha={fecha_ar} — {resp['body'][:150]}"
+                )
+            return None
+
+        detalle = ((resp["json"] or {}).get("result") or {}).get(
+            "detalleMovBanelcoTransferenciaInmEmi"
+        ) or {}
+        if log_fn:
+            cbu = detalle.get("cbuDestino", "")
+            log_fn(
+                f"      [detalleinmediata] cbuDestino={cbu!r}  "
+                f"{_json.dumps({k: v for k, v in detalle.items() if k != 'cbuDestino'}, ensure_ascii=False)}"
+            )
+        return detalle or None
+
     def _enrich_with_detalle(
         self,
         driver,
@@ -861,11 +922,11 @@ class BbvaScraper(BaseScraper):
         """
         Enriquece movimientos con datos del endpoint de detalle correspondiente.
 
-        Ruteo por `procedencia`:
-          - procedencia ~ "OP\\d+" → _fetch_detalleservicio → agrega
-            raw_data["servicio"] y actualiza la descripción con el nombre
-            del servicio pagado (e.g. "SJOSE P DIOS").
-          - Otros tipos de detalle (transferencias, etc.) no implementados aún.
+        Ruteo:
+          - procedencia ~ "OP\\d+"  →  _fetch_detalleservicio
+              → agrega raw_data["servicio"] y lo incorpora a la descripción.
+          - codigoAccion == "06"    →  _fetch_detalleinmediata
+              → loguea y guarda raw_data["cbu_destino"].
         """
         for mov in movs:
             rd = mov.raw_data or {}
@@ -891,6 +952,14 @@ class BbvaScraper(BaseScraper):
                 hora = (detalle.get("hora") or "").strip()
                 if hora:
                     mov.raw_data["hora_operacion"] = hora
+
+            # Transferencias inmediatas salientes (codigoAccion=06)
+            elif codigo_accion == "06":
+                detalle = self._fetch_detalleinmediata(driver, id_producto, mov, log_fn)
+                if detalle:
+                    cbu = (detalle.get("cbuDestino") or "").strip()
+                    if cbu:
+                        mov.raw_data["cbu_destino"] = cbu
 
     # ── parsing de un batch ───────────────────────────────────────────────────
 
@@ -1085,6 +1154,7 @@ class BbvaScraper(BaseScraper):
                 "origen":                 origen or None,
                 "procedencia":            procedencia or None,
                 "numero_cheque":          numero_cheque if numero_cheque and numero_cheque != "0" else None,
+                "importe_raw":            importe_str,   # formato original API p/ endpoints de detalle
                 "tiene_detalle":          mov.get("tieneDetalle"),
                 "sign_reason":            reason,
                 "usuario":                usuario_default,   # None si no hay config

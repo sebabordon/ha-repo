@@ -1,3 +1,7 @@
+## 0.5.52
+
+- **BBVA scraper: CBU destino para transferencias inmediatas salientes** (`scrapers/bbva.py`): se agrega `_fetch_detalleinmediata` que llama a `POST /banelco/transferencias/detalleinmediataemitida` para movimientos con `codigoAccion=06`. Requería guardar el string original del `importe` en `raw_data["importe_raw"]` (también agregado). El log muestra `[detalleinmediata] cbuDestino='...'` y el CBU se persiste en `raw_data["cbu_destino"]`.
+
 ## 0.5.51
 
 - **BBVA scraper: endpoint de detalle de servicios** (`scrapers/bbva.py`): reemplaza la implementación incorrecta de 0.5.50. Análisis de HAR confirmó que el endpoint real para pagos de servicios es `POST /banelco/detalleservicio` (no `/movimientodetalle`), con parámetros `fecha/claveConcepto/codigoTipoMovimiento/procedencia`. El trigger correcto es `procedencia ~ "OP\d+"` (codigoAccion=02 "OPERACION EN EFECTIVO TARJE" y codigoAccion=03 "PAGO DE SERVICIOS TARJETA"). La respuesta incluye el campo `servicio` con el nombre del servicio pagado (ej. "SJOSE P DIOS"), que se incorpora a la descripción del movimiento y se guarda en `raw_data["servicio"]`. También se guardan `cajero_entidad` y `hora_operacion`.
