@@ -1,3 +1,7 @@
+## 0.5.56
+
+- **cuotas.py: excluye fechas de servicio tipo "MM/26"** (`routes/cuotas.py`): descripciones como `PERSFLOW49010001 03/26` (servicio mensual Galicia donde el denominador es el año 2026) dejaban de ser detectadas como cuota 3 de 26. La regla es: para fracciones standalone (`_FRAC_CAP`), solo se acepta `2 ≤ total ≤ 24`; cualquier total ≥ 25 es interpretado como año (`25`=2025, `26`=2026, …) y se descarta. Los planes reales de cuotas en tarjetas argentinas son de 2–24 meses. El umbral mantiene planes de 24 cuotas que sí existen.
+
 ## 0.5.55
 
 - **AMEX parser: captura "Cuota NN de NN" de líneas de continuación** (`parsers/amex.py`): AMEX imprime el indicador de cuota en una línea ~8pt debajo de la línea de la transacción (e.g. "Cuota 02 de 02" o "Plan de Cuotas . Cuota 01 de 03"). El parser ahora inspecciona hasta 3 filas de continuación buscando ese patrón y lo normaliza a "CUOTA NN/NN" al final de la descripción. Cubre cuota anual (2 cuotas) y compras en cuotas ("Plan de Cuotas"). Las descripciones resultantes son detectables por el tab Cuotas.

@@ -43,12 +43,15 @@ def _parse_installment(desc: str):
         cur, tot = int(m.group(1)), int(m.group(2))
         if tot >= 2:
             return cur, tot
-    # Galicia-style: remove date ranges first to avoid "04/26 - 03/27" false positives
+    # Galicia/BBVA style: remove date ranges first, then search for standalone fractions.
+    # Skip if tot >= 25: in a 2-digit suffix that number is almost certainly a year
+    # (e.g. "PERSFLOW49010001 03/26" = billing month March 2026, not installment 3/26).
+    # Real Argentine installment plans are 2–24 months; 25+ is not a standard plan.
     clean = _DATE_RANGE_RE.sub(' ', desc)
     m = _FRAC_CAP.search(clean)
     if m:
         cur, tot = int(m.group(1)), int(m.group(2))
-        if tot >= 2 and cur <= tot:
+        if 2 <= tot <= 24 and cur <= tot:
             return cur, tot
     return None
 
