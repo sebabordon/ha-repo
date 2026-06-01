@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, admin, config_route, charts
+from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, admin, config_route, charts, cuotas
 from routes import scrapers as scrapers_routes
 from routes import scraper_instances_routes
 from db import init_db
@@ -67,6 +67,7 @@ app.include_router(cuentas.router,    prefix="/api",  tags=["cuentas"])
 app.include_router(presupuesto.router,  prefix="/api",   tags=["presupuesto"])
 app.include_router(config_route.router, prefix="/api",   tags=["config"])
 app.include_router(charts.router,          prefix="/api",   tags=["charts"])
+app.include_router(cuotas.router,          prefix="/api",   tags=["cuotas"])
 app.include_router(scrapers_routes.router, prefix="/api",   tags=["scrapers"])
 app.include_router(scraper_instances_routes.router, prefix="/api", tags=["scraper_instances"])
 app.include_router(admin.router,           prefix="/admin", tags=["admin"])

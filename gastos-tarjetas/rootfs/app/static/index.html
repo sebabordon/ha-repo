@@ -50,6 +50,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="graficos">Gráficos</button>
       <button class="tab" data-tab="gastos">Gastos</button>
+      <button class="tab" data-tab="cuotas">Cuotas</button>
       <button class="tab" data-tab="presupuesto">Presupuesto</button>
       <button class="tab" data-tab="config">⚙ Config</button>
     </div>
@@ -384,6 +385,61 @@
         </div>
 
       </div><!-- /gtab-transferencias -->
+
+    </section>
+
+    <!-- ── Tab: Cuotas ───────────────────────────────────────────────────── -->
+    <section id="tab-cuotas" class="tab-content">
+
+      <div class="filter-bar">
+        <div id="cuotas-summary"></div>
+        <button id="btn-cq-load" class="btn btn-sm">↺</button>
+      </div>
+
+      <div class="filters">
+        <select id="cq-filter-fuente">
+          <option value="">Todas las fuentes</option>
+          <option value="amex">AMEX</option>
+          <option value="bbva_mc">BBVA Mastercard</option>
+          <option value="bbva_visa">BBVA Visa</option>
+          <option value="bbva_cuenta">BBVA Cuenta</option>
+          <option value="galicia_mc">Galicia Mastercard</option>
+          <option value="mercadopago">MercadoPago</option>
+        </select>
+        <select id="cq-filter-usuario">
+          <option value="">Todos</option>
+        </select>
+        <select id="cq-filter-moneda">
+          <option value="">Todas</option>
+          <option value="ARS">ARS $</option>
+          <option value="USD">USD $</option>
+        </select>
+        <label class="chk-especiales" title="Ocultar categorías especiales">
+          <input type="checkbox" id="cq-chk-excluir-especiales" checked> Sin especiales
+        </label>
+      </div>
+
+      <div id="cuotas-stats"></div>
+      <div id="cuotas-por-mes"></div>
+
+      <div class="table-wrap">
+        <table id="cuotas-table">
+          <thead>
+            <tr>
+              <th>Descripción</th>
+              <th>Fuente</th>
+              <th>Persona</th>
+              <th>Cuota</th>
+              <th class="col-moneda">Mon.</th>
+              <th>Monto/cuota</th>
+              <th>Restantes</th>
+              <th>Total adeudado</th>
+              <th>Categoría</th>
+            </tr>
+          </thead>
+          <tbody id="cuotas-body"></tbody>
+        </table>
+      </div>
 
     </section>
 

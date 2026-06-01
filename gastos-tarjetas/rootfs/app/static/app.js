@@ -174,6 +174,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     tab.classList.add("active");
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); }
+    if (tab.dataset.tab === "cuotas")      { loadCuotas(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
     if (tab.dataset.tab === "config")      { _restoreCfgSections(); loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); }
   });
@@ -4452,7 +4453,7 @@ async function loadUsuarios() {
 function _populateUsuarioDropdowns() {
   // TODO: agregar opción "Sin usuario" (value="__none__") para filtrar gastos
   // sin persona asignada y poder categorizarlos fácilmente desde la tabla.
-  ["filter-usuario","cf-usuario"].forEach(id => {
+  ["filter-usuario","cf-usuario","cq-filter-usuario"].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     const cur = sel.value;
@@ -5594,6 +5595,128 @@ function _drawBudgetChart() {
 }
 
 document.getElementById("bud-mes").addEventListener("change", loadBudgetChart);
+
+// ── Cuotas ────────────────────────────────────────────────────────────────────
+function _cuotasParams() {
+  const p = new URLSearchParams();
+  const fuente  = document.getElementById("cq-filter-fuente").value;
+  const usuario = document.getElementById("cq-filter-usuario").value;
+  const moneda  = document.getElementById("cq-filter-moneda").value;
+  const excluir = document.getElementById("cq-chk-excluir-especiales")?.checked;
+  if (fuente)  p.set("fuente",  fuente);
+  if (usuario) p.set("usuario", usuario);
+  if (moneda)  p.set("moneda",  moneda);
+  if (excluir) p.set("excluir_especiales", "true");
+  return p;
+}
+
+async function loadCuotas() {
+  const res  = await fetch(`${BASE}/api/cuotas?${_cuotasParams()}`);
+  const data = await res.json();
+  _renderCuotas(data);
+}
+
+function _renderCuotas(data) {
+  // ── Resumen top ───────────────────────────────────────────────────────────
+  const sumEl = document.getElementById("cuotas-summary");
+  const parts = [];
+  if (data.proximo_mes_ars) parts.push(`Próximo mes ARS ${_fmtNum2(data.proximo_mes_ars)}`);
+  if (data.proximo_mes_usd) parts.push(`Próximo mes USD ${_fmtNum2(data.proximo_mes_usd)}`);
+  if (data.total_adeudado_ars) parts.push(`Total adeudado ARS ${_fmtNum2(data.total_adeudado_ars)}`);
+  if (data.total_adeudado_usd) parts.push(`Total adeudado USD ${_fmtNum2(data.total_adeudado_usd)}`);
+  sumEl.textContent = parts.join(" — ") || "Sin cuotas pendientes";
+
+  // ── Tarjetas de resumen ───────────────────────────────────────────────────
+  const statsEl = document.getElementById("cuotas-stats");
+  let sh = `<div class="cq-stat-cards">`;
+  const _statCard = (label, arsVal, usdVal) => {
+    let inner = `<div class="cq-stat-label">${label}</div><div class="cq-stat-val">`;
+    if (arsVal) inner += `<span class="cq-ars">ARS ${_fmtNum2(arsVal)}</span>`;
+    if (usdVal) inner += `<span class="cq-usd">USD ${_fmtNum2(usdVal)}</span>`;
+    if (!arsVal && !usdVal) inner += `<span>—</span>`;
+    inner += `</div>`;
+    return `<div class="cq-stat-card">${inner}</div>`;
+  };
+  sh += _statCard("Próximo mes",    data.proximo_mes_ars,    data.proximo_mes_usd);
+  sh += _statCard("Total adeudado", data.total_adeudado_ars, data.total_adeudado_usd);
+  sh += `</div>`;
+  statsEl.innerHTML = sh;
+
+  // ── Tabla por mes ─────────────────────────────────────────────────────────
+  const porMesEl = document.getElementById("cuotas-por-mes");
+  if (data.por_mes && data.por_mes.length) {
+    // Recopilar todas las fuentes ARS que aparecen
+    const fuentes = [...new Set(
+      data.por_mes.flatMap(m => Object.keys(m.ars_por_fuente || {}))
+    )].sort();
+    const hasUsd = data.por_mes.some(m => m.total_usd > 0);
+
+    let th = `<tr><th>Mes</th>`;
+    fuentes.forEach(f => { th += `<th>${f.replace("_", " ")}</th>`; });
+    th += `<th>Total ARS</th>`;
+    if (hasUsd) th += `<th>Total USD</th>`;
+    th += `</tr>`;
+
+    const today_ym = new Date().toISOString().slice(0, 7);
+    let rows = "";
+    data.por_mes.forEach(pm => {
+      const past = pm.mes < today_ym;
+      rows += `<tr class="${past ? "cq-past" : ""}">`;
+      rows += `<td>${_fmtMes(pm.mes)}</td>`;
+      fuentes.forEach(f => {
+        const v = (pm.ars_por_fuente || {})[f] || 0;
+        rows += `<td class="monto">${v ? _fmtNum2(v) : "—"}</td>`;
+      });
+      rows += `<td class="monto">${pm.total_ars ? _fmtNum2(pm.total_ars) : "—"}</td>`;
+      if (hasUsd) rows += `<td class="monto usd">${pm.total_usd ? _fmtNum2(pm.total_usd) : "—"}</td>`;
+      rows += `</tr>`;
+    });
+
+    porMesEl.innerHTML = `
+      <div class="table-wrap cq-por-mes-wrap">
+        <table class="cq-por-mes-table">
+          <thead>${th}</thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } else {
+    porMesEl.innerHTML = "";
+  }
+
+  // ── Tabla de detalle ──────────────────────────────────────────────────────
+  const tbody = document.getElementById("cuotas-body");
+  tbody.innerHTML = "";
+
+  if (!data.cuotas || !data.cuotas.length) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#aaa;padding:2rem">Sin cuotas pendientes</td></tr>`;
+    return;
+  }
+
+  const today_ym2 = new Date().toISOString().slice(0, 7);
+  data.cuotas.forEach(c => {
+    const nextMes = c.proyeccion?.[0]?.mes || "";
+    const past    = nextMes && nextMes < today_ym2;
+    const usdCls  = c.moneda === "USD" ? " usd" : "";
+    const tr      = document.createElement("tr");
+    if (past) tr.className = "cq-past";
+    tr.innerHTML = `
+      <td title="${escHtml(c.descripcion_original)}">${escHtml(c.descripcion)}</td>
+      <td><span class="badge badge-${c.fuente}">${c.fuente.replace("_"," ")}</span></td>
+      <td>${escHtml(c.usuario || "—")}</td>
+      <td class="cq-progress">${c.cuota_actual}/${c.total_cuotas}</td>
+      <td class="col-moneda">${c.moneda}</td>
+      <td class="monto${usdCls}">${_fmtNum2(c.monto_cuota)}</td>
+      <td>${c.restantes}</td>
+      <td class="monto${usdCls}">${_fmtNum2(c.total_adeudado)}</td>
+      <td>${escHtml(c.categoria || "")}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+["cq-filter-fuente","cq-filter-usuario","cq-filter-moneda"].forEach(id =>
+  document.getElementById(id).addEventListener("change", function() { this.blur(); loadCuotas(); }));
+document.getElementById("cq-chk-excluir-especiales").addEventListener("change", loadCuotas);
+document.getElementById("btn-cq-load").addEventListener("click", loadCuotas);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {

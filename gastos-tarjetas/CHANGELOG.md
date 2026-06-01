@@ -1,3 +1,7 @@
+## 0.5.53
+
+- **Tab Cuotas** (`routes/cuotas.py`, `index.html`, `app.js`, `style.css`): nuevo tab a la derecha de Gastos que calcula cuotas pendientes en cuotas detectadas en las descripciones. Detecta formato AMEX (`CUOTA 01/12 DESCRIPCION`) y Galicia (`DESCRIPCION 03/12`). Agrupa por compra tomando la cuota más alta vista en el historial, proyecta los pagos restantes mes a mes y muestra: tarjetas de resumen (próximo mes + total adeudado separados por ARS/USD), tabla por mes con totales por tarjeta, y tabla de detalle por compra con cuota actual/total, monto por cuota, cuotas restantes y total adeudado. Los mismos filtros de Gastos (fuente, persona, moneda, sin especiales). Filas de meses pasados se muestran en gris (implica cuotas no importadas aún).
+
 ## 0.5.52
 
 - **BBVA scraper: CBU destino para transferencias inmediatas salientes** (`scrapers/bbva.py`): se agrega `_fetch_detalleinmediata` que llama a `POST /banelco/transferencias/detalleinmediataemitida` para movimientos con `codigoAccion=06`. Requería guardar el string original del `importe` en `raw_data["importe_raw"]` (también agregado). El log muestra `[detalleinmediata] cbuDestino='...'` y el CBU se persiste en `raw_data["cbu_destino"]`.

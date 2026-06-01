@@ -2075,3 +2075,46 @@ tbody tr:hover { background: #fafbff; }
 .tw-sug-btn-pair { font-size: .73rem; padding: .12rem .45rem; flex-shrink: 0; }
 .tw-sug-btn-ign  { font-size: .73rem; padding: .12rem .45rem; flex-shrink: 0; color: #6b7280; background: none; border: 1px solid #d1d5db; }
 .tw-sug-btn-ign:hover { color: #b91c1c; border-color: #fca5a5; background: #fff1f2; }
+
+/* ── Cuotas tab ───────────────────────────────────────────────────────────── */
+.cq-stat-cards {
+  display: flex;
+  gap: 1rem;
+  margin: .75rem 0 1.25rem;
+  flex-wrap: wrap;
+}
+.cq-stat-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: .8rem 1.25rem;
+  min-width: 180px;
+}
+.cq-stat-label {
+  font-size: .75rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: .3rem;
+}
+.cq-stat-val {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+}
+.cq-ars { font-size: 1.05rem; font-weight: 600; color: var(--color-ars, #15803d); }
+.cq-usd { font-size: 1.05rem; font-weight: 600; color: var(--color-usd, #2563eb); }
+
+.cq-por-mes-wrap { margin-bottom: 1.5rem; }
+.cq-por-mes-table { width: 100%; border-collapse: collapse; font-size: .87rem; }
+.cq-por-mes-table th,
+.cq-por-mes-table td { padding: .35rem .65rem; border-bottom: 1px solid #e5e7eb; text-align: right; }
+.cq-por-mes-table th { background: #f8fafc; font-weight: 600; color: #374151; }
+.cq-por-mes-table td:first-child,
+.cq-por-mes-table th:first-child { text-align: left; }
+.cq-por-mes-table tbody tr:hover { background: #f0f9ff; }
+
+.cq-past td { color: #94a3b8; }
+.cq-past .monto { color: #94a3b8 !important; }
+
+.cq-progress { font-variant-numeric: tabular-nums; white-space: nowrap; }
