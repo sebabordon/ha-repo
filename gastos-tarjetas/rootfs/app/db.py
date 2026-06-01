@@ -27,19 +27,28 @@ _BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas"})
 def get_special_categorias() -> set[str]:
     """
     Return the set of category names to exclude from totals and charts.
-    Includes built-in specials (Transferencia / Transferencia Intercuentas) plus
-    any categories where especial=True in rules.yaml.
+    Merges built-in specials, categorias table, and rules.yaml (legacy).
     """
+    db_specials: set[str] = set()
+    try:
+        with _conn() as conn:
+            rows = conn.execute("SELECT nombre FROM categorias WHERE especial = 1").fetchall()
+        db_specials = {r["nombre"] for r in rows}
+    except Exception:
+        pass
+
+    yaml_specials: set[str] = set()
     try:
         with open(get_rules_file()) as f:
             data = yaml.safe_load(f) or {}
-        user_specials = {
+        yaml_specials = {
             r["categoria"] for r in data.get("reglas", [])
             if r.get("especial") and r.get("categoria")
         }
     except Exception:
-        user_specials = set()
-    return _BUILTIN_SPECIALS | user_specials
+        pass
+
+    return _BUILTIN_SPECIALS | db_specials | yaml_specials
 
 
 def init_db():
@@ -166,6 +175,16 @@ def init_db():
                 usuario TEXT PRIMARY KEY,
                 monto_mensual REAL DEFAULT 0,
                 moneda TEXT DEFAULT 'ARS'
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS categorias (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre   TEXT NOT NULL UNIQUE,
+                parent   INTEGER REFERENCES categorias(id),
+                orden    INTEGER DEFAULT 0,
+                especial INTEGER DEFAULT 0
             )
         """)
 
@@ -559,6 +578,25 @@ def _run_migrations(conn):
                 (p, p),
             )
         conn.execute("INSERT INTO db_migrations (name) VALUES ('cuentas_parser_type_v1')")
+
+    if "categorias_seed_v1" not in done:
+        # v0.5.68: populate categorias table from rules.yaml on first run.
+        # Subsequent edits go through the category manager UI → DB only.
+        try:
+            with open(get_rules_file()) as _f:
+                _rdata = yaml.safe_load(_f) or {}
+            for _i, _r in enumerate(_rdata.get("reglas", [])):
+                _nombre = (_r.get("categoria") or "").strip()
+                if not _nombre:
+                    continue
+                _especial = 1 if _r.get("especial") else 0
+                conn.execute(
+                    "INSERT OR IGNORE INTO categorias (nombre, orden, especial) VALUES (?,?,?)",
+                    (_nombre, _i, _especial),
+                )
+        except Exception:
+            pass
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('categorias_seed_v1')")
 
     if "fix_orphaned_movimientos_raw_v1" not in done:
         # v0.5.61: delete_all_gastos no actualizaba movimientos_raw, dejando
@@ -1450,6 +1488,84 @@ def apply_categoria_to_ids(ids: list, categoria: str) -> int:
     return len(ids)
 
 
+# ── Categorias (jerarquía) ────────────────────────────────────────────────────
+
+def _get_categorias_children_map() -> dict[str, list[str]]:
+    """Returns {parent_nombre: [child_nombre, ...]} from the categorias table."""
+    try:
+        with _conn() as conn:
+            rows = conn.execute("""
+                SELECT c.nombre, p.nombre AS parent_nombre
+                FROM categorias c
+                JOIN categorias p ON p.id = c.parent
+                ORDER BY c.orden, c.nombre
+            """).fetchall()
+        children: dict[str, list[str]] = {}
+        for r in rows:
+            children.setdefault(r["parent_nombre"], []).append(r["nombre"])
+        return children
+    except Exception:
+        return {}
+
+
+def _get_all_descendants(nombre: str, children_map: dict) -> list[str]:
+    """BFS over children_map to get all descendants of a category."""
+    result: list[str] = []
+    queue = list(children_map.get(nombre, []))
+    while queue:
+        child = queue.pop(0)
+        result.append(child)
+        queue.extend(children_map.get(child, []))
+    return result
+
+
+def get_categorias_flat() -> list[dict]:
+    """All managed categories ordered by orden, with parent_nombre resolved."""
+    with _conn() as conn:
+        rows = conn.execute("""
+            SELECT c.id, c.nombre, c.parent, c.orden, c.especial,
+                   p.nombre AS parent_nombre
+            FROM categorias c
+            LEFT JOIN categorias p ON p.id = c.parent
+            ORDER BY c.orden, c.nombre
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def save_categorias(items: list[dict]):
+    """Full sync of managed categories. Items: [{nombre, parent_nombre, especial}]."""
+    with _conn() as conn:
+        # Pass 1: upsert all rows without parent (avoids self-referential FK order issues)
+        for i, it in enumerate(items):
+            nombre = (it.get("nombre") or "").strip()
+            if not nombre:
+                continue
+            especial = 1 if it.get("especial") else 0
+            conn.execute("INSERT OR IGNORE INTO categorias (nombre) VALUES (?)", (nombre,))
+            conn.execute(
+                "UPDATE categorias SET orden = ?, especial = ?, parent = NULL WHERE nombre = ?",
+                (i, especial, nombre),
+            )
+        # Pass 2: set parent references by nombre
+        for it in items:
+            nombre = (it.get("nombre") or "").strip()
+            parent_nombre = (it.get("parent_nombre") or "").strip() or None
+            if not nombre or not parent_nombre:
+                continue
+            conn.execute(
+                "UPDATE categorias SET parent = (SELECT id FROM categorias WHERE nombre = ?) "
+                "WHERE nombre = ?",
+                (parent_nombre, nombre),
+            )
+        # Delete categories removed from the list
+        nombres = [(it.get("nombre") or "").strip() for it in items if (it.get("nombre") or "").strip()]
+        if nombres:
+            ph = ",".join("?" * len(nombres))
+            conn.execute(f"DELETE FROM categorias WHERE nombre NOT IN ({ph})", nombres)
+        else:
+            conn.execute("DELETE FROM categorias")
+
+
 # ── Cuentas ────────────────────────────────────────────────────────────────────
 
 def get_cuentas() -> list[dict]:
@@ -1723,8 +1839,11 @@ def save_presupuestos(items: list[dict]):
 
 def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
     """
-    Returns all categories that have a budget OR actual spending in `mes`,
-    comparing budget (monto_mensual) vs actual egreso for the month.
+    Returns categories with a budget OR actual spending in `mes`.
+    Parent categories roll up the gastado of all their descendants.
+    Each row includes `parent` (parent category name or None) and
+    `tiene_hijos` (bool) so the frontend can render the tree.
+    Ordered: top-level items (gastado DESC) then their children right after.
     """
     where, params = _base_where(mes=mes)
     q_actual = f"""
@@ -1740,20 +1859,52 @@ def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
     actual = {r["cat"]: float(r["gastado"]) for r in actual_rows if float(r["gastado"]) > 0}
     budget = {r["categoria"]: float(r["monto_mensual"]) for r in budget_rows}
 
-    cats = sorted(set(list(actual) + list(budget)))
+    children_map = _get_categorias_children_map()
+    parent_of: dict[str, str] = {}
+    for par, kids in children_map.items():
+        for kid in kids:
+            parent_of[kid] = par
+
+    # Include leaf categories with spending/budget + their ancestor chain
+    all_cats: set[str] = set(actual) | set(budget)
+    for cat in list(all_cats):
+        anc = parent_of.get(cat)
+        while anc:
+            all_cats.add(anc)
+            anc = parent_of.get(anc)
+
     result = []
-    for cat in cats:
-        g = actual.get(cat, 0.0)
+    for cat in sorted(all_cats):
+        descendants = _get_all_descendants(cat, children_map)
+        g = round(sum(actual.get(c, 0.0) for c in [cat] + descendants), 2)
         b = budget.get(cat, 0.0)
+        if g == 0 and b == 0:
+            continue
         result.append({
-            "categoria":  cat,
+            "categoria":   cat,
             "presupuesto": b,
             "gastado":     g,
             "diferencia":  round(b - g, 2),
             "pct":         round(g / b * 100, 1) if b > 0 else None,
+            "parent":      parent_of.get(cat),
+            "tiene_hijos": bool(children_map.get(cat)),
         })
-    result.sort(key=lambda r: (-r["gastado"]))
-    return result
+
+    # Order: top-level items (gastado DESC) each followed by their children
+    top_level = [r for r in result if not r.get("parent")]
+    top_level.sort(key=lambda r: -r["gastado"])
+    ordered: list[dict] = []
+    for row in top_level:
+        ordered.append(row)
+        children = [r for r in result if r.get("parent") == row["categoria"]]
+        children.sort(key=lambda r: -r["gastado"])
+        ordered.extend(children)
+    # Orphans: have a parent set but the parent is not in the result
+    seen = {r["categoria"] for r in ordered}
+    for r in sorted(result, key=lambda r: -r["gastado"]):
+        if r["categoria"] not in seen:
+            ordered.append(r)
+    return ordered
 
 
 def get_presupuestos_usuario() -> list[dict]:

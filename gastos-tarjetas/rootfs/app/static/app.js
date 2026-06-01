@@ -176,7 +176,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); }
     if (tab.dataset.tab === "cuotas")      { loadCuotas(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { _restoreCfgSections(); loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); }
+    if (tab.dataset.tab === "config")      { _restoreCfgSections(); loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); }
   });
 });
 
@@ -3065,28 +3065,47 @@ function renderPresupuesto() {
   const budgetMap = {};
   _presupItems.forEach(it => { budgetMap[it.categoria] = it.monto_mensual; });
 
-  let rows = vsActual.length ? vsActual : _presupItems.map(it => ({
+  const rawRows = vsActual.length ? vsActual : _presupItems.map(it => ({
     categoria: it.categoria, presupuesto: it.monto_mensual, gastado: 0, diferencia: it.monto_mensual, pct: null,
   }));
 
-  // Sort
+  // Build tree: group children under their parents
+  const byParent = {};
+  rawRows.forEach(r => {
+    if (r.parent) (byParent[r.parent] = byParent[r.parent] || []).push(r);
+  });
+
+  // Sort top-level rows by user-chosen column
   const sc = _presupSort.col, sd = _presupSort.dir;
-  rows = [...rows].sort((a, b) => {
+  const topLevel = rawRows.filter(r => !r.parent);
+  topLevel.sort((a, b) => {
     if (sc === "categoria") return sd * (a.categoria||"").localeCompare(b.categoria||"", "es");
     return sd * ((a[sc]||0) - (b[sc]||0));
   });
 
-  // Totals
+  // Flatten: each top-level row followed by its children (always sorted by gastado desc)
+  const rows = [];
+  topLevel.forEach(r => {
+    rows.push({...r, _indent: false});
+    const kids = (byParent[r.categoria] || []).slice().sort((a, b) => (b.gastado||0) - (a.gastado||0));
+    kids.forEach(c => rows.push({...c, _indent: true}));
+  });
+  // Orphans: have a parent but parent not in this result — show flat
+  const seen = new Set(rows.map(r => r.categoria));
+  rawRows.filter(r => !seen.has(r.categoria))
+         .sort((a, b) => (b.gastado||0) - (a.gastado||0))
+         .forEach(r => rows.push({...r, _indent: false}));
+
+  // Totals: skip indented (child) rows to avoid double-counting
   let totalPresup = 0, totalGastado = 0;
-  rows.forEach(r => {
+  rows.filter(r => !r._indent).forEach(r => {
     totalPresup  += r.presupuesto > 0 ? r.presupuesto : (budgetMap[r.categoria] || 0);
     totalGastado += r.gastado || 0;
   });
-  const totalDiff = totalPresup - totalGastado;
-  const totalPct  = totalPresup > 0 ? Math.round(totalGastado / totalPresup * 100) : 0;
+  const totalDiff   = totalPresup - totalGastado;
+  const totalPct    = totalPresup > 0 ? Math.round(totalGastado / totalPresup * 100) : 0;
   const totalBarCls = totalPct >= 100 ? "over" : totalPct >= 80 ? "warn" : "";
 
-  // Summary bar (only when month is selected and there's real spending data)
   const summaryHtml = vsActual.length ? `
     <div class="presup-summary">
       <span>Presupuestado: <strong>${_fmtNum2(totalPresup)}</strong></span>
@@ -3118,8 +3137,10 @@ function renderPresupuesto() {
           const barW    = Math.min(pct, 100);
           const barCls  = pct >= 100 ? "over" : pct >= 80 ? "warn" : "";
           const diffCls = r.diferencia >= 0 ? "presup-diff-pos" : "presup-diff-neg";
-          return `<tr>
-            <td>${escHtml(r.categoria)}</td>
+          const nameCss = r._indent ? "style=\"padding-left:1.4rem;color:#999;font-size:.9em\"" : (r.tiene_hijos ? "style=\"font-weight:600\"" : "");
+          const prefix  = r._indent ? "└ " : "";
+          return `<tr${r._indent ? " class=\"presup-child-row\"" : ""}>
+            <td ${nameCss}>${prefix}${escHtml(r.categoria)}</td>
             <td>
               <input type="text" class="presup-input" data-cat="${escHtml(r.categoria)}"
                      value="${_fmtNum2(budget)}"
@@ -5569,7 +5590,8 @@ async function loadBudgetChart() {
   }
 
   const vs = data.vs_actual || [];
-  _budgetData    = vs.filter(d => d.presupuesto > 0 || d.gastado > 0);
+  // Only show top-level categories (no parent) to avoid double-counting children
+  _budgetData    = vs.filter(d => !d.parent && (d.presupuesto > 0 || d.gastado > 0));
   _budgetAllCats = _budgetData.map(d => d.categoria);
 
   _renderBudCatChips();
@@ -5669,6 +5691,119 @@ function _drawBudgetChart() {
 }
 
 document.getElementById("bud-mes").addEventListener("change", loadBudgetChart);
+
+// ── Categorías manager ────────────────────────────────────────────────────────
+
+let _categoriasManaged = [];
+
+async function loadCategoriasManaged() {
+  const res  = await fetch(`${BASE}/api/categorias/managed`);
+  const data = await res.json();
+  _categoriasManaged = (data.categorias || []).map(c => ({...c}));
+  renderCategoriasManaged();
+}
+
+function renderCategoriasManaged() {
+  const wrap = document.getElementById("categorias-managed-list");
+  if (!wrap) return;
+  if (!_categoriasManaged.length) {
+    wrap.innerHTML = '<p style="color:#aaa;padding:1rem 0">No hay categorías. Importá movimientos o agregá una nueva.</p>';
+    return;
+  }
+
+  const allNombres = _categoriasManaged.map(c => c.nombre).filter(Boolean);
+
+  wrap.innerHTML = `
+    <div class="table-wrap">
+    <table class="presup-table">
+      <thead>
+        <tr>
+          <th>Categoría</th>
+          <th>Categoría padre</th>
+          <th style="text-align:center">Especial</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${_categoriasManaged.map((c, i) => {
+          const opts = allNombres
+            .filter(n => n !== c.nombre)
+            .map(n => `<option value="${escHtml(n)}"${c.parent_nombre === n ? " selected" : ""}>${escHtml(n)}</option>`)
+            .join("");
+          const nameCell = c._new
+            ? `<input class="cat-name-inp" data-i="${i}" value="${escHtml(c.nombre||"")}" placeholder="Nombre de categoría" style="width:100%;box-sizing:border-box">`
+            : escHtml(c.nombre);
+          return `<tr>
+            <td>${nameCell}</td>
+            <td>
+              <select class="cat-parent-sel" data-i="${i}" style="width:100%;max-width:220px">
+                <option value="">— Sin padre —</option>
+                ${opts}
+              </select>
+            </td>
+            <td style="text-align:center">
+              <input type="checkbox" class="cat-especial-chk" data-i="${i}"${c.especial ? " checked" : ""}>
+            </td>
+            <td>
+              <button class="btn btn-sm btn-danger" data-del="${i}">✕</button>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+    </div>`;
+
+  wrap.querySelectorAll(".cat-parent-sel").forEach(sel => {
+    sel.addEventListener("change", () => {
+      _categoriasManaged[+sel.dataset.i].parent_nombre = sel.value || null;
+    });
+  });
+  wrap.querySelectorAll(".cat-especial-chk").forEach(chk => {
+    chk.addEventListener("change", () => {
+      _categoriasManaged[+chk.dataset.i].especial = chk.checked ? 1 : 0;
+    });
+  });
+  wrap.querySelectorAll(".cat-name-inp").forEach(inp => {
+    inp.addEventListener("input", () => {
+      _categoriasManaged[+inp.dataset.i].nombre = inp.value.trim();
+    });
+  });
+  wrap.querySelectorAll("[data-del]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      _categoriasManaged.splice(+btn.dataset.del, 1);
+      renderCategoriasManaged();
+    });
+  });
+}
+
+async function saveCategoriasManaged() {
+  // Sync any name inputs still in the DOM
+  document.querySelectorAll(".cat-name-inp").forEach(inp => {
+    const i = +inp.dataset.i;
+    if (_categoriasManaged[i]) _categoriasManaged[i].nombre = inp.value.trim();
+  });
+  const items = _categoriasManaged.filter(c => (c.nombre || "").trim());
+  const res = await fetch(`${BASE}/api/categorias/managed`, {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({categorias: items}),
+  });
+  if (res.ok) {
+    showToast("✓ Categorías guardadas", "ok", 2000);
+    loadCategoriasManaged();
+  } else {
+    showToast("❌ Error al guardar categorías", "err", 0);
+  }
+}
+
+document.getElementById("btn-add-categoria").addEventListener("click", () => {
+  _categoriasManaged.push({nombre: "", parent_nombre: null, especial: 0, _new: true});
+  renderCategoriasManaged();
+  const inputs = document.querySelectorAll(".cat-name-inp");
+  if (inputs.length) inputs[inputs.length - 1].focus();
+});
+
+document.getElementById("btn-save-categorias").addEventListener("click", saveCategoriasManaged);
 
 // ── Cuotas ────────────────────────────────────────────────────────────────────
 function _cuotasParams() {

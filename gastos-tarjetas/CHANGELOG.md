@@ -1,3 +1,7 @@
+## 0.5.68
+
+- **Feature: jerarquía de categorías** (`db.py`, `routes/categorias_route.py`, `app.js`, `index.html`): nueva tabla `categorias` con campo `parent` auto-referenciado que permite definir categorías padre/hijo. Migration `categorias_seed_v1` siembra la tabla desde `rules.yaml` en el primer arranque. Nueva sub-tab "Categorías" en Config para asignar padres y gestionar el flag `especial` desde la UI. El presupuesto mensual muestra las categorías hijo indentadas bajo su padre (con rollup del gastado); el total excluye filas hijas para evitar doble-conteo. El budget chart filtra a categorías de nivel raíz. `GET/PUT /api/categorias/managed` son los endpoints de CRUD.
+
 ## 0.5.67
 
 - **Mejora: settlement report incluye EXTERNAL_REFERENCE automáticamente** (`mercadopago.py`): al inicio de cada fetch del settlement report, se consulta la config de columnas en la API de MP y si `EXTERNAL_REFERENCE` no está, se agrega con un PUT (idempotente — después del primer run no hace nada). Permite cruzar las transferencias del reporte con la referencia externa del pago original.

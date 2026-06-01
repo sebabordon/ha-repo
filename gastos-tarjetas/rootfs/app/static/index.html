@@ -476,6 +476,7 @@
       <!-- Config sub-tab bar -->
       <div class="cfg-tabs">
         <button class="cfg-tab active" data-cfgtab="reglas">Reglas</button>
+        <button class="cfg-tab" data-cfgtab="categorias">Categorías</button>
         <button class="cfg-tab" data-cfgtab="personas">Personas</button>
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
@@ -520,6 +521,21 @@
             <div id="match-rules-list"></div>
           </div>
         </div>
+      </div>
+
+      <!-- ── Sub-tab: Categorías ────────────────────────────────────── -->
+      <div id="cfg-tab-categorias" class="cfg-tab-content">
+        <div class="rules-header">
+          <h2>Categorías</h2>
+          <button id="btn-add-categoria" class="btn">+ Nueva</button>
+          <button id="btn-save-categorias" class="btn btn-primary">Guardar</button>
+        </div>
+        <p class="rules-hint">
+          Asigná un <strong>padre</strong> a cada categoría para construir la jerarquía.
+          Las categorías padre muestran el total acumulado de sus hijos en el presupuesto.
+          Marcá <strong>Especial</strong> para excluirlas de gráficos y totales (reemplaza el flag en rules.yaml).
+        </p>
+        <div id="categorias-managed-list"></div>
       </div>
 
       <!-- ── Sub-tab: Personas ─────────────────────────────────────── -->
