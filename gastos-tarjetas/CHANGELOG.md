@@ -1,3 +1,7 @@
+## 0.5.75
+
+- **Fix: BBVA importaba duplicados cuando el concepto cambiaba entre runs** (`scrapers_db.py`): BBVA a veces devuelve un concepto genérico ("TRANSFERENCIA") en un run y uno específico ("TRANSF CREDITO Nro:709675") en otro para el mismo movimiento. Como el fallback de dedup usaba `(fuente, fecha, moneda, monto, descripcion)` exacto, ambos pasaban y se creaban duplicados. Fix: se agrega un set `_GENERIC_DESCS` con descripciones temporales/genéricas conocidas; cuando la descripción nueva es genérica y ya existe cualquier registro con mismo `(fuente, fecha, moneda, monto)`, se descarta el nuevo en lugar de insertar un duplicado.
+
 ## 0.5.74
 
 - **UX: colores de categoría padre/hijo configurables** (`app.js`, `index.html`): nuevas variables CSS `--color-cat-parent` y `--color-cat-child` aplicadas en el árbol de Categorías y en la tabla de Presupuesto. Defaults: padre `#111827` (casi negro), hijo `#4b5563` (gris oscuro legible). Ambos colores se pueden cambiar desde Config → Interfaz → sección "Categorías".

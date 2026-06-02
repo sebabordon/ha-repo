@@ -222,6 +222,19 @@ def insert_movimiento_raw_single(m: dict) -> int:
         return cur.lastrowid
 
 
+# Descripciones genéricas/temporales que BBVA (y potencialmente otros scrapers)
+# puede reemplazar por una más específica en corridas posteriores.
+# Si la descripción nueva está en este set Y ya existe un registro con el mismo
+# (fuente, fecha, moneda, monto), el nuevo se descarta para evitar duplicados.
+_GENERIC_DESCS = frozenset({
+    "TRANSFERENCIA",
+    "Transferencia inmediata",
+    "Movimiento BBVA",
+    "DEPOSITO",
+    "DEBITO",
+})
+
+
 def insert_movimientos_raw(
     movimientos: list[dict],
     _out_inserted: list[dict] | None = None,
@@ -309,6 +322,22 @@ def insert_movimientos_raw(
                          AND descripcion = ?
                        LIMIT 1""",
                     (fuente, fecha, moneda, monto, desc),
+                ).fetchone()
+
+            # Cross-run dedup para descripciones genéricas/temporales:
+            # BBVA (y otros scrapers) a veces cambia el concepto entre runs —
+            # p.ej. "TRANSF CREDITO Nro:709675" en un run y "TRANSFERENCIA"
+            # en el siguiente para el mismo movimiento.  Si la descripción nueva
+            # es genérica y ya existe cualquier registro con mismo
+            # (fuente, fecha, moneda, monto), descartamos el genérico para no
+            # crear duplicados junto al específico ya importado.
+            if not existing and not scraper_uid and desc in _GENERIC_DESCS:
+                existing = conn.execute(
+                    """SELECT id FROM movimientos_raw
+                       WHERE fuente = ? AND fecha = ? AND moneda = ?
+                         AND CAST(monto AS REAL) = CAST(? AS REAL)
+                       LIMIT 1""",
+                    (fuente, fecha, moneda, monto),
                 ).fetchone()
 
             if existing:
