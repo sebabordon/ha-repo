@@ -1,3 +1,10 @@
+## 0.5.76
+
+- **UX: chips de categoría — nuevo comportamiento** (`app.js`): tap chip activo con múltiples seleccionados = colapsar a solo ese (1 tap para cambiar de vista). Tap chip activo cuando es el último = volver a Todas. Tap chip inactivo = ADD (multi-select continúa igual).
+- **UX: sub-chips de subcategorías en Gastos** (`app.js`, `index.html`): al seleccionar un padre aparece un segundo renglón con sus hijos. Tap sub-chip = filtrar exclusivamente a esa subcategoría. El query de gastos expande descendientes automáticamente (seleccionar "Comida" incluye Supermercado, Delivery, etc.).
+- **UX: drill-down en donut de categorías** (`app.js`): si el cross-filter apunta a una categoría con hijos, el donut muestra solo esos hijos en lugar de todos.
+- **Backend: `GET /api/categorias/hierarchy`** (`routes/categorias_route.py`): mapa `{parent:[child,...]}` cargado al startup.
+
 ## 0.5.75
 
 - **Fix: BBVA importaba duplicados cuando el concepto cambiaba entre runs** (`scrapers_db.py`): BBVA a veces devuelve un concepto genérico ("TRANSFERENCIA") en un run y uno específico ("TRANSF CREDITO Nro:709675") en otro para el mismo movimiento. Como el fallback de dedup usaba `(fuente, fecha, moneda, monto, descripcion)` exacto, ambos pasaban y se creaban duplicados. Fix: se agrega un set `_GENERIC_DESCS` con descripciones temporales/genéricas conocidas; cuando la descripción nueva es genérica y ya existe cualquier registro con mismo `(fuente, fecha, moneda, monto)`, se descarta el nuevo en lugar de insertar un duplicado.

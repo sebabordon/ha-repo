@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from auth import require_auth
-from db import get_categorias_flat, save_categorias
+from db import get_categorias_flat, save_categorias, _get_categorias_children_map
 
 router = APIRouter()
 
@@ -17,3 +17,10 @@ def put_categorias_managed(body: dict, request: Request):
     items = body.get("categorias", [])
     save_categorias(items)
     return {"ok": True, "guardadas": len(items)}
+
+
+@router.get("/categorias/hierarchy")
+def get_categorias_hierarchy(request: Request):
+    """Returns {parent_nombre: [child_nombre, ...]} for all categories with children."""
+    require_auth(request)
+    return _get_categorias_children_map()

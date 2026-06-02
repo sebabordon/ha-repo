@@ -893,10 +893,17 @@ function _destroyAndCreate(id, config) {
 }
 
 function _drawDonut(data) {
-  const total = data.reduce((s, d) => s + (d.total || 0), 0);
+  // Drill-down: if cross-filter is a parent with children, show only those children
+  const drillChildren = _crossFilterCat ? (_catHierarchy[_crossFilterCat] || []) : [];
+  const isDrillDown   = drillChildren.length > 0;
+  const displayData   = isDrillDown
+    ? data.filter(d => drillChildren.includes(d.categoria))
+    : data;
+
+  const total = displayData.reduce((s, d) => s + (d.total || 0), 0);
   const _tc = document.getElementById("total-category");
   if (_tc) _tc.textContent = total ? ` — ${_fmtNum2(total)}` : "";
-  const top = data.slice(0, 12);
+  const top = (displayData.length ? displayData : data).slice(0, 12);
   // Build / refresh the global color map so other charts stay in sync
   top.forEach((d, i) => { _categoryColors[d.categoria] = PALETTE[i % PALETTE.length]; });
   _destroyAndCreate("chart-by-category", {
@@ -905,7 +912,7 @@ function _drawDonut(data) {
       labels:   top.map(d => d.categoria),
       datasets: [{ data: top.map(d => d.total),
         backgroundColor: top.map(d =>
-          _crossFilterCat && d.categoria !== _crossFilterCat
+          !isDrillDown && _crossFilterCat && d.categoria !== _crossFilterCat
             ? "#d1d5db"
             : _categoryColors[d.categoria]),
         borderWidth: 2, borderColor: "#fff" }],
@@ -1070,6 +1077,14 @@ document.getElementById("btn-refresh-charts").addEventListener("click", loadChar
 // ── Category slicer ───────────────────────────────────────────────────────────
 let _selectedCats = new Set();
 let _sinCat = false;
+let _catHierarchy = {};   // {parent_nombre: [child_nombre, ...]}
+
+async function loadHierarchy() {
+  try {
+    const res = await fetch(`${BASE}/api/categorias/hierarchy`);
+    _catHierarchy = res.ok ? await res.json() : {};
+  } catch { _catHierarchy = {}; }
+}
 
 async function loadCategorias() {
   const res = await fetch(`${BASE}/api/categorias`);
@@ -1157,24 +1172,88 @@ function toggleSinCat() {
   loadGastos();
 }
 
-function toggleCat(cat) {
+function _allDescendants(cat) {
+  const result = new Set();
+  const queue = [...(_catHierarchy[cat] || [])];
+  while (queue.length) {
+    const c = queue.shift();
+    result.add(c);
+    (_catHierarchy[c] || []).forEach(x => queue.push(x));
+  }
+  return result;
+}
+
+function _expandedCats() {
+  if (_selectedCats.size === 0) return null;
+  const out = new Set(_selectedCats);
+  for (const cat of _selectedCats) _allDescendants(cat).forEach(d => out.add(d));
+  return [...out].join(",");
+}
+
+function _renderSubChips() {
+  const row = document.getElementById("cat-subchips");
+  if (!row) return;
+  const subCats = [];
+  for (const cat of _selectedCats) {
+    (_catHierarchy[cat] || []).forEach(child => {
+      if (!subCats.includes(child)) subCats.push(child);
+    });
+  }
+  if (!subCats.length) { row.style.display = "none"; row.innerHTML = ""; return; }
+  row.style.display = "";
+  row.innerHTML = subCats.map(child =>
+    `<span class="cat-chip" style="font-size:.8rem;color:var(--color-cat-child);border-color:var(--color-cat-child)"
+           data-subchip="${escHtml(child)}">${escHtml(child)}</span>`
+  ).join("");
+  row.querySelectorAll("[data-subchip]").forEach(chip => {
+    chip.addEventListener("click", () => tapSubCat(chip.dataset.subchip));
+  });
+}
+
+function tapSubCat(childCat) {
   _sinCat = false;
-  if (_selectedCats.has(cat)) _selectedCats.delete(cat); else _selectedCats.add(cat);
+  _selectedCats.clear();
+  _selectedCats.add(childCat);
+  _syncChipUI();
+  _renderSubChips();
+  loadGastos();
+}
+
+function _syncChipUI() {
   document.querySelectorAll(".cat-chip:not(.cat-todos):not(.cat-sincat)").forEach(c =>
     c.classList.toggle("active", _selectedCats.has(c.textContent)));
   document.querySelector(".cat-sincat")?.classList.remove("active");
   document.querySelector(".cat-todos")?.classList.toggle("active", _selectedCats.size === 0);
+}
+
+function toggleCat(cat) {
+  _sinCat = false;
+  if (_selectedCats.has(cat)) {
+    if (_selectedCats.size === 1) {
+      _selectedCats.clear();              // último activo → volver a Todas
+    } else {
+      _selectedCats.clear();
+      _selectedCats.add(cat);            // colapsar a solo este (exclusive focus)
+    }
+  } else {
+    _selectedCats.add(cat);              // inactivo → ADD (multi-select)
+  }
+  _syncChipUI();
+  _renderSubChips();
   loadGastos();
 }
+
 function toggleAllCats() {
   _sinCat = false;
   _selectedCats.clear();
   document.querySelectorAll(".cat-chip").forEach(c => c.classList.remove("active"));
   document.querySelector(".cat-todos")?.classList.add("active");
+  const row = document.getElementById("cat-subchips");
+  if (row) { row.style.display = "none"; row.innerHTML = ""; }
   loadGastos();
 }
 
-loadCategorias();
+loadHierarchy().then(loadCategorias);
 
 // ── Filter toggle ─────────────────────────────────────────────────────────────
 document.getElementById("btn-toggle-filters").addEventListener("click", function () {
@@ -1226,7 +1305,7 @@ function _gastosParams() {
   if (_sinCat) {
     p.set("sin_categoria", "true");
   } else if (_selectedCats.size > 0) {
-    p.set("categorias", [..._selectedCats].join(","));
+    p.set("categorias", _expandedCats());
   }
   return p;
 }
