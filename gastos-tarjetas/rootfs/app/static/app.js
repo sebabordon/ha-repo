@@ -5821,9 +5821,17 @@ document.getElementById("btn-apply-rules-cat").addEventListener("click", async (
   try {
     const res  = await fetch(`${BASE}/api/rules/apply`, {method: "POST"});
     const data = await res.json();
-    if (res.ok) { showToast(`✓ ${data.categorizados} movimientos categorizados`, "ok"); loadGastos(); loadCategorias(); }
-    else showToast("Error al aplicar reglas", "err", 0);
-  } finally { btn.disabled = false; btn.textContent = "Reaplicar"; }
+    if (res.ok) {
+      showToast(`✓ ${data.categorizados} movimientos categorizados`, "ok", 4000);
+      loadGastos(); loadCategorias();
+    } else {
+      showToast(`❌ Error al aplicar reglas: ${data.detail || res.status}`, "err", 0);
+    }
+  } catch (e) {
+    showToast(`❌ ${e.message}`, "err", 0);
+  } finally {
+    btn.disabled = false; btn.textContent = "Reaplicar";
+  }
 });
 
 document.getElementById("btn-export-rules-cat").addEventListener("click", () => {
