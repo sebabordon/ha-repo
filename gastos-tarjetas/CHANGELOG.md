@@ -1,3 +1,8 @@
+## 0.5.80
+
+- **Fix: chips de Gastos — todas las categorías visibles** (`app.js`): revertido el filtro que ocultaba categorías hijas del chip row principal; todas las categorías vuelven a aparecer. Los sub-chips del segundo renglón siguen funcionando igual.
+- **Feature: renombrar desde tab Categorías** (`app.js`, `db.py`): doble clic sobre el nombre de una categoría en Config → Categorías abre un input inline para renombrarla. Actualiza tanto la tabla `categorias` como `gastos.categoria` y los chips de gastos en un solo paso.
+
 ## 0.5.79
 
 - **Fix: sub-chips se pueden seleccionar** (`app.js`): `_renderSubChips` ahora mantiene el renglón visible cuando el seleccionado es un hijo (antes desaparecía porque el hijo no tiene hijos propios). `_syncChipUI` marca el chip padre como activo cuando un hijo suyo está seleccionado.

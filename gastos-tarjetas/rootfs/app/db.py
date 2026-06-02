@@ -1100,15 +1100,21 @@ def update_descripcion_editada(gasto_id: int, descripcion_editada: Optional[str]
 
 
 def rename_categoria_in_gastos(old: str, new: Optional[str]) -> int:
-    """Rename (or clear if new=None/empty) a category across all gastos."""
+    """Rename (or clear if new=None/empty) a category across gastos + categorias table."""
     new_val  = new.strip() if new and new.strip() else None
     new_cf   = "manual" if new_val else None
+    old_str  = old.strip()
     with _conn() as conn:
         conn.execute(
             "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE categoria=?",
-            (new_val, new_cf, old.strip()),
+            (new_val, new_cf, old_str),
         )
-        return conn.execute("SELECT changes()").fetchone()[0]
+        count = conn.execute("SELECT changes()").fetchone()[0]
+        if new_val:
+            conn.execute("UPDATE categorias SET nombre=? WHERE nombre=?", (new_val, old_str))
+        else:
+            conn.execute("DELETE FROM categorias WHERE nombre=?", (old_str,))
+        return count
 
 
 def rename_usuario_in_gastos(old_name: str, new_name: str) -> int:

@@ -1116,10 +1116,7 @@ function renderCatChips(cats) {
   sinChip.textContent = "Sin categoría";
   sinChip.onclick = () => toggleSinCat();
   container.appendChild(sinChip);
-  // Only show root categories (exclude children — they appear in sub-chip row)
-  const allChildren = new Set(Object.values(_catHierarchy).flat());
-  const rootCats = cats.filter(cat => !allChildren.has(cat));
-  rootCats.forEach(cat => {
+  cats.forEach(cat => {
     const chip = document.createElement("span");
     chip.className = `cat-chip${_selectedCats.has(cat)?" active":""}`;
     chip.textContent = cat;
@@ -5797,9 +5794,11 @@ function renderCategoriasManaged() {
       .join("");
     const nameCell = c._new
       ? `<input class="cat-name-inp" data-i="${c._i}" value="${escHtml(c.nombre||"")}" placeholder="Nombre de categoría" style="width:100%;box-sizing:border-box">`
-      : (c._isParent
-          ? `<strong style="color:var(--color-cat-parent)">${escHtml(c.nombre)}</strong>`
-          : escHtml(c.nombre));
+      : `<span class="cat-name-static" data-nombre="${escHtml(c.nombre)}" title="Doble clic para renombrar" style="cursor:default">${
+          c._isParent
+            ? `<strong style="color:var(--color-cat-parent)">${escHtml(c.nombre)}</strong>`
+            : escHtml(c.nombre)
+        }</span>`;
     const indentStyle = c._indent ? "padding-left:1.6rem;color:var(--color-cat-child)" : "";
     const prefix      = c._indent ? "└ " : "";
     const expanded    = !c._new && _isCatExpanded(c.nombre);
@@ -5909,6 +5908,36 @@ function renderCategoriasManaged() {
   // Probar (dry-run preview)
   wrap.querySelectorAll(".cat-preview-btn").forEach(btn => {
     btn.addEventListener("click", () => openCatPreview(btn.dataset.nombre));
+  });
+  // Doble clic para renombrar
+  wrap.querySelectorAll(".cat-name-static").forEach(span => {
+    span.addEventListener("dblclick", () => {
+      const oldNombre = span.dataset.nombre;
+      const inp = document.createElement("input");
+      inp.value = oldNombre;
+      inp.style.cssText = "border:1px solid #ccc;border-radius:4px;padding:.2rem .4rem;font-size:.85rem;width:100%;box-sizing:border-box";
+      let saved = false;
+      async function doSave() {
+        if (saved) return; saved = true;
+        const newNombre = inp.value.trim();
+        if (!newNombre || newNombre === oldNombre) { loadCategoriasManaged(); return; }
+        const res = await fetch(`${BASE}/api/categorias/rename`, {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({old: oldNombre, new: newNombre}),
+        });
+        if (res.ok) showToast(`✓ "${oldNombre}" → "${newNombre}"`, "ok", 2500);
+        else showToast("Error al renombrar", "err", 0);
+        loadCategoriasManaged();
+        loadCategorias();  // actualiza los chips de gastos
+      }
+      inp.addEventListener("keydown", e => {
+        if (e.key === "Enter")  { e.preventDefault(); doSave(); }
+        if (e.key === "Escape") { saved = true; renderCategoriasManaged(); }
+      });
+      inp.addEventListener("blur", doSave);
+      span.replaceWith(inp);
+      inp.focus(); inp.select();
+    });
   });
 }
 
