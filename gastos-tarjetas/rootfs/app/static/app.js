@@ -176,7 +176,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); }
     if (tab.dataset.tab === "cuotas")      { loadCuotas(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { _restoreCfgSections(); loadRules(); loadMatchRules(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); }
+    if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); }
   });
 });
 
@@ -218,7 +218,7 @@ function toggleCfgSection(id) {
 }
 
 function _restoreCfgSections() {
-  ["reglas-cat", "reglas-match", "pers-list", "pers-rules"].forEach(id => {
+  ["pers-list", "pers-rules"].forEach(id => {
     if (localStorage.getItem(`cfg-section-${id}`) !== "1") return;
     const body  = document.getElementById(`cfg-body-${id}`);
     const arrow = document.getElementById(`cfg-arr-${id}`);
@@ -1464,7 +1464,7 @@ async function _moveKeywordBetweenRules(keyword, fromCat, toCat) {
   });
   if (res.ok) {
     showToast(`✓ "${keyword}" movido de "${fromCat}" a "${toCat}"`, "ok", 2500);
-    loadRules();
+    _fetchRules();
   } else {
     showToast("Error al mover keyword", "err", 0);
   }
@@ -1511,7 +1511,7 @@ async function saveCategoria(id, btn) {
             body: JSON.stringify({keyword: kw2, categoria: data.categoria}),
           });
           showToast(`✓ "${kw2}" agregado a ${data.categoria}`, "ok", 2500);
-          loadRules();
+          _fetchRules();
         });
       }
     }
@@ -2309,6 +2309,7 @@ function renderRules() {
   const dupes = new Set(Object.entries(wordMap).filter(([,v]) => v.length > 1).map(([k]) => k));
 
   const list = document.getElementById("rules-list");
+  if (!list) return;
   list.innerHTML = "";
   _rules.forEach((rule, i) => {
     const card = document.createElement("div");
@@ -2426,89 +2427,7 @@ function _scheduleSaveRules() {
   clearTimeout(_saveRulesTimer);
   _saveRulesTimer = setTimeout(_doSaveRules, 800);
 }
-// Save on any focusout inside the rules list
-document.getElementById("rules-list").addEventListener("focusout", _scheduleSaveRules);
-
-function removeRule(i)  { _syncRules(); _rules.splice(i,1); renderRules(); clearTimeout(_saveRulesTimer); _doSaveRules(); }
-function removeTag(i,j) { _syncRules(); _rules[i].palabras.splice(j,1); renderRules(); clearTimeout(_saveRulesTimer); _doSaveRules(); }
-function addTag(event,i) {
-  if (event.key !== "Enter") return;
-  event.preventDefault();
-  const word = event.target.value.trim();
-  if (!word) return;
-  _syncRules();
-  if (!_rules[i].palabras.includes(word)) _rules[i].palabras.push(word);
-  renderRules();
-  document.querySelectorAll(".tag-input")[i]?.focus();
-  clearTimeout(_saveRulesTimer); _doSaveRules();
-}
-function editTag(i, j) {
-  _syncRules();
-  const labelEl = document.querySelector(`#tags-${i} .tag:nth-child(${j+1}) .tag-label`);
-  if (!labelEl) return;
-  const orig = _rules[i].palabras[j];
-  const inp = document.createElement("input");
-  inp.className = "tag-edit-input";
-  inp.value = orig;
-  inp.style.width = Math.max(60, orig.length * 8) + "px";
-  let saved = false;
-  function doSave() {
-    if (saved) return; saved = true;
-    const val = inp.value.trim();
-    if (!val) { _rules[i].palabras.splice(j, 1); }
-    else       { _rules[i].palabras[j] = val; }
-    renderRules(); clearTimeout(_saveRulesTimer); _doSaveRules();
-  }
-  inp.addEventListener("keydown", e => {
-    if (e.key === "Enter")  { e.preventDefault(); doSave(); }
-    if (e.key === "Escape") { saved = true; renderRules(); }
-  });
-  inp.addEventListener("blur", doSave);
-  labelEl.replaceWith(inp);
-  inp.focus(); inp.select();
-}
-
-document.getElementById("btn-add-rule").addEventListener("click", () => {
-  _syncRules();
-  _rules.push({palabras: [], categoria: "", especial: false, solo_egresos: false, fuentes: []});
-  renderRules();
-  const el = document.querySelectorAll(".rule-cat").at(-1);
-  el?.scrollIntoView({behavior: "smooth", block: "center"});
-  el?.focus();
-});
-
-document.getElementById("btn-export-rules").addEventListener("click", () => {
-  window.location.href = `${BASE}/api/rules/export`;
-});
-
-document.getElementById("inp-import-rules").addEventListener("change", async e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const fd = new FormData();
-  fd.append("file", file);
-  const res  = await fetch(`${BASE}/api/rules/import`, {method: "POST", body: fd});
-  const data = await res.json();
-  if (res.ok) {
-    showToast(`✓ ${data.reglas} reglas importadas`, "ok", 3000);
-    loadRules();
-  } else {
-    showToast(`❌ ${data.detail || "Error al importar"}`, "err", 0);
-  }
-  e.target.value = "";
-});
-
-document.getElementById("btn-apply-rules").addEventListener("click", async () => {
-  const btn = document.getElementById("btn-apply-rules");
-  btn.disabled = true; btn.textContent = "Aplicando…";
-  try {
-    const res  = await fetch(`${BASE}/api/rules/apply`, {method:"POST"});
-    const data = await res.json();
-    if (res.ok) { showToast(`✓ ${data.categorizados} movimientos categorizados`, "ok"); loadGastos(); loadCategorias(); }
-    else showToast("Error al aplicar reglas", "err", 0);
-  } finally { btn.disabled = false; btn.textContent = "Reaplicar a todos"; }
-});
-
-loadRules();
+document.getElementById("rules-list")?.addEventListener("focusout", _scheduleSaveRules);
 
 // ── Rule dry-run preview (shared modal for cat + user modes) ─────────────────
 let _previewMode    = "cat"; // "cat" | "user"
@@ -2681,6 +2600,7 @@ async function loadMatchRules() {
 
 function renderMatchRules() {
   const list = document.getElementById("match-rules-list");
+  if (!list) return;
   list.innerHTML = "";
   _matchRules.forEach((r, i) => {
     const card = document.createElement("div");
@@ -2742,47 +2662,9 @@ function _scheduleSaveMatchRules() {
     showToast(res.ok ? "✓ Reglas de emparejado guardadas" : "❌ Error al guardar", res.ok ? "ok" : "err", res.ok ? 2000 : 0);
   }, 800);
 }
-document.getElementById("match-rules-list").addEventListener("focusout", _scheduleSaveMatchRules);
+document.getElementById("match-rules-list")?.addEventListener("focusout", _scheduleSaveMatchRules);
 
 function removeMatchRule(i) { _syncMatchRules(); _matchRules.splice(i,1); renderMatchRules(); _scheduleSaveMatchRules(); }
-
-document.getElementById("btn-add-match-rule").addEventListener("click", () => {
-  _syncMatchRules();
-  _matchRules.push({nombre:"",patron_a:"",fuente_a:"",patron_b:"",fuente_b:"",ventana_dias:3,categoria:"Transferencia"});
-  renderMatchRules();
-  const el = document.querySelectorAll(".match-nombre").at(-1);
-  el?.focus();
-  el?.scrollIntoView({behavior:"smooth", block:"nearest"});
-});
-
-document.getElementById("btn-apply-match-rules").addEventListener("click", async () => {
-  const btn = document.getElementById("btn-apply-match-rules");
-  btn.disabled = true; btn.textContent = "Aplicando…";
-  try {
-    const res  = await fetch(`${BASE}/api/rules/match/apply`, {method:"POST"});
-    const data = await res.json();
-    if (res.ok) { showToast(`✓ ${data.marcados} movimientos marcados`, "ok"); loadGastos(); loadCategorias(); }
-    else showToast("Error al aplicar", "err", 0);
-  } finally { btn.disabled = false; btn.textContent = "Aplicar todas"; }
-});
-
-async function applyOneMatchRule(i) {
-  _syncMatchRules();
-  const rule = _matchRules[i];
-  const btn  = document.querySelectorAll(".match-rule-card")[i]?.querySelector(".btn");
-  if (btn) { btn.disabled = true; btn.textContent = "…"; }
-  try {
-    const res  = await fetch(`${BASE}/api/rules/match/apply-one`, {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify(rule),
-    });
-    const data = await res.json();
-    showToast(`✓ ${data.marcados} movimientos marcados`, "ok");
-    loadGastos(); loadCategorias();
-  } finally { if (btn) { btn.disabled = false; btn.textContent = "Aplicar"; } }
-}
-
-loadMatchRules();
 
 // ── Saldos widget ─────────────────────────────────────────────────────────────
 let _widgetCuentas = [];
@@ -5695,11 +5577,64 @@ document.getElementById("bud-mes").addEventListener("change", loadBudgetChart);
 // ── Categorías manager ────────────────────────────────────────────────────────
 
 let _categoriasManaged = [];
+let _expandedCats      = new Set();
+let _showAllKeywords   = false;
+
+async function _fetchRules() {
+  const res  = await fetch(`${BASE}/api/rules`);
+  const data = await res.json();
+  _rules = (data.reglas || []).map(r => ({
+    palabras:     Array.isArray(r.palabras) ? r.palabras.map(String) : _patternToWords(r.patron || ""),
+    patron:       r.patron || null,
+    categoria:    r.categoria || "",
+    especial:     !!r.especial,
+    solo_egresos: !!r.solo_egresos,
+    fuentes:      Array.isArray(r.fuentes) ? r.fuentes : [],
+  }));
+}
 
 async function loadCategoriasManaged() {
+  await _fetchRules();
   const res  = await fetch(`${BASE}/api/categorias/managed`);
   const data = await res.json();
   _categoriasManaged = (data.categorias || []).map(c => ({...c}));
+  renderCategoriasManaged();
+}
+
+function _isCatExpanded(nombre) { return _showAllKeywords || _expandedCats.has(nombre); }
+
+function toggleCatExpand(nombre) {
+  if (_expandedCats.has(nombre)) _expandedCats.delete(nombre); else _expandedCats.add(nombre);
+  renderCategoriasManaged();
+}
+
+function toggleAllCatsKeywords() {
+  _showAllKeywords = !_showAllKeywords;
+  const btn = document.getElementById("btn-toggle-all-keywords");
+  if (btn) btn.textContent = _showAllKeywords ? "Cerrar keywords" : "Ver keywords";
+  renderCategoriasManaged();
+}
+
+function addKeywordToCat(nombre, kw) {
+  kw = kw.trim();
+  if (!kw) return;
+  let rule = _rules.find(r => r.categoria === nombre);
+  if (!rule) {
+    rule = {palabras: [], categoria: nombre, especial: false, solo_egresos: false, fuentes: [], patron: null};
+    _rules.push(rule);
+  }
+  if (!rule.palabras.includes(kw)) {
+    rule.palabras.push(kw);
+    _doSaveRules();
+    renderCategoriasManaged();
+  }
+}
+
+function removeKeywordFromCat(nombre, kw) {
+  const rule = _rules.find(r => r.categoria === nombre);
+  if (!rule) return;
+  rule.palabras = rule.palabras.filter(p => p !== kw);
+  _doSaveRules();
   renderCategoriasManaged();
 }
 
@@ -5713,19 +5648,17 @@ function renderCategoriasManaged() {
 
   const allNombres = _categoriasManaged.map(c => c.nombre).filter(Boolean).sort((a, b) => a.localeCompare(b, "es"));
 
-  // Separate new (unsaved, empty-named) items from the established tree
-  const withIdx   = _categoriasManaged.map((c, i) => ({...c, _i: i}));
-  const existing  = withIdx.filter(c => !c._new);
-  const newItems  = withIdx.filter(c =>  c._new);
+  // Separate new (unsaved) items from established tree
+  const withIdx  = _categoriasManaged.map((c, i) => ({...c, _i: i}));
+  const existing = withIdx.filter(c => !c._new);
+  const newItems = withIdx.filter(c =>  c._new);
 
   const sortAlpha = arr => arr.slice().sort((a, b) => (a.nombre||"").localeCompare(b.nombre||"", "es"));
 
-  // Build tree from existing items only (avoids the empty-nombre collision)
   const byParent = {};
   existing.forEach(c => { (byParent[c.parent_nombre || ""] = byParent[c.parent_nombre || ""] || []).push(c); });
   const parentSet = new Set(existing.map(c => c.parent_nombre).filter(Boolean));
 
-  // Ordered rows: root nodes → their children; new items appended at the bottom
   const ordered = [];
   sortAlpha(byParent[""] || []).forEach(c => {
     ordered.push({...c, _indent: false, _isParent: parentSet.has(c.nombre)});
@@ -5735,66 +5668,93 @@ function renderCategoriasManaged() {
   });
   newItems.forEach(c => ordered.push({...c, _indent: false, _isParent: false}));
 
-  const _row = (c) => {
+  // Duplicate keyword map: kw.toLowerCase() → Set of category names that have it
+  const kwOwners = new Map();
+  _rules.forEach(r => {
+    (r.palabras || []).forEach(kw => {
+      const k = kw.toLowerCase();
+      if (!kwOwners.has(k)) kwOwners.set(k, new Set());
+      kwOwners.get(k).add(r.categoria);
+    });
+  });
+
+  const tableRows = [];
+  ordered.forEach(c => {
     const opts = allNombres
       .filter(n => n !== c.nombre)
       .map(n => `<option value="${escHtml(n)}"${c.parent_nombre === n ? " selected" : ""}>${escHtml(n)}</option>`)
       .join("");
     const nameCell = c._new
       ? `<input class="cat-name-inp" data-i="${c._i}" value="${escHtml(c.nombre||"")}" placeholder="Nombre de categoría" style="width:100%;box-sizing:border-box">`
-      : (c._isParent
-          ? `<strong>${escHtml(c.nombre)}</strong>`
-          : escHtml(c.nombre));
+      : (c._isParent ? `<strong>${escHtml(c.nombre)}</strong>` : escHtml(c.nombre));
     const indentStyle = c._indent ? "padding-left:1.6rem;color:#999" : "";
-    const prefix = c._indent ? "└ " : "";
-    return `<tr${c._indent ? ' class="presup-child-row"' : ""}>
-      <td style="${indentStyle}">${prefix}${nameCell}</td>
-      <td>
-        <select class="cat-parent-sel" data-i="${c._i}" style="width:100%;max-width:220px">
-          <option value="">— Sin padre —</option>
-          ${opts}
-        </select>
-      </td>
-      <td style="text-align:center">
-        <input type="checkbox" class="cat-especial-chk" data-i="${c._i}"${c.especial ? " checked" : ""}>
-      </td>
-      <td>
+    const prefix      = c._indent ? "└ " : "";
+    const expanded    = !c._new && _isCatExpanded(c.nombre);
+    const rule        = _rules.find(r => r.categoria === c.nombre) || {palabras: [], solo_egresos: false};
+    const kwCount     = rule.palabras.length;
+    const kwBadge     = kwCount ? `<span style="font-size:.75rem;color:#888;margin-left:.3rem">(${kwCount})</span>` : "";
+
+    tableRows.push(`<tr${c._indent ? ' class="presup-child-row"' : ""}>
+      <td style="${indentStyle}">${prefix}${nameCell}${!c._new ? kwBadge : ""}</td>
+      <td><select class="cat-parent-sel" data-i="${c._i}" style="width:100%;max-width:220px">
+        <option value="">— Sin padre —</option>${opts}
+      </select></td>
+      <td style="text-align:center"><input type="checkbox" class="cat-especial-chk" data-i="${c._i}"${c.especial ? " checked" : ""}></td>
+      <td style="white-space:nowrap">
+        ${!c._new ? `<button class="btn btn-sm cat-expand-btn" data-nombre="${escHtml(c.nombre)}">${expanded ? "−" : "+"}</button>` : ""}
         <button class="btn btn-sm btn-danger" data-del="${c._i}">✕</button>
       </td>
-    </tr>`;
-  };
+    </tr>`);
 
-  wrap.innerHTML = `
-    <div class="table-wrap">
-    <table class="presup-table">
-      <thead>
-        <tr>
-          <th>Categoría</th>
-          <th>Categoría padre</th>
-          <th style="text-align:center">Especial</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>${ordered.map(_row).join("")}</tbody>
-    </table>
-    </div>`;
+    if (expanded) {
+      const chips = (rule.palabras || []).map(kw => {
+        const owners = kwOwners.get(kw.toLowerCase());
+        const isDup  = owners && (owners.size > 1 || !owners.has(c.nombre));
+        return `<span class="tag${isDup ? " tag-dup" : ""}" title="${isDup ? "Esta palabra ya está en otra categoría" : ""}">
+          <span class="tag-label">${escHtml(kw)}</span>
+          <button class="tag-x cat-kw-remove" type="button" data-nombre="${escHtml(c.nombre)}" data-kw="${escHtml(kw)}">×</button>
+        </span>`;
+      }).join("");
+      tableRows.push(`<tr class="presup-child-row">
+        <td colspan="4" style="padding:.4rem .75rem .6rem ${c._indent ? "2.6rem" : "1rem"};background:#f8f9fa">
+          <div style="display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;min-height:1.8rem">
+            ${chips || '<span style="color:#bbb;font-size:.82rem">Sin keywords — escribí una y presioná Enter</span>'}
+            <input class="cat-kw-input tag-input" data-nombre="${escHtml(c.nombre)}"
+                   placeholder="Agregar…" style="min-width:140px;border:1px solid #ccc;border-radius:4px;padding:.2rem .5rem;font-size:.85rem">
+          </div>
+          <label style="font-size:.8rem;color:#666;margin-top:.3rem;display:inline-flex;align-items:center;gap:.3rem;cursor:pointer">
+            <input type="checkbox" class="cat-solo-egresos" data-nombre="${escHtml(c.nombre)}"${rule.solo_egresos ? " checked" : ""}> Solo egresos
+          </label>
+        </td>
+      </tr>`);
+    }
+  });
 
+  wrap.innerHTML = `<div class="table-wrap"><table class="presup-table">
+    <thead><tr>
+      <th>Categoría</th><th>Categoría padre</th>
+      <th style="text-align:center">Especial</th><th></th>
+    </tr></thead>
+    <tbody>${tableRows.join("")}</tbody>
+  </table></div>`;
+
+  // Parent selector
   wrap.querySelectorAll(".cat-parent-sel").forEach(sel => {
     sel.addEventListener("change", () => {
       _categoriasManaged[+sel.dataset.i].parent_nombre = sel.value || null;
       saveCategoriasManaged();
     });
   });
+  // Especial checkbox
   wrap.querySelectorAll(".cat-especial-chk").forEach(chk => {
     chk.addEventListener("change", () => {
       _categoriasManaged[+chk.dataset.i].especial = chk.checked ? 1 : 0;
       saveCategoriasManaged();
     });
   });
+  // New category name input
   wrap.querySelectorAll(".cat-name-inp").forEach(inp => {
-    inp.addEventListener("input", () => {
-      _categoriasManaged[+inp.dataset.i].nombre = inp.value.trim();
-    });
+    inp.addEventListener("input", () => { _categoriasManaged[+inp.dataset.i].nombre = inp.value.trim(); });
     inp.addEventListener("keydown", e => {
       if (e.key !== "Enter") return;
       e.preventDefault();
@@ -5802,10 +5762,32 @@ function renderCategoriasManaged() {
       saveCategoriasManaged();
     });
   });
+  // Delete category
   wrap.querySelectorAll("[data-del]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      _categoriasManaged.splice(+btn.dataset.del, 1);
-      renderCategoriasManaged();
+    btn.addEventListener("click", () => { _categoriasManaged.splice(+btn.dataset.del, 1); renderCategoriasManaged(); });
+  });
+  // Expand/collapse keyword section
+  wrap.querySelectorAll(".cat-expand-btn").forEach(btn => {
+    btn.addEventListener("click", () => toggleCatExpand(btn.dataset.nombre));
+  });
+  // Remove keyword chip
+  wrap.querySelectorAll(".cat-kw-remove").forEach(btn => {
+    btn.addEventListener("click", () => removeKeywordFromCat(btn.dataset.nombre, btn.dataset.kw));
+  });
+  // Add keyword on Enter
+  wrap.querySelectorAll(".cat-kw-input").forEach(inp => {
+    inp.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      addKeywordToCat(inp.dataset.nombre, inp.value);
+      inp.value = "";
+    });
+  });
+  // Solo egresos toggle
+  wrap.querySelectorAll(".cat-solo-egresos").forEach(chk => {
+    chk.addEventListener("change", () => {
+      const rule = _rules.find(r => r.categoria === chk.dataset.nombre);
+      if (rule) { rule.solo_egresos = chk.checked; _doSaveRules(); }
     });
   });
 }
@@ -5831,6 +5813,33 @@ async function saveCategoriasManaged() {
 }
 
 document.getElementById("btn-reload-categorias").addEventListener("click", loadCategoriasManaged);
+document.getElementById("btn-toggle-all-keywords").addEventListener("click", toggleAllCatsKeywords);
+
+document.getElementById("btn-apply-rules-cat").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-apply-rules-cat");
+  btn.disabled = true; btn.textContent = "Aplicando…";
+  try {
+    const res  = await fetch(`${BASE}/api/rules/apply`, {method: "POST"});
+    const data = await res.json();
+    if (res.ok) { showToast(`✓ ${data.categorizados} movimientos categorizados`, "ok"); loadGastos(); loadCategorias(); }
+    else showToast("Error al aplicar reglas", "err", 0);
+  } finally { btn.disabled = false; btn.textContent = "Reaplicar"; }
+});
+
+document.getElementById("btn-export-rules-cat").addEventListener("click", () => {
+  window.location.href = `${BASE}/api/rules/export`;
+});
+
+document.getElementById("inp-import-rules-cat").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fd = new FormData(); fd.append("file", file);
+  const res  = await fetch(`${BASE}/api/rules/import`, {method: "POST", body: fd});
+  const data = await res.json();
+  if (res.ok) { showToast(`✓ ${data.reglas} reglas importadas`, "ok", 3000); loadCategoriasManaged(); }
+  else showToast(`❌ ${data.detail || "Error al importar"}`, "err", 0);
+  e.target.value = "";
+});
 
 document.getElementById("btn-add-categoria").addEventListener("click", () => {
   _categoriasManaged.push({nombre: "", parent_nombre: null, especial: 0, _new: true});

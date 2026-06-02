@@ -475,60 +475,23 @@
 
       <!-- Config sub-tab bar -->
       <div class="cfg-tabs">
-        <button class="cfg-tab active" data-cfgtab="reglas">Reglas</button>
-        <button class="cfg-tab" data-cfgtab="categorias">Categorías</button>
+        <button class="cfg-tab active" data-cfgtab="categorias">Categorías</button>
         <button class="cfg-tab" data-cfgtab="personas">Personas</button>
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
         <button class="cfg-tab cfg-tab-danger" data-cfgtab="borrar">⚠ Borrar</button>
       </div>
 
-      <!-- ── Sub-tab: Reglas ───────────────────────────────────────── -->
-      <div id="cfg-tab-reglas" class="cfg-tab-content active">
-        <div class="cfg-section">
-          <div class="cfg-section-header" onclick="toggleCfgSection('reglas-cat')">
-            <span class="cfg-arr" id="cfg-arr-reglas-cat">+</span>
-            Reglas de categorización
-          </div>
-          <div class="cfg-section-body" id="cfg-body-reglas-cat" style="display:none">
-            <div class="rules-header">
-              <h2>Reglas de categorización</h2>
-              <button id="btn-add-rule" class="btn">+ Nueva regla</button>
-              <button id="btn-apply-rules" class="btn">Reaplicar a todos</button>
-              <button id="btn-export-rules" class="btn btn-sm">⬇ Exportar</button>
-              <label class="btn btn-sm" style="cursor:pointer">⬆ Importar<input type="file" id="inp-import-rules" accept=".yaml,.yml" style="display:none"></label>
-            </div>
-            <p class="rules-hint">Escribí una palabra y presioná Enter para agregarla. La regla aplica si la palabra aparece (con límite de palabra) en la descripción del gasto. Arrastrá con <strong>⠿</strong> para reordenar — la primera regla que coincide gana. "Reaplicar a todos" respeta los categorizados a mano.</p>
-            <div id="rules-list"></div>
-          </div>
-        </div>
-        <div class="cfg-section">
-          <div class="cfg-section-header" onclick="toggleCfgSection('reglas-match')">
-            <span class="cfg-arr" id="cfg-arr-reglas-match">+</span>
-            Reglas de emparejado
-          </div>
-          <div class="cfg-section-body" id="cfg-body-reglas-match" style="display:none">
-            <div class="rules-header">
-              <h2>Reglas de emparejado</h2>
-              <button id="btn-add-match-rule" class="btn">+ Nueva regla</button>
-              <button id="btn-apply-match-rules" class="btn">Aplicar todas</button>
-            </div>
-            <p class="rules-hint">
-              Cada regla busca movimientos que coincidan con el <strong>Lado A</strong> y, opcionalmente,
-              los empareja con el <strong>Lado B</strong> (misma ventana de días) para marcarlos con
-              una categoría — ideal para excluir pagos de tarjeta, transferencias entre cuentas, etc.
-            </p>
-            <div id="match-rules-list"></div>
-          </div>
-        </div>
-      </div>
-
       <!-- ── Sub-tab: Categorías ────────────────────────────────────── -->
-      <div id="cfg-tab-categorias" class="cfg-tab-content">
+      <div id="cfg-tab-categorias" class="cfg-tab-content active">
         <div class="rules-header">
           <h2>Categorías</h2>
           <button id="btn-add-categoria" class="btn">+ Nueva</button>
           <button id="btn-reload-categorias" class="btn" title="Recargar">↺</button>
+          <button id="btn-toggle-all-keywords" class="btn btn-sm">Ver keywords</button>
+          <button id="btn-apply-rules-cat" class="btn">Reaplicar</button>
+          <button id="btn-export-rules-cat" class="btn btn-sm">⬇ Exportar</button>
+          <label class="btn btn-sm" style="cursor:pointer">⬆ Importar<input type="file" id="inp-import-rules-cat" accept=".yaml,.yml" style="display:none"></label>
           <button id="btn-save-categorias" class="btn btn-primary">Guardar</button>
         </div>
         <p class="rules-hint">

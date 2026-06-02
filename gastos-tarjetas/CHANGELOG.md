@@ -1,3 +1,10 @@
+## 0.5.70
+
+- **Feature: editor de keywords inline en tab Categorías** (`app.js`, `index.html`): cada categoría tiene un botón `+` que expande su sección de keywords directamente en la tabla. Las palabras clave se muestran como chips, con detección de duplicados en rojo (igual que la tab Reglas). Enter en el input agrega la keyword y guarda. Botón "Ver keywords" expande/colapsa todas a la vez.
+- **Botones globales en Categorías**: Reaplicar, ⬇ Exportar, ⬆ Importar (mueven la funcionalidad de la tab Reglas).
+- **Elimina tab Reglas** (`index.html`, `app.js`): la tab "Reglas de categorización" y "Reglas de emparejado" se eliminan de la UI. La lógica de backend (`/api/rules`, `/api/rules/apply`, etc.) se mantiene intacta.
+- **Tab Categorías es ahora la tab activa por defecto** en Config.
+
 ## 0.5.69
 
 - **Fix: categorías nuevas aparecen en gastos y reglas** (`db.py`): `list_categorias()` ahora une `DISTINCT categoria FROM gastos` con `nombre FROM categorias`, así las categorías virtuales (sin gastos asignados aún) aparecen en el datalist de la tabla de gastos y en el campo categoría del editor de reglas.
