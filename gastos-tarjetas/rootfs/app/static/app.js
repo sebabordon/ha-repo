@@ -5756,16 +5756,24 @@ function renderCategoriasManaged() {
   wrap.querySelectorAll(".cat-parent-sel").forEach(sel => {
     sel.addEventListener("change", () => {
       _categoriasManaged[+sel.dataset.i].parent_nombre = sel.value || null;
+      saveCategoriasManaged();
     });
   });
   wrap.querySelectorAll(".cat-especial-chk").forEach(chk => {
     chk.addEventListener("change", () => {
       _categoriasManaged[+chk.dataset.i].especial = chk.checked ? 1 : 0;
+      saveCategoriasManaged();
     });
   });
   wrap.querySelectorAll(".cat-name-inp").forEach(inp => {
     inp.addEventListener("input", () => {
       _categoriasManaged[+inp.dataset.i].nombre = inp.value.trim();
+    });
+    inp.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      _categoriasManaged[+inp.dataset.i].nombre = inp.value.trim();
+      saveCategoriasManaged();
     });
   });
   wrap.querySelectorAll("[data-del]").forEach(btn => {
