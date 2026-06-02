@@ -1078,7 +1078,13 @@ class BbvaScraper(BaseScraper):
             canal    = (mov.get("canal")    or "").strip()
             desc     = concepto or canal or "Movimiento BBVA"
 
-            if saldo_val is not None:
+            # Solo deduplicar cuando el saldo es un valor real no-cero.
+            # Cuando BBVA devuelve saldo=0,00 para todos los movimientos (que es
+            # lo que hace en esta cuenta), la clave (fecha, abs_importe, 0.0) colisiona
+            # entre un egreso y un ingreso del mismo monto el mismo día — p.ej.
+            # un DEBITO DEBIN de $2.298.000 y un CR TRF INM COE de $2.298.000 en
+            # la misma fecha quedan con la misma clave y el segundo se descarta.
+            if saldo_val is not None and saldo_val != 0.0:
                 _key = (fecha, round(importe_abs, 2), round(saldo_val, 2))
                 if _key in _seen_saldo:
                     # Duplicate found — if the already-stored entry has a
