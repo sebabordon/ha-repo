@@ -5713,25 +5713,27 @@ function renderCategoriasManaged() {
 
   const allNombres = _categoriasManaged.map(c => c.nombre).filter(Boolean).sort((a, b) => a.localeCompare(b, "es"));
 
-  // Build tree: group children under parents, sort alphabetically within each level
-  const byParent = {};
-  _categoriasManaged.forEach((c, i) => {
-    const p = c.parent_nombre || "";
-    (byParent[p] = byParent[p] || []).push({...c, _i: i});
-  });
+  // Separate new (unsaved, empty-named) items from the established tree
+  const withIdx   = _categoriasManaged.map((c, i) => ({...c, _i: i}));
+  const existing  = withIdx.filter(c => !c._new);
+  const newItems  = withIdx.filter(c =>  c._new);
+
   const sortAlpha = arr => arr.slice().sort((a, b) => (a.nombre||"").localeCompare(b.nombre||"", "es"));
 
-  // Ordered rows for rendering: root nodes first, then their children
-  const ordered = [];
-  const childSet = new Set(_categoriasManaged.map(c => c.parent_nombre).filter(Boolean));
+  // Build tree from existing items only (avoids the empty-nombre collision)
+  const byParent = {};
+  existing.forEach(c => { (byParent[c.parent_nombre || ""] = byParent[c.parent_nombre || ""] || []).push(c); });
+  const parentSet = new Set(existing.map(c => c.parent_nombre).filter(Boolean));
 
+  // Ordered rows: root nodes → their children; new items appended at the bottom
+  const ordered = [];
   sortAlpha(byParent[""] || []).forEach(c => {
-    const isParent = childSet.has(c.nombre);
-    ordered.push({...c, _indent: false, _isParent: isParent});
+    ordered.push({...c, _indent: false, _isParent: parentSet.has(c.nombre)});
     sortAlpha(byParent[c.nombre] || []).forEach(child => {
       ordered.push({...child, _indent: true, _isParent: false});
     });
   });
+  newItems.forEach(c => ordered.push({...c, _indent: false, _isParent: false}));
 
   const _row = (c) => {
     const opts = allNombres
