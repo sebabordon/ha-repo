@@ -1,3 +1,7 @@
+## 0.5.77
+
+- **Fix: SyntaxError _expandedCats declarada dos veces** (`app.js`): renombrada la función de expansión de categorías a `_catFilterParam()` para evitar conflicto con el `let _expandedCats` del category manager.
+
 ## 0.5.76
 
 - **UX: chips de categoría — nuevo comportamiento** (`app.js`): tap chip activo con múltiples seleccionados = colapsar a solo ese (1 tap para cambiar de vista). Tap chip activo cuando es el último = volver a Todas. Tap chip inactivo = ADD (multi-select continúa igual).
