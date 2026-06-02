@@ -1,3 +1,8 @@
+## 0.5.81
+
+- **Fix: budget chart chips — categorías hoja se muestran a sí mismas** (`app.js`): si `_budgetSelectedCat` no tiene hijos, el chart filtra a esa única categoría en lugar de mostrar todas. Antes caía al fallback y mostraba todo.
+- **Fix: donut drill-down sin gris al volver** (`app.js`): el drill-down usa `_donutDrillCat` (estado separado, sin llamada API) en lugar de `setCrossFilter`. Clic en padre → drill-down visual client-side con datos cacheados en `_donutData`; clic en hoja → cross-filter normal. Volver con × limpia `_donutDrillCat` y restaura el donut sin recargar todo.
+
 ## 0.5.80
 
 - **Fix: chips de Gastos — todas las categorías visibles** (`app.js`): revertido el filtro que ocultaba categorías hijas del chip row principal; todas las categorías vuelven a aparecer. Los sub-chips del segundo renglón siguen funcionando igual.

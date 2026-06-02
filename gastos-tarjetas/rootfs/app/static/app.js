@@ -499,7 +499,9 @@ loadChartLayout();  // fetches layout, rebuilds grid, sets _layoutReady
 
 // ── Charts tab ────────────────────────────────────────────────────────────────
 const _charts = {};
-let _crossFilterCat = null;
+let _crossFilterCat  = null;
+let _donutDrillCat  = null;  // drill-down visual sin llamada API
+let _donutData      = [];    // cache de datos del donut para restaurar al salir
 
 // Consistent color map built by _drawDonut so all charts share the same
 // category→color assignment.
@@ -516,9 +518,21 @@ function setCrossFilter(cat) {
   badge.style.display = "";
   loadCharts();
 }
+function _setDonutDrill(cat) {
+  _donutDrillCat = cat;
+  const badge = document.getElementById("cross-filter-badge");
+  document.getElementById("cross-filter-label").textContent = "↳ " + cat;
+  badge.style.display = "";
+  _drawDonut(_donutData);   // re-dibuja solo el donut con datos ya cacheados
+}
+
 function clearCrossFilter() {
-  const parent = _catParentOf[_crossFilterCat];
-  if (parent) { setCrossFilter(parent); return; }  // subir un nivel si hay padre
+  if (_donutDrillCat) {                             // salir del drill-down visual
+    _donutDrillCat = null;
+    document.getElementById("cross-filter-badge").style.display = "none";
+    _drawDonut(_donutData);
+    return;
+  }
   _crossFilterCat = null;
   document.getElementById("cross-filter-badge").style.display = "none";
   loadCharts();
@@ -895,8 +909,10 @@ function _destroyAndCreate(id, config) {
 }
 
 function _drawDonut(data) {
-  // Drill-down: if cross-filter is a parent with children, show only those children
-  const drillChildren = _crossFilterCat ? (_catHierarchy[_crossFilterCat] || []) : [];
+  // Cachear los datos top-level (solo cuando no estamos ya en drill-down)
+  if (!_donutDrillCat) _donutData = data;
+
+  const drillChildren = _donutDrillCat ? (_catHierarchy[_donutDrillCat] || []) : [];
   const isDrillDown   = drillChildren.length > 0;
   const displayData   = isDrillDown
     ? data.filter(d => drillChildren.includes(d.categoria))
@@ -906,7 +922,6 @@ function _drawDonut(data) {
   const _tc = document.getElementById("total-category");
   if (_tc) _tc.textContent = total ? ` — ${_fmtNum2(total)}` : "";
   const top = (displayData.length ? displayData : data).slice(0, 12);
-  // Build / refresh the global color map so other charts stay in sync
   top.forEach((d, i) => { _categoryColors[d.categoria] = PALETTE[i % PALETTE.length]; });
   _destroyAndCreate("chart-by-category", {
     type: "doughnut",
@@ -923,7 +938,13 @@ function _drawDonut(data) {
       responsive: true, maintainAspectRatio: true,
       onClick: (_, elements) => {
         if (!elements.length) return;
-        setCrossFilter(top[elements[0].index].categoria);
+        const cat = top[elements[0].index].categoria;
+        if (_catHierarchy[cat]?.length) {
+          _setDonutDrill(cat);   // padre → drill-down visual, sin llamada API
+        } else {
+          _donutDrillCat = null;
+          setCrossFilter(cat);   // hoja → cross-filter normal
+        }
       },
       plugins: {
         legend: { position: "right", labels: { boxWidth: 12, font: { size: 11 } } },
@@ -5625,10 +5646,15 @@ function _drawBudgetChart() {
   const empty  = document.getElementById("bud-chart-empty");
   const canvas = document.getElementById("budget-chart");
   let visible;
-  if (_budgetSelectedCat && _catHierarchy[_budgetSelectedCat]?.length) {
-    const children = new Set(_catHierarchy[_budgetSelectedCat]);
-    visible = _budgetAllData.filter(d => children.has(d.categoria));
-    if (!visible.length) visible = _budgetData;   // fallback si no hay datos de hijos
+  if (_budgetSelectedCat) {
+    const children = _catHierarchy[_budgetSelectedCat] || [];
+    if (children.length > 0) {
+      const childSet = new Set(children);
+      visible = _budgetAllData.filter(d => childSet.has(d.categoria));
+    } else {
+      visible = _budgetAllData.filter(d => d.categoria === _budgetSelectedCat); // hoja: solo ella misma
+    }
+    if (!visible.length) visible = _budgetData;   // fallback
   } else {
     visible = _budgetData;
   }
