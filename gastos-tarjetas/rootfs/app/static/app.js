@@ -5711,7 +5711,56 @@ function renderCategoriasManaged() {
     return;
   }
 
-  const allNombres = _categoriasManaged.map(c => c.nombre).filter(Boolean);
+  const allNombres = _categoriasManaged.map(c => c.nombre).filter(Boolean).sort((a, b) => a.localeCompare(b, "es"));
+
+  // Build tree: group children under parents, sort alphabetically within each level
+  const byParent = {};
+  _categoriasManaged.forEach((c, i) => {
+    const p = c.parent_nombre || "";
+    (byParent[p] = byParent[p] || []).push({...c, _i: i});
+  });
+  const sortAlpha = arr => arr.slice().sort((a, b) => (a.nombre||"").localeCompare(b.nombre||"", "es"));
+
+  // Ordered rows for rendering: root nodes first, then their children
+  const ordered = [];
+  const childSet = new Set(_categoriasManaged.map(c => c.parent_nombre).filter(Boolean));
+
+  sortAlpha(byParent[""] || []).forEach(c => {
+    const isParent = childSet.has(c.nombre);
+    ordered.push({...c, _indent: false, _isParent: isParent});
+    sortAlpha(byParent[c.nombre] || []).forEach(child => {
+      ordered.push({...child, _indent: true, _isParent: false});
+    });
+  });
+
+  const _row = (c) => {
+    const opts = allNombres
+      .filter(n => n !== c.nombre)
+      .map(n => `<option value="${escHtml(n)}"${c.parent_nombre === n ? " selected" : ""}>${escHtml(n)}</option>`)
+      .join("");
+    const nameCell = c._new
+      ? `<input class="cat-name-inp" data-i="${c._i}" value="${escHtml(c.nombre||"")}" placeholder="Nombre de categoría" style="width:100%;box-sizing:border-box">`
+      : (c._isParent
+          ? `<strong>${escHtml(c.nombre)}</strong>`
+          : escHtml(c.nombre));
+    const indentStyle = c._indent ? "padding-left:1.6rem;color:#999" : "";
+    const prefix = c._indent ? "└ " : "";
+    return `<tr${c._indent ? ' class="presup-child-row"' : ""}>
+      <td style="${indentStyle}">${prefix}${nameCell}</td>
+      <td>
+        <select class="cat-parent-sel" data-i="${c._i}" style="width:100%;max-width:220px">
+          <option value="">— Sin padre —</option>
+          ${opts}
+        </select>
+      </td>
+      <td style="text-align:center">
+        <input type="checkbox" class="cat-especial-chk" data-i="${c._i}"${c.especial ? " checked" : ""}>
+      </td>
+      <td>
+        <button class="btn btn-sm btn-danger" data-del="${c._i}">✕</button>
+      </td>
+    </tr>`;
+  };
 
   wrap.innerHTML = `
     <div class="table-wrap">
@@ -5724,32 +5773,7 @@ function renderCategoriasManaged() {
           <th></th>
         </tr>
       </thead>
-      <tbody>
-        ${_categoriasManaged.map((c, i) => {
-          const opts = allNombres
-            .filter(n => n !== c.nombre)
-            .map(n => `<option value="${escHtml(n)}"${c.parent_nombre === n ? " selected" : ""}>${escHtml(n)}</option>`)
-            .join("");
-          const nameCell = c._new
-            ? `<input class="cat-name-inp" data-i="${i}" value="${escHtml(c.nombre||"")}" placeholder="Nombre de categoría" style="width:100%;box-sizing:border-box">`
-            : escHtml(c.nombre);
-          return `<tr>
-            <td>${nameCell}</td>
-            <td>
-              <select class="cat-parent-sel" data-i="${i}" style="width:100%;max-width:220px">
-                <option value="">— Sin padre —</option>
-                ${opts}
-              </select>
-            </td>
-            <td style="text-align:center">
-              <input type="checkbox" class="cat-especial-chk" data-i="${i}"${c.especial ? " checked" : ""}>
-            </td>
-            <td>
-              <button class="btn btn-sm btn-danger" data-del="${i}">✕</button>
-            </td>
-          </tr>`;
-        }).join("")}
-      </tbody>
+      <tbody>${ordered.map(_row).join("")}</tbody>
     </table>
     </div>`;
 
