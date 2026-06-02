@@ -1,3 +1,7 @@
+## 0.5.71
+
+- **UX: presupuesto padre hereda suma de hijos** (`db.py`): si una categoría padre no tiene presupuesto explícito definido, `stats_presupuesto_vs_actual` calcula automáticamente su presupuesto como la suma de los presupuestos de sus categorías hijas. La barra de progreso y el porcentaje se calculan contra ese valor derivado.
+
 ## 0.5.70
 
 - **Feature: editor de keywords inline en tab Categorías** (`app.js`, `index.html`): cada categoría tiene un botón `+` que expande su sección de keywords directamente en la tabla. Las palabras clave se muestran como chips, con detección de duplicados en rojo (igual que la tab Reglas). Enter en el input agrega la keyword y guarda. Botón "Ver keywords" expande/colapsa todas a la vez.

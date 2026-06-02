@@ -1894,6 +1894,20 @@ def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
             "tiene_hijos": bool(children_map.get(cat)),
         })
 
+    # Derive parent budget = sum of children's budgets when no explicit budget is set
+    result_by_cat = {r["categoria"]: r for r in result}
+    for r in result:
+        if r.get("tiene_hijos") and r["presupuesto"] == 0:
+            children_sum = sum(
+                result_by_cat[child]["presupuesto"]
+                for child in children_map.get(r["categoria"], [])
+                if child in result_by_cat
+            )
+            if children_sum > 0:
+                r["presupuesto"] = children_sum
+                r["diferencia"]  = round(children_sum - r["gastado"], 2)
+                r["pct"]         = round(r["gastado"] / children_sum * 100, 1)
+
     # Order: top-level items (gastado DESC) each followed by their children
     top_level = [r for r in result if not r.get("parent")]
     top_level.sort(key=lambda r: -r["gastado"])
