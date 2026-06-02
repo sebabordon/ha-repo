@@ -517,6 +517,8 @@ function setCrossFilter(cat) {
   loadCharts();
 }
 function clearCrossFilter() {
+  const parent = _catParentOf[_crossFilterCat];
+  if (parent) { setCrossFilter(parent); return; }  // subir un nivel si hay padre
   _crossFilterCat = null;
   document.getElementById("cross-filter-badge").style.display = "none";
   loadCharts();
@@ -1078,12 +1080,17 @@ document.getElementById("btn-refresh-charts").addEventListener("click", loadChar
 let _selectedCats = new Set();
 let _sinCat = false;
 let _catHierarchy = {};   // {parent_nombre: [child_nombre, ...]}
+let _catParentOf  = {};   // {child_nombre: parent_nombre}
 
 async function loadHierarchy() {
   try {
     const res = await fetch(`${BASE}/api/categorias/hierarchy`);
     _catHierarchy = res.ok ? await res.json() : {};
-  } catch { _catHierarchy = {}; }
+    _catParentOf  = {};
+    for (const [parent, children] of Object.entries(_catHierarchy)) {
+      for (const child of children) _catParentOf[child] = parent;
+    }
+  } catch { _catHierarchy = {}; _catParentOf = {}; }
 }
 
 async function loadCategorias() {
@@ -1109,8 +1116,10 @@ function renderCatChips(cats) {
   sinChip.textContent = "Sin categoría";
   sinChip.onclick = () => toggleSinCat();
   container.appendChild(sinChip);
-  // Regular chips
-  cats.forEach(cat => {
+  // Only show root categories (exclude children — they appear in sub-chip row)
+  const allChildren = new Set(Object.values(_catHierarchy).flat());
+  const rootCats = cats.filter(cat => !allChildren.has(cat));
+  rootCats.forEach(cat => {
     const chip = document.createElement("span");
     chip.className = `cat-chip${_selectedCats.has(cat)?" active":""}`;
     chip.textContent = cat;
@@ -5607,8 +5616,12 @@ function toggleAllBudCats() {
 
 function toggleBudCat(cat) {
   const hidden = new Set((_getBudPrefs().cats_hidden) || []);
-  if (hidden.has(cat)) hidden.delete(cat); else hidden.add(cat);
-  _saveBudPrefs({ cats_hidden: [...hidden] });
+  const isOnlyVisible = _budgetAllCats.every(c => c === cat || hidden.has(c));
+  if (isOnlyVisible) {
+    _saveBudPrefs({ cats_hidden: [] });              // único visible → mostrar todas
+  } else {
+    _saveBudPrefs({ cats_hidden: _budgetAllCats.filter(c => c !== cat) }); // exclusive
+  }
   _renderBudCatChips();
   _drawBudgetChart();
 }

@@ -1,3 +1,9 @@
+## 0.5.78
+
+- **Fix: chips de Gastos muestran solo categorías raíz** (`app.js`): se filtran los hijos del árbol del renglón principal; aparecen solo en el sub-chip row cuando se selecciona el padre.
+- **Fix: donut drill-down — botón × sube al padre** (`app.js`): `clearCrossFilter` ahora navega un nivel arriba si el filtro actual tiene categoría padre, en lugar de limpiar todo. Segundo × limpia completamente.
+- **UX: chips de presupuesto — exclusive select** (`app.js`): tap chip = mostrar solo esa categoría en el chart de presupuesto; tap el único visible = mostrar todas. Igual que los chips de Gastos.
+
 ## 0.5.77
 
 - **Fix: SyntaxError _expandedCats declarada dos veces** (`app.js`): renombrada la función de expansión de categorías a `_catFilterParam()` para evitar conflicto con el `let _expandedCats` del category manager.
