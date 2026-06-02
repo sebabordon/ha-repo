@@ -1,3 +1,7 @@
+## 0.5.74
+
+- **UX: colores de categoría padre/hijo configurables** (`app.js`, `index.html`): nuevas variables CSS `--color-cat-parent` y `--color-cat-child` aplicadas en el árbol de Categorías y en la tabla de Presupuesto. Defaults: padre `#111827` (casi negro), hijo `#4b5563` (gris oscuro legible). Ambos colores se pueden cambiar desde Config → Interfaz → sección "Categorías".
+
 ## 0.5.73
 
 - **Fix: BBVA descartaba ingresos como duplicados cuando saldo=0** (`scrapers/bbva.py`): la dedup usaba `(fecha, abs_importe, saldo)` como clave; cuando BBVA devuelve `saldo=0,00` en todos los movimientos, un egreso y un ingreso del mismo monto el mismo día colisionan (ej. DEBITO DEBIN $2.298.000 y CR TRF INM COE $2.298.000). Corrección: solo se activa la dedup cuando `saldo_val != 0.0` — es decir, cuando BBVA expone un saldo corriente real que sirva como fingerprint único.

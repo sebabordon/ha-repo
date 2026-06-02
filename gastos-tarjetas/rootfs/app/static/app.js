@@ -6,7 +6,8 @@ if (window.APP_VERSION) {
 
 // ── UI settings (colors + prefs) applied immediately from localStorage ────────
 const UI_COLOR_DEFAULTS = {
-  ars: "#15803d", usd: "#2563eb", rg: "#94a3b8", tog: "#d97706", accent: "#16213e"
+  ars: "#15803d", usd: "#2563eb", rg: "#94a3b8", tog: "#d97706", accent: "#16213e",
+  cat_parent: "#111827", cat_child: "#4b5563",
 };
 const UI_PREF_DEFAULTS = {
   dias_urgente:       3,
@@ -30,11 +31,13 @@ function applyUiColors() {
   const stored = JSON.parse(localStorage.getItem("ui_colors") || "{}");
   const c = { ...UI_COLOR_DEFAULTS, ...stored };
   const root = document.documentElement;
-  root.style.setProperty("--color-ars",       c.ars);
-  root.style.setProperty("--color-usd",       c.usd);
-  root.style.setProperty("--color-rg5617",    c.rg);
-  root.style.setProperty("--color-toggle-rg", c.tog);
-  root.style.setProperty("--color-accent",    c.accent);
+  root.style.setProperty("--color-ars",        c.ars);
+  root.style.setProperty("--color-usd",        c.usd);
+  root.style.setProperty("--color-rg5617",     c.rg);
+  root.style.setProperty("--color-toggle-rg",  c.tog);
+  root.style.setProperty("--color-accent",     c.accent);
+  root.style.setProperty("--color-cat-parent", c.cat_parent);
+  root.style.setProperty("--color-cat-child",  c.cat_child);
 }
 
 function applyUiPrefs() {
@@ -232,7 +235,7 @@ function renderUiSettings() {
   // Colors
   const storedC = JSON.parse(localStorage.getItem("ui_colors") || "{}");
   const c = { ...UI_COLOR_DEFAULTS, ...storedC };
-  ["ars","usd","rg","tog","accent"].forEach(k => {
+  ["ars","usd","rg","tog","accent","cat_parent","cat_child"].forEach(k => {
     const picker = document.getElementById(`ui-col-${k}`);
     const hex    = document.getElementById(`ui-hex-${k}`);
     if (picker) picker.value = c[k];
@@ -286,7 +289,8 @@ function _getUiColorInputs() {
     const h = document.getElementById(`ui-hex-${k}`);
     return (h && /^#[0-9a-fA-F]{6}$/.test(h.value)) ? h.value : UI_COLOR_DEFAULTS[k];
   };
-  return { ars: get("ars"), usd: get("usd"), rg: get("rg"), tog: get("tog"), accent: get("accent") };
+  return { ars: get("ars"), usd: get("usd"), rg: get("rg"), tog: get("tog"), accent: get("accent"),
+           cat_parent: get("cat_parent"), cat_child: get("cat_child") };
 }
 
 function _getUiPrefInputs() {
@@ -3028,7 +3032,9 @@ function renderPresupuesto() {
           const barW    = Math.min(pct, 100);
           const barCls  = pct >= 100 ? "over" : pct >= 80 ? "warn" : "";
           const diffCls = r.diferencia >= 0 ? "presup-diff-pos" : "presup-diff-neg";
-          const nameCss = r._indent ? "style=\"padding-left:1.4rem;color:#999;font-size:.9em\"" : (r.tiene_hijos ? "style=\"font-weight:600\"" : "");
+          const nameCss = r._indent
+            ? "style=\"padding-left:1.4rem;color:var(--color-cat-child);font-size:.9em\""
+            : (r.tiene_hijos ? "style=\"font-weight:600;color:var(--color-cat-parent)\"" : "");
           const prefix  = r._indent ? "└ " : "";
           return `<tr${r._indent ? " class=\"presup-child-row\"" : ""}>
             <td ${nameCss}>${prefix}${escHtml(r.categoria)}</td>
@@ -5695,8 +5701,10 @@ function renderCategoriasManaged() {
       .join("");
     const nameCell = c._new
       ? `<input class="cat-name-inp" data-i="${c._i}" value="${escHtml(c.nombre||"")}" placeholder="Nombre de categoría" style="width:100%;box-sizing:border-box">`
-      : (c._isParent ? `<strong>${escHtml(c.nombre)}</strong>` : escHtml(c.nombre));
-    const indentStyle = c._indent ? "padding-left:1.6rem;color:#999" : "";
+      : (c._isParent
+          ? `<strong style="color:var(--color-cat-parent)">${escHtml(c.nombre)}</strong>`
+          : escHtml(c.nombre));
+    const indentStyle = c._indent ? "padding-left:1.6rem;color:var(--color-cat-child)" : "";
     const prefix      = c._indent ? "└ " : "";
     const expanded    = !c._new && _isCatExpanded(c.nombre);
     const rule        = _rules.find(r => r.categoria === c.nombre) || {palabras: [], solo_egresos: false};

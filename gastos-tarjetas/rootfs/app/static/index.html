@@ -638,6 +638,29 @@
             </div>
           </div>
 
+          <!-- ── Categorías ── -->
+          <div class="ui-pref-section">Categorías</div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Color categoría padre</span>
+              <span class="ui-color-desc">texto de categorías raíz con hijos — árbol y presupuesto</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-cat_parent" oninput="syncColorHex('cat_parent')">
+              <input type="text"  id="ui-hex-cat_parent" class="ui-hex-input" maxlength="7" placeholder="#111827" oninput="syncColorPicker('cat_parent')">
+            </div>
+          </div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Color categoría hija</span>
+              <span class="ui-color-desc">texto de subcategorías indentadas — árbol y presupuesto</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-cat_child" oninput="syncColorHex('cat_child')">
+              <input type="text"  id="ui-hex-cat_child" class="ui-hex-input" maxlength="7" placeholder="#4b5563" oninput="syncColorPicker('cat_child')">
+            </div>
+          </div>
+
           <!-- ── Preferencias generales ── -->
           <div class="ui-pref-section">Preferencias</div>
 
