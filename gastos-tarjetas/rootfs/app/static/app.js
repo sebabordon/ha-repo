@@ -2433,6 +2433,15 @@ document.getElementById("rules-list")?.addEventListener("focusout", _scheduleSav
 let _previewMode    = "cat"; // "cat" | "user"
 let _previewRuleIdx = null;
 
+function openCatPreview(nombre) {
+  let idx = _rules.findIndex(r => r.categoria === nombre);
+  if (idx === -1) {
+    _rules.push({palabras: [], categoria: nombre, especial: false, solo_egresos: false, fuentes: [], patron: null});
+    idx = _rules.length - 1;
+  }
+  openRulePreview(idx);
+}
+
 function openRulePreview(i) {
   _syncRules();
   _previewMode    = "cat";
@@ -5722,9 +5731,12 @@ function renderCategoriasManaged() {
             <input class="cat-kw-input tag-input" data-nombre="${escHtml(c.nombre)}"
                    placeholder="Agregar…" style="min-width:140px;border:1px solid #ccc;border-radius:4px;padding:.2rem .5rem;font-size:.85rem">
           </div>
-          <label style="font-size:.8rem;color:#666;margin-top:.3rem;display:inline-flex;align-items:center;gap:.3rem;cursor:pointer">
-            <input type="checkbox" class="cat-solo-egresos" data-nombre="${escHtml(c.nombre)}"${rule.solo_egresos ? " checked" : ""}> Solo egresos
-          </label>
+          <div style="margin-top:.4rem;display:flex;align-items:center;gap:1rem">
+            <label style="font-size:.8rem;color:#666;display:inline-flex;align-items:center;gap:.3rem;cursor:pointer">
+              <input type="checkbox" class="cat-solo-egresos" data-nombre="${escHtml(c.nombre)}"${rule.solo_egresos ? " checked" : ""}> Solo egresos
+            </label>
+            <button class="btn btn-sm cat-preview-btn" data-nombre="${escHtml(c.nombre)}">Probar</button>
+          </div>
         </td>
       </tr>`);
     }
@@ -5789,6 +5801,10 @@ function renderCategoriasManaged() {
       const rule = _rules.find(r => r.categoria === chk.dataset.nombre);
       if (rule) { rule.solo_egresos = chk.checked; _doSaveRules(); }
     });
+  });
+  // Probar (dry-run preview)
+  wrap.querySelectorAll(".cat-preview-btn").forEach(btn => {
+    btn.addEventListener("click", () => openCatPreview(btn.dataset.nombre));
   });
 }
 
