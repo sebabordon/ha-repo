@@ -1,3 +1,9 @@
+## 0.5.69
+
+- **Fix: categorías nuevas aparecen en gastos y reglas** (`db.py`): `list_categorias()` ahora une `DISTINCT categoria FROM gastos` con `nombre FROM categorias`, así las categorías virtuales (sin gastos asignados aún) aparecen en el datalist de la tabla de gastos y en el campo categoría del editor de reglas.
+- **UX: reglas sugieren categorías existentes** (`app.js`): el input `categoria` en el editor de reglas usa `list="cat-datalist"` para guiar hacia categorías gestionadas, evitando nombres nuevos por typo.
+- **UX: botón ↺ en tab Categorías** (`index.html`, `app.js`): recarga la lista desde el servidor sin necesidad de navegar a otra tab.
+
 ## 0.5.68
 
 - **Feature: jerarquía de categorías** (`db.py`, `routes/categorias_route.py`, `app.js`, `index.html`): nueva tabla `categorias` con campo `parent` auto-referenciado que permite definir categorías padre/hijo. Migration `categorias_seed_v1` siembra la tabla desde `rules.yaml` en el primer arranque. Nueva sub-tab "Categorías" en Config para asignar padres y gestionar el flag `especial` desde la UI. El presupuesto mensual muestra las categorías hijo indentadas bajo su padre (con rollup del gastado); el total excluye filas hijas para evitar doble-conteo. El budget chart filtra a categorías de nivel raíz. `GET/PUT /api/categorias/managed` son los endpoints de CRUD.

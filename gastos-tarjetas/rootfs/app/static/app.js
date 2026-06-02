@@ -2328,7 +2328,7 @@ function renderRules() {
       <div class="rule-header">
         <span class="drag-handle" title="Arrastrar para reordenar">⠿</span>
         <span class="rule-num">#${i + 1}</span>
-        <input class="rule-cat" data-i="${i}" value="${escHtml(rule.categoria)}" placeholder="Nombre de categoría">
+        <input class="rule-cat" data-i="${i}" value="${escHtml(rule.categoria)}" placeholder="Nombre de categoría" list="cat-datalist" autocomplete="off">
         <label class="rule-especial-label" title="Categoría especial: se excluye de totales y gráficos">
           <input type="checkbox" class="rule-especial-chk" data-i="${i}" ${rule.especial ? "checked" : ""}> Especial
         </label>
@@ -5827,6 +5827,8 @@ async function saveCategoriasManaged() {
     showToast("❌ Error al guardar categorías", "err", 0);
   }
 }
+
+document.getElementById("btn-reload-categorias").addEventListener("click", loadCategoriasManaged);
 
 document.getElementById("btn-add-categoria").addEventListener("click", () => {
   _categoriasManaged.push({nombre: "", parent_nombre: null, especial: 0, _new: true});

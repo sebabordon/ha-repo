@@ -1063,9 +1063,13 @@ def get_gasto(gasto_id: int) -> Optional[dict]:
 
 def list_categorias() -> list[str]:
     with _conn() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT categoria FROM gastos WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria"
-        ).fetchall()
+        rows = conn.execute("""
+            SELECT DISTINCT nombre FROM (
+                SELECT categoria AS nombre FROM gastos WHERE categoria IS NOT NULL AND categoria != ''
+                UNION
+                SELECT nombre FROM categorias WHERE nombre IS NOT NULL AND nombre != ''
+            ) ORDER BY nombre
+        """).fetchall()
     return [r[0] for r in rows]
 
 
