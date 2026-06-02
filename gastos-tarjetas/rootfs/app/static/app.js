@@ -1202,18 +1202,23 @@ function _catFilterParam() {
 function _renderSubChips() {
   const row = document.getElementById("cat-subchips");
   if (!row) return;
-  const subCats = [];
+  // Show sub-chips for: selected parents AND parents of selected children
+  const parentsToShow = new Set();
   for (const cat of _selectedCats) {
-    (_catHierarchy[cat] || []).forEach(child => {
-      if (!subCats.includes(child)) subCats.push(child);
-    });
+    if (_catHierarchy[cat]?.length) parentsToShow.add(cat);
+    const par = _catParentOf[cat];
+    if (par) parentsToShow.add(par);
   }
-  if (!subCats.length) { row.style.display = "none"; row.innerHTML = ""; return; }
+  if (!parentsToShow.size) { row.style.display = "none"; row.innerHTML = ""; return; }
+  const subCats = [];
+  for (const par of parentsToShow)
+    (_catHierarchy[par] || []).forEach(c => { if (!subCats.includes(c)) subCats.push(c); });
   row.style.display = "";
-  row.innerHTML = subCats.map(child =>
-    `<span class="cat-chip" style="font-size:.8rem;color:var(--color-cat-child);border-color:var(--color-cat-child)"
-           data-subchip="${escHtml(child)}">${escHtml(child)}</span>`
-  ).join("");
+  row.innerHTML = subCats.map(child => {
+    const active = _selectedCats.has(child) ? " active" : "";
+    return `<span class="cat-chip cat-sub${active}" data-subchip="${escHtml(child)}"
+                  style="font-size:.8rem;border-color:#7dd3fc">${escHtml(child)}</span>`;
+  }).join("");
   row.querySelectorAll("[data-subchip]").forEach(chip => {
     chip.addEventListener("click", () => tapSubCat(chip.dataset.subchip));
   });
@@ -1229,8 +1234,11 @@ function tapSubCat(childCat) {
 }
 
 function _syncChipUI() {
-  document.querySelectorAll(".cat-chip:not(.cat-todos):not(.cat-sincat)").forEach(c =>
-    c.classList.toggle("active", _selectedCats.has(c.textContent)));
+  document.querySelectorAll(".cat-chip:not(.cat-todos):not(.cat-sincat):not(.cat-sub)").forEach(c => {
+    const direct = _selectedCats.has(c.textContent);
+    const hasChild = (_catHierarchy[c.textContent] || []).some(ch => _selectedCats.has(ch));
+    c.classList.toggle("active", direct || hasChild);
+  });
   document.querySelector(".cat-sincat")?.classList.remove("active");
   document.querySelector(".cat-todos")?.classList.toggle("active", _selectedCats.size === 0);
 }
@@ -5525,9 +5533,11 @@ async function savePwaShortcuts() {
 }
 
 // ── Budget vs real home chart ─────────────────────────────────────────────────
-let _budgetChart    = null;
-let _budgetData     = [];
-let _budgetAllCats  = [];
+let _budgetChart       = null;
+let _budgetData        = [];   // top-level only (for chips)
+let _budgetAllData     = [];   // full vs_actual (for drill-down)
+let _budgetAllCats     = [];
+let _budgetSelectedCat = null; // chip seleccionado (null = todas)
 
 function _applyBudChartMode(mode) {
   const card = document.getElementById("bud-chart-card");
@@ -5575,9 +5585,10 @@ async function loadBudgetChart() {
   }
 
   const vs = data.vs_actual || [];
-  // Only show top-level categories (no parent) to avoid double-counting children
-  _budgetData    = vs.filter(d => !d.parent && (d.presupuesto > 0 || d.gastado > 0));
+  _budgetAllData = vs.filter(d => d.presupuesto > 0 || d.gastado > 0);
+  _budgetData    = _budgetAllData.filter(d => !d.parent);   // top-level para chips
   _budgetAllCats = _budgetData.map(d => d.categoria);
+  _budgetSelectedCat = null;
 
   _renderBudCatChips();
   _drawBudgetChart();
@@ -5586,20 +5597,15 @@ async function loadBudgetChart() {
 function _renderBudCatChips() {
   const wrap = document.getElementById("bud-cat-chips");
   if (!wrap) return;
-  const hidden    = new Set((_getBudPrefs().cats_hidden) || []);
-  const allActive = _budgetAllCats.length > 0 && _budgetAllCats.every(c => !hidden.has(c));
-
   wrap.innerHTML = "";
-
   const todas = document.createElement("span");
-  todas.className = `cat-chip cat-todos${allActive ? " active" : ""}`;
+  todas.className = `cat-chip cat-todos${!_budgetSelectedCat ? " active" : ""}`;
   todas.textContent = "Todas";
   todas.onclick = toggleAllBudCats;
   wrap.appendChild(todas);
-
   _budgetAllCats.forEach(c => {
     const chip = document.createElement("span");
-    chip.className = `cat-chip${!hidden.has(c) ? " active" : ""}`;
+    chip.className = `cat-chip${_budgetSelectedCat === c ? " active" : ""}`;
     chip.textContent = c;
     chip.onclick = () => toggleBudCat(c);
     wrap.appendChild(chip);
@@ -5607,21 +5613,13 @@ function _renderBudCatChips() {
 }
 
 function toggleAllBudCats() {
-  const hidden    = new Set((_getBudPrefs().cats_hidden) || []);
-  const allActive = _budgetAllCats.length > 0 && _budgetAllCats.every(c => !hidden.has(c));
-  _saveBudPrefs({ cats_hidden: allActive ? _budgetAllCats.slice() : [] });
+  _budgetSelectedCat = null;
   _renderBudCatChips();
   _drawBudgetChart();
 }
 
 function toggleBudCat(cat) {
-  const hidden = new Set((_getBudPrefs().cats_hidden) || []);
-  const isOnlyVisible = _budgetAllCats.every(c => c === cat || hidden.has(c));
-  if (isOnlyVisible) {
-    _saveBudPrefs({ cats_hidden: [] });              // único visible → mostrar todas
-  } else {
-    _saveBudPrefs({ cats_hidden: _budgetAllCats.filter(c => c !== cat) }); // exclusive
-  }
+  _budgetSelectedCat = (_budgetSelectedCat === cat) ? null : cat;
   _renderBudCatChips();
   _drawBudgetChart();
 }
@@ -5629,8 +5627,14 @@ function toggleBudCat(cat) {
 function _drawBudgetChart() {
   const empty  = document.getElementById("bud-chart-empty");
   const canvas = document.getElementById("budget-chart");
-  const hidden  = new Set((_getBudPrefs().cats_hidden) || []);
-  const visible = _budgetData.filter(d => !hidden.has(d.categoria));
+  let visible;
+  if (_budgetSelectedCat && _catHierarchy[_budgetSelectedCat]?.length) {
+    const children = new Set(_catHierarchy[_budgetSelectedCat]);
+    visible = _budgetAllData.filter(d => children.has(d.categoria));
+    if (!visible.length) visible = _budgetData;   // fallback si no hay datos de hijos
+  } else {
+    visible = _budgetData;
+  }
 
   if (!visible.length) {
     if (_budgetChart) { _budgetChart.destroy(); _budgetChart = null; }

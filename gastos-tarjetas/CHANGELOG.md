@@ -1,3 +1,9 @@
+## 0.5.79
+
+- **Fix: sub-chips se pueden seleccionar** (`app.js`): `_renderSubChips` ahora mantiene el renglón visible cuando el seleccionado es un hijo (antes desaparecía porque el hijo no tiene hijos propios). `_syncChipUI` marca el chip padre como activo cuando un hijo suyo está seleccionado.
+- **UX: budget chart chips drill-down** (`app.js`): tap chip de presupuesto = mostrar las barras de sus subcategorías; tap mismo chip = volver a todas. Reemplaza el modelo de hide/show por `_budgetSelectedCat`.
+- **UX: sub-chips borde celeste claro** (`app.js`, `index.html`): sub-chips con `border-color:#7dd3fc`; sin barra negra izquierda en el contenedor.
+
 ## 0.5.78
 
 - **Fix: chips de Gastos muestran solo categorías raíz** (`app.js`): se filtran los hijos del árbol del renglón principal; aparecen solo en el sub-chip row cuando se selecciona el padre.
