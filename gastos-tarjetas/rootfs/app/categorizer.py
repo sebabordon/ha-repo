@@ -58,14 +58,14 @@ def categorize_by_rules(
             # (?<!\w)/(?!\w) lookarounds prevent partial matches ("coto" in "PSICOTOLOGO")
             # and also work when keywords start/end with non-word chars like %, =, *, etc.
             pattern = "(?i)(" + "|".join(r"(?<!\w)" + re.escape(str(p)) + r"(?!\w)" for p in palabras) + ")"
-        elif "patron" in regla:
+        elif regla.get("patron"):
             pattern = regla["patron"]  # backward compat with old regex format
         else:
             continue
         try:
             if re.search(pattern, descripcion):
                 return regla["categoria"]
-        except re.error:
+        except (re.error, TypeError):
             continue
     return None
 

@@ -1,3 +1,7 @@
+## 0.5.72
+
+- **Fix: reaplicar reglas crasheaba con 500** (`categorizer.py`): reglas con `patron: null` en el YAML asignaban `pattern = None`, y `re.search(None, ...)` lanzaba `TypeError` que no era capturado por `except re.error`. Fix: `regla.get("patron")` en lugar de `"patron" in regla` (skipea null/vacío), y se agrega `TypeError` al except.
+
 ## 0.5.71
 
 - **UX: presupuesto padre hereda suma de hijos** (`db.py`): si una categoría padre no tiene presupuesto explícito definido, `stats_presupuesto_vs_actual` calcula automáticamente su presupuesto como la suma de los presupuestos de sus categorías hijas. La barra de progreso y el porcentaje se calculan contra ese valor derivado.
