@@ -1183,7 +1183,7 @@ function _allDescendants(cat) {
   return result;
 }
 
-function _expandedCats() {
+function _catFilterParam() {
   if (_selectedCats.size === 0) return null;
   const out = new Set(_selectedCats);
   for (const cat of _selectedCats) _allDescendants(cat).forEach(d => out.add(d));
@@ -1305,7 +1305,7 @@ function _gastosParams() {
   if (_sinCat) {
     p.set("sin_categoria", "true");
   } else if (_selectedCats.size > 0) {
-    p.set("categorias", _expandedCats());
+    p.set("categorias", _catFilterParam());
   }
   return p;
 }
