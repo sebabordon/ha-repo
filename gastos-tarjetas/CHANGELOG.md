@@ -1,3 +1,7 @@
+## 0.5.86
+
+- **Fix: Galicia BFF — interceptor de fetch via CDP** (`scrapers/galicia.py`): en lugar de inyectar nuestro propio `fetch()` (que falla por CORS preflight), se inyecta un proxy de `window.fetch` en cada página nueva mediante `Page.addScriptToEvaluateOnNewDocument`. Cuando la SPA de tarjetas hace sus propias llamadas al BFF (`overview/cards`, `movements-tc`) con las cookies y el contexto correcto, el proxy captura las respuestas en `window.__galiciaBff`. `scrape()` navega a `/tarjetas/ini`, espera que la SPA llame al BFF (hasta 20s) y lee los datos capturados. `check_session()` usa el mismo mecanismo. Elimina completamente los problemas de CORS.
+
 ## 0.5.85
 
 - **Fix: Galicia BFF fetch — eliminar headers que rompen CORS preflight** (`scrapers/galicia.py`): se removieron `Cache-Control` y `Pragma` del fetch al BFF; algunos servidores no los listan en `Access-Control-Allow-Headers` y el preflight falla con "Failed to fetch". Solo se envía `id_channel: onlinebanking` como header custom.

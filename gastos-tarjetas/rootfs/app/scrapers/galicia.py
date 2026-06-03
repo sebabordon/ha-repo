@@ -90,7 +90,103 @@ class GaliciaScraper(BaseScraper):
     nombre        = "Banco Galicia"
     login_origin  = "https://tarjetas.bancogalicia.com.ar"
 
-    # ── BFF helper ────────────────────────────────────────────────────────────
+    # ── Driver con interceptor de fetch ───────────────────────────────────────
+
+    def _create_driver(self):
+        """
+        Crea el WebDriver e inyecta un proxy de window.fetch via CDP que captura
+        todas las respuestas a *.bff.bancogalicia.com.ar en window.__galiciaBff.
+
+        Esto permite que la SPA de tarjetas haga sus propias llamadas BFF
+        (con las cookies y el contexto correcto) y nosotros leamos los datos
+        capturados, evitando completamente los problemas de CORS.
+        """
+        driver = super()._create_driver()
+        try:
+            driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                "source": """
+                    window.__galiciaBff = {};
+                    (function() {
+                        var _orig = window.fetch;
+                        window.fetch = function() {
+                            var args = arguments;
+                            var url  = args[0];
+                            var urlStr = (typeof url === 'string') ? url
+                                         : (url && url.url) ? url.url : String(url);
+                            var p = _orig.apply(window, args);
+                            if (urlStr.indexOf('.bff.bancogalicia') >= 0) {
+                                p.then(function(r) {
+                                    r.clone().text().then(function(t) {
+                                        window.__galiciaBff[urlStr] = t;
+                                    });
+                                }).catch(function(){});
+                            }
+                            return p;
+                        };
+                    })();
+                """
+            })
+        except Exception as exc:
+            logger.warning("[galicia] No se pudo inyectar interceptor fetch: %s", exc)
+        return driver
+
+    # ── Lectura de datos BFF capturados ──────────────────────────────────────
+
+    def _wait_for_bff_capture(
+        self,
+        driver,
+        keys: list[str],
+        timeout_secs: int = 15,
+    ) -> dict[str, dict]:
+        """
+        Espera hasta timeout_secs a que window.__galiciaBff contenga respuestas
+        para todas las URLs que contengan alguno de los strings en `keys`.
+
+        Devuelve {key_string: parsed_json} para cada clave encontrada.
+        """
+        import time as _t
+        deadline = _t.time() + timeout_secs
+        while _t.time() < deadline:
+            raw = driver.execute_script(
+                "return window.__galiciaBff ? JSON.stringify(window.__galiciaBff) : '{}'"
+            ) or "{}"
+            captured = _json.loads(raw)
+            found = {}
+            for k in keys:
+                for url, body in captured.items():
+                    if k in url:
+                        try:
+                            found[k] = _json.loads(body)
+                        except Exception:
+                            found[k] = None
+                        break
+            if all(k in found for k in keys):
+                return found
+            _t.sleep(0.8)
+        # Retornar lo que hay aunque no esté completo
+        raw = driver.execute_script(
+            "return window.__galiciaBff ? JSON.stringify(window.__galiciaBff) : '{}'"
+        ) or "{}"
+        captured = _json.loads(raw)
+        result = {}
+        for k in keys:
+            for url, body in captured.items():
+                if k in url:
+                    try:
+                        result[k] = _json.loads(body)
+                    except Exception:
+                        result[k] = None
+                    break
+        return result
+
+    def _reset_bff_capture(self, driver) -> None:
+        """Limpia el buffer de capturas (útil entre runs o para forzar recarga)."""
+        try:
+            driver.execute_script("window.__galiciaBff = {};")
+        except Exception:
+            pass
+
+    # ── BFF helper (fallback directo) ─────────────────────────────────────────
 
     def _bff_request(
         self,
@@ -322,19 +418,24 @@ class GaliciaScraper(BaseScraper):
 
     def check_session(self, driver) -> bool:
         """
-        Verifica que la sesión de tarjetas siga activa llamando al BFF overview.
-        La sesión se restaura en tarjetas.bancogalicia.com.ar (login_origin).
+        Verifica la sesión navegando a /tarjetas/ini y esperando que la SPA
+        haga su propia llamada al BFF overview (capturada por el interceptor).
         """
         try:
-            # Asegurar que estamos en tarjetas domain antes de hacer fetch
-            cur = driver.current_url or ""
-            if "tarjetas.bancogalicia.com.ar" not in cur:
-                driver.get("https://tarjetas.bancogalicia.com.ar/")
-                time.sleep(2)
+            self._reset_bff_capture(driver)
+            driver.get(_TARJETAS_URL)
+            time.sleep(3)
 
-            resp = self._bff_request(driver, "GET", _BFF_OVERVIEW, None)
-            logger.info("[galicia] check_session HTTP %d", resp["status"])
-            return resp["status"] == 200
+            cur = driver.current_url or ""
+            # Si redirige al login → sesión expirada
+            if "login" in cur.lower() and "tarjetas" not in cur.lower():
+                logger.info("[galicia] check_session: redirigido a login (%s)", cur[:80])
+                return False
+
+            captured = self._wait_for_bff_capture(driver, ["overview/cards"], timeout_secs=10)
+            ok = "overview/cards" in captured and captured["overview/cards"] is not None
+            logger.info("[galicia] check_session: BFF overview capturado=%s", ok)
+            return ok
         except Exception as exc:
             logger.debug("[galicia] check_session error: %s", exc)
             return False
@@ -597,40 +698,44 @@ class GaliciaScraper(BaseScraper):
             logger.info("[galicia] %s", msg)
             log.append(msg)
 
-        # Asegurar que estamos en la SPA de tarjetas (/tarjetas/ini)
-        # Las llamadas BFF necesitan estar en ese contexto para que las cookies
-        # de sesión del dominio tarjetas.bancogalicia.com.ar sean enviadas.
+        # Navegar a /tarjetas/ini y dejar que la SPA haga sus propias llamadas BFF.
+        # El interceptor inyectado en _create_driver() captura las respuestas
+        # en window.__galiciaBff antes de que nosotros las leamos.
         cur = driver.current_url or ""
         _log(f"URL al iniciar scrape: {cur[:120]}")
 
-        if "tarjetas.bancogalicia.com.ar" not in cur:
-            _log("Navegando a tarjetas desde scrape()…")
-            self._navigate_to_tarjetas(driver)
-            cur = driver.current_url or ""
+        # Limpiar capturas anteriores y recargar la página para obtener datos frescos
+        self._reset_bff_capture(driver)
 
-        # Navegar explícitamente a /tarjetas/ini si no estamos ya en esa ruta.
-        # Esto garantiza el contexto correcto de la SPA antes de llamar el BFF.
         if "/tarjetas/ini" not in cur:
-            _log(f"Navegando a /tarjetas/ini (URL actual: {cur[:80]})")
+            _log("Navegando a /tarjetas/ini…")
             driver.get(_TARJETAS_URL)
-            time.sleep(4)   # esperar inicialización del SPA Next.js
-            cur = driver.current_url or ""
-            _log(f"URL tras navegar a /tarjetas/ini: {cur[:120]}")
         else:
-            _log("Ya en /tarjetas/ini — no es necesario navegar")
-            time.sleep(1)
+            _log("Ya en /tarjetas/ini — recargando para activar interceptor")
+            driver.refresh()
 
-        # ── Obtener info de tarjetas y período ────────────────────────────────
-        _log("Llamando BFF overview/cards…")
-        ov_resp = self._bff_request(driver, "GET", _BFF_OVERVIEW, None)
-        if ov_resp["status"] != 200:
+        # Esperar que la SPA llame al BFF overview (obligatorio) y movements (opcional)
+        _log("Esperando que la SPA llame al BFF overview/cards…")
+        captured = self._wait_for_bff_capture(
+            driver,
+            ["overview/cards", "movements-tc"],
+            timeout_secs=20,
+        )
+
+        ov_json = captured.get("overview/cards")
+        mv_json = captured.get("movements-tc")
+
+        _log(f"BFF capturado: overview={'sí' if ov_json else 'no'}, movements={'sí' if mv_json else 'no'}")
+
+        if not ov_json:
+            cur2 = driver.current_url or ""
             raise RuntimeError(
-                f"[galicia] BFF overview HTTP {ov_resp['status']}: {ov_resp['body'][:200]}"
+                f"[galicia] BFF overview no capturado tras 20s. "
+                f"URL actual: {cur2[:150]}. "
+                f"Claves capturadas: {list(captured.keys())}"
             )
 
-        ov_data = (ov_resp["json"] or {}).get("data", [])
-        if not ov_data:
-            raise RuntimeError("[galicia] BFF overview: data vacía")
+        ov_data = (ov_json or {}).get("data", [])
 
         movimientos: list[MovimientoRaw] = []
         saldos: dict = {}
@@ -642,7 +747,7 @@ class GaliciaScraper(BaseScraper):
         for grupo in ov_data:
             credit_cards = grupo.get("credit_cards") or []
             for card in credit_cards:
-                movs, saldo = self._scrape_card(driver, card, fuente_target, _log)
+                movs, saldo = self._scrape_card(card, mv_json, fuente_target, _log)
                 movimientos.extend(movs)
                 if saldo is not None:
                     saldos.setdefault(fuente_target, {})["saldo_ars"] = saldo
@@ -657,16 +762,17 @@ class GaliciaScraper(BaseScraper):
 
     def _scrape_card(
         self,
-        driver,
         card: dict,
+        mv_json: dict | None,
         fuente_target: str,
         log_fn,
     ) -> tuple[list[MovimientoRaw], float | None]:
         """
-        Obtiene movimientos de una tarjeta de crédito Galicia.
+        Procesa una tarjeta de crédito usando los datos ya capturados por el interceptor.
 
-        Maneja el período-reset: si settlement_closing_dates.current cambió,
-        borra todos los movimientos_raw de la fuente antes de insertar los nuevos.
+        `card`    — objeto de la respuesta overview/cards
+        `mv_json` — respuesta completa de movements-tc (capturada por el interceptor),
+                    o None si la SPA no la llamó todavía
         """
         account_number = card.get("account_number") or ""
         last_four      = card.get("last_digits") or ""
@@ -675,70 +781,42 @@ class GaliciaScraper(BaseScraper):
 
         log_fn(f"Tarjeta: {brand} *{last_four} — cuenta {account_number} ({product})")
 
-        # ── Período: determinar rango y detectar reset ────────────────────────
+        # ── Período: detectar reset ───────────────────────────────────────────
         closing = card.get("settlement_closing_dates") or {}
         current_close = closing.get("current") or ""
         next_close    = closing.get("next")    or ""
+        log_fn(f"Período: current={current_close}, next={next_close}")
 
-        log_fn(f"Período actual: cierra {current_close}, próximo cierra {next_close}")
-
-        if current_close and next_close:
+        if current_close:
             stored_state = _read_period_state()
             stored_close = stored_state.get(fuente_target)
-
             if stored_close and stored_close != current_close:
                 log_fn(
                     f"[PERÍODO RESET] Cierre cambió: {stored_close} → {current_close}. "
                     f"Borrando movimientos_raw de {fuente_target}…"
                 )
                 self._delete_movimientos_raw(fuente_target, log_fn)
-
             _write_period_state(fuente_target, current_close)
-
-            date_from = current_close
-            date_to   = next_close
-        else:
-            log_fn("No se obtuvieron fechas de cierre — usando período abierto sin fecha")
-            date_from = ""
-            date_to   = ""
 
         # ── Consumo total (saldo) ─────────────────────────────────────────────
         saldo = None
-        consumptions_summary = card.get("consumption") or []
-        for c in consumptions_summary:
+        for c in card.get("consumption") or []:
             if (c.get("currency") or "").upper() == "ARS":
                 saldo = float(c.get("total_amount") or 0)
                 break
 
-        # ── Llamar BFF movimientos ────────────────────────────────────────────
-        payload: dict = {
-            "credit_account_number":      account_number,
-            "brand":                      brand[:6].upper() if brand.startswith("MASTER") else brand[:4].upper(),
-            "card_number_last_four_digits": last_four,
-            "is_additional":              False,
-            "type":                       "open",
-            "movement_type":              ["CONSUMPTION", "ADJUSTMENT", "PAYMENT", "AUTHORIZATION"],
-        }
-        if date_from and date_to:
-            payload["date_from"] = date_from
-            payload["date_to"]   = date_to
-
-        log_fn(f"Llamando BFF movements-tc (from={date_from} to={date_to})…")
-        mv_resp = self._bff_request(driver, "POST", _BFF_MOVEMENTS, payload)
-
-        if mv_resp["status"] != 200:
-            log_fn(f"BFF movements HTTP {mv_resp['status']}: {mv_resp['body'][:200]}")
+        # ── Parsear movimientos desde la captura del interceptor ──────────────
+        if not mv_json:
+            log_fn("movements-tc no capturado por el interceptor — sin movimientos")
             return [], saldo
 
-        mv_data = (mv_resp["json"] or {}).get("data", [])
+        mv_data = (mv_json or {}).get("data", [])
         if not mv_data:
-            log_fn("BFF movements: data vacía")
+            log_fn("movements-tc: data vacía")
             return [], saldo
 
-        # La respuesta es un array con un único elemento que contiene las listas
         result_block = mv_data[0] if mv_data else {}
         movs = self._parse_movements(result_block, fuente_target, log_fn)
-
         return movs, saldo
 
     @staticmethod
