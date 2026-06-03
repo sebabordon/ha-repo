@@ -222,10 +222,8 @@ def insert_movimiento_raw_single(m: dict) -> int:
         return cur.lastrowid
 
 
-# Descripciones genéricas/temporales que BBVA (y potencialmente otros scrapers)
-# puede reemplazar por una más específica en corridas posteriores.
-# Si la descripción nueva está en este set Y ya existe un registro con el mismo
-# (fuente, fecha, moneda, monto), el nuevo se descarta para evitar duplicados.
+# Descripciones exactas genéricas/temporales que BBVA puede reemplazar por
+# una más específica en corridas posteriores.
 _GENERIC_DESCS = frozenset({
     "TRANSFERENCIA",
     "Transferencia inmediata",
@@ -233,6 +231,43 @@ _GENERIC_DESCS = frozenset({
     "DEPOSITO",
     "DEBITO",
 })
+
+# Prefijos de descripciones temporales de BBVA (match por startswith).
+# Ejemplos: "BANELCO Nro:003164" → reemplazado por "OPERACION EN EFECTIVO TARJE..."
+#           "DB TRF INM COE Nro:XXXXX" → reemplazado por desc estable
+#           "TRANSF DEBITO Nro:XXXXX"  → ídem
+_GENERIC_PREFIXES = (
+    "BANELCO Nro:",
+    "DB TRF",
+    "TRANSF DEBITO",
+)
+
+
+def _is_generic(desc: str) -> bool:
+    """True si la descripción es genérica/temporal (BBVA puede reemplazarla)."""
+    return desc in _GENERIC_DESCS or any(desc.startswith(p) for p in _GENERIC_PREFIXES)
+
+
+def _generic_sql_cond(col: str = "descripcion") -> tuple[str, tuple]:
+    """
+    Devuelve (fragmento_sql, params) para WHERE que matchea descripciones genéricas.
+    Uso: sql_cond, params = _generic_sql_cond()
+         cursor.execute(f"SELECT ... WHERE {sql_cond}", (*other_params, *params))
+    """
+    ph      = ",".join("?" * len(_GENERIC_DESCS))
+    likes   = " OR ".join(f"{col} LIKE ?" for _ in _GENERIC_PREFIXES)
+    sql     = f"({col} IN ({ph}) OR {likes})"
+    params  = (*_GENERIC_DESCS, *(p + "%" for p in _GENERIC_PREFIXES))
+    return sql, params
+
+
+def _not_generic_sql_cond(col: str = "descripcion") -> tuple[str, tuple]:
+    """Inverso de _generic_sql_cond — matchea descripciones NO genéricas."""
+    ph      = ",".join("?" * len(_GENERIC_DESCS))
+    likes   = " AND ".join(f"{col} NOT LIKE ?" for _ in _GENERIC_PREFIXES)
+    sql     = f"({col} NOT IN ({ph}) AND {likes})"
+    params  = (*_GENERIC_DESCS, *(p + "%" for p in _GENERIC_PREFIXES))
+    return sql, params
 
 
 def insert_movimientos_raw(
@@ -332,15 +367,14 @@ def insert_movimientos_raw(
             # descripción genérica, actualizamos la descripción en lugar de insertar
             # un duplicado.
             if not existing and not scraper_uid and desc not in _GENERIC_DESCS:
+                _g_cond, _g_params = _generic_sql_cond()
                 generic_candidate = conn.execute(
-                    """SELECT id FROM movimientos_raw
+                    f"""SELECT id FROM movimientos_raw
                        WHERE fuente = ? AND fecha = ? AND moneda = ?
                          AND CAST(monto AS REAL) = CAST(? AS REAL)
-                         AND descripcion IN ({placeholders})
-                       LIMIT 1""".format(
-                        placeholders=",".join("?" * len(_GENERIC_DESCS))
-                    ),
-                    (fuente, fecha, moneda, monto, *_GENERIC_DESCS),
+                         AND {_g_cond}
+                       LIMIT 1""",
+                    (fuente, fecha, moneda, monto, *_g_params),
                 ).fetchone()
                 if generic_candidate:
                     conn.execute(
@@ -353,7 +387,7 @@ def insert_movimientos_raw(
             # Si la descripción nueva es genérica y ya existe cualquier registro con
             # mismo (fuente, fecha, moneda, monto), descartamos el genérico para no
             # crear duplicados junto al específico ya importado.
-            if not existing and not scraper_uid and desc in _GENERIC_DESCS:
+            if not existing and not scraper_uid and _is_generic(desc):
                 existing = conn.execute(
                     """SELECT id FROM movimientos_raw
                        WHERE fuente = ? AND fecha = ? AND moneda = ?
@@ -375,7 +409,6 @@ def insert_movimientos_raw(
                     _fd     = _date.fromisoformat(fecha)
                     _d_from = (_fd - _td(days=1)).isoformat()
                     _d_to   = (_fd + _td(days=1)).isoformat()
-                    _ph     = ",".join("?" * len(_GENERIC_DESCS))
 
                     _total = conn.execute(
                         """SELECT COUNT(*) FROM movimientos_raw
@@ -386,17 +419,21 @@ def insert_movimientos_raw(
                     ).fetchone()[0]
 
                     if _total == 1:   # monto único en la ventana → match seguro
-                        if desc not in _GENERIC_DESCS:
-                            # Caso A: descripción específica (TRF INM COE) reemplaza una
-                            # genérica existente.  Regla: descripción específica + fecha más reciente.
+                        _gc, _gp   = _generic_sql_cond()
+                        _ngc, _ngp = _not_generic_sql_cond()
+
+                        if not _is_generic(desc):
+                            # Caso A: descripción específica reemplaza una genérica
+                            # (TRF INM COE, OPERACION EN EFECTIVO → BANELCO Nro:, etc.)
+                            # Regla: descripción específica + fecha más reciente.
                             _cand = conn.execute(
-                                """SELECT id, fecha FROM movimientos_raw
+                                f"""SELECT id, fecha FROM movimientos_raw
                                    WHERE fuente = ? AND moneda = ?
                                      AND CAST(monto AS REAL) = CAST(? AS REAL)
                                      AND fecha BETWEEN ? AND ?
-                                     AND descripcion IN ({ph})
-                                   LIMIT 1""".format(ph=_ph),
-                                (fuente, moneda, monto, _d_from, _d_to, *_GENERIC_DESCS),
+                                     AND {_gc}
+                                   LIMIT 1""",
+                                (fuente, moneda, monto, _d_from, _d_to, *_gp),
                             ).fetchone()
                             if _cand:
                                 _best_fecha = max(fecha, _cand["fecha"])
@@ -406,10 +443,8 @@ def insert_movimientos_raw(
                                 )
                                 existing = _cand
 
-                            # Caso B: misma descripción específica, fecha cambiada
-                            # (p.ej. DEBITO DEBIN Nro:907268 aparece un día y BBVA
-                            # lo mueve un día).  Solo actualiza la fecha si la nueva
-                            # es más reciente — la descripción ya es correcta.
+                            # Caso B: misma descripción específica, solo cambió la fecha
+                            # (p.ej. DEBITO DEBIN Nro:XXXXX un día → mismo Nro al día siguiente).
                             if not _cand:
                                 _cand = conn.execute(
                                     """SELECT id, fecha FROM movimientos_raw
@@ -431,13 +466,13 @@ def insert_movimientos_raw(
                             # Descripción genérica: skip si ya hay una específica.
                             # Si la fecha nueva es más reciente, actualizarla también.
                             _cand = conn.execute(
-                                """SELECT id, fecha FROM movimientos_raw
+                                f"""SELECT id, fecha FROM movimientos_raw
                                    WHERE fuente = ? AND moneda = ?
                                      AND CAST(monto AS REAL) = CAST(? AS REAL)
                                      AND fecha BETWEEN ? AND ?
-                                     AND descripcion NOT IN ({ph})
-                                   LIMIT 1""".format(ph=_ph),
-                                (fuente, moneda, monto, _d_from, _d_to, *_GENERIC_DESCS),
+                                     AND {_ngc}
+                                   LIMIT 1""",
+                                (fuente, moneda, monto, _d_from, _d_to, *_ngp),
                             ).fetchone()
                             if _cand:
                                 if fecha > _cand["fecha"]:

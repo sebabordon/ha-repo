@@ -1,3 +1,7 @@
+## 0.5.106
+
+- **Dedup: "BANELCO Nro:..." y otros prefijos temporales cubren el match genérico/específico** (`scrapers_db.py`): se reemplaza el frozenset `_GENERIC_DESCS` (solo coincidencia exacta) por helpers `_is_generic(desc)`, `_generic_sql_cond()` y `_not_generic_sql_cond()` que incluyen también prefijos por startswith (`"BANELCO Nro:"`, `"DB TRF"`, `"TRANSF DEBITO"`). Así "BANELCO Nro:003164" se reconoce como genérico y cuando llega "OPERACION EN EFECTIVO TARJE 84296031 OP3164" (específico, mismo monto) se actualiza en lugar de insertar un duplicado.
+
 ## 0.5.105
 
 - **Modal de reconciliación al subir PDF/XLS** (`routes/cuentas.py`, `routes/upload.py`, `routes/gastos.py`, `db.py`, `app.js`, `style.css`): al importar un archivo, se corre un dry-run de conciliación antes de insertar. Si hay algo que revisar (registros nuevos que el scraper no vio, matches de baja confianza, gastos scraper huérfanos en el período, o reimportaciones duplicadas), se muestra un modal comparativo. Cada registro del archivo se clasifica contra `movimientos_raw` usando el mismo algoritmo de `conciliacion.py` (`_score`). Los gastos scraper huérfanos se pueden marcar para borrar al confirmar. El modal se salta cuando todo matchea limpiamente (`skip_modal=true`). Funciona para todos los parsers; prioridad inicial MercadoPago y BBVA Cuenta.
