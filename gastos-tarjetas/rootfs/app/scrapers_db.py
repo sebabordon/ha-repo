@@ -360,41 +360,54 @@ def insert_movimientos_raw(
                 ).fetchone()
 
             # Cross-run: descripción específica que reemplaza una genérica existente.
-            # BBVA a veces importa primero con "Transferencia inmediata" y luego
-            # actualiza a "CR TRF INM COE Nro:XXXXX" (o viceversa).  Cuando la
-            # descripción nueva es específica (no está en _GENERIC_DESCS) y existe
-            # un registro con la misma (fuente, fecha, moneda, monto) pero con
-            # descripción genérica, actualizamos la descripción en lugar de insertar
-            # un duplicado.
-            if not existing and not scraper_uid and desc not in _GENERIC_DESCS:
-                _g_cond, _g_params = _generic_sql_cond()
-                generic_candidate = conn.execute(
-                    f"""SELECT id FROM movimientos_raw
+            # Solo actuamos si el monto aparece exactamente una vez en esa fecha
+            # (unicidad), para no fusionar dos movimientos distintos del mismo importe
+            # el mismo día (p.ej. dos retiros de cajero de $460.000).
+            # Nota: BBVA devuelve saldo=0 en todos los movimientos, por lo que no
+            # podemos usar el saldo corriente como discriminador adicional.
+            if not existing and not scraper_uid and not _is_generic(desc):
+                _same_day_total = conn.execute(
+                    """SELECT COUNT(*) FROM movimientos_raw
                        WHERE fuente = ? AND fecha = ? AND moneda = ?
-                         AND CAST(monto AS REAL) = CAST(? AS REAL)
-                         AND {_g_cond}
-                       LIMIT 1""",
-                    (fuente, fecha, moneda, monto, *_g_params),
-                ).fetchone()
-                if generic_candidate:
-                    conn.execute(
-                        "UPDATE movimientos_raw SET descripcion = ?, fecha = ? WHERE id = ?",
-                        (desc, fecha, generic_candidate["id"]),
-                    )
-                    existing = generic_candidate   # no insertar fila nueva
+                         AND CAST(monto AS REAL) = CAST(? AS REAL)""",
+                    (fuente, fecha, moneda, monto),
+                ).fetchone()[0]
+                if _same_day_total == 1:
+                    _g_cond, _g_params = _generic_sql_cond()
+                    generic_candidate = conn.execute(
+                        f"""SELECT id FROM movimientos_raw
+                           WHERE fuente = ? AND fecha = ? AND moneda = ?
+                             AND CAST(monto AS REAL) = CAST(? AS REAL)
+                             AND {_g_cond}
+                           LIMIT 1""",
+                        (fuente, fecha, moneda, monto, *_g_params),
+                    ).fetchone()
+                    if generic_candidate:
+                        conn.execute(
+                            "UPDATE movimientos_raw SET descripcion = ?, fecha = ? WHERE id = ?",
+                            (desc, fecha, generic_candidate["id"]),
+                        )
+                        existing = generic_candidate   # no insertar fila nueva
 
             # Cross-run dedup para descripciones genéricas/temporales:
-            # Si la descripción nueva es genérica y ya existe cualquier registro con
-            # mismo (fuente, fecha, moneda, monto), descartamos el genérico para no
-            # crear duplicados junto al específico ya importado.
+            # Solo skipear si el monto es único en esa fecha (mismo razonamiento:
+            # si hay 2+ registros del mismo monto el mismo día, no podemos saber
+            # cuál es el que ya importamos).
             if not existing and not scraper_uid and _is_generic(desc):
-                existing = conn.execute(
-                    """SELECT id FROM movimientos_raw
+                _same_day_total = conn.execute(
+                    """SELECT COUNT(*) FROM movimientos_raw
                        WHERE fuente = ? AND fecha = ? AND moneda = ?
-                         AND CAST(monto AS REAL) = CAST(? AS REAL)
-                       LIMIT 1""",
+                         AND CAST(monto AS REAL) = CAST(? AS REAL)""",
                     (fuente, fecha, moneda, monto),
-                ).fetchone()
+                ).fetchone()[0]
+                if _same_day_total == 1:
+                    existing = conn.execute(
+                        """SELECT id FROM movimientos_raw
+                           WHERE fuente = ? AND fecha = ? AND moneda = ?
+                             AND CAST(monto AS REAL) = CAST(? AS REAL)
+                           LIMIT 1""",
+                        (fuente, fecha, moneda, monto),
+                    ).fetchone()
 
             # Cross-date match con unicidad de monto (ventana ±1 día):
             # BBVA a veces cambia la fecha contable de un movimiento entre runs,

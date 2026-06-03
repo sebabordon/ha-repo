@@ -1,3 +1,7 @@
+## 0.5.107
+
+- **Dedup mismo-día: check de unicidad de monto antes de fusionar genérico↔específico** (`scrapers_db.py`): los pasos 3 y 4 (specific→generic UPDATE y generic→skip) ahora verifican primero que el monto aparezca exactamente una vez en esa fecha. Si hay 2+ registros del mismo monto el mismo día (p.ej. dos retiros de cajero de $460.000), no se fusiona ninguno — se deja insertar el nuevo para evitar mezclar operaciones distintas. El mismo criterio de unicidad ya existía en el paso cross-date ±1 día; ahora es consistente en todos los niveles.
+
 ## 0.5.106
 
 - **Dedup: "BANELCO Nro:..." y otros prefijos temporales cubren el match genérico/específico** (`scrapers_db.py`): se reemplaza el frozenset `_GENERIC_DESCS` (solo coincidencia exacta) por helpers `_is_generic(desc)`, `_generic_sql_cond()` y `_not_generic_sql_cond()` que incluyen también prefijos por startswith (`"BANELCO Nro:"`, `"DB TRF"`, `"TRANSF DEBITO"`). Así "BANELCO Nro:003164" se reconoce como genérico y cuando llega "OPERACION EN EFECTIVO TARJE 84296031 OP3164" (específico, mismo monto) se actualiza en lugar de insertar un duplicado.
