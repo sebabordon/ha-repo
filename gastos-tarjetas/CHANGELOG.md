@@ -1,5 +1,6 @@
 ## 0.5.107
 
+- **Fix: `_rcnBuildModal` — faltaba `}` de cierre de función** (`app.js`): SyntaxError al cargar la app. La función no tenía su brace de cierre.
 - **Dedup mismo-día: check de unicidad de monto antes de fusionar genérico↔específico** (`scrapers_db.py`): los pasos 3 y 4 (specific→generic UPDATE y generic→skip) ahora verifican primero que el monto aparezca exactamente una vez en esa fecha. Si hay 2+ registros del mismo monto el mismo día (p.ej. dos retiros de cajero de $460.000), no se fusiona ninguno — se deja insertar el nuevo para evitar mezclar operaciones distintas. El mismo criterio de unicidad ya existía en el paso cross-date ±1 día; ahora es consistente en todos los niveles.
 
 ## 0.5.106

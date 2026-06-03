@@ -3980,6 +3980,7 @@ function _rcnBuildModal(data) {
         <button class="btn btn-primary" onclick="confirmRcnImport()">Confirmar e importar →</button>
       </div>
     </div>`;
+}
 
 // ── Toggle collapse/expand de cada cuenta ────────────────────────────────────
 
