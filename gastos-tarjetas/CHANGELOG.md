@@ -1,3 +1,7 @@
+## 0.5.84
+
+- **Fix: Galicia login — send_keys primario para contraseña** (`scrapers/galicia.py`): el campo password de Galicia acepta teclado normal, así que `send_keys()` es ahora la estrategia principal; el teclado virtual queda solo como fallback si send_keys falla. El logging diagnóstico del teclado se mantiene pero ya no bloquea el flujo.
+
 ## 0.5.83
 
 - **Debug: Galicia login — logging diagnóstico completo** (`scrapers/galicia.py`): `do_login` loguea cada paso con resultado (selector matcheado o no); `_dump_form_structure` enumera todos los `<input>` y `<button>` de la página de login; `_dump_keyboard_structure` lista contenedores, cantidad de `.hg-button` y sus valores `data-skbtn`; `_type_on_keyboard` loguea hits/misses por carácter; detección de TOTP ampliada con 9 selectores alternativos; mensaje de error final explica las causas del "seguimos en login".

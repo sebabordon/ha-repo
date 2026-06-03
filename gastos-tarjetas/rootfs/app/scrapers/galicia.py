@@ -432,10 +432,9 @@ class GaliciaScraper(BaseScraper):
         else:
             logger.info("[galicia] Sin alias configurado (tercer_dato vacío) — saltando campo usuario")
 
-        # ── Paso 4: contraseña vía teclado virtual ────────────────────────────
-        logger.info("[galicia] Paso 4 — contraseña vía teclado virtual")
+        # ── Paso 4: contraseña — send_keys directo (el campo acepta teclado normal) ──
+        logger.info("[galicia] Paso 4 — buscando campo password")
 
-        # Hacer clic en el campo password para activar el teclado
         pass_input = None
         for sel in [
             "input[name='Password']",
@@ -449,42 +448,32 @@ class GaliciaScraper(BaseScraper):
                 logger.info("[galicia] Input password encontrado con selector: %s", sel)
                 break
 
+        # Dump diagnóstico del teclado (para logging, no determina la estrategia)
+        self._dump_keyboard_structure(driver)
+
         if pass_input:
             try:
                 driver.execute_script("arguments[0].scrollIntoView({block:'center'});", pass_input)
                 time.sleep(0.2)
                 pass_input.click()
-                logger.info("[galicia] Click en campo password — esperando teclado virtual…")
-                time.sleep(1.0)
+                time.sleep(0.3)
+                pass_input.clear()
+                pass_input.send_keys(password)
+                logger.info("[galicia] Password escrito vía send_keys (%d chars)", len(password))
             except Exception as exc:
-                logger.warning("[galicia] Error clickeando campo password: %s", exc)
+                logger.warning("[galicia] Error escribiendo password con send_keys: %s — intentando teclado virtual", exc)
+                # Fallback: teclado virtual por si send_keys no dispara el evento correcto
+                hg_btns = driver.find_elements(By.CSS_SELECTOR, ".hg-button")
+                if hg_btns:
+                    logger.info("[galicia] Fallback a teclado virtual (%d botones)", len(hg_btns))
+                    self._type_on_keyboard(driver, password)
         else:
-            logger.warning("[galicia] *** Campo password NO encontrado ***")
-
-        # Dump estructura del teclado virtual
-        self._dump_keyboard_structure(driver)
-
-        # Determinar estrategia para la contraseña
-        hg_btns = driver.find_elements(By.CSS_SELECTOR, ".hg-button")
-        if hg_btns:
-            logger.info("[galicia] Teclado virtual .hg-button presente (%d botones) → usando clicks", len(hg_btns))
-            self._type_on_keyboard(driver, password)
-        else:
-            # Intentar con otros selectores de teclado
-            kbd_btns = driver.find_elements(By.CSS_SELECTOR, "[class*='keyboard'] button")
-            if kbd_btns:
-                logger.info("[galicia] Teclado alternativo [class*=keyboard] button (%d) → intentando", len(kbd_btns))
-                self._type_on_keyboard_generic(driver, password, kbd_btns)
-            elif pass_input:
-                logger.info("[galicia] Sin teclado virtual → send_keys directo en campo password")
-                try:
-                    pass_input.clear()
-                    pass_input.send_keys(password)
-                    logger.info("[galicia] Password escrito vía send_keys")
-                except Exception as exc:
-                    logger.warning("[galicia] Error escribiendo password: %s", exc)
+            logger.warning("[galicia] *** Campo password NO encontrado — intentando teclado virtual ***")
+            hg_btns = driver.find_elements(By.CSS_SELECTOR, ".hg-button")
+            if hg_btns:
+                self._type_on_keyboard(driver, password)
             else:
-                logger.warning("[galicia] *** Sin teclado NI campo password → no se pudo escribir la contraseña ***")
+                logger.warning("[galicia] *** Sin campo password NI teclado virtual — contraseña no ingresada ***")
 
         time.sleep(0.5)
 
