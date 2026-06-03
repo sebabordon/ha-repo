@@ -1,3 +1,7 @@
+## 0.5.109
+
+- **BBVA: flag `filtro_fecha_api` para elegir entre filtrado server-side o client-side** (`scrapers/bbva.py`): `filtro_fecha_api: true` (default) mantiene el comportamiento actual — fechas en el payload de la API, BBVA filtra server-side pero devuelve `saldo=0` en cada movimiento. `filtro_fecha_api: false` — envía fechas vacías, BBVA devuelve el saldo real por movimiento (útil como discriminador de dedup), el filtrado por rango se hace client-side. El modo activo aparece en el log al iniciar el scraping.
+
 ## 0.5.108
 
 - **Fix: `_rcnBuildModal` — faltaba `}` de cierre de función** (`app.js`): SyntaxError al cargar la app. La función no tenía su brace de cierre.

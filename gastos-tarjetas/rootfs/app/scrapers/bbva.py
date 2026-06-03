@@ -543,8 +543,13 @@ class BbvaScraper(BaseScraper):
             logger.info("[bbva] %s", msg)
             log.append(msg)
 
-        dias            = int(config.get("dias") or _DIAS_DEFAULT)
-        usuario_default = (config.get("usuario_default") or "").strip() or None
+        dias              = int(config.get("dias") or _DIAS_DEFAULT)
+        usuario_default   = (config.get("usuario_default") or "").strip() or None
+        # filtro_fecha_api: True (default) → BBVA filtra server-side, saldo=0 en respuesta.
+        # False → fechas vacías en payload, BBVA devuelve saldo real por movimiento,
+        # filtrado client-side.  Útil para dedup por saldo corriente.
+        filtro_fecha_api  = bool(config.get("filtro_fecha_api", True))
+        _log(f"Modo filtro_fecha_api={'server-side (saldo=0)' if filtro_fecha_api else 'client-side (saldo real)'}")
 
         # ── Determinar mapeo cuenta→fuente ────────────────────────────────────
         # Si el scheduler nos pasa `__cuentas__` (v0.4.0+): cada cuenta tiene
@@ -623,6 +628,7 @@ class BbvaScraper(BaseScraper):
                 driver, id_prod, fecha_desde, fecha_hasta, _log,
                 moneda=moneda, usuario_default=usuario_default,
                 fuente_target=fuente_target,
+                filtro_fecha_api=filtro_fecha_api,
             )
             _log(f"  → {len(movs)} movimientos importados de {alias} (fuente={fuente_target})")
             movimientos.extend(movs)
@@ -673,13 +679,20 @@ class BbvaScraper(BaseScraper):
         moneda: str = "ARS",
         usuario_default: Optional[str] = None,
         fuente_target: str = "bbva_cuenta",
+        filtro_fecha_api: bool = True,
     ) -> list[MovimientoRaw]:
         """
         Pagina la API de movimientos hasta obtenerlos todos (vía fetch del browser).
 
-        Primera llamada: payload completo con fechaDesde/fechaHasta.
-        Llamadas siguientes: sólo idProducto + ultimoMovimientoMostrado (int).
-        La API devuelve ≤ 10 movimientos por página.
+        filtro_fecha_api=True (default):
+            Incluye fechaDesde/fechaHasta en el payload → BBVA filtra server-side.
+            Ventaja: trae solo el rango pedido.
+            Desventaja: BBVA devuelve saldo=0,00 en cada movimiento (bug de API).
+
+        filtro_fecha_api=False:
+            Envía fechaDesde/fechaHasta vacíos → BBVA devuelve saldo real por movimiento.
+            El filtrado de fechas se hace client-side (hit_out_of_range corta la paginación).
+            Útil cuando se necesita el saldo corriente como discriminador de dedup.
         """
         all_movs: list[MovimientoRaw] = []
         ultimo = 0
@@ -689,17 +702,14 @@ class BbvaScraper(BaseScraper):
         fecha_desde_iso = self.parse_date_ar(fecha_desde)
 
         while True:
-            # IMPORTANTE: incluir SIEMPRE fechaDesde/fechaHasta en el payload
-            # (en TODAS las páginas, no solo la primera).  Si solo mandamos
-            # idProducto + ultimoMovimientoMostrado, BBVA pagina por TODA la
-            # historia de la cuenta, ignorando el filtro de fechas — bug
-            # reportado: dias=35 traía hasta diciembre del año anterior.
+            # Con filtro_fecha_api=True: BBVA filtra server-side (saldo=0 en respuesta).
+            # Con filtro_fecha_api=False: fechas vacías → saldo real, filtrado client-side.
             payload: dict = {
                 "idProducto":               id_producto,
                 "ultimoMovimientoMostrado": "0" if ultimo == 0 else ultimo,
                 "filtro":                   False,
-                "fechaDesde":               fecha_desde,
-                "fechaHasta":               fecha_hasta,
+                "fechaDesde":               fecha_desde if filtro_fecha_api else "",
+                "fechaHasta":               fecha_hasta if filtro_fecha_api else "",
                 "importeDesde":             "",
                 "importeHasta":             "",
                 "codigoTipoMovimiento":     "",
