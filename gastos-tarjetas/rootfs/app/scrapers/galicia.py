@@ -774,6 +774,17 @@ class GaliciaScraper(BaseScraper):
 
         ov_data = (ov_json or {}).get("data", [])
 
+        # Si movements no fue capturado en el load inicial, intentar click en la SPA
+        if not mv_json:
+            _log("movements no capturado — buscando elemento de tarjeta para clickear")
+            self._trigger_spa_card_click(driver, _log)
+            extra = self._wait_for_bff_capture(driver, ["movements-tc"], timeout_secs=12)
+            if extra.get("movements-tc"):
+                mv_json = extra["movements-tc"]
+                _log("movements capturado tras click en la SPA ✓")
+            else:
+                _log("movements-tc no apareció tras click — se intentará fetch directo por tarjeta")
+
         movimientos: list[MovimientoRaw] = []
         saldos: dict = {}
 
@@ -1082,6 +1093,79 @@ class GaliciaScraper(BaseScraper):
                 "is_authorization": True,
             },
         )
+
+    # ── Trigger de la SPA para movements ─────────────────────────────────────
+
+    def _trigger_spa_card_click(self, driver, log_fn) -> None:
+        """
+        Hace click en el primer elemento de tarjeta de la SPA para que dispare
+        la llamada a movements-tc. El interceptor capturará la respuesta.
+
+        Intenta múltiples selectores en orden de especificidad. También loguea
+        todos los elementos clickeables encontrados para diagnóstico.
+        """
+        from selenium.webdriver.common.by import By
+
+        # Esperar un momento extra por si la SPA todavía está renderizando
+        time.sleep(2)
+
+        selectors = [
+            # Patrones típicos del SPA de tarjetas Galicia (Next.js / React)
+            "[class*='CardOverview']",
+            "[class*='card-overview']",
+            "[class*='CreditCard']",
+            "[class*='credit-card']",
+            "[class*='TarjetaItem']",
+            "[class*='tarjeta-item']",
+            "[class*='CardItem']",
+            "[class*='card-item']",
+            # Botones / links de movimientos
+            "button[class*='movement']",
+            "a[href*='movimiento']",
+            "a[href*='movements']",
+            "button[class*='ver']",
+            # Genéricos: rol o atributo clickeable con texto de tarjeta
+            "[role='button'][class*='card']",
+            "[role='button'][class*='Card']",
+            # Cualquier link dentro del contenedor principal
+            "main a",
+            "main button",
+            # Último recurso: primer elemento interactivo no de navegación
+            "#__next a:not([href*='login'])",
+            "#__next button",
+        ]
+
+        # Primero loguear qué hay en la página para diagnóstico
+        try:
+            all_btns = driver.find_elements(By.CSS_SELECTOR, "button")
+            all_links = driver.find_elements(By.CSS_SELECTOR, "a")
+            log_fn(f"Elementos en página: {len(all_btns)} botones, {len(all_links)} links")
+            for el in (all_btns + all_links)[:8]:
+                try:
+                    cls  = (el.get_attribute("class") or "")[:60]
+                    href = (el.get_attribute("href")  or "")[:60]
+                    txt  = (el.text or "").strip()[:30]
+                    if cls or href or txt:
+                        log_fn(f"  el: class={cls!r} href={href!r} text={txt!r}")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        for sel in selectors:
+            try:
+                els = driver.find_elements(By.CSS_SELECTOR, sel)
+                if els:
+                    el = els[0]
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+                    time.sleep(0.3)
+                    el.click()
+                    log_fn(f"Click en SPA con selector: {sel!r}")
+                    return
+            except Exception as exc:
+                log_fn(f"Click fallido ({sel!r}): {exc}")
+
+        log_fn("No se encontró ningún elemento de tarjeta para clickear")
 
     # ── Diagnóstico ───────────────────────────────────────────────────────────
 

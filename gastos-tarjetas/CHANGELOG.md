@@ -1,3 +1,7 @@
+## 0.5.90
+
+- **Fix: Galicia movements — trigger via click en la SPA** (`scrapers/galicia.py`): la SPA solo llama `movements-tc` ante interacción del usuario, y el fetch directo falla por CORS. Ahora, si el interceptor no capturó movements en el page load, se intenta hacer click en el elemento de tarjeta de la SPA (usando ~15 selectores en orden de especificidad) para que ella misma dispare el call y el interceptor lo capture. Loguea todos los botones/links encontrados para ayudar a calibrar el selector correcto.
+
 ## 0.5.89
 
 - **Fix: `driver` no definido en `_scrape_card`** (`scrapers/galicia.py`): al refactorizar el método se sacó `driver` de la firma pero se seguía usando en el fallback `_bff_request`. Corregido: `driver` vuelve a ser el primer parámetro y se pasa correctamente desde `scrape()`.
