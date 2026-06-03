@@ -387,8 +387,8 @@ def insert_movimientos_raw(
 
                     if _total == 1:   # monto único en la ventana → match seguro
                         if desc not in _GENERIC_DESCS:
-                            # Descripción específica (TRF INM COE): actualizar la genérica
-                            # existente.  Regla: descripción del específico + fecha más reciente.
+                            # Caso A: descripción específica (TRF INM COE) reemplaza una
+                            # genérica existente.  Regla: descripción específica + fecha más reciente.
                             _cand = conn.execute(
                                 """SELECT id, fecha FROM movimientos_raw
                                    WHERE fuente = ? AND moneda = ?
@@ -405,6 +405,28 @@ def insert_movimientos_raw(
                                     (desc, _best_fecha, _cand["id"]),
                                 )
                                 existing = _cand
+
+                            # Caso B: misma descripción específica, fecha cambiada
+                            # (p.ej. DEBITO DEBIN Nro:907268 aparece un día y BBVA
+                            # lo mueve un día).  Solo actualiza la fecha si la nueva
+                            # es más reciente — la descripción ya es correcta.
+                            if not _cand:
+                                _cand = conn.execute(
+                                    """SELECT id, fecha FROM movimientos_raw
+                                       WHERE fuente = ? AND moneda = ?
+                                         AND CAST(monto AS REAL) = CAST(? AS REAL)
+                                         AND fecha BETWEEN ? AND ?
+                                         AND descripcion = ?
+                                       LIMIT 1""",
+                                    (fuente, moneda, monto, _d_from, _d_to, desc),
+                                ).fetchone()
+                                if _cand and fecha > _cand["fecha"]:
+                                    conn.execute(
+                                        "UPDATE movimientos_raw SET fecha = ? WHERE id = ?",
+                                        (fecha, _cand["id"]),
+                                    )
+                                if _cand:
+                                    existing = _cand
                         else:
                             # Descripción genérica: skip si ya hay una específica.
                             # Si la fecha nueva es más reciente, actualizarla también.

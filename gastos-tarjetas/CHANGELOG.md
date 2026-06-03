@@ -1,3 +1,7 @@
+## 0.5.101
+
+- **Cross-date: cubre también movimientos con descripción específica y fecha cambiada (DEBIN, etc.)** (`scrapers_db.py`): se agrega el "Caso B" en el bloque cross-date ±1 día: cuando la descripción nueva es específica (no genérica) y ya existe un registro con la misma descripción pero fecha distinta dentro de la ventana y monto único, se actualiza solo la `fecha` al valor más reciente. Cubre el escenario "DEBITO DEBIN Nro:XXXXX" u otros movimientos donde BBVA mueve la fecha contable sin cambiar el concepto.
+
 ## 0.5.100
 
 - **Fix regla de merge descripción/fecha: descripción del TRF INM COE, fecha más reciente** (`scrapers_db.py`): corrección de la lógica cross-date. En el match cross-date (±1 día, monto único): (1) cuando llega un "CR/DB TRF INM COE" y existe un genérico → UPDATE con la descripción específica + `MAX(fecha_nueva, fecha_existente)`; (2) cuando llega un genérico y existe el específico → solo UPDATE `fecha` si la nueva es más reciente, la descripción del específico se preserva intacta.
