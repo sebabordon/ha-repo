@@ -1,3 +1,7 @@
+## 0.5.110
+
+- **BBVA: checkbox "Filtrar fechas en la API" en la UI del scraper** (`scraper_credentials.py`, `app.js`): el flag `filtro_fecha_api` ahora aparece como checkbox en la configuración de la instancia BBVA. Activado por default (comportamiento anterior). Al desactivarlo, el scraper envía fechas vacías y BBVA devuelve el saldo corriente real por movimiento. También se corrige el renderizado de checkbox con `default: true` en campos de scrapers — si el key no estaba en la config guardada, el checkbox ahora respeta el default del campo en lugar de aparecer siempre desmarcado.
+
 ## 0.5.109
 
 - **BBVA: flag `filtro_fecha_api` para elegir entre filtrado server-side o client-side** (`scrapers/bbva.py`): `filtro_fecha_api: true` (default) mantiene el comportamiento actual — fechas en el payload de la API, BBVA filtra server-side pero devuelve `saldo=0` en cada movimiento. `filtro_fecha_api: false` — envía fechas vacías, BBVA devuelve el saldo real por movimiento (útil como discriminador de dedup), el filtrado por rango se hace client-side. El modo activo aparece en el log al iniciar el scraping.

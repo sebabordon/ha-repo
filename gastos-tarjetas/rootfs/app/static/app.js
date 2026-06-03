@@ -4077,7 +4077,8 @@ function _renderInstanceFullPanel(c, inst) {
     const hintHtml = campo.hint ? `<span class="field-hint">${escHtml(campo.hint)}</span>` : "";
 
     if (campo.type === "checkbox") {
-      const checked = cfg[campo.key] ? "checked" : "";
+      const _defVal = campo.default !== undefined ? campo.default : false;
+      const checked = (cfg[campo.key] !== undefined ? cfg[campo.key] : _defVal) ? "checked" : "";
       return `
         <div class="scraper-field scraper-field-checkbox">
           <label>
@@ -5174,7 +5175,8 @@ function _buildScraperCard(banco, data) {
       ? `<span class="field-hint">${escHtml(campo.hint)}</span>` : "";
 
     if (campo.type === "checkbox") {
-      const checked = data[campo.key] ? "checked" : "";
+      const _defVal = campo.default !== undefined ? campo.default : false;
+      const checked = (data[campo.key] !== undefined ? data[campo.key] : _defVal) ? "checked" : "";
       return `
         <div class="scraper-field scraper-field-checkbox">
           <label>

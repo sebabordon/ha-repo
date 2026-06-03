@@ -92,6 +92,14 @@ BANKS: dict[str, dict] = {
                 "placeholder": "ARS",
                 "hint":        "Códigos de moneda separados por coma (ej. ARS, USD, EUR). Vacío = solo ARS. Filtra qué cuentas BBVA procesar. NOTA: en v0.4.0+ este campo se usa SOLO si la instancia no tiene cuentas mapeadas (modo legacy). Cuando linkees cuentas desde la tab Cuentas, este campo se ignora porque las cuentas ya implican qué monedas procesar.",
             },
+            {
+                "key":      "filtro_fecha_api",
+                "label":    "Filtrar fechas en la API",
+                "type":     "checkbox",
+                "required": False,
+                "default":  True,
+                "hint":     "Activado (default): BBVA filtra los movimientos server-side, más eficiente pero devuelve saldo=0 por movimiento. Desactivado: fechas vacías en el request, BBVA devuelve el saldo corriente real por movimiento (útil para dedup preciso), el filtrado por rango se hace client-side.",
+            },
         ],
     },
     "bbva_tarjetas": {
