@@ -1,3 +1,7 @@
+## 0.5.108
+
+- **Fix: `_rcnBuildModal` — faltaba `}` de cierre de función** (`app.js`): SyntaxError al cargar la app. La función no tenía su brace de cierre.
+
 ## 0.5.107
 
 - **Fix: `_rcnBuildModal` — faltaba `}` de cierre de función** (`app.js`): SyntaxError al cargar la app. La función no tenía su brace de cierre.
