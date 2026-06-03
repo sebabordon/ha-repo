@@ -439,19 +439,24 @@ class GaliciaScraper(BaseScraper):
 
     def check_session(self, driver) -> bool:
         """
-        Verifica la sesión: navega a /tarjetas/ini via SSO desde el dashboard
-        y espera que la SPA llame al BFF overview.
+        Verifica la sesión con las cookies guardadas de tarjetas.bancogalicia.com.ar:
+        navega directo a /tarjetas/ini y espera que la SPA llame al BFF overview.
+
+        NO intenta navegar a /inicio porque las cookies guardadas son del dominio
+        tarjetas, no del dominio principal.
         """
         try:
-            # Navegar via SSO para que la SPA tenga contexto de autenticación
-            cur = driver.current_url or ""
-            if "onlinebanking.bancogalicia.com.ar" not in cur:
-                driver.get(_INICIO_URL)
-                time.sleep(3)
-
             self._reset_bff_capture(driver)
-            self._navigate_to_tarjetas(driver)
+            driver.get(_TARJETAS_URL)
+            time.sleep(4)
 
+            # Si fue redirigido al login, sesión expirada
+            cur = driver.current_url or ""
+            if "login" in cur.lower() and "tarjetas" not in cur.lower():
+                logger.info("[galicia] check_session: redirigido a login — sesión expirada")
+                return False
+
+            # Esperar que la SPA llame al BFF overview
             captured = self._wait_for_bff_capture(driver, ["overview/cards"], timeout_secs=15)
             ok = bool(captured.get("overview/cards"))
             logger.info("[galicia] check_session: overview capturado=%s", ok)
@@ -1110,6 +1115,8 @@ class GaliciaScraper(BaseScraper):
         time.sleep(2)
 
         selectors = [
+            # ✓ Confirmado que funciona (primer link en el SPA que no es login)
+            "#__next a:not([href*='login'])",
             # Patrones típicos del SPA de tarjetas Galicia (Next.js / React)
             "[class*='CardOverview']",
             "[class*='card-overview']",
@@ -1130,8 +1137,6 @@ class GaliciaScraper(BaseScraper):
             # Cualquier link dentro del contenedor principal
             "main a",
             "main button",
-            # Último recurso: primer elemento interactivo no de navegación
-            "#__next a:not([href*='login'])",
             "#__next button",
         ]
 

@@ -1,3 +1,8 @@
+## 0.5.91
+
+- **Fix: `check_session` con cookies de tarjetas** (`scrapers/galicia.py`): la sesión se guarda en el dominio `tarjetas.bancogalicia.com.ar`. `check_session` ahora navega directo a `/tarjetas/ini` en lugar de intentar ir a `/inicio` (que requeriría cookies del dominio principal que no tenemos). Esto permite reutilizar la sesión guardada en runs siguientes y evitar el re-login innecesario.
+- **Fix: selector de click para movements** — `#__next a:not([href*='login'])` (confirmado funcional) queda primero en la lista.
+
 ## 0.5.90
 
 - **Fix: Galicia movements — trigger via click en la SPA** (`scrapers/galicia.py`): la SPA solo llama `movements-tc` ante interacción del usuario, y el fetch directo falla por CORS. Ahora, si el interceptor no capturó movements en el page load, se intenta hacer click en el elemento de tarjeta de la SPA (usando ~15 selectores en orden de especificidad) para que ella misma dispare el call y el interceptor lo capture. Loguea todos los botones/links encontrados para ayudar a calibrar el selector correcto.
