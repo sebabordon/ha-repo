@@ -89,6 +89,7 @@ class GaliciaScraper(BaseScraper):
     fuente        = "galicia"
     nombre        = "Banco Galicia"
     login_origin  = "https://tarjetas.bancogalicia.com.ar"
+    save_session  = False   # no vale la pena — el scraper corre una vez por día
 
     # ── Driver con interceptor de fetch ───────────────────────────────────────
 

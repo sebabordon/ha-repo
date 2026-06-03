@@ -1,3 +1,7 @@
+## 0.5.92
+
+- **Config: Galicia `save_session = False`** (`scrapers/galicia.py`): no tiene sentido guardar la sesión cuando el scraper corre una sola vez por día. Simplifica el flujo: siempre hace login completo, igual que BBVA.
+
 ## 0.5.91
 
 - **Fix: `check_session` con cookies de tarjetas** (`scrapers/galicia.py`): la sesión se guarda en el dominio `tarjetas.bancogalicia.com.ar`. `check_session` ahora navega directo a `/tarjetas/ini` en lugar de intentar ir a `/inicio` (que requeriría cookies del dominio principal que no tenemos). Esto permite reutilizar la sesión guardada en runs siguientes y evitar el re-login innecesario.
