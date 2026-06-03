@@ -1,7 +1,10 @@
+## 0.5.105
+
+- **Modal de reconciliación al subir PDF/XLS** (`routes/cuentas.py`, `routes/upload.py`, `routes/gastos.py`, `db.py`, `app.js`, `style.css`): al importar un archivo, se corre un dry-run de conciliación antes de insertar. Si hay algo que revisar (registros nuevos que el scraper no vio, matches de baja confianza, gastos scraper huérfanos en el período, o reimportaciones duplicadas), se muestra un modal comparativo. Cada registro del archivo se clasifica contra `movimientos_raw` usando el mismo algoritmo de `conciliacion.py` (`_score`). Los gastos scraper huérfanos se pueden marcar para borrar al confirmar. El modal se salta cuando todo matchea limpiamente (`skip_modal=true`). Funciona para todos los parsers; prioridad inicial MercadoPago y BBVA Cuenta.
+
 ## 0.5.104
 
 - **Fix: Galicia cuotas — off-by-one en la fórmula de fecha** (`scrapers/galicia.py`): cuota 1 es la del mes original, cuota 2 es +1 mes, cuota N es +(N-1) meses. Corregido `+numero` → `+(numero-1)`.
-- **Modal de reconciliación al subir PDF/XLS** (`routes/cuentas.py`, `routes/upload.py`, `routes/gastos.py`, `db.py`, `app.js`, `style.css`): al importar un archivo, se corre un dry-run de conciliación antes de insertar. Si hay algo que revisar (registros nuevos que el scraper no vio, matches de baja confianza, gastos scraper huérfanos en el período, o reimportaciones duplicadas), se muestra un modal comparativo. Cada registro del archivo se clasifica contra `movimientos_raw` usando el mismo algoritmo de `conciliacion.py` (`_score`). Los gastos scraper huérfanos se pueden marcar para borrar al confirmar. El modal se salta cuando todo matchea limpiamente (`skip_modal=true`). Funciona para todos los parsers; prioridad inicial MercadoPago y BBVA Cuenta.
 
 ## 0.5.103
 
