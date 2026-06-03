@@ -994,7 +994,7 @@ class GaliciaScraper(BaseScraper):
                 import calendar as _cal
                 from datetime import date as _date
                 d = _date.fromisoformat(c.get("transaction_date", ""))
-                total_month = d.month + numero
+                total_month = d.month + (numero - 1)
                 y = d.year + (total_month - 1) // 12
                 m = (total_month - 1) % 12 + 1
                 day = min(d.day, _cal.monthrange(y, m)[1])

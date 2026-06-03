@@ -1,3 +1,7 @@
+## 0.5.104
+
+- **Fix: Galicia cuotas — off-by-one en la fórmula de fecha** (`scrapers/galicia.py`): cuota 1 es la del mes original, cuota 2 es +1 mes, cuota N es +(N-1) meses. Corregido `+numero` → `+(numero-1)`.
+
 ## 0.5.103
 
 - **Fix: Galicia cuotas — fecha = transaction_date + N meses** (`scrapers/galicia.py`): lógica más simple y correcta. Si la compra fue el 27/05 y es la cuota 2, la fecha es 27/07. Equivalente a `_installment_date` del parser PDF y coincide exactamente con lo que Galicia reporta en el resumen. 
