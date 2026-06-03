@@ -1,3 +1,7 @@
+## 0.5.88
+
+- **Fix: Galicia movements — fallback a BFF directo** (`scrapers/galicia.py`): la SPA solo llama `movements-tc` ante interacción del usuario, no en el page load. Si el interceptor no lo capturó, ahora se llama directamente al BFF con `_bff_request()` usando los datos de la tarjeta del overview (account_number, last_digits, fechas de período). La sesión está activa en ese punto (overview funcionó), por lo que el fetch directo debería tener el contexto correcto.
+
 ## 0.5.87
 
 - **Fix: Galicia interceptor — no borrar datos capturados por do_login** (`scrapers/galicia.py`): `scrape()` ya no llama `_reset_bff_capture()` ni recarga la página al inicio; primero verifica si la SPA ya llamó al BFF durante la navegación SSO de `do_login()`. Solo re-navega (via dashboard → SSO) si no hay datos. Esto preserva la captura del load inicial que es cuando la SPA efectivamente llama al BFF.

@@ -842,9 +842,34 @@ class GaliciaScraper(BaseScraper):
                 saldo = float(c.get("total_amount") or 0)
                 break
 
-        # ── Parsear movimientos desde la captura del interceptor ──────────────
+        # ── Obtener movimientos ───────────────────────────────────────────────
+        # La SPA solo llama movements-tc en respuesta a interacción del usuario.
+        # Si no fue capturado por el interceptor, llamamos al BFF directamente
+        # ahora que la SPA ya cargó y la sesión está activa.
         if not mv_json:
-            log_fn("movements-tc no capturado por el interceptor — sin movimientos")
+            log_fn("movements-tc no en interceptor — llamando BFF directamente")
+            brand_short = "MASTER" if brand.startswith("MASTER") else brand[:4].upper()
+            payload: dict = {
+                "credit_account_number":       account_number,
+                "brand":                        brand_short,
+                "card_number_last_four_digits": last_four,
+                "is_additional":                False,
+                "type":                         "open",
+                "movement_type":                ["CONSUMPTION", "ADJUSTMENT", "PAYMENT", "AUTHORIZATION"],
+            }
+            if current_close and next_close:
+                payload["date_from"] = current_close
+                payload["date_to"]   = next_close
+
+            mv_resp = self._bff_request(driver, "POST", _BFF_MOVEMENTS, payload)
+            log_fn(f"BFF movements directo HTTP {mv_resp['status']}")
+            if mv_resp["status"] == 200:
+                mv_json = mv_resp["json"]
+            else:
+                log_fn(f"BFF movements error: {mv_resp['body'][:300]}")
+
+        if not mv_json:
+            log_fn("Sin movimientos disponibles")
             return [], saldo
 
         mv_data = (mv_json or {}).get("data", [])
