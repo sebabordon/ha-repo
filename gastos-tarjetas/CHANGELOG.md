@@ -1,3 +1,7 @@
+## 0.5.95
+
+- **BBVA: diferimiento de movimientos "TRF INM COE" hasta consolidación** (`scrapers/bbva.py`): los movimientos cuyo concepto empieza con `CR TRF INM COE` o `DB TRF INM COE` se omiten durante los primeros 2 días desde su fecha, ya que BBVA puede cambiar tanto la descripción como la fecha contable durante ese período. Con `dias >= 3` en la configuración del scraper, en la siguiente corrida ya estarán consolidados y se importarán con la descripción e fecha definitivas. En el log aparece `[defer] ... pendiente de consolidación BBVA`.
+
 ## 0.5.94
 
 - **Fix: chips de Gastos muestran solo categorías raíz** (`app.js`): re-aplicado el filtro que excluye categorías hijas del chip row principal. Los hijos siguen apareciendo en el sub-chip row cuando se selecciona su padre.
