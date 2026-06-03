@@ -784,6 +784,17 @@ def delete_gasto_manual(gasto_id: int) -> bool:
     return delete_movimiento_manual(gasto_id, gasto["fuente"])
 
 
+def delete_scraper_gastos_batch(ids: list[int]) -> int:
+    """Delete gastos that were auto-imported by a scraper (archivo_origen='scraper')."""
+    deleted = 0
+    for gasto_id in ids:
+        gasto = get_gasto(gasto_id)
+        if gasto and gasto.get("archivo_origen") == "scraper":
+            if delete_movimiento_manual(gasto_id, gasto["fuente"]):
+                deleted += 1
+    return deleted
+
+
 def monthly_summary(excluir_especiales: bool = True) -> list[dict]:
     """
     Returns month-by-month ARS totals.

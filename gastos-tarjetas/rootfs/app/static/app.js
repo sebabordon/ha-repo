@@ -3777,13 +3777,36 @@ async function onCuentaFileChange(fuente, inputEl) {
   if (!file) return;
 
   const msgEl = document.getElementById(`cp-msg-${fuente}`);
-  if (msgEl) { msgEl.textContent = "Procesando…"; msgEl.className = "cp-msg"; }
+  if (msgEl) { msgEl.textContent = "Analizando…"; msgEl.className = "cp-msg"; }
 
+  // Preview reconciliation dry-run before inserting
+  try {
+    const pvFd = new FormData();
+    pvFd.append("file", file);
+    const chk = document.getElementById("chk-include-rg5617");
+    pvFd.append("include_rg5617_credits", chk && chk.checked ? "true" : "false");
+    const pvRes = await fetch(`${BASE}/api/cuentas/${encodeURIComponent(fuente)}/upload/preview`, {
+      method: "POST", body: pvFd,
+    });
+    if (pvRes.ok) {
+      const pvData = await pvRes.json();
+      if (!pvData.summary?.skip_modal) {
+        showUploadReconciliationModal(pvData, fuente, file, msgEl);
+        if (msgEl) { msgEl.textContent = ""; msgEl.className = "cp-msg"; }
+        return;
+      }
+    }
+  } catch (_) { /* preview failed — fall through to direct upload */ }
+
+  await _doActualUpload(fuente, file, msgEl);
+}
+
+async function _doActualUpload(fuente, file, msgEl) {
+  if (msgEl) { msgEl.textContent = "Procesando…"; msgEl.className = "cp-msg"; }
   const fd = new FormData();
   fd.append("file", file);
   const chk = document.getElementById("chk-include-rg5617");
   fd.append("include_rg5617_credits", chk && chk.checked ? "true" : "false");
-
   try {
     const res = await fetch(`${BASE}/api/cuentas/${encodeURIComponent(fuente)}/upload`, {
       method: "POST", body: fd,
@@ -3799,6 +3822,164 @@ async function onCuentaFileChange(fuente, inputEl) {
     if (msgEl) { msgEl.textContent = "✗ " + e.message; msgEl.className = "cp-msg err"; }
   }
 }
+
+// ── Upload Reconciliation Modal ───────────────────────────────────────────────
+
+let _rcnPending = null;
+
+function showUploadReconciliationModal(data, fuente, file, msgEl) {
+  document.getElementById("rcn-modal")?.remove();
+  _rcnPending = { fuente, file, msgEl };
+  const modal = document.createElement("div");
+  modal.id = "rcn-modal";
+  modal.className = "modal-backdrop";
+  modal.onclick = (ev) => { if (ev.target === modal) closeRcnModal(); };
+  modal.innerHTML = _rcnBuildModal(data);
+  document.body.appendChild(modal);
+}
+
+function closeRcnModal() {
+  document.getElementById("rcn-modal")?.remove();
+  _rcnPending = null;
+}
+
+async function confirmRcnImport() {
+  if (!_rcnPending) return;
+  const { fuente, file, msgEl } = _rcnPending;
+  const orphanIds = [...document.querySelectorAll(".rcn-orphan-chk:checked")]
+    .map(c => parseInt(c.value)).filter(Boolean);
+  closeRcnModal();
+  await _doActualUpload(fuente, file, msgEl);
+  if (orphanIds.length > 0) {
+    try {
+      const dr = await fetch(`${BASE}/api/gastos/scraper-orphans`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: orphanIds }),
+      });
+      const dd = await dr.json();
+      if (msgEl && dr.ok && dd.eliminados > 0) {
+        msgEl.textContent += ` · ${dd.eliminados} eliminados`;
+      }
+      loadGastos();
+    } catch (_) { /* orphan delete failed silently */ }
+  }
+}
+
+function _rcnFmtAmt(monto, moneda) {
+  return (moneda === "USD" ? "U$S " : "$") + _fmtNum(Math.abs(+monto || 0));
+}
+
+function _rcnBuildModal(data) {
+  const { fuente, periodo, pdf_records, scraper_orphans, summary } = data;
+  const label = periodo ? `${periodo.desde} – ${periodo.hasta}` : "—";
+  const fLabel = _FUENTE_LABEL[fuente] || fuente;
+
+  const highRecs     = pdf_records.filter(r => r.status === "raw_match_high");
+  const lowRecs      = pdf_records.filter(r => r.status === "raw_match_low");
+  const newRecs      = pdf_records.filter(r => r.status === "new");
+  const importedRecs = pdf_records.filter(r => r.status === "already_imported");
+
+  const rowHigh = r => `
+    <div class="rcn-row">
+      <span class="rcn-col-date">${r.fecha}</span>
+      <span class="rcn-col-desc">${escHtml(r.descripcion)}</span>
+      <span class="rcn-col-amt">${_rcnFmtAmt(r.monto, r.moneda)}</span>
+      <span class="rcn-col-conf">${Math.round((r.match_raw?.confianza||0)*100)}%</span>
+    </div>`;
+
+  const rowLow = r => `
+    <div class="rcn-pair">
+      <div class="rcn-row rcn-row-src">
+        <span class="rcn-tag rcn-tag-pdf">PDF</span>
+        <span class="rcn-col-date">${r.fecha}</span>
+        <span class="rcn-col-desc">${escHtml(r.descripcion)}</span>
+        <span class="rcn-col-amt">${_rcnFmtAmt(r.monto, r.moneda)}</span>
+      </div>
+      <div class="rcn-row rcn-row-scr">
+        <span class="rcn-tag rcn-tag-scr">SCR</span>
+        <span class="rcn-col-date">${r.match_raw?.fecha||"—"}</span>
+        <span class="rcn-col-desc">${escHtml(r.match_raw?.descripcion||"—")}</span>
+        <span class="rcn-col-amt">${_rcnFmtAmt(r.match_raw?.monto||0, r.moneda)}</span>
+        <span class="rcn-col-conf">${Math.round((r.match_raw?.confianza||0)*100)}%</span>
+      </div>
+    </div>`;
+
+  const rowNew = r => `
+    <div class="rcn-row">
+      <span class="rcn-col-date">${r.fecha}</span>
+      <span class="rcn-col-desc">${escHtml(r.descripcion)}</span>
+      <span class="rcn-col-amt">${_rcnFmtAmt(r.monto, r.moneda)}</span>
+    </div>`;
+
+  const rowImported = r => `
+    <div class="rcn-row">
+      <span class="rcn-col-date">${r.fecha}</span>
+      <span class="rcn-col-desc">${escHtml(r.descripcion)}</span>
+      <span class="rcn-col-amt">${_rcnFmtAmt(r.monto, r.moneda)}</span>
+      <span class="rcn-col-conf" style="color:#dc2626">dup</span>
+    </div>`;
+
+  const rowOrphan = g => `
+    <div class="rcn-row">
+      <input type="checkbox" class="rcn-orphan-chk" value="${g.id}" checked>
+      <span class="rcn-col-date">${g.fecha}</span>
+      <span class="rcn-col-desc">${escHtml(g.descripcion)}</span>
+      <span class="rcn-col-amt">${_rcnFmtAmt(g.monto, g.moneda)}</span>
+      ${g.categoria ? `<span class="rcn-col-cat">${escHtml(g.categoria)}</span>` : ""}
+    </div>`;
+
+  const sHigh = highRecs.length ? `
+    <details class="rcn-section">
+      <summary class="rcn-sum rcn-sum-green">
+        <span>● Match en scraper</span><span class="rcn-badge">${highRecs.length}</span>
+      </summary>
+      <div class="rcn-list">${highRecs.map(rowHigh).join("")}</div>
+    </details>` : "";
+
+  const sLow = lowRecs.length ? `
+    <details class="rcn-section" open>
+      <summary class="rcn-sum rcn-sum-yellow">
+        <span>⚠ Match bajo — revisar</span><span class="rcn-badge rcn-badge-warn">${lowRecs.length}</span>
+      </summary>
+      <div class="rcn-list">${lowRecs.map(rowLow).join("")}</div>
+    </details>` : "";
+
+  const sNew = newRecs.length ? `
+    <details class="rcn-section" open>
+      <summary class="rcn-sum rcn-sum-blue">
+        <span>◆ Sin match en scraper</span><span class="rcn-badge rcn-badge-new">${newRecs.length}</span>
+      </summary>
+      <div class="rcn-list">${newRecs.map(rowNew).join("")}</div>
+    </details>` : "";
+
+  const sImported = importedRecs.length ? `
+    <details class="rcn-section" open>
+      <summary class="rcn-sum rcn-sum-red">
+        <span>⛔ Ya importados previamente</span><span class="rcn-badge rcn-badge-err">${importedRecs.length}</span>
+      </summary>
+      <div class="rcn-list">${importedRecs.map(rowImported).join("")}</div>
+    </details>` : "";
+
+  const sOrphans = scraper_orphans.length ? `
+    <details class="rcn-section" open>
+      <summary class="rcn-sum rcn-sum-gray">
+        <span>🗑 En scraper sin match en resumen</span><span class="rcn-badge">${scraper_orphans.length}</span>
+      </summary>
+      <p class="rcn-hint">Auto-importados por el scraper pero no aparecen en el resumen oficial. Los marcados se eliminan al confirmar.</p>
+      <div class="rcn-list">${scraper_orphans.map(rowOrphan).join("")}</div>
+    </details>` : "";
+
+  return `
+    <div class="modal" style="max-width:720px">
+      <h3>Conciliación — ${escHtml(fLabel)} · ${escHtml(label)}</h3>
+      <p class="modal-hint">${summary.total_pdf} registros en el archivo.</p>
+      ${sHigh}${sLow}${sNew}${sImported}${sOrphans}
+      <div class="modal-footer">
+        <button class="btn" onclick="closeRcnModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmRcnImport()">Confirmar e importar →</button>
+      </div>
+    </div>`;
 
 // ── Toggle collapse/expand de cada cuenta ────────────────────────────────────
 

@@ -193,3 +193,203 @@ async def upload_file(
     if deduped:
         result["scraper_duplicados_eliminados"] = deduped
     return result
+
+
+def _preview_upload_reconcile(records: list[dict], effective_fuente: str) -> dict:
+    """
+    Dry-run reconciliation: matches parsed PDF/XLS records against movimientos_raw
+    and existing gastos. Does NOT modify the database.
+
+    Returns per-record status and orphan scraper gastos in the period.
+    """
+    import sqlite3
+    from datetime import datetime, timedelta
+    from userctx import get_db_path
+    from conciliacion import _score, DATE_WINDOW_DAYS, AUTO_MATCH_THRESHOLD
+
+    empty_summary = {
+        "total_pdf": len(records),
+        "already_imported": 0,
+        "raw_match_high": 0,
+        "raw_match_low": 0,
+        "new": 0,
+        "scraper_orphans": 0,
+        "skip_modal": True,
+    }
+    if not records:
+        return {"fuente": effective_fuente, "periodo": None,
+                "pdf_records": [], "scraper_orphans": [], "summary": empty_summary}
+
+    fechas = [str(r.get("fecha", ""))[:10] for r in records if r.get("fecha")]
+    if not fechas:
+        return {"fuente": effective_fuente, "periodo": None,
+                "pdf_records": [], "scraper_orphans": [], "summary": empty_summary}
+
+    periodo_desde = min(fechas)
+    periodo_hasta = max(fechas)
+    d_from = (datetime.fromisoformat(periodo_desde) - timedelta(days=DATE_WINDOW_DAYS)).strftime("%Y-%m-%d")
+    d_to   = (datetime.fromisoformat(periodo_hasta) + timedelta(days=DATE_WINDOW_DAYS)).strftime("%Y-%m-%d")
+
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        raws = [dict(r) for r in conn.execute(
+            """SELECT id, fecha, descripcion, monto, moneda, estado
+               FROM movimientos_raw
+               WHERE fuente=? AND fecha BETWEEN ? AND ? AND estado NOT IN ('ignored')""",
+            (effective_fuente, d_from, d_to),
+        ).fetchall()]
+        gastos_db = [dict(g) for g in conn.execute(
+            """SELECT id, fecha, descripcion, monto, moneda, archivo_origen, categoria
+               FROM gastos WHERE fuente=? AND fecha BETWEEN ? AND ?""",
+            (effective_fuente, d_from, d_to),
+        ).fetchall()]
+    finally:
+        conn.close()
+
+    gastos_scraper = [g for g in gastos_db if g.get("archivo_origen") == "scraper"]
+    gastos_prev    = [g for g in gastos_db
+                      if g.get("archivo_origen") not in (None, "scraper", "manual")]
+    has_raws       = bool(raws)
+
+    used_raw_ids = set()
+    counts = {"already_imported": 0, "raw_match_high": 0, "raw_match_low": 0, "new": 0}
+    pdf_out = []
+
+    for idx, record in enumerate(records):
+        r_fecha  = str(record.get("fecha", ""))[:10]
+        r_desc   = record.get("descripcion", "")
+        r_monto  = float(record.get("monto", 0))
+        r_moneda = record.get("moneda", "ARS")
+        rec = {"fecha": r_fecha, "descripcion": r_desc, "monto": r_monto, "moneda": r_moneda}
+
+        entry = {
+            "idx": idx,
+            "fecha": r_fecha,
+            "descripcion": r_desc,
+            "monto": r_monto,
+            "moneda": r_moneda,
+            "status": "new",
+            "match_raw": None,
+            "match_gasto": None,
+        }
+
+        # 1. Check duplicate in previously-imported (non-scraper) gastos
+        best_prev_score = 0.0
+        best_prev = None
+        for g in gastos_prev:
+            if g["moneda"] != r_moneda:
+                continue
+            if abs(float(g["monto"]) - abs(r_monto)) > 0.02:
+                continue
+            s = _score(rec, g)
+            if s > best_prev_score:
+                best_prev_score = s
+                best_prev = g
+
+        if best_prev and best_prev_score >= AUTO_MATCH_THRESHOLD:
+            entry["status"] = "already_imported"
+            entry["match_gasto"] = {
+                "id": best_prev["id"],
+                "fecha": best_prev["fecha"],
+                "descripcion": best_prev["descripcion"],
+                "monto": float(best_prev["monto"]),
+                "moneda": best_prev["moneda"],
+                "archivo_origen": best_prev.get("archivo_origen"),
+                "confianza": round(best_prev_score, 3),
+            }
+            counts["already_imported"] += 1
+            pdf_out.append(entry)
+            continue
+
+        # 2. Match against movimientos_raw (greedy: track used IDs)
+        candidates = [
+            r for r in raws
+            if r["id"] not in used_raw_ids
+               and r["moneda"] == r_moneda
+               and abs(float(r["monto"]) - abs(r_monto)) < 0.02
+        ]
+        best_raw_score = 0.0
+        best_raw = None
+        for r in candidates:
+            s = _score(rec, r)
+            if s > best_raw_score:
+                best_raw_score = s
+                best_raw = r
+
+        if best_raw and best_raw_score > 0.4:
+            used_raw_ids.add(best_raw["id"])
+            entry["match_raw"] = {
+                "id": best_raw["id"],
+                "fecha": best_raw["fecha"],
+                "descripcion": best_raw["descripcion"],
+                "monto": float(best_raw["monto"]),
+                "moneda": best_raw["moneda"],
+                "estado": best_raw.get("estado"),
+                "confianza": round(best_raw_score, 3),
+            }
+            if best_raw_score >= AUTO_MATCH_THRESHOLD:
+                entry["status"] = "raw_match_high"
+                counts["raw_match_high"] += 1
+            else:
+                entry["status"] = "raw_match_low"
+                counts["raw_match_low"] += 1
+        else:
+            entry["status"] = "new"
+            counts["new"] += 1
+
+        pdf_out.append(entry)
+
+    # Orphan scraper gastos: in the exact statement period, not matched by any PDF record
+    orphans = []
+    for g in gastos_scraper:
+        if g["fecha"] < periodo_desde or g["fecha"] > periodo_hasta:
+            continue
+        g_monto  = float(g["monto"])
+        g_moneda = g["moneda"]
+        best = 0.0
+        for record in records:
+            if record.get("moneda", "ARS") != g_moneda:
+                continue
+            if abs(float(record.get("monto", 0)) - abs(g_monto)) > 0.02:
+                continue
+            s = _score(
+                {"fecha": str(record.get("fecha", ""))[:10], "descripcion": record.get("descripcion", "")},
+                g,
+            )
+            if s > best:
+                best = s
+        if best < AUTO_MATCH_THRESHOLD:
+            orphans.append({
+                "id": g["id"],
+                "fecha": g["fecha"],
+                "descripcion": g["descripcion"],
+                "monto": g_monto,
+                "moneda": g_moneda,
+                "categoria": g.get("categoria"),
+            })
+
+    # Show modal only when there's something worth reviewing
+    skip_modal = (
+        counts["already_imported"] == 0
+        and counts["raw_match_low"] == 0
+        and len(orphans) == 0
+        and (not has_raws or counts["new"] == 0)
+    )
+
+    return {
+        "fuente": effective_fuente,
+        "periodo": {"desde": periodo_desde, "hasta": periodo_hasta},
+        "pdf_records": pdf_out,
+        "scraper_orphans": orphans,
+        "summary": {
+            "total_pdf": len(records),
+            "already_imported": counts["already_imported"],
+            "raw_match_high": counts["raw_match_high"],
+            "raw_match_low": counts["raw_match_low"],
+            "new": counts["new"],
+            "scraper_orphans": len(orphans),
+            "skip_modal": skip_modal,
+        },
+    }

@@ -15,6 +15,7 @@ from db import (list_gastos, list_categorias, monthly_summary,
                 update_categoria, update_usuario, update_gasto_fecha,
                 update_descripcion_editada,
                 delete_all_gastos, get_gasto, delete_gasto_manual,
+                delete_scraper_gastos_batch,
                 list_importaciones, rename_categoria_in_gastos)
 
 router = APIRouter()
@@ -203,6 +204,15 @@ def delete_all(
     require_auth(request)
     deleted = delete_all_gastos(fuente=fuente, import_id=import_id)
     return {"ok": True, "eliminados": deleted, "fuente": fuente, "import_id": import_id}
+
+
+@router.delete("/gastos/scraper-orphans")
+def delete_orphans(body: dict, request: Request):
+    """Delete scraper-auto-imported gastos selected during upload reconciliation."""
+    require_auth(request)
+    ids = [int(i) for i in (body.get("ids") or []) if str(i).isdigit()]
+    deleted = delete_scraper_gastos_batch(ids)
+    return {"ok": True, "eliminados": deleted}
 
 
 @router.delete("/gastos/{gasto_id}")

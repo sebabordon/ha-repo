@@ -158,6 +158,62 @@ def list_parsers(request: Request):
     ]
 
 
+@router.post("/cuentas/{fuente}/upload/preview")
+async def preview_cuenta_upload(
+    fuente: str,
+    request: Request,
+    file: UploadFile = File(...),
+    include_rg5617_credits: str = Form("false"),
+):
+    """
+    Dry-run reconciliation preview: parses the file WITHOUT inserting into DB.
+    Returns per-record match status vs movimientos_raw / existing gastos.
+    """
+    require_auth(request)
+    import io
+    from parsers import PARSERS
+    from db import _CC_FUENTES
+    from routes.upload import _preview_upload_reconcile
+
+    cuentas = get_cuentas()
+    cuenta = next((c for c in cuentas if c["fuente"] == fuente), None)
+    if not cuenta:
+        raise HTTPException(404, f"Cuenta '{fuente}' no encontrada")
+
+    parser_type      = cuenta.get("parser_type") or fuente
+    effective_fuente = fuente
+
+    if parser_type not in PARSERS:
+        raise HTTPException(400, f"Parser desconocido: {parser_type}")
+
+    content = await file.read()
+    try:
+        gastos = PARSERS[parser_type].parse(io.BytesIO(content), file.filename)
+    except Exception as e:
+        raise HTTPException(422, f"Error al parsear archivo: {e}")
+
+    if not gastos:
+        return {
+            "fuente": effective_fuente, "periodo": None,
+            "pdf_records": [], "scraper_orphans": [],
+            "summary": {"total_pdf": 0, "already_imported": 0, "raw_match_high": 0,
+                        "raw_match_low": 0, "new": 0, "scraper_orphans": 0, "skip_modal": True},
+        }
+
+    if include_rg5617_credits.lower() not in ("true", "1", "yes"):
+        gastos = [g for g in gastos if not ("5617" in g.descripcion and g.monto < 0)]
+
+    needs_flip = parser_type not in _CC_FUENTES
+    records = []
+    for g in gastos:
+        d = g.model_dump()
+        d["fuente"] = effective_fuente
+        d["monto"] = -float(d["monto"]) if (needs_flip and d["monto"] != 0) else float(d["monto"])
+        records.append(d)
+
+    return _preview_upload_reconcile(records, effective_fuente)
+
+
 @router.post("/cuentas/{fuente}/upload")
 async def upload_cuenta(fuente: str, request: Request,
                         file: UploadFile = File(...),
