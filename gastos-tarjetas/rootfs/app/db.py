@@ -1663,11 +1663,14 @@ def upsert_cuenta_saldo(fuente: str, saldo: float, moneda: str = "ARS", fecha: s
         )
 
 
-def update_cuenta(fuente: str, saldo: float, saldo_usd: float, moneda: str, activa: int, auto_saldo: int):
+def update_cuenta(fuente: str, saldo: float, saldo_usd: float, moneda: str,
+                  activa: int, auto_saldo: int, cuenta_tipo: str = "bank"):
+    if cuenta_tipo not in ("bank", "credit_card"):
+        cuenta_tipo = "bank"
     with _conn() as conn:
         conn.execute(
-            "UPDATE cuentas SET saldo=?, saldo_usd=?, moneda=?, activa=?, auto_saldo=? WHERE fuente=?",
-            (saldo, saldo_usd, moneda, activa, auto_saldo, fuente),
+            "UPDATE cuentas SET saldo=?, saldo_usd=?, moneda=?, activa=?, auto_saldo=?, cuenta_tipo=? WHERE fuente=?",
+            (saldo, saldo_usd, moneda, activa, auto_saldo, cuenta_tipo, fuente),
         )
 
 

@@ -3749,6 +3749,13 @@ function _renderCuentaCard(c) {
     ? `<button class="btn btn-sm" title="Ocultar del widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',0)">Widget ✓</button>`
     : `<button class="btn btn-sm" title="Mostrar en el widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',1)">Widget ✗</button>`;
 
+  const cuentaTipo = c.cuenta_tipo || "bank";
+  const tipoSel = `<select class="moneda-sel" title="Tipo de cuenta (afecta matching de transferencias y pagos)"
+    onchange="saveCuentaTipo('${c.fuente}',this.value);this.blur()">
+    <option value="bank"${cuentaTipo==="bank"?" selected":""}>🏦 Banco</option>
+    <option value="credit_card"${cuentaTipo==="credit_card"?" selected":""}>💳 Tarjeta</option>
+  </select>`;
+
   // Saldo edit row (auto only — manual recalculated from movements)
   let editSaldoRow;
   if (isManual) {
@@ -3816,6 +3823,7 @@ function _renderCuentaCard(c) {
             onclick="event.stopPropagation();startRenameCuenta('${c.fuente}')">${escHtml(c.nombre)}</span>
       ${badge}
       <span onclick="event.stopPropagation()">${monedaSel}</span>
+      <span onclick="event.stopPropagation()" title="Tipo de cuenta (banco o tarjeta de crédito)">${tipoSel}</span>
       ${saldoDisplay}
     </div>
     <div class="cuenta-body" id="cuenta-body-${c.fuente}" style="display:${expanded ? 'block' : 'none'}">
@@ -4564,6 +4572,15 @@ async function saveCuentaMoneda(fuente, moneda) {
     body: JSON.stringify({moneda}),
   });
   loadCuentas(); loadSaldos();
+}
+
+async function saveCuentaTipo(fuente, cuenta_tipo) {
+  await fetch(`${BASE}/api/cuentas/${fuente}`, {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({cuenta_tipo}),
+  });
+  loadCuentas();
+  showToast(`Tipo actualizado: ${cuenta_tipo === "credit_card" ? "💳 Tarjeta" : "🏦 Banco"}`, "ok");
 }
 
 async function toggleCuentaActiva(fuente, activa) {

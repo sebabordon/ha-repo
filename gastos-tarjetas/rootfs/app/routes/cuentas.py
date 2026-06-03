@@ -86,6 +86,7 @@ def put_cuenta(fuente: str, body: dict, request: Request):
         moneda=moneda,
         activa=int(body.get("activa", current["activa"])),
         auto_saldo=int(body.get("auto_saldo", current["auto_saldo"])),
+        cuenta_tipo=str(body.get("cuenta_tipo", current.get("cuenta_tipo", "bank"))),
     )
     return {"ok": True}
 

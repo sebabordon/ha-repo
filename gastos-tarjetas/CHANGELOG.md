@@ -1,3 +1,7 @@
+## 0.5.114
+
+- **UI: selector de tipo de cuenta en Config → Cuentas** (`app.js`, `db.py`, `routes/cuentas.py`): cada cuenta muestra un selector 🏦 Banco / 💳 Tarjeta en el header de la card. Persiste vía `PUT /api/cuentas/{fuente}` con campo `cuenta_tipo`. `update_cuenta` en db.py acepta el nuevo parámetro. Los valores por defecto (banco para bbva_cuenta/mp/iol, tarjeta para amex/bbva_mc/bbva_visa/galicia_mc) se setean automáticamente al crear la columna.
+
 ## 0.5.113
 
 - **Workspace transferencias: matching de pagos de tarjeta** (`db.py`, `routes/gastos.py`, `index.html`, `app.js`, `style.css`): nueva columna `cuentas.cuenta_tipo` ('bank' / 'credit_card') que generaliza la clasificación de cuentas. `detect_transfers` ahora matchea solo `bank→bank` via JOIN con `cuentas`. Nueva función `detect_card_payments` (ventana ±1 día) matchea `bank→credit_card`. Nueva categoría especial "Pago Tarjeta" (excluida de totales). Workspace muestra nueva zona "Pagos de tarjeta detectados" (visual azul) con Parear/Ignorar por fila y "Agregar todas a cola". La cola de confirmación incluye ambos tipos; al confirmar llama a `mark-transfers` para transferencias y `mark-card-payments` para pagos (categoría diferente).
