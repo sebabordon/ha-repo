@@ -1011,7 +1011,8 @@ def get_existing_transfer_pairs(days_window: int = 60) -> dict:
                    a.fecha AS fecha_out, a.descripcion AS desc_out,
                    a.monto AS monto_out, a.fuente AS fuente_out,
                    b.fecha AS fecha_in,  b.descripcion AS desc_in,
-                   b.monto AS monto_in,  b.fuente AS fuente_in
+                   b.monto AS monto_in,  b.fuente AS fuente_in,
+                   COALESCE(a.categoria, b.categoria) AS categoria
             FROM transfer_pairs tp
             JOIN gastos a ON a.id = tp.id_out
             JOIN gastos b ON b.id = tp.id_in
@@ -1023,33 +1024,27 @@ def get_existing_transfer_pairs(days_window: int = 60) -> dict:
         ph = ",".join("?" * len(paired_ids)) if paired_ids else "NULL"
         legacy_rows = conn.execute(
             f"SELECT id, fecha, descripcion, monto, fuente, moneda "
-            f"FROM gastos WHERE categoria IN ('Transferencia Intercuentas','Transferencia') "
+            f"FROM gastos WHERE categoria IN ('Transferencia Intercuentas','Transferencia','Pago Tarjeta') "
             f"AND moneda='ARS'"
             + (f" AND id NOT IN ({ph})" if paired_ids else "") +
             " ORDER BY fecha DESC",
             list(paired_ids),
         ).fetchall()
 
-    pairs  = [{"out": dict(r), "in": dict(r)} for r in explicit_rows]  # placeholder, fixed below
-    pairs  = [{"out": {k: r[f"{k}_out"] if f"{k}_out" in r.keys() else r[k]
-                        for k in ("id_out","fecha_out","desc_out","monto_out","fuente_out")},
-               "in":  {k: r[f"{k}_in"]  if f"{k}_in"  in r.keys() else r[k]
-                        for k in ("id_in","fecha_in","desc_in","monto_in","fuente_in")}}
-              for r in explicit_rows]
-    # Clean up key names
-    pairs = [{"out": {"id": p["out"]["id_out"], "fecha": p["out"]["fecha_out"],
-                      "descripcion": p["out"]["desc_out"], "monto": p["out"]["monto_out"],
-                      "fuente": p["out"]["fuente_out"]},
-              "in":  {"id": p["in"]["id_in"],  "fecha": p["in"]["fecha_in"],
-                      "descripcion": p["in"]["desc_in"],  "monto": p["in"]["monto_in"],
-                      "fuente": p["in"]["fuente_in"]}}
-             for p in pairs]
+    pairs = [{"out": {"id": r["id_out"], "fecha": r["fecha_out"],
+                      "descripcion": r["desc_out"], "monto": r["monto_out"],
+                      "fuente": r["fuente_out"]},
+              "in":  {"id": r["id_in"],  "fecha": r["fecha_in"],
+                      "descripcion": r["desc_in"],  "monto": r["monto_in"],
+                      "fuente": r["fuente_in"]},
+              "categoria": r["categoria"]}
+             for r in explicit_rows]
 
-    # Legacy fallback: reconstruct unpaired marked transactions by amount+date
+    # Legacy fallback: reconstruct unpaired marked transactions by amount+date.
+    # Don't filter by fuente type — "Pago Tarjeta" pairs have CC on the ingreso side.
     legacy = [dict(r) for r in legacy_rows]
-    cc = _CC_FUENTES
-    out_rows = [r for r in legacy if float(r["monto"]) > 0 and r["fuente"] not in cc]
-    in_rows  = [r for r in legacy if float(r["monto"]) < 0 and r["fuente"] not in cc]
+    out_rows = [r for r in legacy if float(r["monto"]) > 0]
+    in_rows  = [r for r in legacy if float(r["monto"]) < 0]
     used_out: set = set()
     used_in:  set = set()
     for o in out_rows:

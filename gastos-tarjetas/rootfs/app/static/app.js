@@ -2278,10 +2278,15 @@ function renderTwExisting() {
   if (!count) { list.innerHTML = `<p class="tw-empty">Sin transferencias marcadas aún</p>`; return; }
   list.innerHTML = "";
   for (const pair of pairs) {
+    const isCardPayment = pair.categoria === "Pago Tarjeta";
     const row = document.createElement("div");
-    row.className = "tw-pair-row tw-existing-row";
+    row.className = "tw-pair-row tw-existing-row" + (isCardPayment ? " tw-card-row" : "");
     const amtOut = _fmtNum2(Math.abs(parseFloat(pair.out.monto)));
     const amtIn  = _fmtNum2(Math.abs(parseFloat(pair.in.monto)));
+    const arrow  = isCardPayment ? "→" : "⇄";
+    const catBadge = isCardPayment
+      ? `<span class="tw-single-badge" style="color:#0369a1;background:#e0f2fe">💳 pago</span>`
+      : "";
     row.innerHTML =
       `<div class="tw-pair-side">` +
         `<span class="tw-item-date">${pair.out.fecha}</span>` +
@@ -2289,13 +2294,13 @@ function renderTwExisting() {
         `<span class="tw-item-desc">${escHtml((pair.out.descripcion||"").slice(0,28))}</span>` +
         `<span class="tw-item-amount tw-amt-egreso">−${amtOut}</span>` +
       `</div>` +
-      `<span class="tw-pair-arrow">⇄</span>` +
+      `<span class="tw-pair-arrow">${arrow}</span>` +
       `<div class="tw-pair-side">` +
         `<span class="tw-item-date">${pair.in.fecha}</span>` +
         `<span class="badge badge-${pair.in.fuente}">${_twFuenteLabel(pair.in.fuente)}</span>` +
         `<span class="tw-item-desc">${escHtml((pair.in.descripcion||"").slice(0,28))}</span>` +
         `<span class="tw-item-amount tw-amt-ingreso">+${amtIn}</span>` +
-      `</div>`;
+      `</div>` + catBadge;
     const btn = document.createElement("button");
     btn.className = "btn btn-sm tw-unmark-btn";
     btn.textContent = "Deshacer";

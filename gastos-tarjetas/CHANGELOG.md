@@ -1,3 +1,7 @@
+## 0.5.115
+
+- **Fix "Ya emparejados" incluye pagos de tarjeta** (`db.py`, `app.js`): la sección inferior del workspace ahora muestra los pares de categoría "Pago Tarjeta" además de "Transferencia Intercuentas". La reconstrucción legacy ya no excluye fuentes CC del lado ingreso (necesario para pares banco→tarjeta). Los pares explícitos (en `transfer_pairs`) devuelven la `categoria` para distinguirlos visualmente: los pagos de tarjeta muestran badge 💳 y flecha → en lugar de ⇄.
+
 ## 0.5.114
 
 - **UI: selector de tipo de cuenta en Config → Cuentas** (`app.js`, `db.py`, `routes/cuentas.py`): cada cuenta muestra un selector 🏦 Banco / 💳 Tarjeta en el header de la card. Persiste vía `PUT /api/cuentas/{fuente}` con campo `cuenta_tipo`. `update_cuenta` en db.py acepta el nuevo parámetro. Los valores por defecto (banco para bbva_cuenta/mp/iol, tarjeta para amex/bbva_mc/bbva_visa/galicia_mc) se setean automáticamente al crear la columna.
