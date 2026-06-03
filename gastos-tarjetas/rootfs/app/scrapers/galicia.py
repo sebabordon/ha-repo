@@ -107,13 +107,14 @@ class GaliciaScraper(BaseScraper):
                 "source": """
                     window.__galiciaBff = {};
                     (function() {
-                        var _orig = window.fetch;
+                        // ── Proxy fetch ────────────────────────────────────────
+                        var _origFetch = window.fetch;
                         window.fetch = function() {
                             var args = arguments;
                             var url  = args[0];
                             var urlStr = (typeof url === 'string') ? url
                                          : (url && url.url) ? url.url : String(url);
-                            var p = _orig.apply(window, args);
+                            var p = _origFetch.apply(window, args);
                             if (urlStr.indexOf('.bff.bancogalicia') >= 0) {
                                 p.then(function(r) {
                                     r.clone().text().then(function(t) {
@@ -122,6 +123,26 @@ class GaliciaScraper(BaseScraper):
                                 }).catch(function(){});
                             }
                             return p;
+                        };
+
+                        // ── Proxy XMLHttpRequest (axios/jQuery usan XHR) ───────
+                        var _origOpen = XMLHttpRequest.prototype.open;
+                        var _origSend = XMLHttpRequest.prototype.send;
+                        XMLHttpRequest.prototype.open = function(method, url) {
+                            this._galiciaUrl = String(url || '');
+                            return _origOpen.apply(this, arguments);
+                        };
+                        XMLHttpRequest.prototype.send = function() {
+                            var xhr = this;
+                            if (xhr._galiciaUrl &&
+                                xhr._galiciaUrl.indexOf('.bff.bancogalicia') >= 0) {
+                                xhr.addEventListener('load', function() {
+                                    if (xhr.readyState === 4) {
+                                        window.__galiciaBff[xhr._galiciaUrl] = xhr.responseText;
+                                    }
+                                });
+                            }
+                            return _origSend.apply(this, arguments);
                         };
                     })();
                 """
@@ -418,23 +439,22 @@ class GaliciaScraper(BaseScraper):
 
     def check_session(self, driver) -> bool:
         """
-        Verifica la sesión navegando a /tarjetas/ini y esperando que la SPA
-        haga su propia llamada al BFF overview (capturada por el interceptor).
+        Verifica la sesión: navega a /tarjetas/ini via SSO desde el dashboard
+        y espera que la SPA llame al BFF overview.
         """
         try:
-            self._reset_bff_capture(driver)
-            driver.get(_TARJETAS_URL)
-            time.sleep(3)
-
+            # Navegar via SSO para que la SPA tenga contexto de autenticación
             cur = driver.current_url or ""
-            # Si redirige al login → sesión expirada
-            if "login" in cur.lower() and "tarjetas" not in cur.lower():
-                logger.info("[galicia] check_session: redirigido a login (%s)", cur[:80])
-                return False
+            if "onlinebanking.bancogalicia.com.ar" not in cur:
+                driver.get(_INICIO_URL)
+                time.sleep(3)
 
-            captured = self._wait_for_bff_capture(driver, ["overview/cards"], timeout_secs=10)
-            ok = "overview/cards" in captured and captured["overview/cards"] is not None
-            logger.info("[galicia] check_session: BFF overview capturado=%s", ok)
+            self._reset_bff_capture(driver)
+            self._navigate_to_tarjetas(driver)
+
+            captured = self._wait_for_bff_capture(driver, ["overview/cards"], timeout_secs=15)
+            ok = bool(captured.get("overview/cards"))
+            logger.info("[galicia] check_session: overview capturado=%s", ok)
             return ok
         except Exception as exc:
             logger.debug("[galicia] check_session error: %s", exc)
@@ -698,41 +718,58 @@ class GaliciaScraper(BaseScraper):
             logger.info("[galicia] %s", msg)
             log.append(msg)
 
-        # Navegar a /tarjetas/ini y dejar que la SPA haga sus propias llamadas BFF.
-        # El interceptor inyectado en _create_driver() captura las respuestas
-        # en window.__galiciaBff antes de que nosotros las leamos.
         cur = driver.current_url or ""
         _log(f"URL al iniciar scrape: {cur[:120]}")
 
-        # Limpiar capturas anteriores y recargar la página para obtener datos frescos
-        self._reset_bff_capture(driver)
+        # ── Estrategia de captura BFF ─────────────────────────────────────────
+        # La SPA llama al BFF durante la navegación SSO en do_login().
+        # El interceptor ya capturó esas respuestas en window.__galiciaBff.
+        # Solo recargamos si todavía no hay datos (p.ej. check_session vacía el buffer).
 
-        if "/tarjetas/ini" not in cur:
-            _log("Navegando a /tarjetas/ini…")
-            driver.get(_TARJETAS_URL)
-        else:
-            _log("Ya en /tarjetas/ini — recargando para activar interceptor")
-            driver.refresh()
-
-        # Esperar que la SPA llame al BFF overview (obligatorio) y movements (opcional)
-        _log("Esperando que la SPA llame al BFF overview/cards…")
+        # Paso 1: intentar leer lo que ya existe (máx. 5s extra por si sigue cargando)
+        _log("Verificando si BFF ya fue capturado por la SPA…")
         captured = self._wait_for_bff_capture(
-            driver,
-            ["overview/cards", "movements-tc"],
-            timeout_secs=20,
+            driver, ["overview/cards"], timeout_secs=5,
         )
+
+        if not captured.get("overview/cards"):
+            # Paso 2: no hay datos — navegar/recargar y esperar la SPA
+            _log("Sin datos previos — navegando a /tarjetas/ini para activar SPA")
+            self._reset_bff_capture(driver)
+            if "/tarjetas/ini" not in cur:
+                driver.get(_TARJETAS_URL)
+            else:
+                # Volvemos al dashboard y re-hacemos la navegación por SSO para que
+                # la SPA cargue con contexto de autenticación completo
+                _log("Intentando re-navegar via dashboard → Tarjetas")
+                driver.get(_INICIO_URL)
+                time.sleep(3)
+                try:
+                    self._navigate_to_tarjetas(driver)
+                except Exception as nav_exc:
+                    _log(f"Re-navegación fallida ({nav_exc}) — recargando directamente")
+                    driver.get(_TARJETAS_URL)
+
+            _log("Esperando que la SPA llame al BFF (hasta 25s)…")
+            captured = self._wait_for_bff_capture(
+                driver, ["overview/cards", "movements-tc"], timeout_secs=25,
+            )
 
         ov_json = captured.get("overview/cards")
         mv_json = captured.get("movements-tc")
-
-        _log(f"BFF capturado: overview={'sí' if ov_json else 'no'}, movements={'sí' if mv_json else 'no'}")
+        _log(f"BFF capturado: overview={'sí' if ov_json else 'NO'}, movements={'sí' if mv_json else 'no'}")
 
         if not ov_json:
             cur2 = driver.current_url or ""
+            # Log de claves presentes para diagnóstico
+            raw = driver.execute_script(
+                "return window.__galiciaBff ? JSON.stringify(Object.keys(window.__galiciaBff)) : '[]'"
+            )
+            _log(f"Claves en __galiciaBff: {raw}")
             raise RuntimeError(
-                f"[galicia] BFF overview no capturado tras 20s. "
-                f"URL actual: {cur2[:150]}. "
-                f"Claves capturadas: {list(captured.keys())}"
+                f"[galicia] BFF overview no capturado. URL: {cur2[:150]}. "
+                f"Claves: {raw}. "
+                f"Posible causa: la SPA no hizo llamadas fetch/XHR al BFF en esta sesión."
             )
 
         ov_data = (ov_json or {}).get("data", [])
