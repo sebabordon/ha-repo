@@ -1,6 +1,6 @@
-## 0.5.111
+## 0.5.112
 
-- **amex scraper: excluye pagos al resumen y devoluciones RG 5617** (`scrapers/amex.py`): el scraper Selenium importaba `ACREDITACION DE VUESTRO PAGO` (pago al resumen) y `DEV PERCEPCION RG 5617` (devolución de percepción) como gastos normales, aunque el parser de PDF los excluye explícitamente (`"Gracias por su pago"` y el filtro `include_rg5617_credits`). Ahora `_parse_row` skipea filas cuya descripción empiece con `ACREDITACION` o contenga `5617`, manteniendo la misma lógica que la importación por PDF.
+- **amex scraper: revierte filtro de ACREDITACION/5617** (`scrapers/amex.py`): se revierte el filtro introducido en v0.5.111. El usuario usa esas entradas (pagos al resumen y devoluciones RG 5617) para conciliar con los movimientos de sus cuentas bancarias; deben quedar en gastos.
 
 ## 0.5.110
 
