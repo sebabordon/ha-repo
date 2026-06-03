@@ -1137,7 +1137,9 @@ function renderCatChips(cats) {
   sinChip.textContent = "Sin categoría";
   sinChip.onclick = () => toggleSinCat();
   container.appendChild(sinChip);
-  cats.forEach(cat => {
+  // Solo mostrar categorías raíz en el chip row; los hijos aparecen en sub-chips
+  const _allChildren = new Set(Object.values(_catHierarchy).flat());
+  cats.filter(cat => !_allChildren.has(cat)).forEach(cat => {
     const chip = document.createElement("span");
     chip.className = `cat-chip${_selectedCats.has(cat)?" active":""}`;
     chip.textContent = cat;

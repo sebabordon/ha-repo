@@ -1,3 +1,7 @@
+## 0.5.94
+
+- **Fix: chips de Gastos muestran solo categorías raíz** (`app.js`): re-aplicado el filtro que excluye categorías hijas del chip row principal. Los hijos siguen apareciendo en el sub-chip row cuando se selecciona su padre.
+
 ## 0.5.93
 
 - **Fix: Galicia cuotas — formato `NN/NN` igual al parser PDF** (`scrapers/galicia.py`): el scraper formateaba `2/6` pero el parser PDF produce `02/06`. Ahora usa zero-padding de 2 dígitos (3 para planes > 99), igualando el formato del PDF para que la conciliación scraper↔PDF no genere duplicados.
