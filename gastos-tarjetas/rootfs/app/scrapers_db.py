@@ -387,9 +387,10 @@ def insert_movimientos_raw(
 
                     if _total == 1:   # monto único en la ventana → match seguro
                         if desc not in _GENERIC_DESCS:
-                            # Descripción específica: actualizar la genérica existente
+                            # Descripción específica (TRF INM COE): actualizar la genérica
+                            # existente.  Regla: descripción del específico + fecha más reciente.
                             _cand = conn.execute(
-                                """SELECT id FROM movimientos_raw
+                                """SELECT id, fecha FROM movimientos_raw
                                    WHERE fuente = ? AND moneda = ?
                                      AND CAST(monto AS REAL) = CAST(? AS REAL)
                                      AND fecha BETWEEN ? AND ?
@@ -398,15 +399,17 @@ def insert_movimientos_raw(
                                 (fuente, moneda, monto, _d_from, _d_to, *_GENERIC_DESCS),
                             ).fetchone()
                             if _cand:
+                                _best_fecha = max(fecha, _cand["fecha"])
                                 conn.execute(
                                     "UPDATE movimientos_raw SET descripcion = ?, fecha = ? WHERE id = ?",
-                                    (desc, fecha, _cand["id"]),
+                                    (desc, _best_fecha, _cand["id"]),
                                 )
                                 existing = _cand
                         else:
-                            # Descripción genérica: skip si ya hay una específica
+                            # Descripción genérica: skip si ya hay una específica.
+                            # Si la fecha nueva es más reciente, actualizarla también.
                             _cand = conn.execute(
-                                """SELECT id FROM movimientos_raw
+                                """SELECT id, fecha FROM movimientos_raw
                                    WHERE fuente = ? AND moneda = ?
                                      AND CAST(monto AS REAL) = CAST(? AS REAL)
                                      AND fecha BETWEEN ? AND ?
@@ -415,6 +418,11 @@ def insert_movimientos_raw(
                                 (fuente, moneda, monto, _d_from, _d_to, *_GENERIC_DESCS),
                             ).fetchone()
                             if _cand:
+                                if fecha > _cand["fecha"]:
+                                    conn.execute(
+                                        "UPDATE movimientos_raw SET fecha = ? WHERE id = ?",
+                                        (fecha, _cand["id"]),
+                                    )
                                 existing = _cand
                 except Exception:
                     pass   # si falla el cálculo de fechas, dejar pasar (INSERT normal)

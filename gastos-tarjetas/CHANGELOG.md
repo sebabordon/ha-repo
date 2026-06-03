@@ -1,3 +1,7 @@
+## 0.5.100
+
+- **Fix regla de merge descripción/fecha: descripción del TRF INM COE, fecha más reciente** (`scrapers_db.py`): corrección de la lógica cross-date. En el match cross-date (±1 día, monto único): (1) cuando llega un "CR/DB TRF INM COE" y existe un genérico → UPDATE con la descripción específica + `MAX(fecha_nueva, fecha_existente)`; (2) cuando llega un genérico y existe el específico → solo UPDATE `fecha` si la nueva es más reciente, la descripción del específico se preserva intacta.
+
 ## 0.5.99
 
 - **Al actualizar descripción genérica → específica, también actualiza la fecha** (`scrapers_db.py`): cuando un movimiento existente con descripción genérica ("Transferencia inmediata") se reemplaza por uno específico ("CR TRF INM COE Nro:..."), ahora se actualiza tanto `descripcion` como `fecha` con los valores del registro específico — que corresponde a la fecha de liquidación de BBVA, más confiable que la fecha de operación original.
