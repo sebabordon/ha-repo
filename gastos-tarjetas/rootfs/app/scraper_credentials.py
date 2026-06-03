@@ -117,10 +117,13 @@ BANKS: dict[str, dict] = {
         "nombre":   "Banco Galicia",
         "schedule": "07:30",
         "campos": [
-            {"key": "usuario",  "label": "Usuario",     "type": "text",     "required": True},
-            {"key": "password", "label": "Contraseña",  "type": "password", "required": True},
+            {"key": "usuario",     "label": "Número de DNI",       "type": "text",     "required": True,
+             "hint": "Solo el número, sin puntos (ej. 12345678)"},
+            {"key": "tercer_dato", "label": "Usuario homebanking",  "type": "text",     "required": True,
+             "hint": "El alias/usuario que configuraste en Galicia Online Banking (no el DNI)"},
+            {"key": "password",    "label": "Contraseña",           "type": "password", "required": True},
         ],
-        "totp": True,   # requiere flujo TOTP interactivo para la primera sesión
+        "totp": True,   # puede pedir código de verificación en el primer login
     },
     "invertironline": {
         "nombre":   "InvertirOnline",

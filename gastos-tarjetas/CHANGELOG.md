@@ -1,3 +1,8 @@
+## 0.5.82
+
+- **Feature: Scraper Banco Galicia — implementación completa** (`scrapers/galicia.py`): reescritura desde cero sobre la base del stub anterior. Login vía Selenium en `onlinebanking.bancogalicia.com.ar/login` (formulario con DNI + alias + teclado virtual simple-keyboard); navega automáticamente a `tarjetas.bancogalicia.com.ar` vía SSO. Consumos y cuotas obtenidos con `fetch()` directo a los BFF endpoints (`bff-cards-overview-pota-cards`, `bff-cards-movements-tc-pota-cards`). Detecta cierre de período (`settlement_closing_dates.current`) y hace reset de `movimientos_raw` cuando comienza un nuevo resumen, mostrando solo el período vigente.
+- **Config: campo DNI para Galicia** (`scraper_credentials.py`): se agrega `tercer_dato` (alias homebanking) y se renombra `usuario` a "Número de DNI" para alinear la UI con el formulario real de Galicia Online Banking.
+
 ## 0.5.81
 
 - **Fix: budget chart chips — categorías hoja se muestran a sí mismas** (`app.js`): si `_budgetSelectedCat` no tiene hijos, el chart filtra a esa única categoría en lugar de mostrar todas. Antes caía al fallback y mostraba todo.
