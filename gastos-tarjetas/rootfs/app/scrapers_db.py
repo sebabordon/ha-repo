@@ -362,10 +362,10 @@ def insert_movimientos_raw(
                     (fuente, fecha, moneda, monto),
                 ).fetchone()
 
-            # Cross-date match con unicidad de monto (ventana ±3 días):
+            # Cross-date match con unicidad de monto (ventana ±1 día):
             # BBVA a veces cambia la fecha contable de un movimiento entre runs,
             # rompiendo el match exacto por fecha.  Si el monto aparece exactamente
-            # una vez en ±3 días (es único → no hay ambigüedad), aplicamos la misma
+            # una vez en ±1 día (es único → no hay ambigüedad), aplicamos la misma
             # lógica de actualización/skip que el match mismo-día.
             # Si hay 2+ registros con el mismo monto en la ventana NO actuamos
             # para evitar fusionar movimientos distintos que coinciden en importe.
@@ -373,8 +373,8 @@ def insert_movimientos_raw(
                 try:
                     from datetime import date as _date, timedelta as _td
                     _fd     = _date.fromisoformat(fecha)
-                    _d_from = (_fd - _td(days=3)).isoformat()
-                    _d_to   = (_fd + _td(days=3)).isoformat()
+                    _d_from = (_fd - _td(days=1)).isoformat()
+                    _d_to   = (_fd + _td(days=1)).isoformat()
                     _ph     = ",".join("?" * len(_GENERIC_DESCS))
 
                     _total = conn.execute(

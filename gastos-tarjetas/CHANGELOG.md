@@ -1,3 +1,7 @@
+## 0.5.98
+
+- **Cross-date match: ventana reducida de ±3 días a ±1 día** (`scrapers_db.py`): ventana más conservadora para el match cross-date con unicidad de monto.
+
 ## 0.5.97
 
 - **Cross-date match con unicidad de monto (ventana ±3 días)** (`scrapers_db.py`): cuando BBVA cambia la fecha contable de un movimiento entre runs, el match por fecha exacta falla. Se agrega una segunda pasada: si el monto aparece exactamente una vez en ±3 días (único → sin ambigüedad), se aplica la misma lógica de actualización/skip que el match mismo-día. Si hay 2+ registros con el mismo monto en la ventana no se actúa, evitando fusionar movimientos distintos que coinciden en importe.
