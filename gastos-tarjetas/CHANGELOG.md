@@ -1,3 +1,7 @@
+## 0.5.102
+
+- **Fix: Galicia cuotas — usar `submission_date` como fecha** (`scrapers/galicia.py`): para cuotas (`installment_plan > 0`), la fecha pasa a ser `submission_date` (cuando la cuota fue acreditada al período actual, ej. `2026-06-01`) en lugar de `transaction_date` (fecha original de la compra). Esto coincide con la fecha que aparece en el PDF de Galicia y mejora la conciliación scraper↔PDF en caso de subir el resumen de un período abierto.
+
 ## 0.5.101
 
 - **Cross-date: cubre también movimientos con descripción específica y fecha cambiada (DEBIN, etc.)** (`scrapers_db.py`): se agrega el "Caso B" en el bloque cross-date ±1 día: cuando la descripción nueva es específica (no genérica) y ya existe un registro con la misma descripción pero fecha distinta dentro de la ventana y monto único, se actualiza solo la `fecha` al valor más reciente. Cubre el escenario "DEBITO DEBIN Nro:XXXXX" u otros movimientos donde BBVA mueve la fecha contable sin cambiar el concepto.

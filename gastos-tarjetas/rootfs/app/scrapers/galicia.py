@@ -981,13 +981,20 @@ class GaliciaScraper(BaseScraper):
         Para cuotas: final_amount es el valor de ESTA cuota (no el total original).
         Descripción: "MERCHANT_NAME 2/6" para cuotas, "MERCHANT_NAME" para pago único.
         """
-        fecha = c.get("transaction_date") or c.get("submission_date") or ""
+        plan   = int(c.get("installment_plan")   or 0)
+        numero = int(c.get("installment_number") or 0)
+
+        # Fecha: para cuotas usamos submission_date (cuándo se acreditó al período
+        # actual, ej. 2026-06-01). Es la fecha que aparece en el PDF.
+        # Para compras en 1 pago usamos transaction_date (fecha real de la compra).
+        if plan > 0 and numero > 0:
+            fecha = c.get("submission_date") or c.get("transaction_date") or ""
+        else:
+            fecha = c.get("transaction_date") or c.get("submission_date") or ""
         if not fecha:
             return None
 
         merchant = (c.get("merchant_name") or "").strip()
-        plan     = int(c.get("installment_plan")   or 0)
-        numero   = int(c.get("installment_number") or 0)
         amount   = float(c.get("final_amount") or c.get("transaction_amount") or 0)
         moneda   = (c.get("final_currency") or c.get("transaction_currency") or "ARS").upper()
         mv_type  = (c.get("movement_type") or "credit").lower()
