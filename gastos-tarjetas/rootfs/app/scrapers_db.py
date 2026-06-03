@@ -344,8 +344,8 @@ def insert_movimientos_raw(
                 ).fetchone()
                 if generic_candidate:
                     conn.execute(
-                        "UPDATE movimientos_raw SET descripcion = ? WHERE id = ?",
-                        (desc, generic_candidate["id"]),
+                        "UPDATE movimientos_raw SET descripcion = ?, fecha = ? WHERE id = ?",
+                        (desc, fecha, generic_candidate["id"]),
                     )
                     existing = generic_candidate   # no insertar fila nueva
 
@@ -399,8 +399,8 @@ def insert_movimientos_raw(
                             ).fetchone()
                             if _cand:
                                 conn.execute(
-                                    "UPDATE movimientos_raw SET descripcion = ? WHERE id = ?",
-                                    (desc, _cand["id"]),
+                                    "UPDATE movimientos_raw SET descripcion = ?, fecha = ? WHERE id = ?",
+                                    (desc, fecha, _cand["id"]),
                                 )
                                 existing = _cand
                         else:

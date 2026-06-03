@@ -1,3 +1,7 @@
+## 0.5.99
+
+- **Al actualizar descripción genérica → específica, también actualiza la fecha** (`scrapers_db.py`): cuando un movimiento existente con descripción genérica ("Transferencia inmediata") se reemplaza por uno específico ("CR TRF INM COE Nro:..."), ahora se actualiza tanto `descripcion` como `fecha` con los valores del registro específico — que corresponde a la fecha de liquidación de BBVA, más confiable que la fecha de operación original.
+
 ## 0.5.98
 
 - **Cross-date match: ventana reducida de ±3 días a ±1 día** (`scrapers_db.py`): ventana más conservadora para el match cross-date con unicidad de monto.
