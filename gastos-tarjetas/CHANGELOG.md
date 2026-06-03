@@ -1,3 +1,7 @@
+## 0.5.89
+
+- **Fix: `driver` no definido en `_scrape_card`** (`scrapers/galicia.py`): al refactorizar el método se sacó `driver` de la firma pero se seguía usando en el fallback `_bff_request`. Corregido: `driver` vuelve a ser el primer parámetro y se pasa correctamente desde `scrape()`.
+
 ## 0.5.88
 
 - **Fix: Galicia movements — fallback a BFF directo** (`scrapers/galicia.py`): la SPA solo llama `movements-tc` ante interacción del usuario, no en el page load. Si el interceptor no lo capturó, ahora se llama directamente al BFF con `_bff_request()` usando los datos de la tarjeta del overview (account_number, last_digits, fechas de período). La sesión está activa en ese punto (overview funcionó), por lo que el fetch directo debería tener el contexto correcto.

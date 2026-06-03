@@ -784,7 +784,7 @@ class GaliciaScraper(BaseScraper):
         for grupo in ov_data:
             credit_cards = grupo.get("credit_cards") or []
             for card in credit_cards:
-                movs, saldo = self._scrape_card(card, mv_json, fuente_target, _log)
+                movs, saldo = self._scrape_card(driver, card, mv_json, fuente_target, _log)
                 movimientos.extend(movs)
                 if saldo is not None:
                     saldos.setdefault(fuente_target, {})["saldo_ars"] = saldo
@@ -799,6 +799,7 @@ class GaliciaScraper(BaseScraper):
 
     def _scrape_card(
         self,
+        driver,
         card: dict,
         mv_json: dict | None,
         fuente_target: str,
