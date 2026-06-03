@@ -1078,31 +1078,6 @@ class BbvaScraper(BaseScraper):
             canal    = (mov.get("canal")    or "").strip()
             desc     = concepto or canal or "Movimiento BBVA"
 
-            # Movimientos "TRF INM COE" — diferimiento hasta consolidación.
-            # BBVA liquida estas transferencias en hasta 2 días hábiles: durante
-            # ese período puede cambiar tanto la fecha contable como la descripción
-            # (p.ej. "DB TRF INM COE Nro:XXXXX" → descripción e incluso fecha
-            # distintas al día siguiente).  Importarlos antes de que se consoliden
-            # genera registros que luego BBVA actualiza con otra fecha, rompiendo
-            # el dedup y generando duplicados.
-            # Solución: diferir su importación hasta que tengan al menos 2 días
-            # de antigüedad.  Con dias >= 3 en la configuración el scraper siempre
-            # los alcanza ya consolidados.
-            if desc.startswith("CR TRF INM COE") or desc.startswith("DB TRF INM COE"):
-                try:
-                    from datetime import date as _date
-                    fecha_date = _date.fromisoformat(fecha)
-                    hoy        = datetime.now(_ART).date()
-                    if (hoy - fecha_date).days < 2:
-                        if log_fn:
-                            log_fn(
-                                f"    [defer] {fecha} '{desc}' — pendiente de "
-                                f"consolidación BBVA (< 2 días), se importará en próximo run"
-                            )
-                        continue
-                except Exception:
-                    pass   # si falla el cálculo, importar igual
-
             # Solo deduplicar cuando el saldo es un valor real no-cero.
             # Cuando BBVA devuelve saldo=0,00 para todos los movimientos (que es
             # lo que hace en esta cuenta), la clave (fecha, abs_importe, 0.0) colisiona

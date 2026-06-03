@@ -324,12 +324,34 @@ def insert_movimientos_raw(
                     (fuente, fecha, moneda, monto, desc),
                 ).fetchone()
 
+            # Cross-run: descripción específica que reemplaza una genérica existente.
+            # BBVA a veces importa primero con "Transferencia inmediata" y luego
+            # actualiza a "CR TRF INM COE Nro:XXXXX" (o viceversa).  Cuando la
+            # descripción nueva es específica (no está en _GENERIC_DESCS) y existe
+            # un registro con la misma (fuente, fecha, moneda, monto) pero con
+            # descripción genérica, actualizamos la descripción en lugar de insertar
+            # un duplicado.
+            if not existing and not scraper_uid and desc not in _GENERIC_DESCS:
+                generic_candidate = conn.execute(
+                    """SELECT id FROM movimientos_raw
+                       WHERE fuente = ? AND fecha = ? AND moneda = ?
+                         AND CAST(monto AS REAL) = CAST(? AS REAL)
+                         AND descripcion IN ({placeholders})
+                       LIMIT 1""".format(
+                        placeholders=",".join("?" * len(_GENERIC_DESCS))
+                    ),
+                    (fuente, fecha, moneda, monto, *_GENERIC_DESCS),
+                ).fetchone()
+                if generic_candidate:
+                    conn.execute(
+                        "UPDATE movimientos_raw SET descripcion = ? WHERE id = ?",
+                        (desc, generic_candidate["id"]),
+                    )
+                    existing = generic_candidate   # no insertar fila nueva
+
             # Cross-run dedup para descripciones genéricas/temporales:
-            # BBVA (y otros scrapers) a veces cambia el concepto entre runs —
-            # p.ej. "TRANSF CREDITO Nro:709675" en un run y "TRANSFERENCIA"
-            # en el siguiente para el mismo movimiento.  Si la descripción nueva
-            # es genérica y ya existe cualquier registro con mismo
-            # (fuente, fecha, moneda, monto), descartamos el genérico para no
+            # Si la descripción nueva es genérica y ya existe cualquier registro con
+            # mismo (fuente, fecha, moneda, monto), descartamos el genérico para no
             # crear duplicados junto al específico ya importado.
             if not existing and not scraper_uid and desc in _GENERIC_DESCS:
                 existing = conn.execute(

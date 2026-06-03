@@ -1,3 +1,7 @@
+## 0.5.96
+
+- **Revert diferimiento TRF INM COE + actualización de descripción genérica → específica** (`scrapers/bbva.py`, `scrapers_db.py`): se elimina el diferimiento de 0.5.95. En su lugar, `insert_movimientos_raw` actualiza la descripción del registro existente cuando la nueva descripción es específica ("CR TRF INM COE Nro:...") y la existente es genérica ("Transferencia inmediata", "TRANSFERENCIA", etc.) para el mismo `(fuente, fecha, moneda, monto)`. Así el registro conserva la descripción detallada de BBVA sin crear duplicados.
+
 ## 0.5.95
 
 - **BBVA: diferimiento de movimientos "TRF INM COE" hasta consolidación** (`scrapers/bbva.py`): los movimientos cuyo concepto empieza con `CR TRF INM COE` o `DB TRF INM COE` se omiten durante los primeros 2 días desde su fecha, ya que BBVA puede cambiar tanto la descripción como la fecha contable durante ese período. Con `dias >= 3` en la configuración del scraper, en la siguiente corrida ya estarán consolidados y se importarán con la descripción e fecha definitivas. En el log aparece `[defer] ... pendiente de consolidación BBVA`.
