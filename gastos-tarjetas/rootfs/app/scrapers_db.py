@@ -362,6 +362,63 @@ def insert_movimientos_raw(
                     (fuente, fecha, moneda, monto),
                 ).fetchone()
 
+            # Cross-date match con unicidad de monto (ventana ±3 días):
+            # BBVA a veces cambia la fecha contable de un movimiento entre runs,
+            # rompiendo el match exacto por fecha.  Si el monto aparece exactamente
+            # una vez en ±3 días (es único → no hay ambigüedad), aplicamos la misma
+            # lógica de actualización/skip que el match mismo-día.
+            # Si hay 2+ registros con el mismo monto en la ventana NO actuamos
+            # para evitar fusionar movimientos distintos que coinciden en importe.
+            if not existing and not scraper_uid:
+                try:
+                    from datetime import date as _date, timedelta as _td
+                    _fd     = _date.fromisoformat(fecha)
+                    _d_from = (_fd - _td(days=3)).isoformat()
+                    _d_to   = (_fd + _td(days=3)).isoformat()
+                    _ph     = ",".join("?" * len(_GENERIC_DESCS))
+
+                    _total = conn.execute(
+                        """SELECT COUNT(*) FROM movimientos_raw
+                           WHERE fuente = ? AND moneda = ?
+                             AND CAST(monto AS REAL) = CAST(? AS REAL)
+                             AND fecha BETWEEN ? AND ?""",
+                        (fuente, moneda, monto, _d_from, _d_to),
+                    ).fetchone()[0]
+
+                    if _total == 1:   # monto único en la ventana → match seguro
+                        if desc not in _GENERIC_DESCS:
+                            # Descripción específica: actualizar la genérica existente
+                            _cand = conn.execute(
+                                """SELECT id FROM movimientos_raw
+                                   WHERE fuente = ? AND moneda = ?
+                                     AND CAST(monto AS REAL) = CAST(? AS REAL)
+                                     AND fecha BETWEEN ? AND ?
+                                     AND descripcion IN ({ph})
+                                   LIMIT 1""".format(ph=_ph),
+                                (fuente, moneda, monto, _d_from, _d_to, *_GENERIC_DESCS),
+                            ).fetchone()
+                            if _cand:
+                                conn.execute(
+                                    "UPDATE movimientos_raw SET descripcion = ? WHERE id = ?",
+                                    (desc, _cand["id"]),
+                                )
+                                existing = _cand
+                        else:
+                            # Descripción genérica: skip si ya hay una específica
+                            _cand = conn.execute(
+                                """SELECT id FROM movimientos_raw
+                                   WHERE fuente = ? AND moneda = ?
+                                     AND CAST(monto AS REAL) = CAST(? AS REAL)
+                                     AND fecha BETWEEN ? AND ?
+                                     AND descripcion NOT IN ({ph})
+                                   LIMIT 1""".format(ph=_ph),
+                                (fuente, moneda, monto, _d_from, _d_to, *_GENERIC_DESCS),
+                            ).fetchone()
+                            if _cand:
+                                existing = _cand
+                except Exception:
+                    pass   # si falla el cálculo de fechas, dejar pasar (INSERT normal)
+
             if existing:
                 continue   # ya estaba — skipear
 

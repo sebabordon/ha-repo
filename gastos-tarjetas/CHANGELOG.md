@@ -1,3 +1,7 @@
+## 0.5.97
+
+- **Cross-date match con unicidad de monto (ventana ±3 días)** (`scrapers_db.py`): cuando BBVA cambia la fecha contable de un movimiento entre runs, el match por fecha exacta falla. Se agrega una segunda pasada: si el monto aparece exactamente una vez en ±3 días (único → sin ambigüedad), se aplica la misma lógica de actualización/skip que el match mismo-día. Si hay 2+ registros con el mismo monto en la ventana no se actúa, evitando fusionar movimientos distintos que coinciden en importe.
+
 ## 0.5.96
 
 - **Revert diferimiento TRF INM COE + actualización de descripción genérica → específica** (`scrapers/bbva.py`, `scrapers_db.py`): se elimina el diferimiento de 0.5.95. En su lugar, `insert_movimientos_raw` actualiza la descripción del registro existente cuando la nueva descripción es específica ("CR TRF INM COE Nro:...") y la existente es genérica ("Transferencia inmediata", "TRANSFERENCIA", etc.) para el mismo `(fuente, fecha, moneda, monto)`. Así el registro conserva la descripción detallada de BBVA sin crear duplicados.
