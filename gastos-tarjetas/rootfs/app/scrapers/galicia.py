@@ -995,9 +995,12 @@ class GaliciaScraper(BaseScraper):
         if not merchant:
             merchant = "Consumo Galicia"
 
-        # Descripción con número de cuota si aplica
+        # Descripción con número de cuota si aplica.
+        # Formato igual al parser PDF: NN/NN con zero-padding (ej. "01/06", "03/12")
+        # para que la conciliación scraper↔PDF funcione correctamente.
         if plan > 0 and numero > 0:
-            desc = f"{merchant} {numero}/{plan}"
+            digits = 3 if plan > 99 else 2
+            desc = f"{merchant} {numero:0{digits}d}/{plan:0{digits}d}"
         else:
             desc = merchant
 
