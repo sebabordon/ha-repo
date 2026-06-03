@@ -1834,13 +1834,20 @@ async function loadTransferWorkspace() {
   _twSelA = null;
   _twQueue = [];
   _twQueuedIds = new Set();
+  _twCardQueue = [];
+  _twCardQueuedIds = new Set();
   document.getElementById("tw-selection-bar").style.display = "none";
+  renderTwCardSuggestions();
   renderTwSuggestions();
   renderTwCandidates();
   renderTwQueue();
   renderTwExisting();
   renderTwIgnored();
 }
+
+// Card payment queue (separate from transfer queue — different category)
+let _twCardQueue  = [];
+let _twCardQueuedIds = new Set();
 
 function _twFuenteLabel(f) {
   return _FUENTE_LABEL[f] || f.replace(/_/g, " ");
@@ -1856,6 +1863,110 @@ function _twSugPairSide(g, amtSign, amtCls) {
     `</div>`;
 }
 
+// ── Card payment suggestions ───────────────────────────────────────────────────
+function renderTwCardSuggestions() {
+  const sugs = (_twData.card_suggestions || []);
+  const sec  = document.getElementById("tw-card-section");
+  const list = document.getElementById("tw-card-list");
+  document.getElementById("tw-card-count").textContent = sugs.length ? `(${sugs.length})` : "";
+  if (!sugs.length) { sec.style.display = "none"; return; }
+  sec.style.display = "";
+  const eMap = Object.fromEntries((_twData.egresos || []).map(e => [e.id, e]));
+  const iMap = Object.fromEntries((_twData.cc_ingresos || []).map(i => [i.id, i]));
+  list.innerHTML = "";
+  sugs.forEach(([outId, inId], idx) => {
+    const out = eMap[outId], inp = iMap[inId];
+    if (!out || !inp) return;
+    const row = document.createElement("div");
+    row.className = "tw-pair-row tw-sug-row tw-card-row";
+    row.innerHTML =
+      _twSugPairSide(out, "−", "tw-amt-egreso") +
+      `<span class="tw-pair-arrow">→</span>` +
+      _twSugPairSide(inp, "+", "tw-amt-ingreso");
+    const btnPar = document.createElement("button");
+    btnPar.className = "btn btn-sm tw-sug-btn-pair";
+    btnPar.textContent = "Parear";
+    btnPar.onclick = () => twPairCardSuggestion(idx);
+    const btnIgn = document.createElement("button");
+    btnIgn.className = "btn btn-sm tw-sug-btn-ign";
+    btnIgn.textContent = "Ignorar";
+    btnIgn.onclick = () => twIgnoreCardSuggestion(idx);
+    row.appendChild(btnPar);
+    row.appendChild(btnIgn);
+    list.appendChild(row);
+  });
+}
+
+function twPairCardSuggestion(idx) {
+  const [outId, inId] = _twData.card_suggestions[idx];
+  const out = (_twData.egresos || []).find(e => e.id === outId);
+  const inp = (_twData.cc_ingresos || []).find(i => i.id === inId);
+  if (!out || !inp || _twCardQueuedIds.has(outId) || _twCardQueuedIds.has(inId)) return;
+  _twCardQueue.push({ out, in: inp });
+  _twCardQueuedIds.add(outId);
+  _twCardQueuedIds.add(inId);
+  _twData.card_suggestions.splice(idx, 1);
+  renderTwCardSuggestions();
+  renderTwCardQueue();
+}
+
+async function twIgnoreCardSuggestion(idx) {
+  const [outId, inId] = _twData.card_suggestions[idx];
+  const res = await fetch(`${BASE}/api/gastos/ignore-transfer`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id_out: outId, id_in: inId }),
+  });
+  if (!res.ok) { showToast("Error al ignorar", "err"); return; }
+  _twData.card_suggestions.splice(idx, 1);
+  renderTwCardSuggestions();
+}
+
+function twCardPairAll() {
+  const eMap = Object.fromEntries((_twData.egresos || []).map(e => [e.id, e]));
+  const iMap = Object.fromEntries((_twData.cc_ingresos || []).map(i => [i.id, i]));
+  let added = 0;
+  for (const [outId, inId] of [...(_twData.card_suggestions || [])]) {
+    if (_twCardQueuedIds.has(outId) || _twCardQueuedIds.has(inId)) continue;
+    const out = eMap[outId], inp = iMap[inId];
+    if (!out || !inp) continue;
+    _twCardQueue.push({ out, in: inp });
+    _twCardQueuedIds.add(outId);
+    _twCardQueuedIds.add(inId);
+    added++;
+  }
+  if (!added) { showToast("Todas las sugerencias ya están en cola", "info"); return; }
+  _twData.card_suggestions = [];
+  renderTwCardSuggestions();
+  renderTwCardQueue();
+  showToast(`${added} pago${added !== 1 ? "s" : ""} agregado${added !== 1 ? "s" : ""} a la cola`, "ok");
+}
+
+function renderTwCardQueue() {
+  // Re-use tw-queue-section but add a section for card payments if needed
+  // For simplicity: fold card payments into the main queue section with a label
+  // (both queues are confirmed together via their respective endpoints)
+  // Show count in the confirm button
+  const totalQ = _twQueue.length + _twCardQueue.length;
+  const section = document.getElementById("tw-queue-section");
+  if (!totalQ) { section.style.display = "none"; return; }
+  section.style.display = "";
+  document.getElementById("btn-tw-confirm").textContent =
+    `Confirmar ${totalQ} par${totalQ !== 1 ? "es" : ""}` +
+    (_twCardQueue.length ? ` (${_twCardQueue.length} pagos tarjeta)` : "");
+}
+
+async function twConfirmCardPayments() {
+  if (!_twCardQueue.length) return;
+  const pairs = _twCardQueue.map(p => [p.out.id, p.in.id]);
+  const res = await fetch(`${BASE}/api/gastos/mark-card-payments`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pairs }),
+  });
+  if (!res.ok) { showToast("Error al guardar pagos", "err"); return; }
+  return res.json();
+}
+
+// ── Transfer suggestions ───────────────────────────────────────────────────────
 function renderTwSuggestions() {
   const sugs = _twData.suggestions;
   const sec  = document.getElementById("tw-sug-section");
@@ -2078,9 +2189,11 @@ function renderTwQueue() {
   const section = document.getElementById("tw-queue-section");
   const list    = document.getElementById("tw-queue-list");
   const btn     = document.getElementById("btn-tw-confirm");
-  if (!_twQueue.length) { section.style.display = "none"; return; }
+  const total   = _twQueue.length + _twCardQueue.length;
+  if (!total) { section.style.display = "none"; return; }
   section.style.display = "";
-  btn.textContent = `Confirmar ${_twQueue.length} par${_twQueue.length !== 1 ? "es" : ""}`;
+  btn.textContent = `Confirmar ${total} par${total !== 1 ? "es" : ""}` +
+    (_twCardQueue.length ? ` (${_twCardQueue.length} pago${_twCardQueue.length !== 1 ? "s" : ""} tarjeta)` : "");
   list.innerHTML = "";
   _twQueue.forEach((pair, i) => {
     const row = document.createElement("div");
@@ -2113,15 +2226,25 @@ function renderTwQueue() {
 function twAutoSuggest() { if (_twData) twPairAll(); }
 
 async function twConfirm() {
-  if (!_twQueue.length) return;
-  const pairs = _twQueue.map(p => [p.out.id, p.in.id]);
-  const res = await fetch(`${BASE}/api/gastos/mark-transfers`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pairs }),
-  });
-  if (!res.ok) { showToast("Error al guardar", "err"); return; }
-  const data = await res.json();
-  showToast(`✓ ${data.marcados} movimientos marcados`, "ok");
+  if (!_twQueue.length && !_twCardQueue.length) return;
+  let total = 0;
+  if (_twQueue.length) {
+    const res = await fetch(`${BASE}/api/gastos/mark-transfers`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pairs: _twQueue.map(p => [p.out.id, p.in.id]) }),
+    });
+    if (!res.ok) { showToast("Error al guardar transferencias", "err"); return; }
+    total += (await res.json()).marcados;
+  }
+  if (_twCardQueue.length) {
+    const res = await fetch(`${BASE}/api/gastos/mark-card-payments`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pairs: _twCardQueue.map(p => [p.out.id, p.in.id]) }),
+    });
+    if (!res.ok) { showToast("Error al guardar pagos de tarjeta", "err"); return; }
+    total += (await res.json()).marcados;
+  }
+  showToast(`✓ ${total} movimientos marcados`, "ok");
   await loadTransferWorkspace();
   loadGastos(); loadMonthlyChart();
 }
@@ -2268,6 +2391,7 @@ function twToggleIgnored() {
 
 document.getElementById("btn-tw-autosugerir").addEventListener("click", twAutoSuggest);
 document.getElementById("btn-tw-pair-all").addEventListener("click", twPairAll);
+document.getElementById("btn-tw-card-all").addEventListener("click", twCardPairAll);
 document.getElementById("btn-tw-refresh").addEventListener("click", loadTransferWorkspace);
 document.getElementById("btn-tw-confirm").addEventListener("click", twConfirm);
 document.getElementById("btn-tw-cancel-select").addEventListener("click", twCancelSelect);

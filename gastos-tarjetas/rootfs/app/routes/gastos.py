@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from auth import require_auth
 from db import (list_gastos, list_categorias, monthly_summary,
-                detect_transfers, mark_transfers,
+                detect_transfers, detect_card_payments, mark_transfers,
                 get_transfer_candidates, get_existing_transfer_pairs, unmark_transfers,
                 ignore_transfer_pair, unignore_transfer_pair, get_ignored_transfer_pairs,
                 update_categoria, update_usuario, update_gasto_fecha,
@@ -138,15 +138,18 @@ def get_gastos(
 @router.get("/gastos/transfer-workspace")
 def get_transfer_workspace(request: Request, days: int = Query(3)):
     require_auth(request)
-    candidates = get_transfer_candidates()
-    suggestions = detect_transfers(days_window=days)
-    existing = get_existing_transfer_pairs()
+    candidates   = get_transfer_candidates()
+    suggestions  = detect_transfers(days_window=days)
+    card_sugs    = detect_card_payments()
+    existing     = get_existing_transfer_pairs()
     return {
-        "egresos":     candidates["egresos"],
-        "ingresos":    candidates["ingresos"],
-        "suggestions": [[s["id_out"], s["id_in"]] for s in suggestions],
-        "existing":    existing,
-        "ignored":     get_ignored_transfer_pairs(),
+        "egresos":              candidates["egresos"],
+        "ingresos":             candidates["ingresos"],
+        "cc_ingresos":          candidates["cc_ingresos"],
+        "suggestions":          [[s["id_out"], s["id_in"]] for s in suggestions],
+        "card_suggestions":     [[s["id_out"], s["id_in"]] for s in card_sugs],
+        "existing":             existing,
+        "ignored":              get_ignored_transfer_pairs(),
     }
 
 
@@ -162,6 +165,15 @@ def post_mark_transfers(body: dict, request: Request):
     pairs = body.get("pairs", [])
     id_pairs = [(p[0], p[1]) for p in pairs if len(p) == 2]
     mark_transfers(id_pairs)
+    return {"ok": True, "marcados": len(id_pairs) * 2}
+
+
+@router.post("/gastos/mark-card-payments")
+def post_mark_card_payments(body: dict, request: Request):
+    require_auth(request)
+    pairs = body.get("pairs", [])
+    id_pairs = [(p[0], p[1]) for p in pairs if len(p) == 2]
+    mark_transfers(id_pairs, categoria="Pago Tarjeta")
     return {"ok": True, "marcados": len(id_pairs) * 2}
 
 

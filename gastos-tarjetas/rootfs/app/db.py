@@ -21,7 +21,7 @@ _EGRESO_EXPR = "CASE WHEN CAST(monto AS REAL) > 0 THEN CAST(monto AS REAL) ELSE 
 _CC_FUENTES = frozenset(("amex", "bbva_mc", "bbva_visa", "galicia_mc"))
 
 # Categories that are always considered "special" regardless of user rules.
-_BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas"})
+_BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas", "Pago Tarjeta"})
 
 
 def get_special_categorias() -> set[str]:
@@ -155,6 +155,10 @@ def init_db():
         ccols = {r[1] for r in conn.execute("PRAGMA table_info(cuentas)").fetchall()}
         if "tipo" not in ccols:
             conn.execute("ALTER TABLE cuentas ADD COLUMN tipo TEXT DEFAULT 'auto'")
+        if "cuenta_tipo" not in ccols:
+            conn.execute("ALTER TABLE cuentas ADD COLUMN cuenta_tipo TEXT DEFAULT 'bank'")
+            cc_list = "','".join(_CC_FUENTES)
+            conn.execute(f"UPDATE cuentas SET cuenta_tipo='credit_card' WHERE fuente IN ('{cc_list}')")
         if "saldo_usd" not in ccols:
             conn.execute("ALTER TABLE cuentas ADD COLUMN saldo_usd REAL DEFAULT 0")
             # Credit cards can have both ARS and USD charges
@@ -823,36 +827,35 @@ def monthly_summary(excluir_especiales: bool = True) -> list[dict]:
     return [{"mes": r["mes"], "ingresos": float(r["ingresos"]), "egresos": float(r["egresos"])} for r in rows]
 
 
-def detect_transfers(days_window: int = 3) -> list[dict]:
+def _detect_transfer_pairs(
+    type_a: str, type_b: str, days_window: int, specials: set, ignored: set
+) -> list[dict]:
     """
-    Find candidate inter-account transfer pairs across any non-CC cuenta sources
-    with the same absolute ARS amount within `days_window` days.
-    Returns only pairs where neither transaction is already a special category.
+    Internal helper: find candidate pairs between accounts of the given
+    cuenta_tipo values.  type_a must be egreso side (monto > 0),
+    type_b must be ingreso side (monto < 0).
     """
-    specials = get_special_categorias()
-    cc_ph = ",".join("?" * len(_CC_FUENTES))
-    cc_list = list(_CC_FUENTES)
+    excl_params: list = []
+    excl_a = excl_b = ""
     if specials:
         sph = ",".join("?" * len(specials))
         excl_a = f"AND (a.categoria IS NULL OR a.categoria NOT IN ({sph}))"
         excl_b = f"AND (b.categoria IS NULL OR b.categoria NOT IN ({sph}))"
         excl_params = list(specials) + list(specials)
-    else:
-        excl_a = excl_b = ""
-        excl_params = []
     query = f"""
         SELECT
-            a.id        AS id_out,
-            a.fecha     AS fecha_out,
+            a.id          AS id_out,
+            a.fecha       AS fecha_out,
             a.descripcion AS desc_out,
-            a.monto     AS monto_out,
-            a.fuente    AS fuente_out,
-            b.id        AS id_in,
-            b.fecha     AS fecha_in,
+            a.monto       AS monto_out,
+            a.fuente      AS fuente_out,
+            b.id          AS id_in,
+            b.fecha       AS fecha_in,
             b.descripcion AS desc_in,
-            b.monto     AS monto_in,
-            b.fuente    AS fuente_in
+            b.monto       AS monto_in,
+            b.fuente      AS fuente_in
         FROM gastos a
+        JOIN cuentas ca ON ca.fuente = a.fuente
         JOIN gastos b ON
             ABS(CAST(a.monto AS REAL)) = ABS(CAST(b.monto AS REAL))
             AND ABS(julianday(a.fecha) - julianday(b.fecha)) <= {days_window}
@@ -860,22 +863,20 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
             AND CAST(a.monto AS REAL) > 0
             AND CAST(b.monto AS REAL) < 0
             AND a.fuente != b.fuente
-            AND a.fuente NOT IN ({cc_ph})
-            AND b.fuente NOT IN ({cc_ph})
             {excl_a}
             {excl_b}
+        JOIN cuentas cb ON cb.fuente = b.fuente
+        WHERE ca.cuenta_tipo = ?
+          AND cb.cuenta_tipo = ?
         ORDER BY a.fecha DESC
     """
-    params = cc_list + cc_list + excl_params
+    params = excl_params + [type_a, type_b]
     with _conn() as conn:
         rows = conn.execute(query, params).fetchall()
-        ignored = {(r[0], r[1]) for r in conn.execute(
-            "SELECT id_out, id_in FROM transfer_ignores"
-        ).fetchall()}
-    seen = set()
-    result = []
+    seen: set = set()
     seen_out: set = set()
-    seen_in:  set = set()
+    seen_in: set = set()
+    result = []
     for r in rows:
         key = tuple(sorted([r["id_out"], r["id_in"]]))
         if key in seen or r["id_out"] in seen_out or r["id_in"] in seen_in:
@@ -887,6 +888,26 @@ def detect_transfers(days_window: int = 3) -> list[dict]:
         seen_in.add(r["id_in"])
         result.append(dict(r))
     return result
+
+
+def detect_transfers(days_window: int = 3) -> list[dict]:
+    """Find candidate bank→bank inter-account transfer pairs."""
+    specials = get_special_categorias()
+    with _conn() as conn:
+        ignored = {(r[0], r[1]) for r in conn.execute(
+            "SELECT id_out, id_in FROM transfer_ignores"
+        ).fetchall()}
+    return _detect_transfer_pairs("bank", "bank", days_window, specials, ignored)
+
+
+def detect_card_payments(days_window: int = 1) -> list[dict]:
+    """Find candidate bank→credit_card payment pairs (tight ±1 day window)."""
+    specials = get_special_categorias()
+    with _conn() as conn:
+        ignored = {(r[0], r[1]) for r in conn.execute(
+            "SELECT id_out, id_in FROM transfer_ignores"
+        ).fetchall()}
+    return _detect_transfer_pairs("bank", "credit_card", days_window, specials, ignored)
 
 
 def ignore_transfer_pair(id_out: int, id_in: int) -> None:
@@ -924,17 +945,18 @@ def get_ignored_transfer_pairs() -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def mark_transfers(id_pairs: list[tuple[int, int]]):
-    """Mark both sides of each transfer pair as categoria='Transferencia Intercuentas'
-    and record the explicit link in transfer_pairs."""
+def mark_transfers(id_pairs: list[tuple[int, int]],
+                   categoria: str = "Transferencia Intercuentas"):
+    """Mark both sides of each transfer pair with the given categoria and record
+    the explicit link in transfer_pairs."""
     ids = list({i for pair in id_pairs for i in pair})
     if not ids:
         return
     placeholders = ",".join("?" * len(ids))
     with _conn() as conn:
         conn.execute(
-            f"UPDATE gastos SET categoria='Transferencia Intercuentas', categoria_fuente='auto' WHERE id IN ({placeholders})",
-            ids,
+            f"UPDATE gastos SET categoria=?, categoria_fuente='auto' WHERE id IN ({placeholders})",
+            [categoria] + ids,
         )
         conn.executemany(
             "INSERT OR IGNORE INTO transfer_pairs (id_out, id_in) VALUES (?,?)",
@@ -944,29 +966,32 @@ def mark_transfers(id_pairs: list[tuple[int, int]]):
 
 def get_transfer_candidates() -> dict:
     """
-    Returns all non-CC cuenta transactions without special categories,
-    split into egresos (monto > 0) and ingresos (monto < 0).
-    Used by the transfer workspace UI.
+    Returns cuenta transactions without special categories for the workspace.
+    - egresos / ingresos: bank accounts (monto > 0 / < 0)
+    - cc_ingresos: credit card accounts, monto < 0 (payment credits)
     """
     specials = get_special_categorias()
-    cc_ph = ",".join("?" * len(_CC_FUENTES))
-    cc_list = list(_CC_FUENTES)
     excl = ""
     spec_params: list = []
     if specials:
         sph = ",".join("?" * len(specials))
-        excl = f"AND (categoria IS NULL OR categoria NOT IN ({sph}))"
+        excl = f"AND (g.categoria IS NULL OR g.categoria NOT IN ({sph}))"
         spec_params = list(specials)
-    base = (
-        f"SELECT id, fecha, descripcion, monto, fuente, moneda, categoria "
-        f"FROM gastos WHERE fuente NOT IN ({cc_ph}) AND moneda='ARS' {excl} "
-        f"ORDER BY fecha DESC"
+    query = (
+        f"SELECT g.id, g.fecha, g.descripcion, g.monto, g.fuente, g.moneda, "
+        f"       g.categoria, c.cuenta_tipo "
+        f"FROM gastos g JOIN cuentas c ON c.fuente = g.fuente "
+        f"WHERE g.moneda='ARS' {excl} ORDER BY g.fecha DESC"
     )
     with _conn() as conn:
-        all_rows = conn.execute(base, cc_list + spec_params).fetchall()
-    egresos  = [dict(r) for r in all_rows if float(r["monto"]) > 0]
-    ingresos = [dict(r) for r in all_rows if float(r["monto"]) < 0]
-    return {"egresos": egresos, "ingresos": ingresos}
+        all_rows = conn.execute(query, spec_params).fetchall()
+    bank_rows = [dict(r) for r in all_rows if r["cuenta_tipo"] == "bank"]
+    cc_rows   = [dict(r) for r in all_rows if r["cuenta_tipo"] == "credit_card"]
+    return {
+        "egresos":     [r for r in bank_rows if float(r["monto"]) > 0],
+        "ingresos":    [r for r in bank_rows if float(r["monto"]) < 0],
+        "cc_ingresos": [r for r in cc_rows   if float(r["monto"]) < 0],
+    }
 
 
 def get_existing_transfer_pairs(days_window: int = 60) -> dict:

@@ -1,3 +1,7 @@
+## 0.5.113
+
+- **Workspace transferencias: matching de pagos de tarjeta** (`db.py`, `routes/gastos.py`, `index.html`, `app.js`, `style.css`): nueva columna `cuentas.cuenta_tipo` ('bank' / 'credit_card') que generaliza la clasificación de cuentas. `detect_transfers` ahora matchea solo `bank→bank` via JOIN con `cuentas`. Nueva función `detect_card_payments` (ventana ±1 día) matchea `bank→credit_card`. Nueva categoría especial "Pago Tarjeta" (excluida de totales). Workspace muestra nueva zona "Pagos de tarjeta detectados" (visual azul) con Parear/Ignorar por fila y "Agregar todas a cola". La cola de confirmación incluye ambos tipos; al confirmar llama a `mark-transfers` para transferencias y `mark-card-payments` para pagos (categoría diferente).
+
 ## 0.5.112
 
 - **amex scraper: revierte filtro de ACREDITACION/5617** (`scrapers/amex.py`): se revierte el filtro introducido en v0.5.111. El usuario usa esas entradas (pagos al resumen y devoluciones RG 5617) para conciliar con los movimientos de sus cuentas bancarias; deben quedar en gastos.
