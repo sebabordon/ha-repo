@@ -1,3 +1,7 @@
+## 0.5.83
+
+- **Debug: Galicia login — logging diagnóstico completo** (`scrapers/galicia.py`): `do_login` loguea cada paso con resultado (selector matcheado o no); `_dump_form_structure` enumera todos los `<input>` y `<button>` de la página de login; `_dump_keyboard_structure` lista contenedores, cantidad de `.hg-button` y sus valores `data-skbtn`; `_type_on_keyboard` loguea hits/misses por carácter; detección de TOTP ampliada con 9 selectores alternativos; mensaje de error final explica las causas del "seguimos en login".
+
 ## 0.5.82
 
 - **Feature: Scraper Banco Galicia — implementación completa** (`scrapers/galicia.py`): reescritura desde cero sobre la base del stub anterior. Login vía Selenium en `onlinebanking.bancogalicia.com.ar/login` (formulario con DNI + alias + teclado virtual simple-keyboard); navega automáticamente a `tarjetas.bancogalicia.com.ar` vía SSO. Consumos y cuotas obtenidos con `fetch()` directo a los BFF endpoints (`bff-cards-overview-pota-cards`, `bff-cards-movements-tc-pota-cards`). Detecta cierre de período (`settlement_closing_dates.current`) y hace reset de `movimientos_raw` cuando comienza un nuevo resumen, mostrando solo el período vigente.

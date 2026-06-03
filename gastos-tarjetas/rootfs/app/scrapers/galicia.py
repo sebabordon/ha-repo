@@ -172,26 +172,23 @@ class GaliciaScraper(BaseScraper):
         """
         Escribe texto usando el teclado virtual simple-keyboard de Galicia.
 
-        Busca botones con selector:  .hg-button[data-skbtn="X"]
-        Si no se encuentra el botón, intenta fallback con ActionChains send_keys.
+        Busca botones con selector .hg-button[data-skbtn="X"] (simple-keyboard lib).
+        Si no lo encuentra, busca el botón por contenido de texto.
         """
         from selenium.webdriver.common.by import By
 
+        hits = 0
+        misses = 0
         for char in text:
-            # Intentar con data-skbtn (simple-keyboard)
             btn = self.find(driver, f'.hg-button[data-skbtn="{char}"]')
 
-            # Fallback: buscar por contenido de texto del botón
             if not btn:
+                # Fallback: buscar por texto del botón
                 try:
-                    btns = driver.find_elements(By.CSS_SELECTOR, ".hg-button")
-                    for b in btns:
-                        try:
-                            if b.text.strip() == char:
-                                btn = b
-                                break
-                        except Exception:
-                            pass
+                    for b in driver.find_elements(By.CSS_SELECTOR, ".hg-button"):
+                        if (b.text or "").strip() == char:
+                            btn = b
+                            break
                 except Exception:
                     pass
 
@@ -200,18 +197,43 @@ class GaliciaScraper(BaseScraper):
                     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
                     time.sleep(0.05)
                     btn.click()
-                    time.sleep(0.1)
+                    time.sleep(0.12)
+                    hits += 1
                 except Exception as exc:
-                    logger.warning("[galicia] Error clickeando tecla %r: %s", char, exc)
+                    logger.warning("[galicia-kbd] Error clickeando tecla %r: %s", char, exc)
+                    misses += 1
             else:
-                logger.warning("[galicia] Tecla %r no encontrada en teclado virtual", char)
-                # Fallback: intentar send_keys directamente al elemento activo
+                logger.warning("[galicia-kbd] Tecla %r NO encontrada en teclado", char)
+                misses += 1
                 try:
                     from selenium.webdriver.common.action_chains import ActionChains
                     ActionChains(driver).send_keys(char).perform()
                     time.sleep(0.1)
                 except Exception:
                     pass
+
+        logger.info("[galicia-kbd] Teclado: %d teclas OK, %d no encontradas", hits, misses)
+
+    def _type_on_keyboard_generic(self, driver, text: str, btns: list) -> None:
+        """
+        Fallback para teclados con estructura diferente a simple-keyboard.
+        Itera los botones buscando coincidencia de texto.
+        """
+        for char in text:
+            found = False
+            for b in btns:
+                try:
+                    if (b.text or "").strip() == char:
+                        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", b)
+                        time.sleep(0.05)
+                        b.click()
+                        time.sleep(0.12)
+                        found = True
+                        break
+                except Exception:
+                    pass
+            if not found:
+                logger.warning("[galicia-kbd] Tecla genérica %r no encontrada", char)
 
     # ── Navegar al dashboard de tarjetas ─────────────────────────────────────
 
@@ -323,6 +345,8 @@ class GaliciaScraper(BaseScraper):
         3. Click en link Tarjetas → SSO → tarjetas.bancogalicia.com.ar
         """
         from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.common.by import By
+        from selenium.common.exceptions import TimeoutException
 
         dni      = str(config.get("usuario", "")).strip()
         username = str(config.get("tercer_dato", "")).strip()
@@ -332,17 +356,23 @@ class GaliciaScraper(BaseScraper):
             raise RuntimeError("[galicia] Credenciales incompletas: se requieren usuario (DNI) y password")
 
         # ── Paso 1: cargar página de login ────────────────────────────────────
-        logger.info("[galicia] Cargando página de login: %s", _LOGIN_URL)
+        logger.info("[galicia] Paso 1 — cargando login: %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
-        time.sleep(3)
 
-        # Esperar que aparezca el formulario
-        try:
-            self.wait_for(driver, "input, .keyboard-container, .simple-keyboard", timeout=15)
-        except Exception:
-            logger.info("[galicia] Timeout esperando formulario, continuando…")
+        # Esperar que aparezcan inputs (el JS puede tardar hasta ~8s)
+        for wait_secs in [3, 6, 10]:
+            time.sleep(wait_secs)
+            if driver.find_elements(By.CSS_SELECTOR, "input"):
+                logger.info("[galicia] Inputs detectados después de %ds", wait_secs)
+                break
+        else:
+            logger.info("[galicia] No se detectaron inputs tras 10s")
+
+        # Dump diagnóstico de la página de login
+        self._dump_form_structure(driver)
 
         # ── Paso 2: campo DocumentNumber (DNI) ───────────────────────────────
+        logger.info("[galicia] Paso 2 — buscando campo DNI")
         doc_input = None
         for sel in [
             "input[name='DocumentNumber']",
@@ -350,25 +380,28 @@ class GaliciaScraper(BaseScraper):
             "input[id*='document' i]",
             "input[placeholder*='DNI' i]",
             "input[placeholder*='documento' i]",
+            "input[placeholder*='Documento' i]",
             "input[type='number']",
             "input[type='tel']",
         ]:
             doc_input = self.find(driver, sel)
             if doc_input:
-                logger.info("[galicia] Input DNI encontrado: %s", sel)
+                logger.info("[galicia] Input DNI encontrado con selector: %s", sel)
                 break
 
         if doc_input:
             try:
                 doc_input.clear()
                 doc_input.send_keys(dni)
+                logger.info("[galicia] DNI escrito OK (%d dígitos)", len(dni))
                 time.sleep(0.3)
             except Exception as exc:
                 logger.warning("[galicia] Error escribiendo DNI: %s", exc)
         else:
-            logger.warning("[galicia] Input DNI no encontrado — continuando sin él")
+            logger.warning("[galicia] *** Input DNI NO encontrado — formulario puede fallar ***")
 
         # ── Paso 3: campo UserName (alias) ────────────────────────────────────
+        logger.info("[galicia] Paso 3 — buscando campo usuario (alias=%r)", username or "(vacío)")
         if username:
             user_input = None
             for sel in [
@@ -377,80 +410,109 @@ class GaliciaScraper(BaseScraper):
                 "input[id*='user' i]",
                 "input[name*='user' i]",
                 "input[placeholder*='usuario' i]",
+                "input[placeholder*='Usuario' i]",
                 "input[autocomplete='username']",
+                "input[type='text']",
             ]:
                 user_input = self.find(driver, sel)
-                if user_input:
-                    logger.info("[galicia] Input usuario encontrado: %s", sel)
+                if user_input and user_input != doc_input:
+                    logger.info("[galicia] Input usuario encontrado con selector: %s", sel)
                     break
 
             if user_input:
                 try:
                     user_input.clear()
                     user_input.send_keys(username)
+                    logger.info("[galicia] Alias escrito OK")
                     time.sleep(0.3)
                 except Exception as exc:
-                    logger.warning("[galicia] Error escribiendo usuario: %s", exc)
+                    logger.warning("[galicia] Error escribiendo alias: %s", exc)
+            else:
+                logger.warning("[galicia] Input usuario no encontrado")
+        else:
+            logger.info("[galicia] Sin alias configurado (tercer_dato vacío) — saltando campo usuario")
 
         # ── Paso 4: contraseña vía teclado virtual ────────────────────────────
-        # Primero hacer clic en el campo de password para activar el teclado
+        logger.info("[galicia] Paso 4 — contraseña vía teclado virtual")
+
+        # Hacer clic en el campo password para activar el teclado
         pass_input = None
         for sel in [
             "input[name='Password']",
             "input#Password",
             "input[type='password']",
+            ".password-input input",
             ".password-input",
         ]:
             pass_input = self.find(driver, sel)
             if pass_input:
-                logger.info("[galicia] Input password encontrado: %s", sel)
+                logger.info("[galicia] Input password encontrado con selector: %s", sel)
                 break
 
         if pass_input:
             try:
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", pass_input)
+                time.sleep(0.2)
                 pass_input.click()
-                time.sleep(0.5)  # Esperar que aparezca el teclado virtual
-            except Exception:
-                pass
-
-        # Verificar si hay teclado virtual
-        keyboard_present = self.find(driver, ".simple-keyboard, .hg-button") is not None
-        logger.info("[galicia] Teclado virtual presente: %s", keyboard_present)
-
-        if keyboard_present:
-            self._type_on_keyboard(driver, password)
-        elif pass_input:
-            # Fallback: send_keys directo
-            try:
-                pass_input.clear()
-                pass_input.send_keys(password)
+                logger.info("[galicia] Click en campo password — esperando teclado virtual…")
+                time.sleep(1.0)
             except Exception as exc:
-                logger.warning("[galicia] Error escribiendo password: %s", exc)
+                logger.warning("[galicia] Error clickeando campo password: %s", exc)
+        else:
+            logger.warning("[galicia] *** Campo password NO encontrado ***")
+
+        # Dump estructura del teclado virtual
+        self._dump_keyboard_structure(driver)
+
+        # Determinar estrategia para la contraseña
+        hg_btns = driver.find_elements(By.CSS_SELECTOR, ".hg-button")
+        if hg_btns:
+            logger.info("[galicia] Teclado virtual .hg-button presente (%d botones) → usando clicks", len(hg_btns))
+            self._type_on_keyboard(driver, password)
+        else:
+            # Intentar con otros selectores de teclado
+            kbd_btns = driver.find_elements(By.CSS_SELECTOR, "[class*='keyboard'] button")
+            if kbd_btns:
+                logger.info("[galicia] Teclado alternativo [class*=keyboard] button (%d) → intentando", len(kbd_btns))
+                self._type_on_keyboard_generic(driver, password, kbd_btns)
+            elif pass_input:
+                logger.info("[galicia] Sin teclado virtual → send_keys directo en campo password")
+                try:
+                    pass_input.clear()
+                    pass_input.send_keys(password)
+                    logger.info("[galicia] Password escrito vía send_keys")
+                except Exception as exc:
+                    logger.warning("[galicia] Error escribiendo password: %s", exc)
+            else:
+                logger.warning("[galicia] *** Sin teclado NI campo password → no se pudo escribir la contraseña ***")
 
         time.sleep(0.5)
 
         # ── Paso 5: submit ────────────────────────────────────────────────────
+        logger.info("[galicia] Paso 5 — buscando botón submit")
         submit = None
         for sel in [
             "button[type='submit']",
             "input[type='submit']",
             "button.btn-ingresar",
             "button.btn-primary",
+            "button.btn-login",
             ".btn-login",
+            "form button:last-of-type",
         ]:
             submit = self.find(driver, sel)
             if submit:
-                logger.info("[galicia] Botón submit encontrado: %s", sel)
+                logger.info("[galicia] Botón submit encontrado con selector: %s  texto=%r",
+                            sel, (submit.text or "").strip()[:40])
                 break
 
         if not submit:
-            # Buscar por texto del botón
-            from selenium.webdriver.common.by import By
-            for txt in ["Ingresar", "ingresar", "INGRESAR", "Entrar"]:
+            for txt in ["Ingresar", "ingresar", "INGRESAR", "Entrar", "entrar"]:
                 try:
                     els = driver.find_elements(By.XPATH, f"//button[contains(text(),'{txt}')]")
                     if els:
                         submit = els[0]
+                        logger.info("[galicia] Botón submit encontrado por texto: %r", txt)
                         break
                 except Exception:
                     pass
@@ -458,14 +520,13 @@ class GaliciaScraper(BaseScraper):
         if submit:
             try:
                 driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit)
-                time.sleep(0.2)
+                time.sleep(0.3)
                 submit.click()
-                logger.info("[galicia] Submit clickeado")
+                logger.info("[galicia] Submit clickeado — esperando navegación a /inicio…")
             except Exception as exc:
                 raise RuntimeError(f"[galicia] Error clickeando submit: {exc}")
         else:
-            # Intentar submit por Enter en el campo password
-            logger.warning("[galicia] Botón submit no encontrado — intentando Enter")
+            logger.warning("[galicia] *** Botón submit no encontrado — enviando Enter ***")
             if pass_input:
                 from selenium.webdriver.common.keys import Keys
                 try:
@@ -473,38 +534,65 @@ class GaliciaScraper(BaseScraper):
                 except Exception:
                     pass
 
-        # ── Paso 6: esperar /inicio ───────────────────────────────────────────
-        from selenium.common.exceptions import TimeoutException
+        # ── Paso 6: esperar /inicio o detectar TOTP ───────────────────────────
+        logger.info("[galicia] Paso 6 — esperando resultado del submit (hasta 45s)…")
 
         try:
             WebDriverWait(driver, 45).until(
                 lambda d: (
                     "/inicio" in (d.current_url or "")
                     or "/Navigation/MenuLink" in (d.current_url or "")
+                    or "tarjetas.bancogalicia.com.ar" in (d.current_url or "")
                 )
             )
         except TimeoutException:
             cur = driver.current_url or ""
-            # Verificar si apareció pantalla de TOTP
-            if self.find(driver, "input[maxlength='6'], .otp-input, #otpCode, .totp"):
-                raise _SessionNeedsTotp(
-                    "Galicia requiere código de verificación (TOTP). "
-                    "Usá 'Configurar sesión Galicia' en la UI del add-on."
-                )
-            # Verificar si seguimos en login (credenciales incorrectas)
+            logger.info("[galicia] Timeout — URL actual: %s", cur[:200])
+
+            # Detectar TOTP con múltiples selectores
+            totp_selectors = [
+                "input[maxlength='6']",
+                ".otp-input",
+                "#otpCode",
+                ".totp",
+                "input[name*='token' i]",
+                "input[name*='code' i]",
+                "input[name*='otp' i]",
+                "[class*='verification']",
+                "[class*='token']",
+            ]
+            for totp_sel in totp_selectors:
+                if self.find(driver, totp_sel):
+                    logger.info("[galicia] Pantalla TOTP detectada (selector: %s)", totp_sel)
+                    self._dump_form_structure(driver)
+                    raise _SessionNeedsTotp(
+                        "Galicia requiere código de verificación (TOTP / segundo factor). "
+                        "Usá 'Configurar sesión Galicia' en la UI del add-on."
+                    )
+
+            # Seguimos en la pantalla de login → dumpe y error
+            self._dump_form_structure(driver)
+            self._dump_keyboard_structure(driver)
+
             if "/login" in cur or "Users/LogIn" in cur:
-                self._dump_page(driver)
                 raise RuntimeError(
-                    f"[galicia] Seguimos en la pantalla de login tras el submit. "
-                    f"URL: {cur[:200]}. Verificar credenciales."
+                    f"[galicia] Sigue en pantalla de login tras submit (URL: {cur[:200]}). "
+                    f"Causas posibles: (1) EncriptedPassword vacío — teclado virtual no "
+                    f"encontrado; (2) credenciales incorrectas; (3) selectores desactualizados. "
+                    f"Ver logs [galicia-diag] y [galicia-kbd] para diagnóstico."
                 )
             raise RuntimeError(f"[galicia] Timeout esperando /inicio. URL: {cur[:200]}")
 
-        logger.info("[galicia] Login OK — URL: %s", driver.current_url[:100])
+        cur = driver.current_url or ""
+        logger.info("[galicia] Login OK — URL: %s", cur[:100])
         time.sleep(2)
 
-        # ── Paso 7: navegar a Tarjetas ────────────────────────────────────────
-        self._navigate_to_tarjetas(driver)
+        # ── Paso 7: navegar a Tarjetas (si no llegamos directo) ───────────────
+        if "tarjetas.bancogalicia.com.ar" not in cur:
+            logger.info("[galicia] Paso 7 — navegando a Tarjetas desde dashboard")
+            self._navigate_to_tarjetas(driver)
+        else:
+            logger.info("[galicia] Ya en tarjetas domain — salteando paso 7")
 
     # ── scrape ────────────────────────────────────────────────────────────────
 
@@ -856,6 +944,102 @@ class GaliciaScraper(BaseScraper):
             logger.info("[galicia-diag] body[:600]: %s", body)
         except Exception as exc:
             logger.info("[galicia-diag] error: %s", exc)
+
+    def _dump_form_structure(self, driver) -> None:
+        """
+        Loguea todos los inputs, botones y formularios de la página actual.
+        Imprescindible para calibrar selectores de login.
+        """
+        from selenium.webdriver.common.by import By
+        try:
+            logger.info("[galicia-diag] === ESTRUCTURA DE LA PÁGINA ===")
+            logger.info("[galicia-diag] URL: %s", driver.current_url or "?")
+            logger.info("[galicia-diag] Título: %r", driver.title or "?")
+
+            # Forms
+            forms = driver.find_elements(By.CSS_SELECTOR, "form")
+            logger.info("[galicia-diag] Forms: %d", len(forms))
+            for i, f in enumerate(forms):
+                logger.info(
+                    "[galicia-diag]   form[%d] id=%r action=%r",
+                    i,
+                    f.get_attribute("id") or "",
+                    (f.get_attribute("action") or "")[:80],
+                )
+
+            # Inputs
+            inputs = driver.find_elements(By.CSS_SELECTOR, "input")
+            logger.info("[galicia-diag] Inputs: %d", len(inputs))
+            for inp in inputs[:20]:
+                logger.info(
+                    "[galicia-diag]   <input id=%r name=%r type=%r placeholder=%r class=%r>",
+                    inp.get_attribute("id") or "",
+                    inp.get_attribute("name") or "",
+                    inp.get_attribute("type") or "",
+                    (inp.get_attribute("placeholder") or "")[:40],
+                    (inp.get_attribute("class") or "")[:50],
+                )
+
+            # Buttons
+            btns = driver.find_elements(By.CSS_SELECTOR, "button")
+            logger.info("[galicia-diag] Buttons: %d", len(btns))
+            for b in btns[:12]:
+                logger.info(
+                    "[galicia-diag]   <button type=%r class=%r text=%r>",
+                    b.get_attribute("type") or "",
+                    (b.get_attribute("class") or "")[:60],
+                    (b.text or "")[:40],
+                )
+
+        except Exception as exc:
+            logger.info("[galicia-diag] error en dump_form: %s", exc)
+
+    def _dump_keyboard_structure(self, driver) -> None:
+        """
+        Loguea la estructura del teclado virtual simple-keyboard si está presente.
+        Muestra todos los contenedores de teclado y los valores data-skbtn disponibles.
+        """
+        from selenium.webdriver.common.by import By
+        try:
+            # Contenedores de teclado conocidos
+            for sel in [".simple-keyboard", ".keyboard-container", "[class*='keyboard']"]:
+                els = driver.find_elements(By.CSS_SELECTOR, sel)
+                if els:
+                    logger.info("[galicia-kbd] Contenedor %r: %d elementos", sel, len(els))
+
+            # Botones del teclado
+            btns = driver.find_elements(By.CSS_SELECTOR, ".hg-button")
+            logger.info("[galicia-kbd] .hg-button encontrados: %d", len(btns))
+            if btns:
+                skbtns = []
+                texts = []
+                for b in btns[:30]:
+                    sk = b.get_attribute("data-skbtn") or ""
+                    tx = (b.text or "").strip()
+                    if sk:
+                        skbtns.append(repr(sk))
+                    elif tx:
+                        texts.append(repr(tx))
+                if skbtns:
+                    logger.info("[galicia-kbd] data-skbtn values: %s", ", ".join(skbtns))
+                if texts:
+                    logger.info("[galicia-kbd] button texts (sin data-skbtn): %s", ", ".join(texts))
+
+            # Alternativa: buscar cualquier botón dentro del keyboard
+            for sel in ["[class*='keyboard'] button", "[class*='key'] button",
+                        ".key button", "button[data-key]", "button[data-char]"]:
+                els = driver.find_elements(By.CSS_SELECTOR, sel)
+                if els:
+                    sample = [
+                        f"text={repr((e.text or '').strip()[:4])} "
+                        f"data-key={repr(e.get_attribute('data-key') or '')} "
+                        f"data-char={repr(e.get_attribute('data-char') or '')}"
+                        for e in els[:8]
+                    ]
+                    logger.info("[galicia-kbd] %r: %d btns → %s", sel, len(els), "; ".join(sample))
+
+        except Exception as exc:
+            logger.info("[galicia-kbd] error en dump_keyboard: %s", exc)
 
     # ── Flujo interactivo TOTP ────────────────────────────────────────────────
 
