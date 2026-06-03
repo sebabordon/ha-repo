@@ -1,3 +1,7 @@
+## 0.5.111
+
+- **amex scraper: excluye pagos al resumen y devoluciones RG 5617** (`scrapers/amex.py`): el scraper Selenium importaba `ACREDITACION DE VUESTRO PAGO` (pago al resumen) y `DEV PERCEPCION RG 5617` (devolución de percepción) como gastos normales, aunque el parser de PDF los excluye explícitamente (`"Gracias por su pago"` y el filtro `include_rg5617_credits`). Ahora `_parse_row` skipea filas cuya descripción empiece con `ACREDITACION` o contenga `5617`, manteniendo la misma lógica que la importación por PDF.
+
 ## 0.5.110
 
 - **BBVA: checkbox "Filtrar fechas en la API" en la UI del scraper** (`scraper_credentials.py`, `app.js`): el flag `filtro_fecha_api` ahora aparece como checkbox en la configuración de la instancia BBVA. Activado por default (comportamiento anterior). Al desactivarlo, el scraper envía fechas vacías y BBVA devuelve el saldo corriente real por movimiento. También se corrige el renderizado de checkbox con `default: true` en campos de scrapers — si el key no estaba en la config guardada, el checkbox ahora respeta el default del campo en lugar de aparecer siempre desmarcado.

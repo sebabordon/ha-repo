@@ -374,6 +374,15 @@ class AmexScraper(BaseScraper):
             if not desc:
                 return None
 
+            # Skipear pagos al resumen y devoluciones RG 5617: el parser de PDF
+            # los excluye ("Gracias por su pago" / include_rg5617_credits=false);
+            # el scraper hace lo mismo para mantener consistencia.
+            desc_up = desc.upper()
+            if desc_up.startswith("ACREDITACION"):
+                return None
+            if "5617" in desc_up:
+                return None
+
             # ── Moneda y monto ────────────────────────────────────────────────
             is_dollar = "dollarText" in (row.get_attribute("class") or "")
 
