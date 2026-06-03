@@ -1,3 +1,9 @@
+## 0.5.85
+
+- **Fix: Galicia BFF fetch — eliminar headers que rompen CORS preflight** (`scrapers/galicia.py`): se removieron `Cache-Control` y `Pragma` del fetch al BFF; algunos servidores no los listan en `Access-Control-Allow-Headers` y el preflight falla con "Failed to fetch". Solo se envía `id_channel: onlinebanking` como header custom.
+- **Fix: Galicia scrape — navegar explícitamente a `/tarjetas/ini`** antes de llamar el BFF para garantizar el contexto correcto de la SPA; loguea la URL al inicio del scrape.
+- **Debug: fetch error mejorado**: el catch ahora incluye `e.name`, `e.message`, `window.location.href` y la URL target para diagnóstico más claro.
+
 ## 0.5.84
 
 - **Fix: Galicia login — send_keys primario para contraseña** (`scrapers/galicia.py`): el campo password de Galicia acepta teclado normal, así que `send_keys()` es ahora la estrategia principal; el teclado virtual queda solo como fallback si send_keys falla. El logging diagnóstico del teclado se mantiene pero ya no bloquea el flujo.

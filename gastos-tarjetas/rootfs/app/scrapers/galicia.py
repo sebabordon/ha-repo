@@ -112,6 +112,8 @@ class GaliciaScraper(BaseScraper):
         """
         body_str = _json.dumps(json_body) if json_body is not None else None
 
+        # Solo id_channel es necesario; Cache-Control/Pragma rompen el CORS preflight
+        # porque algunos servidores no los listan en Access-Control-Allow-Headers.
         js = """
         var url    = arguments[0];
         var method = arguments[1];
@@ -119,10 +121,8 @@ class GaliciaScraper(BaseScraper):
         var cb     = arguments[arguments.length - 1];
 
         var headers = {
-            'Accept':         'application/vnd.iman.v1+json, application/json, */*',
-            'id_channel':     'onlinebanking',
-            'Cache-Control':  'no-store, no-cache, must-revalidate',
-            'Pragma':         'no-cache'
+            'Accept':     'application/vnd.iman.v1+json, application/json, */*',
+            'id_channel': 'onlinebanking'
         };
         if (method !== 'GET' && body !== null) {
             headers['Content-Type'] = 'application/json';
@@ -138,7 +138,12 @@ class GaliciaScraper(BaseScraper):
                 });
             })
             .catch(function(e) {
-                cb({status: 0, body: 'fetch error: ' + String(e)});
+                cb({
+                    status: 0,
+                    body: 'fetch error: ' + e.name + ': ' + e.message
+                         + ' | page=' + window.location.href
+                         + ' | url=' + url
+                });
             });
         """
 
@@ -592,11 +597,28 @@ class GaliciaScraper(BaseScraper):
             logger.info("[galicia] %s", msg)
             log.append(msg)
 
-        # Asegurar que estamos en tarjetas domain
+        # Asegurar que estamos en la SPA de tarjetas (/tarjetas/ini)
+        # Las llamadas BFF necesitan estar en ese contexto para que las cookies
+        # de sesión del dominio tarjetas.bancogalicia.com.ar sean enviadas.
         cur = driver.current_url or ""
+        _log(f"URL al iniciar scrape: {cur[:120]}")
+
         if "tarjetas.bancogalicia.com.ar" not in cur:
             _log("Navegando a tarjetas desde scrape()…")
             self._navigate_to_tarjetas(driver)
+            cur = driver.current_url or ""
+
+        # Navegar explícitamente a /tarjetas/ini si no estamos ya en esa ruta.
+        # Esto garantiza el contexto correcto de la SPA antes de llamar el BFF.
+        if "/tarjetas/ini" not in cur:
+            _log(f"Navegando a /tarjetas/ini (URL actual: {cur[:80]})")
+            driver.get(_TARJETAS_URL)
+            time.sleep(4)   # esperar inicialización del SPA Next.js
+            cur = driver.current_url or ""
+            _log(f"URL tras navegar a /tarjetas/ini: {cur[:120]}")
+        else:
+            _log("Ya en /tarjetas/ini — no es necesario navegar")
+            time.sleep(1)
 
         # ── Obtener info de tarjetas y período ────────────────────────────────
         _log("Llamando BFF overview/cards…")
