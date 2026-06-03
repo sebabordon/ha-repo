@@ -984,11 +984,23 @@ class GaliciaScraper(BaseScraper):
         plan   = int(c.get("installment_plan")   or 0)
         numero = int(c.get("installment_number") or 0)
 
-        # Fecha: para cuotas usamos submission_date (cuándo se acreditó al período
-        # actual, ej. 2026-06-01). Es la fecha que aparece en el PDF.
-        # Para compras en 1 pago usamos transaction_date (fecha real de la compra).
+        # Fecha:
+        #   compra 1 pago → transaction_date (fecha real de la operación)
+        #   cuota N/M     → transaction_date + N meses
+        #                   (si compraste el 27/02 y es la cuota 4, el cargo cae en Jun 27)
+        #                   Produce el mismo resultado que _installment_date del parser PDF.
         if plan > 0 and numero > 0:
-            fecha = c.get("submission_date") or c.get("transaction_date") or ""
+            try:
+                import calendar as _cal
+                from datetime import date as _date
+                d = _date.fromisoformat(c.get("transaction_date", ""))
+                total_month = d.month + numero
+                y = d.year + (total_month - 1) // 12
+                m = (total_month - 1) % 12 + 1
+                day = min(d.day, _cal.monthrange(y, m)[1])
+                fecha = _date(y, m, day).isoformat()
+            except Exception:
+                fecha = c.get("submission_date") or c.get("transaction_date") or ""
         else:
             fecha = c.get("transaction_date") or c.get("submission_date") or ""
         if not fecha:

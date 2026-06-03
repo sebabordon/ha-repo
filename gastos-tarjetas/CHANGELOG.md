@@ -1,3 +1,7 @@
+## 0.5.103
+
+- **Fix: Galicia cuotas — fecha = transaction_date + N meses** (`scrapers/galicia.py`): lógica más simple y correcta. Si la compra fue el 27/05 y es la cuota 2, la fecha es 27/07. Equivalente a `_installment_date` del parser PDF y coincide exactamente con lo que Galicia reporta en el resumen. 
+
 ## 0.5.102
 
 - **Fix: Galicia cuotas — usar `submission_date` como fecha** (`scrapers/galicia.py`): para cuotas (`installment_plan > 0`), la fecha pasa a ser `submission_date` (cuando la cuota fue acreditada al período actual, ej. `2026-06-01`) en lugar de `transaction_date` (fecha original de la compra). Esto coincide con la fecha que aparece en el PDF de Galicia y mejora la conciliación scraper↔PDF en caso de subir el resumen de un período abierto.
