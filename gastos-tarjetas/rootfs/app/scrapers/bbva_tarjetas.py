@@ -42,14 +42,24 @@ _MC_RE   = re.compile(r"\bmastercard\b|\bmaster\b", re.IGNORECASE)
 _EP_TARJETAS  = "/cliente/productos/tarjetas"
 
 # Candidatos de endpoint de consumos, en orden de probabilidad.
-# Se prueban todos hasta encontrar el primero que devuelva HTTP 200.
-# El tipo de tarjeta se interpola como {tipo_lower} / {tipo_clave}.
+# Se prueban POST y GET para cada variante.
+# {tipo_clave} → "Visa" / "Mastercard"
+# {id}         → id numérico del producto (interpolado en _fetch_consumos)
 _EP_CONSUMOS_CANDIDATES = [
-    "/cliente/productos/tarjetasCredito{tipo_clave}/consumos",  # tarjetasCreditoVisa / tarjetasCreditoMastercard
-    "/cliente/productos/tarjetas/consumos",
-    "/cliente/productos/tarjetas{tipo_clave}/consumos",         # tarjetasVisa / tarjetasMastercard
-    "/cliente/tarjetas/credito/consumos",
-    "/cliente/tarjetas/consumos",
+    # Variantes con tipo en el path (POST)
+    ("/cliente/productos/tarjetasCredito{tipo_clave}/consumos",  "POST"),
+    ("/cliente/productos/tarjetas/credito/{tipo_clave_lower}/consumos", "POST"),
+    ("/cliente/productos/tarjetas/consumos",                     "POST"),
+    ("/cliente/productos/tarjetas{tipo_clave}/consumos",         "POST"),
+    ("/cliente/tarjetas/credito/consumos",                       "POST"),
+    ("/cliente/tarjetas/consumos",                               "POST"),
+    # Variantes con ID en el path (GET)
+    ("/cliente/productos/tarjetas/{id}/consumos",                "GET"),
+    ("/cliente/productos/tarjetasCredito{tipo_clave}/{id}/consumos", "GET"),
+    ("/cliente/tarjetas/{id}/consumos",                          "GET"),
+    # Variantes GET sin ID
+    ("/cliente/productos/tarjetasCredito{tipo_clave}/consumos",  "GET"),
+    ("/cliente/productos/tarjetas/consumos",                     "GET"),
 ]
 
 
@@ -237,19 +247,27 @@ class BbvaTarjetasScraper(BbvaScraper):
         import time as _time
 
         id_tj      = tj["id"]
-        tipo_clave = tj.get("tipo_clave", "")
+        tipo_clave = tj.get("tipo_clave", "")          # "Visa" / "Mastercard"
+        tipo_lower = tipo_clave.lower()                 # "visa" / "mastercard"
         payload    = {"idProducto": id_tj}
 
-        for ep_tpl in _EP_CONSUMOS_CANDIDATES:
-            ep = ep_tpl.format(tipo_clave=tipo_clave)
-            resp = self._api_request(driver, ep, method="POST", json_body=payload)
-            log_fn(f"  POST {ep} → HTTP {resp['status']}")
+        for ep_tpl, method in _EP_CONSUMOS_CANDIDATES:
+            ep = ep_tpl.format(
+                tipo_clave=tipo_clave,
+                tipo_clave_lower=tipo_lower,
+                id=id_tj,
+            )
+            resp = self._api_request(
+                driver, ep,
+                method=method,
+                json_body=payload if method == "POST" else None,
+            )
+            log_fn(f"  {method} {ep} → HTTP {resp['status']}")
             if resp["status"] == 200 and resp["json"]:
-                log_fn(f"  ✓ Endpoint encontrado: {ep}")
+                log_fn(f"  ✓ Endpoint encontrado: {method} {ep}")
                 log_fn(f"  [diag] body[:2000]: {resp['body'][:2000]}")
                 return self._parse_consumos(resp["json"], fuente, usuario_default, log_fn, tj["nombre"])
             if resp["status"] not in (404, 0):
-                # Error inesperado (no 404) — loguear y parar
                 log_fn(f"  [diag] body[:500]: {resp['body'][:500]}")
 
         # Ningún candidato funcionó — interceptar fetch del SPA para descubrir el endpoint

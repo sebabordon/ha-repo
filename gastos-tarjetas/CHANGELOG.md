@@ -1,3 +1,7 @@
+## 0.5.119
+
+- **Scraper BBVA tarjetas: más candidatos de endpoint + GET con ID en path** (`scrapers/bbva_tarjetas.py`): los HARs disponibles no tienen la llamada de consumos de tarjeta (solo capturan login + cuentas). Se amplían los candidatos con variantes GET (`/tarjetas/{id}/consumos`, `/tarjetasCreditoVisa/{id}/consumos`) y variantes con el tipo en minúsculas. El interceptor de fetch/XHR (v0.5.118) mostrará el endpoint real si ningún candidato acierta.
+
 ## 0.5.118
 
 - **Fix interceptor fetch BBVA tarjetas: log sin filtro + XHR** (`scrapers/bbva_tarjetas.py`): el interceptor descartaba calls sin `"servicios"` en la URL; ahora loguea todas sin filtro. Agrega interceptor de `XMLHttpRequest` además de `fetch` (Angular usa XHR en algunos builds).
