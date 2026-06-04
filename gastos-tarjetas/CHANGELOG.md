@@ -1,3 +1,7 @@
+## 0.5.120
+
+- **Scraper BBVA tarjetas: endpoint correcto confirmado por HAR** (`scrapers/bbva_tarjetas.py`): reescritura completa basada en `bbvalogin6.har`. El token de cada tarjeta está en el campo `numeroPan` de la respuesta de `/cliente/productos/tarjetas`. Los consumos se obtienen con `GET /cards/v1/cards/{numeroPan}/transactions` (responde con array `data[]` con campos `localAmount.amount`, `concept`, `operationDate`). El saldo viene de `GET /cliente/productos/tarjetas/{id}/datosultimoproximoresumen` → `result.estadoActual.saldoPesos`. Se eliminan los ~11 candidatos de endpoint y el interceptor de fetch, reemplazados por el flujo exacto del HAR.
+
 ## 0.5.119
 
 - **Scraper BBVA tarjetas: más candidatos de endpoint + GET con ID en path** (`scrapers/bbva_tarjetas.py`): los HARs disponibles no tienen la llamada de consumos de tarjeta (solo capturan login + cuentas). Se amplían los candidatos con variantes GET (`/tarjetas/{id}/consumos`, `/tarjetasCreditoVisa/{id}/consumos`) y variantes con el tipo en minúsculas. El interceptor de fetch/XHR (v0.5.118) mostrará el endpoint real si ningún candidato acierta.

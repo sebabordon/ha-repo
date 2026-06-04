@@ -1,27 +1,28 @@
 """
 Scraper BBVA Argentina — Tarjetas de Crédito (Visa y Mastercard).
 
-Misma estrategia que el scraper de cuentas (bbva.py): login natural con
-Selenium + llamadas REST vía fetch() desde dentro del browser (para que
-Akamai BotManager acepte las requests con el fingerprint correcto).
+Misma estrategia que el scraper de cuentas (bbva.py): hereda BbvaScraper
+para login / sesión / _api_request y solo overridea scrape().
 
-Hereda de BbvaScraper todo el flujo de login / sesión / _api_request.
-Solo overridea scrape() para llamar los endpoints de tarjetas en lugar
-de los de cuentas.
+Flujo (confirmado por HAR bbvalogin6.har):
+  1. GET  /cliente/productos/tarjetas
+       → lista tarjetasCreditoVisa / tarjetasCreditoMastercard
+       → cada item tiene `id` (numérico) y `numeroPan` (token opaco)
+  2. GET  /cards/v1/cards/{numeroPan}/transactions
+       → array `data[]` con los consumos del período en curso
+       → campos: localAmount.{amount,currency}, concept, operationDate
+  3. GET  /cliente/productos/tarjetas/{id}/datosultimoproximoresumen
+       → result.estadoActual.{saldoPesos, saldoDolares}
 
 Tarjetas soportadas:
-  VISA (cualquier variante)  → fuente "bbva_visa"
-  MASTERCARD (Black, Gold…)  → fuente "bbva_mc"
+  tarjetasCreditoVisa        → fuente "bbva_visa"
+  tarjetasCreditoMastercard  → fuente "bbva_mc"
 
 El mapeo tarjeta→fuente se puede overridear vía __cuentas__ del scheduler
 usando product_key="VISA" o product_key="MC".
-
-Período: BBVA sólo expone los consumos del período en curso en el endpoint
-de movimientos de tarjeta — el scraper importa todo lo que devuelve la API.
 """
 
 import logging
-import os
 import re
 from typing import Optional
 
@@ -30,37 +31,19 @@ from .bbva import BbvaScraper
 
 logger = logging.getLogger(__name__)
 
-# Fuentes por defecto cuando no hay __cuentas__ override
 _FUENTE_VISA = "bbva_visa"
 _FUENTE_MC   = "bbva_mc"
 
-# Detecta tipo de tarjeta por texto de la API (marca, descripción, alias)
-_VISA_RE = re.compile(r"\bvisa\b", re.IGNORECASE)
-_MC_RE   = re.compile(r"\bmastercard\b|\bmaster\b", re.IGNORECASE)
+_EP_TARJETAS   = "/cliente/productos/tarjetas"
+_EP_TRANSACC   = "/cards/v1/cards/{pan}/transactions"
+_EP_RESUMEN    = "/cliente/productos/tarjetas/{id}/datosultimoproximoresumen"
 
-# Endpoints (se ajustan con el diagnóstico del primer run)
-_EP_TARJETAS  = "/cliente/productos/tarjetas"
+# Detecta tipo de tarjeta por nombre de clave en la API
+_VISA_RE = re.compile(r"\bvisa\b",        re.IGNORECASE)
+_MC_RE   = re.compile(r"\bmastercard\b",  re.IGNORECASE)
 
-# Candidatos de endpoint de consumos, en orden de probabilidad.
-# Se prueban POST y GET para cada variante.
-# {tipo_clave} → "Visa" / "Mastercard"
-# {id}         → id numérico del producto (interpolado en _fetch_consumos)
-_EP_CONSUMOS_CANDIDATES = [
-    # Variantes con tipo en el path (POST)
-    ("/cliente/productos/tarjetasCredito{tipo_clave}/consumos",  "POST"),
-    ("/cliente/productos/tarjetas/credito/{tipo_clave_lower}/consumos", "POST"),
-    ("/cliente/productos/tarjetas/consumos",                     "POST"),
-    ("/cliente/productos/tarjetas{tipo_clave}/consumos",         "POST"),
-    ("/cliente/tarjetas/credito/consumos",                       "POST"),
-    ("/cliente/tarjetas/consumos",                               "POST"),
-    # Variantes con ID en el path (GET)
-    ("/cliente/productos/tarjetas/{id}/consumos",                "GET"),
-    ("/cliente/productos/tarjetasCredito{tipo_clave}/{id}/consumos", "GET"),
-    ("/cliente/tarjetas/{id}/consumos",                          "GET"),
-    # Variantes GET sin ID
-    ("/cliente/productos/tarjetasCredito{tipo_clave}/consumos",  "GET"),
-    ("/cliente/productos/tarjetas/consumos",                     "GET"),
-]
+# Tipos de transacción que son pagos/créditos (monto negativo)
+_CREDITO_TYPES = {"PAYMENT", "CREDIT", "PAGO", "CREDITO", "REFUND", "REVERSAL"}
 
 
 class BbvaTarjetasScraper(BbvaScraper):
@@ -93,40 +76,35 @@ class BbvaTarjetasScraper(BbvaScraper):
         movimientos: list[MovimientoRaw] = []
         saldos: dict = {}
 
-        # ── 1. Obtener lista de tarjetas ──────────────────────────────────────
+        # ── 1. Lista de tarjetas ──────────────────────────────────────────────
         resp = self._api_request(driver, _EP_TARJETAS)
         _log(f"GET {_EP_TARJETAS} → HTTP {resp['status']}")
-        _log(f"[diag] body[:1000]: {resp['body'][:1000]}")
-
         if resp["status"] != 200 or not resp["json"]:
-            _log("⚠ No se pudo obtener la lista de tarjetas — revisar endpoint")
+            _log("⚠ No se pudo obtener la lista de tarjetas")
             return ScraperResult(fuente=self.fuente, movimientos=[], log_lines=log)
 
         tarjetas = self._extract_tarjetas(resp["json"], _log)
         _log(f"Tarjetas encontradas: {len(tarjetas)}")
 
-        # ── 2. Para cada tarjeta, obtener consumos ────────────────────────────
+        # ── 2. Consumos + saldo por tarjeta ───────────────────────────────────
         for tj in tarjetas:
-            tipo   = tj["tipo"]    # "VISA" o "MC"
+            tipo   = tj["tipo"]
             nombre = tj["nombre"]
-            id_tj  = tj["id"]
             fuente = product_to_fuente.get(tipo)
-
             if not fuente:
                 _log(f"  Saltando {nombre} (tipo={tipo} sin mapeo)")
                 continue
 
-            _log(f"  Procesando {nombre} (id={id_tj}) → fuente={fuente}")
-
+            _log(f"  Procesando {nombre} → fuente={fuente}")
             try:
-                movs, saldo = self._fetch_consumos(driver, tj, fuente, usuario_default, _log)
+                movs, saldo = self._fetch_tarjeta(driver, tj, fuente, usuario_default, _log)
                 movimientos.extend(movs)
                 if saldo is not None:
                     saldos[fuente] = {"saldo_ars": saldo}
                 _log(f"  → {len(movs)} consumos, saldo={saldo}")
             except Exception as exc:
                 _log(f"  ✗ Error en {nombre}: {exc}")
-                logger.exception("[bbva-tj] Error scrapeando tarjeta %s", nombre)
+                logger.exception("[bbva-tj] Error scrapeando %s", nombre)
 
         return ScraperResult(
             fuente      = self.fuente,
@@ -139,99 +117,71 @@ class BbvaTarjetasScraper(BbvaScraper):
 
     def _extract_tarjetas(self, json_body: dict, log_fn) -> list[dict]:
         """
-        Parsea la respuesta de GET /cliente/productos/tarjetas.
-
-        BBVA devuelve las tarjetas en listas separadas por tipo bajo result:
-          "tarjetasCreditoVisa":       [...] → tipo VISA
-          "tarjetasCreditoMastercard": [...] → tipo MC
-          "tarjetasCreditoAmex":       [...] → (ignoradas, usa scraper amex)
-
-        El tipo se deduce del nombre de la clave; si no matchea, se intenta
-        por el texto de los campos del item.
+        Parsea GET /cliente/productos/tarjetas.
+        Itera sobre las claves del result que contengan "credito" en el nombre
+        (tarjetasCreditoVisa, tarjetasCreditoMastercard) y deduce el tipo
+        (VISA / MC) del nombre de la clave.
+        Extrae id, numeroPan y nombre de cada item.
         """
         result = json_body.get("result") or json_body
         if not isinstance(result, dict):
-            log_fn(f"  [diag] result no es dict: {str(json_body)[:500]}")
+            log_fn(f"  [diag] result inesperado: {str(json_body)[:300]}")
             return []
-
-        # Determinar tipo por nombre de clave
-        def _tipo_from_key(key: str) -> Optional[str]:
-            k = key.lower()
-            if "visa" in k:
-                return "VISA"
-            if "master" in k:
-                return "MC"
-            return None
 
         tarjetas = []
         for key, items in result.items():
             if not isinstance(items, list) or not items:
                 continue
-
-            tipo_key = _tipo_from_key(key)
-            # Ignorar tarjetas de débito y otras listas no relacionadas con crédito
-            if "debito" in key.lower() or "debit" in key.lower():
+            kl = key.lower()
+            if "debito" in kl or "debit" in kl:
+                continue  # ignorar tarjetas de débito
+            if "credito" not in kl and "credit" not in kl and "card" not in kl:
                 continue
-            if tipo_key is None and not any(
-                k in key.lower() for k in ("tarjeta", "credito", "credit", "card")
-            ):
-                continue  # no parece una lista de tarjetas
 
-            log_fn(f"  Clave '{key}': {len(items)} items (tipo_key={tipo_key})")
+            tipo = "VISA" if _VISA_RE.search(key) else ("MC" if _MC_RE.search(key) else None)
+            log_fn(f"  Clave '{key}': {len(items)} items (tipo={tipo})")
 
             for item in items:
-                id_tj = (
-                    item.get("id") or item.get("idProducto") or
-                    item.get("contractId") or item.get("contrato") or ""
-                )
+                id_tj     = str(item.get("id") or item.get("idProducto") or "")
+                numero_pan = str(item.get("numeroPan") or "")
+                numero    = item.get("numero") or ""
 
-                # Tipo: desde la clave o desde los campos del item
-                tipo = tipo_key
-                if tipo is None:
-                    texto = " ".join(str(item.get(k) or "") for k in (
-                        "alias", "descripcion", "description",
-                        "marca", "brand", "tipo", "type",
-                        "tipoProducto",
-                    ))
-                    # También buscar en tipoProducto anidado
-                    tp = item.get("tipoProducto") or {}
-                    if isinstance(tp, dict):
-                        texto += " " + str(tp.get("descripcion") or "")
-                    if _VISA_RE.search(texto):
-                        tipo = "VISA"
-                    elif _MC_RE.search(texto):
-                        tipo = "MC"
+                if not id_tj or not numero_pan:
+                    log_fn(f"  ⚠ Item sin id o numeroPan: {item}")
+                    continue
+
+                # Tipo desde la clave; fallback por campos del item
+                t = tipo
+                if t is None:
+                    texto = " ".join(str(item.get(k) or "") for k in
+                                     ("alias", "descripcion", "marca", "brand"))
+                    t_sub = item.get("tipoProducto") or {}
+                    texto += " " + str(t_sub.get("descripcion") or "")
+                    if _VISA_RE.search(texto):   t = "VISA"
+                    elif _MC_RE.search(texto):   t = "MC"
                     else:
-                        log_fn(f"  Tipo no reconocido para item id={id_tj}: {str(item)[:200]}")
+                        log_fn(f"  Tipo no reconocido: {str(item)[:200]}")
                         continue
 
                 nombre = (
                     item.get("alias") or
                     (item.get("tipoProducto") or {}).get("descripcion") or
-                    item.get("descripcion") or
-                    ("Tarjeta Visa" if tipo == "VISA" else "Tarjeta Mastercard")
+                    ("Visa" if t == "VISA" else "Mastercard")
                 )
-                numero = item.get("numero") or ""
-
-                # tipo_clave: sufijo del nombre de clave en la API
-                # "VISA" → "Visa",  "MC" → "Mastercard"
-                # Se usa en templates como tarjetasCredito{tipo_clave} → tarjetasCreditoVisa
-                tipo_clave = "Visa" if tipo == "VISA" else "Mastercard"
 
                 tarjetas.append({
-                    "id":         str(id_tj),
-                    "tipo":       tipo,
-                    "tipo_clave": tipo_clave,
-                    "nombre":     f"{nombre} {numero}".strip()[:80],
-                    "raw":        item,
+                    "id":        id_tj,
+                    "pan":       numero_pan,
+                    "tipo":      t,
+                    "nombre":    f"{nombre} {numero}".strip()[:80],
                 })
-                log_fn(f"  Tarjeta: tipo={tipo} nombre={nombre!r} numero={numero} id={id_tj}")
+                log_fn(f"  Tarjeta: tipo={t} nombre={nombre!r} num={numero} id={id_tj}")
 
         return tarjetas
 
-    # ── Consumos de una tarjeta ───────────────────────────────────────────────
+    # ── Fetch de una tarjeta: saldo + consumos ────────────────────────────────
 
-    def _fetch_consumos(
+    def _fetch_tarjeta(
         self,
         driver,
         tj: dict,
@@ -239,256 +189,138 @@ class BbvaTarjetasScraper(BbvaScraper):
         usuario_default: Optional[str],
         log_fn,
     ) -> tuple[list[MovimientoRaw], Optional[float]]:
-        """
-        Prueba los candidatos de endpoint de consumos en orden hasta que uno
-        responda HTTP 200. Si ninguno funciona, activa el interceptor de fetch
-        del SPA para descubrir el endpoint real navegando al browser.
-        """
-        import time as _time
 
-        id_tj      = tj["id"]
-        tipo_clave = tj.get("tipo_clave", "")          # "Visa" / "Mastercard"
-        tipo_lower = tipo_clave.lower()                 # "visa" / "mastercard"
-        payload    = {"idProducto": id_tj}
-
-        for ep_tpl, method in _EP_CONSUMOS_CANDIDATES:
-            ep = ep_tpl.format(
-                tipo_clave=tipo_clave,
-                tipo_clave_lower=tipo_lower,
-                id=id_tj,
-            )
-            resp = self._api_request(
-                driver, ep,
-                method=method,
-                json_body=payload if method == "POST" else None,
-            )
-            log_fn(f"  {method} {ep} → HTTP {resp['status']}")
-            if resp["status"] == 200 and resp["json"]:
-                log_fn(f"  ✓ Endpoint encontrado: {method} {ep}")
-                log_fn(f"  [diag] body[:2000]: {resp['body'][:2000]}")
-                return self._parse_consumos(resp["json"], fuente, usuario_default, log_fn, tj["nombre"])
-            if resp["status"] not in (404, 0):
-                log_fn(f"  [diag] body[:500]: {resp['body'][:500]}")
-
-        # Ningún candidato funcionó — interceptar fetch del SPA para descubrir el endpoint
-        log_fn("  Todos los candidatos dieron 404 — activando interceptor fetch del SPA…")
-        self._intercept_spa_consumos(driver, tj, log_fn)
-        return [], None
-
-    def _intercept_spa_consumos(self, driver, tj: dict, log_fn) -> None:
-        """
-        Inyecta un monkey-patch sobre window.fetch, luego navega DENTRO del SPA
-        (sin driver.get que recargaría la página) para que el interceptor siga activo
-        mientras el SPA hace sus llamadas al API de consumos.
-        """
-        import time as _time
-        _BASE_URL = "https://online.bbva.com.ar"
         id_tj = tj["id"]
+        pan   = tj["pan"]
 
-        # Asegurarse de estar en el dominio correcto con la SPA ya cargada
-        cur = driver.current_url or ""
-        if "fnetcore" not in cur:
-            driver.get(f"{_BASE_URL}/fnetcore/#/globalposition")
-            _time.sleep(8)
+        # Saldo actual
+        saldo = self._fetch_saldo(driver, id_tj, log_fn)
 
-        # 1. Inyectar interceptor en la página YA CARGADA (fetch + XHR)
-        driver.execute_script("""
-            window.__fetchLog = [];
+        # Consumos del período
+        ep = _EP_TRANSACC.format(pan=pan)
+        resp = self._api_request(driver, ep)
+        log_fn(f"  GET {ep} → HTTP {resp['status']}")
 
-            // — fetch interceptor —
-            var _origFetch = window.fetch;
-            window.fetch = function(url, opts) {
-                opts = opts || {};
-                window.__fetchLog.push({
-                    url:    String(url),
-                    method: String(opts.method || 'GET'),
-                    body:   String(opts.body   || '')
-                });
-                return _origFetch.apply(this, arguments);
-            };
+        if resp["status"] != 200 or not resp["json"]:
+            log_fn(f"  ⚠ Sin respuesta válida — body: {resp['body'][:300]}")
+            return [], saldo
 
-            // — XMLHttpRequest interceptor (Angular $http usa XHR en algunos builds) —
-            var _origOpen = XMLHttpRequest.prototype.open;
-            var _origSend = XMLHttpRequest.prototype.send;
-            XMLHttpRequest.prototype.open = function(method, url) {
-                this.__logUrl    = String(url);
-                this.__logMethod = String(method);
-                return _origOpen.apply(this, arguments);
-            };
-            XMLHttpRequest.prototype.send = function(body) {
-                window.__fetchLog.push({
-                    url:    this.__logUrl    || '',
-                    method: this.__logMethod || 'XHR',
-                    body:   String(body || '')
-                });
-                return _origSend.apply(this, arguments);
-            };
+        movs = self._parse_transactions(
+            resp["json"], fuente, usuario_default, log_fn, tj["nombre"]
+        )
+        return movs, saldo
 
-            console.log('[bbva-tj] fetch+XHR interceptor activo');
-        """)
-        log_fn("  [intercept] interceptor inyectado")
-
-        # 2. Navegar dentro del SPA con hash change (NO driver.get → no recarga)
-        #    Probamos varias rutas hash posibles de consumos de tarjeta BBVA.
-        hash_candidates = [
-            f"#/tarjeta-credito/consumos?idProducto={id_tj}",
-            f"#/tarjetas/consumos/{id_tj}",
-            f"#/mis-tarjetas/{id_tj}/consumos",
-            f"#/globalposition",  # volver al inicio fuerza carga de todos los productos
-        ]
-        for route in hash_candidates:
-            driver.execute_script(f"window.location.hash = '{route}';")
-            _time.sleep(4)
-            # Leer log parcial para ver si ya apareció algo
-            try:
-                partial = driver.execute_script(
-                    "return (window.__fetchLog || []).filter(function(c){"
-                    "  return c.url.indexOf('servicios') >= 0;"
-                    "});"
-                ) or []
-                if partial:
-                    log_fn(f"  [intercept] calls tras '{route}': {len(partial)}")
-                    break
-            except Exception:
-                pass
-
-        # 3. Leer todo lo capturado — filtrar solo llamadas a servicios/tarjetas
-        _time.sleep(2)
+    def _fetch_saldo(self, driver, id_tj: str, log_fn) -> Optional[float]:
+        ep   = _EP_RESUMEN.format(id=id_tj)
+        resp = self._api_request(driver, ep)
+        log_fn(f"  GET {ep} → HTTP {resp['status']}")
+        if resp["status"] != 200 or not resp["json"]:
+            return None
         try:
-            fetch_log = driver.execute_script("return window.__fetchLog || [];") or []
-            log_fn(f"  [intercept] total calls capturadas: {len(fetch_log)}")
-            # Loguear TODAS las calls sin filtro — el endpoint real puede tener
-            # cualquier path base, no necesariamente "/servicios/"
-            for call in fetch_log:
-                url  = call.get("url", "")
-                meth = call.get("method", "?")
-                body = (call.get("body") or "").strip()
-                log_fn(f"  [intercept] {meth} {url}")
-                if body and body not in ("null", "undefined", ""):
-                    log_fn(f"  [intercept]   body: {body[:400]}")
-        except Exception as exc:
-            log_fn(f"  [intercept] error leyendo log: {exc}")
+            estado = (resp["json"].get("result") or {}).get("estadoActual") or {}
+            s = estado.get("saldoPesos") or estado.get("saldoDolares")
+            if s:
+                val = float(str(s).replace(",", "."))
+                log_fn(f"  Saldo ARS: {val}")
+                return val
+        except (ValueError, TypeError):
+            pass
+        return None
 
-    def _parse_consumos(
+    # ── Parseo de transacciones ───────────────────────────────────────────────
+
+    def _parse_transactions(
         self,
         json_body: dict,
         fuente: str,
         usuario_default: Optional[str],
         log_fn,
         nombre_tarjeta: str,
-    ) -> tuple[list[MovimientoRaw], Optional[float]]:
+    ) -> list[MovimientoRaw]:
         """
-        Convierte la respuesta JSON de consumos en MovimientoRaw.
-        Soporta los formatos más comunes de la API BBVA.
+        Parsea la respuesta de GET /cards/v1/cards/{pan}/transactions.
+
+        Estructura (confirmada por HAR):
+          {
+            "data": [
+              {
+                "localAmount":   {"amount": "5089.98", "currency": "ARS"},
+                "concept":       "CONSUMO EN PESOS",
+                "operationDate": "2026-06-03T00:00:00.000-0300",
+                "transactionType": {"id": "AUTHORIZED", ...},
+                "status":        {"id": "SETTLED", ...},
+                ...
+              }, ...
+            ]
+          }
+
+        Convención de monto: positivo = egreso (cargo), negativo = crédito.
+        Los consumos tipo "AUTHORIZED"/"SETTLED" son egresos; pagos/créditos
+        se detectan por transactionType.id.
         """
-        result = json_body.get("result") or json_body
+        items = json_body.get("data") or []
+        if not items:
+            log_fn(f"  [diag] Sin items en 'data'. Keys: {list(json_body.keys())}")
+            return []
 
-        # Buscar la lista de consumos bajo distintas claves
-        consumos = []
-        for key in ("consumos", "movimientos", "transactions", "movements",
-                    "items", "data", "detalle"):
-            v = result.get(key) if isinstance(result, dict) else None
-            if isinstance(v, list) and v:
-                log_fn(f"  Consumos en campo '{key}': {len(v)} items")
-                consumos = v
-                break
-
-        if not consumos and isinstance(result, list):
-            consumos = result
-
-        if not consumos:
-            log_fn(f"  [diag] JSON completo: {str(json_body)[:2000]}")
-            return [], None
-
-        log_fn(f"  [diag] Keys del primer consumo: {sorted(consumos[0].keys()) if consumos else []}")
-
-        # Saldo total a pagar (si viene en el result)
-        saldo = None
-        for saldo_key in ("saldoActual", "saldo", "balance", "totalAPagar",
-                          "importeTotal", "montoCierre"):
-            sv = result.get(saldo_key) if isinstance(result, dict) else None
-            if sv is not None:
-                try:
-                    saldo = float(str(sv).replace(",", "."))
-                    log_fn(f"  Saldo desde '{saldo_key}': {saldo}")
-                    break
-                except (ValueError, TypeError):
-                    pass
+        log_fn(f"  Transacciones en respuesta: {len(items)}")
 
         movimientos = []
-        for item in consumos:
-            mov = self._parse_consumo(item, fuente, usuario_default, nombre_tarjeta)
+        for item in items:
+            mov = self._parse_one(item, fuente, usuario_default, nombre_tarjeta)
             if mov:
                 movimientos.append(mov)
 
-        return movimientos, saldo
+        return movimientos
 
-    def _parse_consumo(
+    def _parse_one(
         self,
         item: dict,
         fuente: str,
         usuario_default: Optional[str],
         nombre_tarjeta: str,
     ) -> Optional[MovimientoRaw]:
-        """
-        Parsea un consumo individual de la API BBVA.
 
-        Convención de monto (igual que todos los parsers CC):
-          monto > 0 = egreso (cargo en la tarjeta)
-          monto < 0 = ingreso (crédito / devolución)
-        """
-        # Fecha
+        # Fecha — "2026-06-03T00:00:00.000-0300"
         fecha_raw = (
-            item.get("fecha") or item.get("date") or
-            item.get("fechaConsumo") or item.get("fechaMovimiento") or
-            item.get("transactionDate") or ""
+            item.get("operationDate") or
+            item.get("accountedDate") or
+            item.get("valuationDate") or ""
         )
-        fecha_iso = self.parse_date_ar(str(fecha_raw))
-        if not fecha_iso:
-            # Intentar ISO directo (YYYY-MM-DD o YYYY-MM-DDThh:mm:ss)
-            m = re.match(r"^(\d{4}-\d{2}-\d{2})", str(fecha_raw))
-            if m:
-                fecha_iso = m.group(1)
-        if not fecha_iso:
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})", str(fecha_raw))
+        if not m:
             return None
+        fecha_iso = m.group(1)
 
         # Descripción
-        desc = (
-            item.get("descripcion") or item.get("description") or
-            item.get("concepto") or item.get("concept") or
-            item.get("comercio") or item.get("merchant") or
-            item.get("nombre") or ""
-        ).strip()
+        desc = (item.get("concept") or "").strip()
         if not desc:
             return None
 
-        # Importe
-        importe_raw = (
-            item.get("importe") or item.get("amount") or
-            item.get("monto") or item.get("total") or
-            item.get("importePesos") or 0
-        )
+        # Monto y moneda
+        local = item.get("localAmount") or {}
         try:
-            monto = float(str(importe_raw).replace(",", "."))
+            monto = float(str(local.get("amount") or 0).replace(",", "."))
         except (ValueError, TypeError):
             return None
-
         if monto == 0:
             return None
 
-        # Moneda
-        moneda_raw = (
-            item.get("moneda") or item.get("currency") or
-            item.get("codigoMoneda") or "ARS"
-        )
-        moneda = "USD" if "USD" in str(moneda_raw).upper() else "ARS"
+        moneda = "USD" if "USD" in str(local.get("currency") or "").upper() else "ARS"
 
-        raw_data: dict = {"tarjeta": nombre_tarjeta}
+        # Signo: créditos/pagos → monto negativo
+        tx_type = str((item.get("transactionType") or {}).get("id") or "").upper()
+        if tx_type in _CREDITO_TYPES:
+            monto = -abs(monto)
+        else:
+            monto = abs(monto)
+
+        raw_data: dict = {"tarjeta": nombre_tarjeta, "tx_type": tx_type}
         if usuario_default:
             raw_data["usuario"] = usuario_default
-        for k in ("cuotas", "numeroCupon", "codigoAutorizacion", "canal"):
-            if item.get(k):
-                raw_data[k] = item[k]
+        status = (item.get("status") or {}).get("id")
+        if status:
+            raw_data["status"] = status
 
         return MovimientoRaw(
             fuente      = fuente,
