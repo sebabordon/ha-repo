@@ -203,9 +203,10 @@ class BbvaTarjetasScraper(BbvaScraper):
                 )
                 numero = item.get("numero") or ""
 
-                # tipo_clave: la parte del nombre de clave de la API que identifica
-                # el tipo, ej. "Visa" → "CreditoVisa", "MC" → "CreditoMastercard"
-                tipo_clave = "CreditoVisa" if tipo == "VISA" else "CreditoMastercard"
+                # tipo_clave: sufijo del nombre de clave en la API
+                # "VISA" → "Visa",  "MC" → "Mastercard"
+                # Se usa en templates como tarjetasCredito{tipo_clave} → tarjetasCreditoVisa
+                tipo_clave = "Visa" if tipo == "VISA" else "Mastercard"
 
                 tarjetas.append({
                     "id":         str(id_tj),
@@ -258,14 +259,21 @@ class BbvaTarjetasScraper(BbvaScraper):
 
     def _intercept_spa_consumos(self, driver, tj: dict, log_fn) -> None:
         """
-        Inyecta un monkey-patch sobre window.fetch en el browser, navega a la
-        página de consumos de la tarjeta, y loguea todas las llamadas fetch que
-        hace el SPA para que podamos identificar el endpoint correcto.
+        Inyecta un monkey-patch sobre window.fetch, luego navega DENTRO del SPA
+        (sin driver.get que recargaría la página) para que el interceptor siga activo
+        mientras el SPA hace sus llamadas al API de consumos.
         """
         import time as _time
         _BASE_URL = "https://online.bbva.com.ar"
+        id_tj = tj["id"]
 
-        # 1. Inyectar el interceptor
+        # Asegurarse de estar en el dominio correcto con la SPA ya cargada
+        cur = driver.current_url or ""
+        if "fnetcore" not in cur:
+            driver.get(f"{_BASE_URL}/fnetcore/#/globalposition")
+            _time.sleep(8)
+
+        # 1. Inyectar interceptor en la página YA CARGADA
         driver.execute_script("""
             window.__fetchLog = [];
             var _orig = window.fetch;
@@ -278,26 +286,47 @@ class BbvaTarjetasScraper(BbvaScraper):
                 });
                 return _orig.apply(this, arguments);
             };
+            console.log('[bbva-tj] fetch interceptor activo');
         """)
+        log_fn("  [intercept] interceptor inyectado")
 
-        # 2. Navegar al dashboard y hacer click en la tarjeta
-        driver.get(f"{_BASE_URL}/fnetcore/#/globalposition")
-        _time.sleep(8)
+        # 2. Navegar dentro del SPA con hash change (NO driver.get → no recarga)
+        #    Probamos varias rutas hash posibles de consumos de tarjeta BBVA.
+        hash_candidates = [
+            f"#/tarjeta-credito/consumos?idProducto={id_tj}",
+            f"#/tarjetas/consumos/{id_tj}",
+            f"#/mis-tarjetas/{id_tj}/consumos",
+            f"#/globalposition",  # volver al inicio fuerza carga de todos los productos
+        ]
+        for route in hash_candidates:
+            driver.execute_script(f"window.location.hash = '{route}';")
+            _time.sleep(4)
+            # Leer log parcial para ver si ya apareció algo
+            try:
+                partial = driver.execute_script(
+                    "return (window.__fetchLog || []).filter(function(c){"
+                    "  return c.url.indexOf('servicios') >= 0;"
+                    "});"
+                ) or []
+                if partial:
+                    log_fn(f"  [intercept] calls tras '{route}': {len(partial)}")
+                    break
+            except Exception:
+                pass
 
-        # Intentar navegar directo a una URL de consumos conocida para el id
-        driver.get(f"{_BASE_URL}/fnetcore/")
-        _time.sleep(5)
-
-        # 3. Recolectar lo que capturó el interceptor
+        # 3. Leer todo lo capturado — filtrar solo llamadas a servicios/tarjetas
+        _time.sleep(2)
         try:
             fetch_log = driver.execute_script("return window.__fetchLog || [];") or []
-            log_fn(f"  [intercept] {len(fetch_log)} calls fetch capturadas")
+            log_fn(f"  [intercept] total calls capturadas: {len(fetch_log)}")
             for call in fetch_log:
                 url = call.get("url", "")
-                if "servicios" in url or "tarjeta" in url.lower() or "consumo" in url.lower():
-                    log_fn(f"  [intercept] {call.get('method')} {url}")
-                    if call.get("body") and call["body"] != "null":
-                        log_fn(f"  [intercept]   body: {call['body'][:300]}")
+                # Mostrar TODAS las calls a /servicios/ para no perdernos nada
+                if "servicios" in url:
+                    log_fn(f"  [intercept] {call.get('method','?')} {url}")
+                    body = (call.get("body") or "").strip()
+                    if body and body != "null" and body != "undefined":
+                        log_fn(f"  [intercept]   body: {body[:400]}")
         except Exception as exc:
             log_fn(f"  [intercept] error leyendo log: {exc}")
 

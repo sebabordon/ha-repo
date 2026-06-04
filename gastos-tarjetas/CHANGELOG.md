@@ -1,3 +1,7 @@
+## 0.5.117
+
+- **Fix scraper BBVA tarjetas: bug tipo_clave doble "Credito" + interceptor fetch** (`scrapers/bbva_tarjetas.py`): corregido el bug en el template de endpoint que generaba `tarjetasCreditoCreditoVisa` (ahora `tipo_clave` es `"Visa"`/`"Mastercard"` sin el prefijo extra). El interceptor de `window.fetch` ahora navega dentro del SPA con `window.location.hash` en lugar de `driver.get()`, que recargaba la página y perdía el monkey-patch; además loguea todas las calls a `/servicios/` para identificar el endpoint real de consumos.
+
 ## 0.5.116
 
 - **Fix: categoría "Pago de Tarjeta" (con "de")** (`db.py`, `routes/gastos.py`, `app.js`): el código usaba `"Pago Tarjeta"` pero la categoría ya existente en la DB era `"Pago de Tarjeta"`. El mismatch hacía que `detect_card_payments` no excluyera entradas ya categorizadas y que "Ya emparejados" no las mostrara. Renombrado en los 4 lugares donde aparecía.
