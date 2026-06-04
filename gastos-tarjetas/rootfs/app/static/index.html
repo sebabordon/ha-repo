@@ -489,6 +489,7 @@
         <button class="cfg-tab" data-cfgtab="personas">Personas</button>
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
+        <button class="cfg-tab" data-cfgtab="importacion">Importación</button>
         <button class="cfg-tab cfg-tab-danger" data-cfgtab="borrar">⚠ Borrar</button>
       </div>
 
@@ -784,6 +785,35 @@
             <span class="ui-prev-tog">$ 1.100.000 −RG</span>
             <span class="ui-prev-accent">Acento</span>
           </div>
+        </div>
+      </div>
+
+      <!-- ── Sub-tab: Importación ──────────────────────────────────── -->
+      <div id="cfg-tab-importacion" class="cfg-tab-content">
+        <h2>Importación — Reglas de dedup</h2>
+        <p class="hint" style="margin-bottom:1rem">
+          Cuando un movimiento llega con una descripción genérica/temporal y ya existe
+          uno con descripción específica (o viceversa) para el mismo monto y fecha,
+          el sistema los fusiona en lugar de duplicarlos. Estas listas definen qué
+          descripciones se consideran "genéricas".
+        </p>
+
+        <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px">
+            <label class="field-label">Prefijos genéricos <span class="hint">(startsWith, uno por línea)</span></label>
+            <textarea id="dedup-prefijos" rows="8" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
+            <p class="hint">Ej: <code>BANELCO Nro:</code> · <code>PAGO SERVICIOS Nro:</code> · <code>DB TRF</code></p>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <label class="field-label">Exactos genéricos <span class="hint">(coincidencia exacta, uno por línea)</span></label>
+            <textarea id="dedup-exactos" rows="8" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
+            <p class="hint">Ej: <code>TRANSFERENCIA</code> · <code>Transferencia inmediata</code></p>
+          </div>
+        </div>
+        <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-primary" onclick="saveDedupConfig()">Guardar</button>
+          <button class="btn" onclick="loadDedupConfig()">Restablecer</button>
+          <span id="dedup-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
       </div>
 

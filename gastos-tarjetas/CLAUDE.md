@@ -44,6 +44,25 @@ Concrete examples of what this means:
 In short: **don't commit half-implementations**. A feature is done when it works,
 not when the code that should make it work exists.
 
+## Configuration must live in the UI (MANDATORY)
+
+Every configurable value — thresholds, pattern lists, flags, texts — must be
+editable from the UI. **Never hardcode configuration in Python.**
+
+- **Scraper-specific config** (dias, filtro_fecha_api, usuario_default, etc.) →
+  define in `scraper_credentials.py`, render in `app.js`, save via
+  `saveScraperConfig`, read in the scraper's `run()`.
+- **Global / cross-scraper config** (dedup prefixes, behaviour flags, etc.) →
+  expose in Config → the most relevant section. Create a new subsection if
+  needed (e.g. Config → Importación for dedup rules).
+- A sensible default is fine, but the user must be able to override it from
+  the UI without touching code.
+
+Examples of things that must NOT stay hardcoded:
+- `_GENERIC_PREFIXES` / `_GENERIC_DESCS` in `scrapers_db.py`
+- Any numerical threshold used in matching/dedup logic
+- Any flag that changes scraper behaviour
+
 ## Security
 
 - NEVER commit anything inside `samples/` — those files contain real personal

@@ -179,7 +179,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); }
     if (tab.dataset.tab === "cuotas")      { loadCuotas(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); }
+    if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); }
   });
 });
 
@@ -231,6 +231,38 @@ function _restoreCfgSections() {
 }
 
 // ── UI settings (Interfaz tab) ────────────────────────────────────────────────
+// ── Dedup config (Config → Importación) ──────────────────────────────────────
+
+async function loadDedupConfig() {
+  try {
+    const r = await fetch("/api/config/dedup", { headers: _authHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const pEl = document.getElementById("dedup-prefijos");
+    const eEl = document.getElementById("dedup-exactos");
+    if (pEl) pEl.value = (d.dedup_prefijos || []).join("\n");
+    if (eEl) eEl.value = (d.dedup_exactos  || []).join("\n");
+  } catch(e) { console.warn("loadDedupConfig:", e); }
+}
+
+async function saveDedupConfig() {
+  const pEl = document.getElementById("dedup-prefijos");
+  const eEl = document.getElementById("dedup-exactos");
+  const msgEl = document.getElementById("dedup-save-msg");
+  const prefijos = (pEl?.value || "").split("\n").map(s => s.trim()).filter(Boolean);
+  const exactos  = (eEl?.value || "").split("\n").map(s => s.trim()).filter(Boolean);
+  try {
+    const r = await fetch("/api/config/dedup", {
+      method: "PUT",
+      headers: { ..._authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ dedup_prefijos: prefijos, dedup_exactos: exactos }),
+    });
+    if (r.ok) {
+      if (msgEl) { msgEl.textContent = "Guardado ✓"; setTimeout(() => { msgEl.textContent = ""; }, 2500); }
+    }
+  } catch(e) { console.warn("saveDedupConfig:", e); }
+}
+
 function renderUiSettings() {
   // Colors
   const storedC = JSON.parse(localStorage.getItem("ui_colors") || "{}");

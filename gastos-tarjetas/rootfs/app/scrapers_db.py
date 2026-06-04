@@ -251,31 +251,52 @@ _GENERIC_PREFIXES = (
 )
 
 
-def _is_generic(desc: str) -> bool:
-    """True si la descripción es genérica/temporal (BBVA puede reemplazarla)."""
-    return desc in _GENERIC_DESCS or any(desc.startswith(p) for p in _GENERIC_PREFIXES)
-
-
-def _generic_sql_cond(col: str = "descripcion") -> tuple[str, tuple]:
+def _load_dedup_config() -> tuple[frozenset, tuple]:
     """
-    Devuelve (fragmento_sql, params) para WHERE que matchea descripciones genéricas.
-    Uso: sql_cond, params = _generic_sql_cond()
-         cursor.execute(f"SELECT ... WHERE {sql_cond}", (*other_params, *params))
+    Carga los sets de dedup desde user_config.json.
+    Usa los defaults hardcodeados si no hay configuración guardada o falla la lectura.
+    Se llama una vez por invocación de insert_movimientos_raw para no leer el
+    archivo en cada iteración del loop.
     """
-    ph      = ",".join("?" * len(_GENERIC_DESCS))
-    likes   = " OR ".join(f"{col} LIKE ?" for _ in _GENERIC_PREFIXES)
-    sql     = f"({col} IN ({ph}) OR {likes})"
-    params  = (*_GENERIC_DESCS, *(p + "%" for p in _GENERIC_PREFIXES))
-    return sql, params
+    try:
+        from user_config import read_user_config
+        cfg = read_user_config()
+        descs    = frozenset(cfg["dedup_exactos"])  if cfg.get("dedup_exactos")  else _GENERIC_DESCS
+        prefixes = tuple(cfg["dedup_prefijos"])      if cfg.get("dedup_prefijos") else _GENERIC_PREFIXES
+        return descs, prefixes
+    except Exception:
+        return _GENERIC_DESCS, _GENERIC_PREFIXES
 
 
-def _not_generic_sql_cond(col: str = "descripcion") -> tuple[str, tuple]:
+def _is_generic(desc: str, descs: frozenset = None, prefixes: tuple = None) -> bool:
+    """True si la descripción es genérica/temporal (puede ser reemplazada por una específica)."""
+    d = descs    if descs    is not None else _GENERIC_DESCS
+    p = prefixes if prefixes is not None else _GENERIC_PREFIXES
+    return desc in d or any(desc.startswith(px) for px in p)
+
+
+def _generic_sql_cond(col: str = "descripcion",
+                      descs: frozenset = None,
+                      prefixes: tuple = None) -> tuple[str, tuple]:
+    """Devuelve (fragmento_sql, params) para WHERE que matchea descripciones genéricas."""
+    d = descs    if descs    is not None else _GENERIC_DESCS
+    p = prefixes if prefixes is not None else _GENERIC_PREFIXES
+    ph    = ",".join("?" * len(d))
+    likes = " OR ".join(f"{col} LIKE ?" for _ in p)
+    sql   = f"({col} IN ({ph}) OR {likes})" if p else f"({col} IN ({ph}))"
+    return sql, (*d, *(px + "%" for px in p))
+
+
+def _not_generic_sql_cond(col: str = "descripcion",
+                           descs: frozenset = None,
+                           prefixes: tuple = None) -> tuple[str, tuple]:
     """Inverso de _generic_sql_cond — matchea descripciones NO genéricas."""
-    ph      = ",".join("?" * len(_GENERIC_DESCS))
-    likes   = " AND ".join(f"{col} NOT LIKE ?" for _ in _GENERIC_PREFIXES)
-    sql     = f"({col} NOT IN ({ph}) AND {likes})"
-    params  = (*_GENERIC_DESCS, *(p + "%" for p in _GENERIC_PREFIXES))
-    return sql, params
+    d = descs    if descs    is not None else _GENERIC_DESCS
+    p = prefixes if prefixes is not None else _GENERIC_PREFIXES
+    ph    = ",".join("?" * len(d))
+    likes = " AND ".join(f"{col} NOT LIKE ?" for _ in p)
+    sql   = f"({col} NOT IN ({ph}) AND {likes})" if p else f"({col} NOT IN ({ph}))"
+    return sql, (*d, *(px + "%" for px in p))
 
 
 def insert_movimientos_raw(
@@ -302,6 +323,9 @@ def insert_movimientos_raw(
     if not movimientos:
         return 0
     now = datetime.utcnow().isoformat()
+
+    # Cargar config de dedup una sola vez (no en cada iteración del loop)
+    _eff_descs, _eff_prefixes = _load_dedup_config()
 
     inserted = 0
     with _conn() as conn:
@@ -373,7 +397,7 @@ def insert_movimientos_raw(
             # el mismo día (p.ej. dos retiros de cajero de $460.000).
             # Nota: BBVA devuelve saldo=0 en todos los movimientos, por lo que no
             # podemos usar el saldo corriente como discriminador adicional.
-            if not existing and not scraper_uid and not _is_generic(desc):
+            if not existing and not scraper_uid and not _is_generic(desc, _eff_descs, _eff_prefixes):
                 _same_day_total = conn.execute(
                     """SELECT COUNT(*) FROM movimientos_raw
                        WHERE fuente = ? AND fecha = ? AND moneda = ?
@@ -381,7 +405,7 @@ def insert_movimientos_raw(
                     (fuente, fecha, moneda, monto),
                 ).fetchone()[0]
                 if _same_day_total == 1:
-                    _g_cond, _g_params = _generic_sql_cond()
+                    _g_cond, _g_params = _generic_sql_cond(descs=_eff_descs, prefixes=_eff_prefixes)
                     generic_candidate = conn.execute(
                         f"""SELECT id FROM movimientos_raw
                            WHERE fuente = ? AND fecha = ? AND moneda = ?
@@ -401,7 +425,7 @@ def insert_movimientos_raw(
             # Solo skipear si el monto es único en esa fecha (mismo razonamiento:
             # si hay 2+ registros del mismo monto el mismo día, no podemos saber
             # cuál es el que ya importamos).
-            if not existing and not scraper_uid and _is_generic(desc):
+            if not existing and not scraper_uid and _is_generic(desc, _eff_descs, _eff_prefixes):
                 _same_day_total = conn.execute(
                     """SELECT COUNT(*) FROM movimientos_raw
                        WHERE fuente = ? AND fecha = ? AND moneda = ?
@@ -440,10 +464,10 @@ def insert_movimientos_raw(
                     ).fetchone()[0]
 
                     if _total == 1:   # monto único en la ventana → match seguro
-                        _gc, _gp   = _generic_sql_cond()
-                        _ngc, _ngp = _not_generic_sql_cond()
+                        _gc, _gp   = _generic_sql_cond(descs=_eff_descs, prefixes=_eff_prefixes)
+                        _ngc, _ngp = _not_generic_sql_cond(descs=_eff_descs, prefixes=_eff_prefixes)
 
-                        if not _is_generic(desc):
+                        if not _is_generic(desc, _eff_descs, _eff_prefixes):
                             # Caso A: descripción específica reemplaza una genérica
                             # (TRF INM COE, OPERACION EN EFECTIVO → BANELCO Nro:, etc.)
                             # Regla: descripción específica + fecha más reciente.

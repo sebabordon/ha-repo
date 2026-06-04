@@ -130,6 +130,29 @@ async def import_user_rules(request: Request, file: UploadFile = File(...)):
     return {"ok": True, "reglas": len(reglas)}
 
 
+@router.get("/config/dedup")
+def get_dedup_config(request: Request):
+    require_auth(request)
+    from scrapers_db import _GENERIC_DESCS, _GENERIC_PREFIXES
+    cfg = read_user_config()
+    return {
+        "dedup_prefijos": list(cfg.get("dedup_prefijos", list(_GENERIC_PREFIXES))),
+        "dedup_exactos":  list(cfg.get("dedup_exactos",  sorted(_GENERIC_DESCS))),
+    }
+
+
+@router.put("/config/dedup")
+def put_dedup_config(body: dict, request: Request):
+    require_auth(request)
+    cfg = read_user_config()
+    if "dedup_prefijos" in body:
+        cfg["dedup_prefijos"] = [s.strip() for s in body["dedup_prefijos"] if str(s).strip()]
+    if "dedup_exactos" in body:
+        cfg["dedup_exactos"]  = [s.strip() for s in body["dedup_exactos"]  if str(s).strip()]
+    write_user_config(cfg)
+    return {"ok": True}
+
+
 @router.post("/config/usuarios/rename-db")
 def rename_usuario_in_db(body: dict, request: Request):
     """Rename a persona in all existing gastos rows (called after UI rename)."""
