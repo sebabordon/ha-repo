@@ -1,3 +1,7 @@
+## 0.6.0
+
+- **Bump a versión 0.6**: marca el salto de minor con la incorporación del scraper BBVA enriquecido (campos extra, endpoints de detalle, dedup cross-run configurable desde UI), la tab Config → Importación con reglas de dedup editables, y la regla de proyecto "toda configuración va en la UI".
+
 ## 0.5.124
 
 - **Config → Importación: prefijos y exactos de dedup configurables desde la UI** (`index.html`, `app.js`, `config_route.py`, `scrapers_db.py`, `CLAUDE.md`): los sets `_GENERIC_PREFIXES` y `_GENERIC_DESCS` ya no son hardcodeados — se guardan en `user_config.json` y se editan desde Config → Importación con dos textareas (uno por línea). `insert_movimientos_raw` los carga una vez por llamada vía `_load_dedup_config()`. Los defaults hardcodeados siguen siendo el fallback si no hay config guardada. También se actualiza `CLAUDE.md` con la regla: toda configuración debe ir en la UI, no hardcodeada.
