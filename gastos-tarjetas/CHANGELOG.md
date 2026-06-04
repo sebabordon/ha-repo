@@ -1,3 +1,7 @@
+## 0.5.122
+
+- **Fix BBVA tarjetas: headers extra para /cards/v1/** (`scrapers/bbva_tarjetas.py`): el endpoint `/cards/v1/cards/{pan}/transactions` devolvía HTTP 500 porque requiere tres headers extra que `/cliente/productos/` no necesita: `tsec` (JWT que BBVA devuelve en el *response header* de `GET /seguridad/cliente/obtenerTsec`), `timestamp-uid` (timestamp actual en hora Argentina) y `uid` (UUID v4 por request). Agrega `_fetch_tsec()` que captura el header tsec de la respuesta via fetch JS, y `_api_request_cards()` que inyecta los tres headers en la llamada a transactions.
+
 ## 0.5.121
 
 - **Dedup cross-run para consumos BBVA tarjeta** (`scrapers_db.py`): agrega `"CONSUMO EN PESOS"` y `"CONSUMO EN DOLARES"` a `_GENERIC_DESCS`. El API de BBVA devuelve esa descripción genérica mientras la transacción está autorizada; unos días después aparece el nombre real del comercio. Con este cambio, cuando el scraper vuelve a correr y encuentra la descripción actualizada, el sistema la actualiza in-place en lugar de crear un duplicado — igual que con las descripciones temporales de cuentas BBVA.

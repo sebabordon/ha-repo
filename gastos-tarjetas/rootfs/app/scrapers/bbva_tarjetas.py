@@ -24,6 +24,9 @@ usando product_key="VISA" o product_key="MC".
 
 import logging
 import re
+import time
+import uuid
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from .base import MovimientoRaw, ScraperResult
@@ -179,6 +182,148 @@ class BbvaTarjetasScraper(BbvaScraper):
 
         return tarjetas
 
+    # ── tsec + llamada autenticada a /cards/v1/ ───────────────────────────────
+
+    _EP_TSEC = "/seguridad/cliente/obtenerTsec"
+
+    def _fetch_tsec(self, driver) -> Optional[str]:
+        """
+        Llama GET /seguridad/cliente/obtenerTsec y extrae el JWT del header
+        'tsec' de la respuesta (no del body).
+
+        El endpoint devuelve el token como response header, no como body.
+        Necesita un fetch() modificado que capture los headers de la respuesta.
+        """
+        _API_BASE = "https://online.bbva.com.ar/fnetcore/servicios"
+        ts_ms = str(int(time.time() * 1000))
+        url   = f"{_API_BASE}{self._EP_TSEC}?ts={ts_ms}"
+
+        js = """
+        var url = arguments[0];
+        var cb  = arguments[arguments.length - 1];
+
+        // Leer XSRF-TOKEN de cookies
+        var xsrf = null;
+        try {
+            document.cookie.split(';').forEach(function(c) {
+                var p = c.trim();
+                if (p.startsWith('XSRF-TOKEN='))
+                    xsrf = decodeURIComponent(p.substring(11));
+            });
+        } catch(e) {}
+
+        var opts = {
+            method: 'GET',
+            headers: {
+                'Accept':          'application/json, text/plain, */*',
+                'Accept-Language': 'es-AR,es;q=0.9'
+            },
+            credentials: 'include'
+        };
+        if (xsrf) opts.headers['X-XSRF-TOKEN'] = xsrf;
+
+        fetch(url, opts)
+            .then(function(r) {
+                var tsec = r.headers.get('tsec') || '';
+                return r.text().then(function(t) {
+                    cb({status: r.status, tsec: tsec, body: t});
+                });
+            })
+            .catch(function(e) {
+                cb({status: 0, tsec: '', body: 'fetch error: ' + e});
+            });
+        """
+        try:
+            driver.set_script_timeout(35)
+        except Exception:
+            pass
+        try:
+            result = driver.execute_async_script(js, url)
+            tsec = (result or {}).get("tsec") or ""
+            status = (result or {}).get("status", 0)
+            return tsec if tsec else None
+        except Exception as exc:
+            logger.warning("[bbva-tj] _fetch_tsec error: %s", exc)
+            return None
+
+    def _api_request_cards(self, driver, path: str) -> dict:
+        """
+        GET a un endpoint de /cards/v1/ con los headers extra que requiere:
+          tsec          — JWT obtenido de /seguridad/cliente/obtenerTsec
+          timestamp-uid — timestamp actual en hora Argentina (formato ISO-0300)
+          uid           — UUID v4 aleatorio por request
+          X-XSRF-TOKEN  — igual que _api_request normal
+        """
+        _API_BASE = "https://online.bbva.com.ar/fnetcore/servicios"
+        ts_ms = str(int(time.time() * 1000))
+        url   = f"{_API_BASE}{path}?ts={ts_ms}"
+
+        # Hora Argentina (UTC-3)
+        art_now  = datetime.now(timezone(timedelta(hours=-3)))
+        ts_uid   = art_now.strftime("%Y-%m-%dT%H:%M:%S-0300")
+        req_uid  = str(uuid.uuid4())
+
+        # Obtener tsec fresh
+        tsec = self._fetch_tsec(driver) or ""
+
+        js = """
+        var url    = arguments[0];
+        var tsec   = arguments[1];
+        var tsUid  = arguments[2];
+        var uid    = arguments[3];
+        var cb     = arguments[arguments.length - 1];
+
+        var xsrf = null;
+        try {
+            document.cookie.split(';').forEach(function(c) {
+                var p = c.trim();
+                if (p.startsWith('XSRF-TOKEN='))
+                    xsrf = decodeURIComponent(p.substring(11));
+            });
+        } catch(e) {}
+
+        var opts = {
+            method: 'GET',
+            headers: {
+                'Accept':          'application/json, text/plain, */*',
+                'Accept-Language': 'es-419,es;q=0.9,en;q=0.8',
+                'timestamp-uid':   tsUid,
+                'uid':             uid
+            },
+            credentials: 'include'
+        };
+        if (xsrf) opts.headers['X-XSRF-TOKEN'] = xsrf;
+        if (tsec) opts.headers['tsec']          = tsec;
+
+        fetch(url, opts)
+            .then(function(r) {
+                return r.text().then(function(t) {
+                    cb({status: r.status, body: t});
+                });
+            })
+            .catch(function(e) {
+                cb({status: 0, body: 'fetch error: ' + e});
+            });
+        """
+        try:
+            driver.set_script_timeout(35)
+        except Exception:
+            pass
+        try:
+            result = driver.execute_async_script(js, url, tsec, ts_uid, req_uid)
+            status = int((result or {}).get("status", 0) or 0)
+            body   = str((result or {}).get("body", "") or "")
+            parsed = None
+            try:
+                import json as _json
+                parsed = _json.loads(body) if body else None
+            except Exception:
+                pass
+            return {"status": status, "body": body, "json": parsed}
+        except Exception as exc:
+            logger.warning("[bbva-tj] _api_request_cards error: %s", exc)
+            return {"status": 0, "body": str(exc), "json": None}
+
     # ── Fetch de una tarjeta: saldo + consumos ────────────────────────────────
 
     def _fetch_tarjeta(
@@ -196,9 +341,9 @@ class BbvaTarjetasScraper(BbvaScraper):
         # Saldo actual
         saldo = self._fetch_saldo(driver, id_tj, log_fn)
 
-        # Consumos del período
+        # Consumos del período — requiere headers tsec/uid/timestamp-uid
         ep = _EP_TRANSACC.format(pan=pan)
-        resp = self._api_request(driver, ep)
+        resp = self._api_request_cards(driver, ep)
         log_fn(f"  GET {ep} → HTTP {resp['status']}")
 
         if resp["status"] != 200 or not resp["json"]:
