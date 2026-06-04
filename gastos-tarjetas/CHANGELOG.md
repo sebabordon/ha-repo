@@ -1,3 +1,7 @@
+## 0.6.4
+
+- **Fix real del guardado de Período (y de dedup)** (`app.js`): las funciones llamaban a `_authHeaders()`, una función que **no existe** en el código → `ReferenceError` que abortaba el fetch antes de enviarse, tanto en Período como en Config → Importación (dedup). La autenticación es por cookie de sesión (como todos los demás fetch), así que se eliminó el uso de `_authHeaders()` y se dejó solo `Content-Type: application/json` en los PUT. Este era el motivo de que el guardado "no anduviera" pese al fix de `${BASE}` en 0.6.2.
+
 ## 0.6.3
 
 - **Bump de versión** para forzar la actualización del add-on en HA (sin cambios de código respecto a 0.6.2).

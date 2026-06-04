@@ -235,7 +235,7 @@ function _restoreCfgSections() {
 
 async function loadDedupConfig() {
   try {
-    const r = await fetch(`${BASE}/api/config/dedup`, { headers: _authHeaders() });
+    const r = await fetch(`${BASE}/api/config/dedup`);
     if (!r.ok) return;
     const d = await r.json();
     const pEl = document.getElementById("dedup-prefijos");
@@ -254,7 +254,7 @@ async function saveDedupConfig() {
   try {
     const r = await fetch(`${BASE}/api/config/dedup`, {
       method: "PUT",
-      headers: { ..._authHeaders(), "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dedup_prefijos: prefijos, dedup_exactos: exactos }),
     });
     if (r.ok) {
@@ -288,7 +288,7 @@ function renderPeriodoPreview() {
 
 async function loadPeriodoConfig() {
   try {
-    const r = await fetch(`${BASE}/api/config/periodo`, { headers: _authHeaders() });
+    const r = await fetch(`${BASE}/api/config/periodo`);
     if (!r.ok) return;
     const d = await r.json();
     const act = document.getElementById("periodo-activo");
@@ -325,7 +325,7 @@ async function savePeriodoConfig() {
   try {
     const r = await fetch(`${BASE}/api/config/periodo`, {
       method: "PUT",
-      headers: { ..._authHeaders(), "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ periodo_activo: activo, periodo_dia_ancla: dia, periodo_overrides: overrides }),
     });
     if (r.ok) {
