@@ -3140,8 +3140,11 @@ function renderVencimientos(items) {
     const d = vencDate;
     const fechaStr = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
 
+    const pagoHtml = v.pago_confirmado
+      ? `<span class="venc-pago-ok" title="Pago confirmado">✓</span>` : "";
+
     return `<div class="venc-card ${cls}">
-      <div class="${fuenteCls}">${escHtml(label)}</div>
+      <div class="${fuenteCls}">${escHtml(label)}${pagoHtml}</div>
       <div class="venc-fecha">${fechaStr}</div>
       <div class="venc-dias">${diasTxt}</div>
       ${montoHtml}

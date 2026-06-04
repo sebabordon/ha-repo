@@ -715,7 +715,15 @@ def list_vencimientos() -> list[dict]:
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS net_usd,
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='ARS' AND UPPER(g.descripcion) LIKE '%5617%'
                                                AND CAST(g.monto AS REAL) > 0
-                                          THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS rg5617_ars
+                                          THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS rg5617_ars,
+                   -- 1 if a confirmed bank→CC payment exists within 90 days before the due date
+                   CASE WHEN EXISTS (
+                       SELECT 1 FROM transfer_pairs tp
+                       JOIN gastos gp ON gp.id = tp.id_in
+                       WHERE gp.fuente = i.fuente
+                         AND gp.fecha >= date(i.fecha_venc, '-90 days')
+                         AND gp.fecha <= date(i.fecha_venc, '+10 days')
+                   ) THEN 1 ELSE 0 END AS pago_confirmado
             FROM importaciones i
             LEFT JOIN gastos g ON g.import_id = i.id
             WHERE i.fecha_venc IS NOT NULL

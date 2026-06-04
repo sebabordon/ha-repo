@@ -1060,6 +1060,22 @@ tbody tr:hover { background: #fafbff; }
 }
 .venc-fuente.ars-label { color: var(--color-ars); }
 .venc-fuente.usd-label { color: var(--color-usd); }
+.venc-pago-ok {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: .35em;
+  font-size: .75rem;
+  font-weight: 700;
+  color: #fff;
+  background: #22c55e;
+  border-radius: 50%;
+  width: 1.2em;
+  height: 1.2em;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: default;
+}
 .venc-fecha {
   font-size: 1rem;
   font-weight: 700;

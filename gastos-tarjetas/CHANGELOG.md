@@ -1,3 +1,7 @@
+## 0.5.118
+
+- **UI: tilde verde en widget de vencimientos cuando el pago está confirmado** (`db.py`, `app.js`, `style.css`): `list_vencimientos` ahora incluye el campo `pago_confirmado` (subquery sobre `transfer_pairs`) que indica si existe un pago banco→tarjeta confirmado dentro de la ventana de 90 días antes del vencimiento. Cuando es verdadero, el widget muestra un badge circular verde con ✓ al lado del nombre de la tarjeta.
+
 ## 0.5.117
 
 - **Fix scraper BBVA tarjetas: bug tipo_clave doble "Credito" + interceptor fetch** (`scrapers/bbva_tarjetas.py`): corregido el bug en el template de endpoint que generaba `tarjetasCreditoCreditoVisa` (ahora `tipo_clave` es `"Visa"`/`"Mastercard"` sin el prefijo extra). El interceptor de `window.fetch` ahora navega dentro del SPA con `window.location.hash` en lugar de `driver.get()`, que recargaba la página y perdía el monkey-patch; además loguea todas las calls a `/servicios/` para identificar el endpoint real de consumos.
