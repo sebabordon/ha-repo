@@ -1,3 +1,7 @@
+## 0.6.3
+
+- **Bump de versión** para forzar la actualización del add-on en HA (sin cambios de código respecto a 0.6.2).
+
 ## 0.6.2
 
 - **Fix: la config de Período no se guardaba bajo ingress de HA** (`app.js`): los fetch de `/api/config/periodo` (y los de `/api/config/dedup`, mismo bug latente) no anteponían `${BASE}` (el prefijo de ingress), así que el PUT/GET pegaban a una ruta inexistente → el guardado fallaba en silencio y al refrescar volvían los defaults. Ahora usan `${BASE}/api/...` como el resto de los fetch.
