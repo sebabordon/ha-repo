@@ -277,14 +277,14 @@ function renderPeriodoState() {
 function renderPeriodoPreview() {
   const el = document.getElementById("periodo-preview");
   if (!el) return;
-  const n = parseInt(document.getElementById("periodo-dia-ancla")?.value, 10);
-  if (!n || n < 1 || n > 31) { el.textContent = ""; return; }
-  const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  // Ejemplo: período "junio" con ancla N → del (N) de mayo al (N-1) de junio.
-  const desde = `${n} de ${MESES[4]}`;       // mayo
-  const hasta = `${n - 1 || 1} de ${MESES[5]}`; // junio
-  const nota = n >= 29 ? " En meses más cortos (p.ej. febrero) el corte cae el último día." : "";
-  el.textContent = `Ej.: el período "junio" abarca del ${desde} al ${hasta} (etiquetado por el mes que financia).${nota}`;
+  const n = parseInt(document.getElementById("periodo-delta")?.value, 10);
+  if (isNaN(n) || n < 0 || n > 28) { el.textContent = ""; return; }
+  if (n === 0) {
+    el.textContent = "Delta 0: equivale al mes calendario (sin desfasaje).";
+    return;
+  }
+  el.textContent = `Los últimos ${n} día${n === 1 ? "" : "s"} de cada mes se imputan al período del mes siguiente, `
+    + `de modo que el sueldo que cobrás a fin de mes (y los gastos posteriores) caen en el mes que financian.`;
 }
 
 async function loadPeriodoConfig() {
@@ -293,10 +293,10 @@ async function loadPeriodoConfig() {
     if (!r.ok) return;
     const d = await r.json();
     const act = document.getElementById("periodo-activo");
-    const dia = document.getElementById("periodo-dia-ancla");
+    const delta = document.getElementById("periodo-delta");
     const ovr = document.getElementById("periodo-overrides");
     if (act) act.checked = !!d.periodo_activo;
-    if (dia) dia.value = d.periodo_dia_ancla || 26;
+    if (delta) delta.value = (d.periodo_delta_dias ?? 2);
     if (ovr) {
       const lines = Object.entries(d.periodo_overrides || {})
         .sort((a, b) => a[0].localeCompare(b[0]))
@@ -310,7 +310,8 @@ async function loadPeriodoConfig() {
 async function savePeriodoConfig() {
   const msgEl = document.getElementById("periodo-save-msg");
   const activo = !!document.getElementById("periodo-activo")?.checked;
-  const dia = parseInt(document.getElementById("periodo-dia-ancla")?.value, 10) || 26;
+  const deltaRaw = parseInt(document.getElementById("periodo-delta")?.value, 10);
+  const delta = isNaN(deltaRaw) ? 2 : Math.max(0, Math.min(28, deltaRaw));
   const raw = (document.getElementById("periodo-overrides")?.value || "").split("\n");
   const overrides = {};
   for (const line of raw) {
@@ -321,13 +322,13 @@ async function savePeriodoConfig() {
       if (msgEl) { msgEl.style.color = "#dc2626"; msgEl.textContent = `Línea inválida: "${t}"`; }
       return;
     }
-    overrides[m[1]] = Math.max(1, Math.min(31, parseInt(m[2], 10)));
+    overrides[m[1]] = Math.max(0, Math.min(28, parseInt(m[2], 10)));
   }
   try {
     const r = await fetch(`${BASE}/api/config/periodo`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ periodo_activo: activo, periodo_dia_ancla: dia, periodo_overrides: overrides }),
+      body: JSON.stringify({ periodo_activo: activo, periodo_delta_dias: delta, periodo_overrides: overrides }),
     });
     if (r.ok) {
       if (msgEl) { msgEl.style.color = "#16a34a"; msgEl.textContent = "Guardado ✓ — recargá para ver los gráficos"; setTimeout(() => { msgEl.textContent = ""; }, 4000); }

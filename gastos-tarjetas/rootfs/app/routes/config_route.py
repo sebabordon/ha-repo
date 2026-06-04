@@ -160,10 +160,10 @@ def get_periodo_config(request: Request):
     from db import periodo_actual
     cfg = read_user_config()
     return {
-        "periodo_activo":    bool(cfg.get("periodo_activo", False)),
-        "periodo_dia_ancla": int(cfg.get("periodo_dia_ancla", 26) or 26),
-        "periodo_overrides": cfg.get("periodo_overrides", {}) or {},
-        "periodo_actual":    periodo_actual(),
+        "periodo_activo":      bool(cfg.get("periodo_activo", False)),
+        "periodo_delta_dias":  int(cfg.get("periodo_delta_dias", 2) or 2),
+        "periodo_overrides":   cfg.get("periodo_overrides", {}) or {},
+        "periodo_actual":      periodo_actual(),
     }
 
 
@@ -173,18 +173,18 @@ def put_periodo_config(body: dict, request: Request):
     cfg = read_user_config()
     if "periodo_activo" in body:
         cfg["periodo_activo"] = bool(body["periodo_activo"])
-    if "periodo_dia_ancla" in body:
+    if "periodo_delta_dias" in body:
         try:
-            cfg["periodo_dia_ancla"] = max(1, min(31, int(body["periodo_dia_ancla"])))
+            cfg["periodo_delta_dias"] = max(0, min(28, int(body["periodo_delta_dias"])))
         except (TypeError, ValueError):
-            raise HTTPException(400, "periodo_dia_ancla inválido (1..31)")
+            raise HTTPException(400, "periodo_delta_dias inválido (0..28)")
     if "periodo_overrides" in body:
         ovr: dict = {}
         for k, v in (body["periodo_overrides"] or {}).items():
             if not re.match(r"^\d{4}-\d{2}$", str(k)):
                 continue
             try:
-                ovr[str(k)] = max(1, min(31, int(v)))
+                ovr[str(k)] = max(0, min(28, int(v)))
             except (TypeError, ValueError):
                 continue
         cfg["periodo_overrides"] = ovr

@@ -836,10 +836,10 @@
 
         <div id="periodo-body" style="opacity:.5;pointer-events:none">
           <div style="margin-bottom:1rem">
-            <label class="field-label">Día-ancla del período
-              <span class="hint">(1–31: el día en que arranca tu ciclo de cobro; si el mes es más corto, el corte cae el último día)</span>
+            <label class="field-label">Delta de días
+              <span class="hint">(cuántos días antes de fin de mes cobrás)</span>
             </label>
-            <input type="number" id="periodo-dia-ancla" min="1" max="31" value="26"
+            <input type="number" id="periodo-delta" min="0" max="28" value="2"
                    style="width:90px;font:inherit;padding:.4rem;border:1px solid #ccc;border-radius:4px"
                    oninput="renderPeriodoPreview()">
             <p class="hint" id="periodo-preview" style="margin-top:.4rem"></p>
@@ -847,16 +847,16 @@
 
           <div style="margin-bottom:1rem">
             <label class="field-label">Excepciones por mes
-              <span class="hint">(opcional: meses donde el corte cayó otro día)</span>
+              <span class="hint">(opcional: meses donde el cobro cayó otro día)</span>
             </label>
             <p class="hint" style="margin:.2rem 0 .5rem">
-              Una por línea, formato <code>YYYY-MM = día</code>. Ej:
-              <code>2026-06 = 27</code> · <code>2026-12 = 24</code>.
-              El default cubre el resto automáticamente.
+              Una por línea, formato <code>YYYY-MM = delta</code>. Ej:
+              <code>2026-06 = 3</code> · <code>2026-12 = 4</code>.
+              El delta general cubre el resto automáticamente.
             </p>
             <textarea id="periodo-overrides" rows="5"
                       style="width:100%;font-family:monospace;font-size:0.85em"
-                      placeholder="2026-06 = 27"></textarea>
+                      placeholder="2026-06 = 3"></textarea>
           </div>
         </div>
 

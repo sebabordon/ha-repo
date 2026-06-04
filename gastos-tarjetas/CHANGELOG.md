@@ -1,3 +1,10 @@
+## 0.6.6
+
+- **Ciclo de cobro: se reemplaza el día-ancla por un modelo de DELTA de días** (`db.py`, `config_route.py`, `user_config.py`, `index.html`, `app.js`): en vez de un día fijo del calendario, ahora se configura "cuántos días antes de fin de mes cobrás" (`periodo_delta_dias`, 0..28). Los últimos N días de cada mes se imputan al período del mes siguiente. El delta es relativo al fin de mes —que es como cae el cobro (anteúltimo día hábil)— así que el corte ya no se desfasa según el largo del mes y desaparecen los casos especiales de febrero/bisiesto/overflow.
+  - La expresión SQL se simplifica a `substr(date(fecha,'+D days'),1,7)` (correr la fecha D días y tomar el mes). Los overrides pasan a ser `{YYYY-MM: delta}` (delta distinto para un mes calendario puntual) vía un `CASE` por mes. `_periodo_de_fecha` usa `date + timedelta`.
+  - UI: input "Delta de días" con texto explicativo en vivo; las excepciones ahora son `YYYY-MM = delta`. Se eliminó el helper `_last_day` (ya no hace falta).
+  - Default delta = 2; inactivo de fábrica (comportamiento calendario idéntico al previo cuando está apagado o con delta 0).
+
 ## 0.6.5
 
 - **Día-ancla del período ahora admite 1..31 (antes 1..28)** (`db.py`, `config_route.py`, `index.html`, `app.js`): el límite de 28 impedía configurar cortes a fin de mes (anteúltimo día hábil suele caer 29/30). Ahora la fórmula de período *clampea el corte al último día del mes* cuando el mes es más corto que N (p.ej. con ancla 30, en febrero el corte es el 28; en bisiesto, el 29). Reescrita `_mes_sql` con `strftime('%d', ...último día...)` + comparación de día contra el corte clampeado; `_periodo_de_fecha` y los overrides usan la misma lógica con `_last_day()` (vía `calendar.monthrange`). Validado contra bisiestos y cruces de año.

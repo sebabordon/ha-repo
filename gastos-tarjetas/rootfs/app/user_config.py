@@ -25,8 +25,10 @@ _DEFAULT_CONFIG: dict = {
     "pwa_shortcuts": [],
     # Ciclo de cobro (período contable ≠ mes calendario). Inactivo por defecto:
     # cuando está apagado, todos los agregados usan el mes calendario como siempre.
+    # Modelo delta: los últimos `periodo_delta_dias` días de cada mes cuentan
+    # para el período del mes siguiente. Overrides {YYYY-MM: delta} por mes.
     "periodo_activo": False,
-    "periodo_dia_ancla": 26,
+    "periodo_delta_dias": 2,
     "periodo_overrides": {},
 }
 

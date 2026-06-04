@@ -31,98 +31,71 @@ _BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas", "P
 # mes calendario. Los listados/detalle SIEMPRE muestran la fecha real: esto
 # solo cambia la expresión de agrupación y el filtro por mes.
 #
-# Modelo: día-ancla `N` (1..28). Etiqueta = "mes que financia" = el mes
-# calendario siguiente al corte. Ej. con N=26, el período "2026-06" abarca del
-# 26-may al 25-jun inclusive. Overrides {YYYY-MM: día} ajustan el corte de un
-# mes puntual (p.ej. el mes en que el cobro cayó un día distinto).
+# Modelo: DELTA de días `D` (0..28). "Los últimos D días de cada mes cuentan
+# para el período del mes siguiente". Se implementa corriendo la fecha D días
+# hacia adelante y tomando el mes calendario resultante — así el corte queda
+# siempre relativo al fin de mes (que es como cae el cobro: anteúltimo día
+# hábil), sin casos especiales de febrero/bisiesto. Ej. con D=2, el sueldo del
+# 30 cuenta para el mes siguiente; el 27 se queda en el mes corriente.
+# Overrides {YYYY-MM: delta} ajustan el delta de un mes calendario puntual.
 
 def _periodo_cfg() -> tuple[bool, int, dict]:
-    """Lee la config del ciclo de cobro: (activo, dia_ancla, overrides)."""
+    """Lee la config del ciclo de cobro: (activo, delta_dias, overrides)."""
     try:
         from user_config import read_user_config
         cfg = read_user_config()
     except Exception:
-        return (False, 1, {})
+        return (False, 0, {})
     activo = bool(cfg.get("periodo_activo", False))
     try:
-        dia = max(1, min(31, int(cfg.get("periodo_dia_ancla", 1) or 1)))
+        delta = max(0, min(28, int(cfg.get("periodo_delta_dias", 0) or 0)))
     except Exception:
-        dia = 1
+        delta = 0
     overrides: dict[str, int] = {}
     for k, v in (cfg.get("periodo_overrides", {}) or {}).items():
         try:
             if re.match(r"^\d{4}-\d{2}$", str(k)):
-                overrides[str(k)] = max(1, min(31, int(v)))
+                overrides[str(k)] = max(0, min(28, int(v)))
         except Exception:
             pass
-    return (activo, dia, overrides)
-
-
-def _last_day(ym: str) -> int:
-    """Cantidad de días del mes YYYY-MM (28..31, contempla bisiestos)."""
-    import calendar
-    y, m = map(int, ym.split("-"))
-    return calendar.monthrange(y, m)[1]
+    return (activo, delta, overrides)
 
 
 def _mes_sql(col: str = "fecha") -> str:
     """Expresión SQL que mapea una fecha (YYYY-MM-DD en `col`) a su período.
 
-    Con el ciclo inactivo devuelve el mes calendario (``substr(col,1,7)``), de
-    modo que el comportamiento es idéntico al histórico. Con el ciclo activo
-    aplica el día-ancla (etiqueta = "mes que financia") más los overrides.
-
-    El día-ancla N puede ser 1..31; cuando el mes es más corto que N (p.ej.
-    febrero con N=30) el corte se *clampea* al último día del mes.
+    Con el ciclo inactivo (o delta 0) devuelve el mes calendario
+    (``substr(col,1,7)``), idéntico al histórico. Con el ciclo activo corre la
+    fecha `D` días hacia adelante y toma el mes resultante — los últimos D días
+    de cada mes caen así en el período del mes siguiente. Overrides aplican un
+    delta distinto a un mes calendario puntual.
     """
-    activo, N, overrides = _periodo_cfg()
+    activo, D, overrides = _periodo_cfg()
     if not activo:
         return f"substr({col},1,7)"
-    last_day = (f"CAST(strftime('%d',date({col},'start of month','+1 month',"
-                f"'-1 day')) AS INTEGER)")
-    day = f"CAST(strftime('%d',{col}) AS INTEGER)"
-    cut = f"(CASE WHEN {N} < {last_day} THEN {N} ELSE {last_day} END)"
-    this_m = f"substr({col},1,7)"
-    next_m = f"substr(date({this_m}||'-01','+1 month'),1,7)"
-    # Si el día del movimiento alcanzó el corte, pertenece al "mes que financia".
-    default = f"CASE WHEN {day} >= {cut} THEN {next_m} ELSE {this_m} END"
+    default = f"substr(date({col},'+{D} days'),1,7)"
     whens = []
     for ym, d in sorted(overrides.items()):
-        last = _last_day(ym)
-        ncut, dcut = min(N, last), min(d, last)  # cortes clampeados al mes
-        if dcut == ncut:
+        if d == D:
             continue
-        nxt = _add_months(ym, 1)
-        lo, hi = min(ncut, dcut), max(ncut, dcut)
-        # dcut>ncut: los días [ncut,dcut) del mes `ym` quedan en el período `ym`.
-        # dcut<ncut: los días [dcut,ncut) del mes `ym` pasan al siguiente `ym+1`.
-        label = ym if dcut > ncut else nxt
-        whens.append(f"WHEN {col} >= '{ym}-{lo:02d}' AND {col} < '{ym}-{hi:02d}' "
-                     f"THEN '{label}'")
+        # Para los movimientos del mes calendario `ym` se usa el delta override.
+        whens.append(f"WHEN substr({col},1,7) = '{ym}' "
+                     f"THEN substr(date({col},'+{d} days'),1,7)")
     if not whens:
         return default
-    return "CASE " + " ".join(whens) + f" ELSE ({default}) END"
+    return "CASE " + " ".join(whens) + f" ELSE {default} END"
 
 
 def _periodo_de_fecha(fecha: str) -> str:
     """Etiqueta de período (YYYY-MM) para una fecha dada, en Python (espeja _mes_sql)."""
-    activo, N, overrides = _periodo_cfg()
+    activo, D, overrides = _periodo_cfg()
     ym = fecha[:7]
     if not activo:
         return ym
-    d = int(fecha[8:10])
-    last = _last_day(ym)
-    cut = min(N, last)
-    label = _add_months(ym, 1) if d >= cut else ym
-    cd = overrides.get(ym)
-    if cd:
-        dcut = min(cd, last)
-        if dcut != cut:
-            if dcut > cut and cut <= d < dcut:
-                label = ym
-            elif dcut < cut and dcut <= d < cut:
-                label = _add_months(ym, 1)
-    return label
+    d = overrides.get(ym, D)
+    from datetime import date as _date, timedelta as _td
+    shifted = _date.fromisoformat(fecha[:10]) + _td(days=d)
+    return shifted.strftime("%Y-%m")
 
 
 def periodo_actual() -> str:
