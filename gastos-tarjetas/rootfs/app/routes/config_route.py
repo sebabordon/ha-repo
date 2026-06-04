@@ -175,16 +175,16 @@ def put_periodo_config(body: dict, request: Request):
         cfg["periodo_activo"] = bool(body["periodo_activo"])
     if "periodo_dia_ancla" in body:
         try:
-            cfg["periodo_dia_ancla"] = max(1, min(28, int(body["periodo_dia_ancla"])))
+            cfg["periodo_dia_ancla"] = max(1, min(31, int(body["periodo_dia_ancla"])))
         except (TypeError, ValueError):
-            raise HTTPException(400, "periodo_dia_ancla inválido (1..28)")
+            raise HTTPException(400, "periodo_dia_ancla inválido (1..31)")
     if "periodo_overrides" in body:
         ovr: dict = {}
         for k, v in (body["periodo_overrides"] or {}).items():
             if not re.match(r"^\d{4}-\d{2}$", str(k)):
                 continue
             try:
-                ovr[str(k)] = max(1, min(28, int(v)))
+                ovr[str(k)] = max(1, min(31, int(v)))
             except (TypeError, ValueError):
                 continue
         cfg["periodo_overrides"] = ovr

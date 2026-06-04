@@ -278,12 +278,13 @@ function renderPeriodoPreview() {
   const el = document.getElementById("periodo-preview");
   if (!el) return;
   const n = parseInt(document.getElementById("periodo-dia-ancla")?.value, 10);
-  if (!n || n < 1 || n > 28) { el.textContent = ""; return; }
+  if (!n || n < 1 || n > 31) { el.textContent = ""; return; }
   const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
   // Ejemplo: período "junio" con ancla N → del (N) de mayo al (N-1) de junio.
   const desde = `${n} de ${MESES[4]}`;       // mayo
   const hasta = `${n - 1 || 1} de ${MESES[5]}`; // junio
-  el.textContent = `Ej.: el período "junio" abarca del ${desde} al ${hasta} (etiquetado por el mes que financia).`;
+  const nota = n >= 29 ? " En meses más cortos (p.ej. febrero) el corte cae el último día." : "";
+  el.textContent = `Ej.: el período "junio" abarca del ${desde} al ${hasta} (etiquetado por el mes que financia).${nota}`;
 }
 
 async function loadPeriodoConfig() {
@@ -320,7 +321,7 @@ async function savePeriodoConfig() {
       if (msgEl) { msgEl.style.color = "#dc2626"; msgEl.textContent = `Línea inválida: "${t}"`; }
       return;
     }
-    overrides[m[1]] = Math.max(1, Math.min(28, parseInt(m[2], 10)));
+    overrides[m[1]] = Math.max(1, Math.min(31, parseInt(m[2], 10)));
   }
   try {
     const r = await fetch(`${BASE}/api/config/periodo`, {

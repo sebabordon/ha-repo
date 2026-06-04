@@ -1,3 +1,7 @@
+## 0.6.5
+
+- **Día-ancla del período ahora admite 1..31 (antes 1..28)** (`db.py`, `config_route.py`, `index.html`, `app.js`): el límite de 28 impedía configurar cortes a fin de mes (anteúltimo día hábil suele caer 29/30). Ahora la fórmula de período *clampea el corte al último día del mes* cuando el mes es más corto que N (p.ej. con ancla 30, en febrero el corte es el 28; en bisiesto, el 29). Reescrita `_mes_sql` con `strftime('%d', ...último día...)` + comparación de día contra el corte clampeado; `_periodo_de_fecha` y los overrides usan la misma lógica con `_last_day()` (vía `calendar.monthrange`). Validado contra bisiestos y cruces de año.
+
 ## 0.6.4
 
 - **Fix real del guardado de Período (y de dedup)** (`app.js`): las funciones llamaban a `_authHeaders()`, una función que **no existe** en el código → `ReferenceError` que abortaba el fetch antes de enviarse, tanto en Período como en Config → Importación (dedup). La autenticación es por cookie de sesión (como todos los demás fetch), así que se eliminó el uso de `_authHeaders()` y se dejó solo `Content-Type: application/json` en los PUT. Este era el motivo de que el guardado "no anduviera" pese al fix de `${BASE}` en 0.6.2.

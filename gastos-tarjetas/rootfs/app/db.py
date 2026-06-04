@@ -45,17 +45,24 @@ def _periodo_cfg() -> tuple[bool, int, dict]:
         return (False, 1, {})
     activo = bool(cfg.get("periodo_activo", False))
     try:
-        dia = max(1, min(28, int(cfg.get("periodo_dia_ancla", 1) or 1)))
+        dia = max(1, min(31, int(cfg.get("periodo_dia_ancla", 1) or 1)))
     except Exception:
         dia = 1
     overrides: dict[str, int] = {}
     for k, v in (cfg.get("periodo_overrides", {}) or {}).items():
         try:
             if re.match(r"^\d{4}-\d{2}$", str(k)):
-                overrides[str(k)] = max(1, min(28, int(v)))
+                overrides[str(k)] = max(1, min(31, int(v)))
         except Exception:
             pass
     return (activo, dia, overrides)
+
+
+def _last_day(ym: str) -> int:
+    """Cantidad de días del mes YYYY-MM (28..31, contempla bisiestos)."""
+    import calendar
+    y, m = map(int, ym.split("-"))
+    return calendar.monthrange(y, m)[1]
 
 
 def _mes_sql(col: str = "fecha") -> str:
@@ -63,30 +70,38 @@ def _mes_sql(col: str = "fecha") -> str:
 
     Con el ciclo inactivo devuelve el mes calendario (``substr(col,1,7)``), de
     modo que el comportamiento es idéntico al histórico. Con el ciclo activo
-    aplica el día-ancla más los overrides puntuales.
+    aplica el día-ancla (etiqueta = "mes que financia") más los overrides.
+
+    El día-ancla N puede ser 1..31; cuando el mes es más corto que N (p.ej.
+    febrero con N=30) el corte se *clampea* al último día del mes.
     """
     activo, N, overrides = _periodo_cfg()
     if not activo:
         return f"substr({col},1,7)"
-    # Default aritmético: corro la fecha (N-1) días hacia atrás → mes del cobro,
-    # y le sumo 1 mes para etiquetar con el "mes que financia". El '+1 month' se
-    # aplica sobre el día-01 justamente para evitar el overflow de días (31-may).
-    default = (f"substr(date(substr(date({col},'-{N-1} days'),1,7) || '-01',"
-               f"'+1 month'),1,7)")
+    last_day = (f"CAST(strftime('%d',date({col},'start of month','+1 month',"
+                f"'-1 day')) AS INTEGER)")
+    day = f"CAST(strftime('%d',{col}) AS INTEGER)"
+    cut = f"(CASE WHEN {N} < {last_day} THEN {N} ELSE {last_day} END)"
+    this_m = f"substr({col},1,7)"
+    next_m = f"substr(date({this_m}||'-01','+1 month'),1,7)"
+    # Si el día del movimiento alcanzó el corte, pertenece al "mes que financia".
+    default = f"CASE WHEN {day} >= {cut} THEN {next_m} ELSE {this_m} END"
     whens = []
     for ym, d in sorted(overrides.items()):
-        if d == N:
+        last = _last_day(ym)
+        ncut, dcut = min(N, last), min(d, last)  # cortes clampeados al mes
+        if dcut == ncut:
             continue
         nxt = _add_months(ym, 1)
-        lo, hi = min(d, N), max(d, N)
-        # d>N: los días [N,d) del mes `ym` quedan en el período `ym`.
-        # d<N: los días [d,N) del mes `ym` pasan al período siguiente `ym+1`.
-        label = ym if d > N else nxt
+        lo, hi = min(ncut, dcut), max(ncut, dcut)
+        # dcut>ncut: los días [ncut,dcut) del mes `ym` quedan en el período `ym`.
+        # dcut<ncut: los días [dcut,ncut) del mes `ym` pasan al siguiente `ym+1`.
+        label = ym if dcut > ncut else nxt
         whens.append(f"WHEN {col} >= '{ym}-{lo:02d}' AND {col} < '{ym}-{hi:02d}' "
                      f"THEN '{label}'")
     if not whens:
         return default
-    return "CASE " + " ".join(whens) + f" ELSE {default} END"
+    return "CASE " + " ".join(whens) + f" ELSE ({default}) END"
 
 
 def _periodo_de_fecha(fecha: str) -> str:
@@ -96,13 +111,17 @@ def _periodo_de_fecha(fecha: str) -> str:
     if not activo:
         return ym
     d = int(fecha[8:10])
-    label = _add_months(ym, 1) if d >= N else ym
+    last = _last_day(ym)
+    cut = min(N, last)
+    label = _add_months(ym, 1) if d >= cut else ym
     cd = overrides.get(ym)
-    if cd and cd != N:
-        if cd > N and N <= d < cd:
-            label = ym
-        elif cd < N and cd <= d < N:
-            label = _add_months(ym, 1)
+    if cd:
+        dcut = min(cd, last)
+        if dcut != cut:
+            if dcut > cut and cut <= d < dcut:
+                label = ym
+            elif dcut < cut and dcut <= d < cut:
+                label = _add_months(ym, 1)
     return label
 
 
