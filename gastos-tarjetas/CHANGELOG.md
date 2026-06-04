@@ -1,3 +1,7 @@
+## 0.5.121
+
+- **Dedup cross-run para consumos BBVA tarjeta** (`scrapers_db.py`): agrega `"CONSUMO EN PESOS"` y `"CONSUMO EN DOLARES"` a `_GENERIC_DESCS`. El API de BBVA devuelve esa descripción genérica mientras la transacción está autorizada; unos días después aparece el nombre real del comercio. Con este cambio, cuando el scraper vuelve a correr y encuentra la descripción actualizada, el sistema la actualiza in-place en lugar de crear un duplicado — igual que con las descripciones temporales de cuentas BBVA.
+
 ## 0.5.120
 
 - **Scraper BBVA tarjetas: endpoint correcto confirmado por HAR** (`scrapers/bbva_tarjetas.py`): reescritura completa basada en `bbvalogin6.har`. El token de cada tarjeta está en el campo `numeroPan` de la respuesta de `/cliente/productos/tarjetas`. Los consumos se obtienen con `GET /cards/v1/cards/{numeroPan}/transactions` (responde con array `data[]` con campos `localAmount.amount`, `concept`, `operationDate`). El saldo viene de `GET /cliente/productos/tarjetas/{id}/datosultimoproximoresumen` → `result.estadoActual.saldoPesos`. Se eliminan los ~11 candidatos de endpoint y el interceptor de fetch, reemplazados por el flujo exacto del HAR.

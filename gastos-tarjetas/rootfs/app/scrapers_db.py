@@ -230,6 +230,10 @@ _GENERIC_DESCS = frozenset({
     "Movimiento BBVA",
     "DEPOSITO",
     "DEBITO",
+    # BBVA tarjetas de crédito: descripción provisoria hasta que la transacción liquide
+    "CONSUMO EN PESOS",
+    "CONSUMO EN DOLARES",
+    "CONSUMO EN DÓLARES",
 })
 
 # Prefijos de descripciones temporales de BBVA (match por startswith).
