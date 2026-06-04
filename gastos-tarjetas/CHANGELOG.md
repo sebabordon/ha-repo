@@ -1,3 +1,8 @@
+## 0.6.2
+
+- **Fix: la config de Período no se guardaba bajo ingress de HA** (`app.js`): los fetch de `/api/config/periodo` (y los de `/api/config/dedup`, mismo bug latente) no anteponían `${BASE}` (el prefijo de ingress), así que el PUT/GET pegaban a una ruta inexistente → el guardado fallaba en silencio y al refrescar volvían los defaults. Ahora usan `${BASE}/api/...` como el resto de los fetch.
+- **Fix: el input de día-ancla quedaba más chico que el font de la página** (`index.html`): los controles `<input type=number>` no heredan la tipografía por defecto; se le agregó `font:inherit` + padding/borde consistentes con los demás campos de Configuración.
+
 ## 0.6.1
 
 - **Ciclo de cobro / período contable configurable** (`db.py`, `user_config.py`, `config_route.py`, `gastos.py`, `index.html`, `app.js`): nueva sección Config → Período para usuarios que cobran cerca de fin de mes y tienen desfasaje entre los gastos del mes y el sueldo. Cuando está activo, los agregados (gráficos, estadísticas y presupuesto) reasignan cada movimiento a su período de cobro en vez del mes calendario; los listados y el detalle siguen mostrando la fecha real.

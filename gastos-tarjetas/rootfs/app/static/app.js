@@ -235,7 +235,7 @@ function _restoreCfgSections() {
 
 async function loadDedupConfig() {
   try {
-    const r = await fetch("/api/config/dedup", { headers: _authHeaders() });
+    const r = await fetch(`${BASE}/api/config/dedup`, { headers: _authHeaders() });
     if (!r.ok) return;
     const d = await r.json();
     const pEl = document.getElementById("dedup-prefijos");
@@ -252,7 +252,7 @@ async function saveDedupConfig() {
   const prefijos = (pEl?.value || "").split("\n").map(s => s.trim()).filter(Boolean);
   const exactos  = (eEl?.value || "").split("\n").map(s => s.trim()).filter(Boolean);
   try {
-    const r = await fetch("/api/config/dedup", {
+    const r = await fetch(`${BASE}/api/config/dedup`, {
       method: "PUT",
       headers: { ..._authHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ dedup_prefijos: prefijos, dedup_exactos: exactos }),
@@ -288,7 +288,7 @@ function renderPeriodoPreview() {
 
 async function loadPeriodoConfig() {
   try {
-    const r = await fetch("/api/config/periodo", { headers: _authHeaders() });
+    const r = await fetch(`${BASE}/api/config/periodo`, { headers: _authHeaders() });
     if (!r.ok) return;
     const d = await r.json();
     const act = document.getElementById("periodo-activo");
@@ -323,7 +323,7 @@ async function savePeriodoConfig() {
     overrides[m[1]] = Math.max(1, Math.min(28, parseInt(m[2], 10)));
   }
   try {
-    const r = await fetch("/api/config/periodo", {
+    const r = await fetch(`${BASE}/api/config/periodo`, {
       method: "PUT",
       headers: { ..._authHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ periodo_activo: activo, periodo_dia_ancla: dia, periodo_overrides: overrides }),
