@@ -173,7 +173,7 @@ def post_mark_card_payments(body: dict, request: Request):
     require_auth(request)
     pairs = body.get("pairs", [])
     id_pairs = [(p[0], p[1]) for p in pairs if len(p) == 2]
-    mark_transfers(id_pairs, categoria="Pago Tarjeta")
+    mark_transfers(id_pairs, categoria="Pago de Tarjeta")
     return {"ok": True, "marcados": len(id_pairs) * 2}
 
 

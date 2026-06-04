@@ -2278,7 +2278,7 @@ function renderTwExisting() {
   if (!count) { list.innerHTML = `<p class="tw-empty">Sin transferencias marcadas aún</p>`; return; }
   list.innerHTML = "";
   for (const pair of pairs) {
-    const isCardPayment = pair.categoria === "Pago Tarjeta";
+    const isCardPayment = pair.categoria === "Pago de Tarjeta";
     const row = document.createElement("div");
     row.className = "tw-pair-row tw-existing-row" + (isCardPayment ? " tw-card-row" : "");
     const amtOut = _fmtNum2(Math.abs(parseFloat(pair.out.monto)));

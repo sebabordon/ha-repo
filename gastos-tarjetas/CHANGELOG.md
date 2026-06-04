@@ -1,3 +1,7 @@
+## 0.5.116
+
+- **Fix: categoría "Pago de Tarjeta" (con "de")** (`db.py`, `routes/gastos.py`, `app.js`): el código usaba `"Pago Tarjeta"` pero la categoría ya existente en la DB era `"Pago de Tarjeta"`. El mismatch hacía que `detect_card_payments` no excluyera entradas ya categorizadas y que "Ya emparejados" no las mostrara. Renombrado en los 4 lugares donde aparecía.
+
 ## 0.5.115
 
 - **Fix "Ya emparejados" incluye pagos de tarjeta** (`db.py`, `app.js`): la sección inferior del workspace ahora muestra los pares de categoría "Pago Tarjeta" además de "Transferencia Intercuentas". La reconstrucción legacy ya no excluye fuentes CC del lado ingreso (necesario para pares banco→tarjeta). Los pares explícitos (en `transfer_pairs`) devuelven la `categoria` para distinguirlos visualmente: los pagos de tarjeta muestran badge 💳 y flecha → en lugar de ⇄.

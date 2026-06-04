@@ -21,7 +21,7 @@ _EGRESO_EXPR = "CASE WHEN CAST(monto AS REAL) > 0 THEN CAST(monto AS REAL) ELSE 
 _CC_FUENTES = frozenset(("amex", "bbva_mc", "bbva_visa", "galicia_mc"))
 
 # Categories that are always considered "special" regardless of user rules.
-_BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas", "Pago Tarjeta"})
+_BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas", "Pago de Tarjeta"})
 
 
 def get_special_categorias() -> set[str]:
@@ -1024,7 +1024,7 @@ def get_existing_transfer_pairs(days_window: int = 60) -> dict:
         ph = ",".join("?" * len(paired_ids)) if paired_ids else "NULL"
         legacy_rows = conn.execute(
             f"SELECT id, fecha, descripcion, monto, fuente, moneda "
-            f"FROM gastos WHERE categoria IN ('Transferencia Intercuentas','Transferencia','Pago Tarjeta') "
+            f"FROM gastos WHERE categoria IN ('Transferencia Intercuentas','Transferencia','Pago de Tarjeta') "
             f"AND moneda='ARS'"
             + (f" AND id NOT IN ({ph})" if paired_ids else "") +
             " ORDER BY fecha DESC",
@@ -1041,7 +1041,7 @@ def get_existing_transfer_pairs(days_window: int = 60) -> dict:
              for r in explicit_rows]
 
     # Legacy fallback: reconstruct unpaired marked transactions by amount+date.
-    # Don't filter by fuente type — "Pago Tarjeta" pairs have CC on the ingreso side.
+    # Don't filter by fuente type — "Pago de Tarjeta" pairs have CC on the ingreso side.
     legacy = [dict(r) for r in legacy_rows]
     out_rows = [r for r in legacy if float(r["monto"]) > 0]
     in_rows  = [r for r in legacy if float(r["monto"]) < 0]
