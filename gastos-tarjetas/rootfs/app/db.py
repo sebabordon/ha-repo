@@ -24,6 +24,94 @@ _CC_FUENTES = frozenset(("amex", "bbva_mc", "bbva_visa", "galicia_mc"))
 _BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas", "Pago de Tarjeta"})
 
 
+# ── Período / Ciclo de cobro ─────────────────────────────────────────────────
+# El usuario cobra cerca de fin de mes, así que el "mes contable" no coincide
+# con el mes calendario. Cuando el ciclo está activo, los agregados (charts,
+# stats, presupuesto) reasignan cada movimiento al período de cobro en vez del
+# mes calendario. Los listados/detalle SIEMPRE muestran la fecha real: esto
+# solo cambia la expresión de agrupación y el filtro por mes.
+#
+# Modelo: día-ancla `N` (1..28). Etiqueta = "mes que financia" = el mes
+# calendario siguiente al corte. Ej. con N=26, el período "2026-06" abarca del
+# 26-may al 25-jun inclusive. Overrides {YYYY-MM: día} ajustan el corte de un
+# mes puntual (p.ej. el mes en que el cobro cayó un día distinto).
+
+def _periodo_cfg() -> tuple[bool, int, dict]:
+    """Lee la config del ciclo de cobro: (activo, dia_ancla, overrides)."""
+    try:
+        from user_config import read_user_config
+        cfg = read_user_config()
+    except Exception:
+        return (False, 1, {})
+    activo = bool(cfg.get("periodo_activo", False))
+    try:
+        dia = max(1, min(28, int(cfg.get("periodo_dia_ancla", 1) or 1)))
+    except Exception:
+        dia = 1
+    overrides: dict[str, int] = {}
+    for k, v in (cfg.get("periodo_overrides", {}) or {}).items():
+        try:
+            if re.match(r"^\d{4}-\d{2}$", str(k)):
+                overrides[str(k)] = max(1, min(28, int(v)))
+        except Exception:
+            pass
+    return (activo, dia, overrides)
+
+
+def _mes_sql(col: str = "fecha") -> str:
+    """Expresión SQL que mapea una fecha (YYYY-MM-DD en `col`) a su período.
+
+    Con el ciclo inactivo devuelve el mes calendario (``substr(col,1,7)``), de
+    modo que el comportamiento es idéntico al histórico. Con el ciclo activo
+    aplica el día-ancla más los overrides puntuales.
+    """
+    activo, N, overrides = _periodo_cfg()
+    if not activo:
+        return f"substr({col},1,7)"
+    # Default aritmético: corro la fecha (N-1) días hacia atrás → mes del cobro,
+    # y le sumo 1 mes para etiquetar con el "mes que financia". El '+1 month' se
+    # aplica sobre el día-01 justamente para evitar el overflow de días (31-may).
+    default = (f"substr(date(substr(date({col},'-{N-1} days'),1,7) || '-01',"
+               f"'+1 month'),1,7)")
+    whens = []
+    for ym, d in sorted(overrides.items()):
+        if d == N:
+            continue
+        nxt = _add_months(ym, 1)
+        lo, hi = min(d, N), max(d, N)
+        # d>N: los días [N,d) del mes `ym` quedan en el período `ym`.
+        # d<N: los días [d,N) del mes `ym` pasan al período siguiente `ym+1`.
+        label = ym if d > N else nxt
+        whens.append(f"WHEN {col} >= '{ym}-{lo:02d}' AND {col} < '{ym}-{hi:02d}' "
+                     f"THEN '{label}'")
+    if not whens:
+        return default
+    return "CASE " + " ".join(whens) + f" ELSE {default} END"
+
+
+def _periodo_de_fecha(fecha: str) -> str:
+    """Etiqueta de período (YYYY-MM) para una fecha dada, en Python (espeja _mes_sql)."""
+    activo, N, overrides = _periodo_cfg()
+    ym = fecha[:7]
+    if not activo:
+        return ym
+    d = int(fecha[8:10])
+    label = _add_months(ym, 1) if d >= N else ym
+    cd = overrides.get(ym)
+    if cd and cd != N:
+        if cd > N and N <= d < cd:
+            label = ym
+        elif cd < N and cd <= d < N:
+            label = _add_months(ym, 1)
+    return label
+
+
+def periodo_actual() -> str:
+    """Etiqueta del período que contiene hoy (mes calendario si está inactivo)."""
+    from datetime import date as _date
+    return _periodo_de_fecha(_date.today().isoformat())
+
+
 def get_special_categorias() -> set[str]:
     """
     Return the set of category names to exclude from totals and charts.
@@ -771,7 +859,7 @@ def list_gastos(
     if usuario:
         query += " AND g.usuario = ?"; params.append(usuario)
     if mes:
-        query += " AND g.fecha LIKE ?"; params.append(f"{mes}-%")
+        query += f" AND {_mes_sql('g.fecha')} = ?"; params.append(mes)
     query += " ORDER BY g.fecha DESC"
     with _conn() as conn:
         rows = conn.execute(query, params).fetchall()
@@ -823,7 +911,7 @@ def monthly_summary(excluir_especiales: bool = True) -> list[dict]:
             base += f" AND (categoria IS NULL OR categoria NOT IN ({ph}))"
             params.extend(specials)
     query = f"""
-        SELECT substr(fecha, 1, 7) AS mes,
+        SELECT {_mes_sql()} AS mes,
           ROUND(SUM(CASE WHEN CAST(monto AS REAL) > 0 THEN  CAST(monto AS REAL) ELSE 0 END), 2) AS egresos,
           ROUND(SUM(CASE WHEN CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL) ELSE 0 END), 2) AS ingresos
         FROM gastos
@@ -1193,7 +1281,7 @@ def _base_where(fuente=None, usuario=None, mes=None, meses=None, extra="", moned
     if categoria:
         conds.append("categoria = ?"); params.append(categoria)
     if mes:
-        conds.append("fecha LIKE ?"); params.append(f"{mes}-%")
+        conds.append(f"{_mes_sql()} = ?"); params.append(mes)
     elif meses:
         conds.append(f"fecha >= date('now', '-{int(meses)} months')")
     if extra:
@@ -1250,7 +1338,7 @@ def stats_top_descriptions(fuente=None, usuario=None, mes=None, meses=6, limit=1
 
 def stats_monthly_by_category(fuente=None, usuario=None, meses=6, moneda='ARS', excluir_especiales=True, categoria=None):
     where, params = _base_where(fuente, usuario, meses=meses, moneda=moneda, excluir_especiales=excluir_especiales, categoria=categoria)
-    q = f"""SELECT substr(fecha,1,7) AS mes,
+    q = f"""SELECT {_mes_sql()} AS mes,
               COALESCE(categoria,'Sin categoría') AS cat,
               ROUND(SUM({_EGRESO_EXPR}),2) AS total
             FROM gastos {where}
@@ -2050,7 +2138,7 @@ def stats_pivot(dimension="categoria", metrica="egresos", fuente=None, usuario=N
         "categoria": "COALESCE(categoria,'Sin categoría')",
         "fuente":    "fuente",
         "usuario":   "COALESCE(usuario,'Sin asignar')",
-        "mes":       "substr(fecha,1,7)",
+        "mes":       _mes_sql(),
     }
     MET_MAP = {
         "egresos":  f"ROUND(SUM({_EGRESO_EXPR}),2)",
@@ -2131,7 +2219,7 @@ def stats_forecast(
     if exclude_income_cats:
         placeholders = ",".join("?" * len(exclude_income_cats))
         excl_q = f"""
-            SELECT substr(fecha, 1, 7) AS mes,
+            SELECT {_mes_sql()} AS mes,
               ROUND(SUM(CASE WHEN CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL) ELSE 0 END), 2) AS ingreso_excl
             FROM gastos
             WHERE moneda = 'ARS'
@@ -2152,8 +2240,7 @@ def stats_forecast(
     # Exclude the current (incomplete) month from the regression baseline so a
     # partial month doesn't drag the trend line toward zero.  The current month
     # is still shown in the historical series on the chart.
-    from datetime import date as _date
-    current_ym = _date.today().strftime("%Y-%m")
+    current_ym = periodo_actual()
     regression_base = [h for h in historical if h["mes"] < current_ym]
     if len(regression_base) < 2:
         regression_base = historical  # fall back if not enough complete months

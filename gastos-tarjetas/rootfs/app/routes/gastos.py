@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request, Query
 from fastapi.responses import StreamingResponse
 
 from auth import require_auth
-from db import (list_gastos, list_categorias, monthly_summary,
+from db import (list_gastos, list_categorias, monthly_summary, periodo_actual,
                 detect_transfers, detect_card_payments, mark_transfers,
                 get_transfer_candidates, get_existing_transfer_pairs, unmark_transfers,
                 ignore_transfer_pair, unignore_transfer_pair, get_ignored_transfer_pairs,
@@ -31,7 +31,9 @@ def _parse_categorias(categorias: Optional[str]) -> Optional[list]:
 @router.get("/gastos/monthly")
 def get_monthly(request: Request):
     require_auth(request)
-    return monthly_summary()
+    # `meses`: serie mensual (etiquetas de período si el ciclo de cobro está activo).
+    # `actual`: período que contiene hoy, para que el front elija el mes por defecto.
+    return {"meses": monthly_summary(), "actual": periodo_actual()}
 
 
 @router.get("/importaciones")

@@ -1,3 +1,11 @@
+## 0.6.1
+
+- **Ciclo de cobro / período contable configurable** (`db.py`, `user_config.py`, `config_route.py`, `gastos.py`, `index.html`, `app.js`): nueva sección Config → Período para usuarios que cobran cerca de fin de mes y tienen desfasaje entre los gastos del mes y el sueldo. Cuando está activo, los agregados (gráficos, estadísticas y presupuesto) reasignan cada movimiento a su período de cobro en vez del mes calendario; los listados y el detalle siguen mostrando la fecha real.
+  - Modelo **día-ancla** (1–28) con etiqueta = "mes que financia" (el período "junio" con ancla 26 abarca del 26-may al 25-jun). Más **overrides por mes** (`YYYY-MM = día`) para los meses donde el corte cayó otro día, con el default cubriendo el resto.
+  - Helpers nuevos en `db.py`: `_periodo_cfg()`, `_mes_sql(col)` (expresión SQL aritmética a prueba de overflow de días + `CASE` para overrides), `_periodo_de_fecha()` y `periodo_actual()`. Reemplazan los `substr(fecha,1,7)` y filtros `fecha LIKE` en `monthly_summary`, `stats_monthly_by_category`, `stats_pivot`, `stats_forecast`, `_base_where` y `get_gastos`.
+  - El endpoint `/api/gastos/monthly` ahora devuelve `{meses, actual}` para que el front elija el mes por defecto según el período corriente (no el mes calendario). El "mes actual" del forecast/presupuesto también usa el período.
+  - Inactivo por defecto: con el ciclo apagado todo queda idéntico al comportamiento calendario previo.
+
 ## 0.6.0
 
 - **Bump a versión 0.6**: marca el salto de minor con la incorporación del scraper BBVA enriquecido (campos extra, endpoints de detalle, dedup cross-run configurable desde UI), la tab Config → Importación con reglas de dedup editables, y la regla de proyecto "toda configuración va en la UI".

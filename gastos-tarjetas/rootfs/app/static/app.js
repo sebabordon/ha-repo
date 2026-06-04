@@ -179,7 +179,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); }
     if (tab.dataset.tab === "cuotas")      { loadCuotas(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); }
+    if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); loadPeriodoConfig(); }
   });
 });
 
@@ -261,6 +261,81 @@ async function saveDedupConfig() {
       if (msgEl) { msgEl.textContent = "Guardado ✓"; setTimeout(() => { msgEl.textContent = ""; }, 2500); }
     }
   } catch(e) { console.warn("saveDedupConfig:", e); }
+}
+
+// ── Período / Ciclo de cobro ───────────────────────────────────────────────
+function renderPeriodoState() {
+  const on = document.getElementById("periodo-activo")?.checked;
+  const body = document.getElementById("periodo-body");
+  if (body) {
+    body.style.opacity = on ? "1" : ".5";
+    body.style.pointerEvents = on ? "auto" : "none";
+  }
+  renderPeriodoPreview();
+}
+
+function renderPeriodoPreview() {
+  const el = document.getElementById("periodo-preview");
+  if (!el) return;
+  const n = parseInt(document.getElementById("periodo-dia-ancla")?.value, 10);
+  if (!n || n < 1 || n > 28) { el.textContent = ""; return; }
+  const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  // Ejemplo: período "junio" con ancla N → del (N) de mayo al (N-1) de junio.
+  const desde = `${n} de ${MESES[4]}`;       // mayo
+  const hasta = `${n - 1 || 1} de ${MESES[5]}`; // junio
+  el.textContent = `Ej.: el período "junio" abarca del ${desde} al ${hasta} (etiquetado por el mes que financia).`;
+}
+
+async function loadPeriodoConfig() {
+  try {
+    const r = await fetch("/api/config/periodo", { headers: _authHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const act = document.getElementById("periodo-activo");
+    const dia = document.getElementById("periodo-dia-ancla");
+    const ovr = document.getElementById("periodo-overrides");
+    if (act) act.checked = !!d.periodo_activo;
+    if (dia) dia.value = d.periodo_dia_ancla || 26;
+    if (ovr) {
+      const lines = Object.entries(d.periodo_overrides || {})
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([k, v]) => `${k} = ${v}`);
+      ovr.value = lines.join("\n");
+    }
+    renderPeriodoState();
+  } catch (e) { console.warn("loadPeriodoConfig:", e); }
+}
+
+async function savePeriodoConfig() {
+  const msgEl = document.getElementById("periodo-save-msg");
+  const activo = !!document.getElementById("periodo-activo")?.checked;
+  const dia = parseInt(document.getElementById("periodo-dia-ancla")?.value, 10) || 26;
+  const raw = (document.getElementById("periodo-overrides")?.value || "").split("\n");
+  const overrides = {};
+  for (const line of raw) {
+    const t = line.trim();
+    if (!t) continue;
+    const m = t.match(/^(\d{4}-\d{2})\s*=\s*(\d{1,2})$/);
+    if (!m) {
+      if (msgEl) { msgEl.style.color = "#dc2626"; msgEl.textContent = `Línea inválida: "${t}"`; }
+      return;
+    }
+    overrides[m[1]] = Math.max(1, Math.min(28, parseInt(m[2], 10)));
+  }
+  try {
+    const r = await fetch("/api/config/periodo", {
+      method: "PUT",
+      headers: { ..._authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ periodo_activo: activo, periodo_dia_ancla: dia, periodo_overrides: overrides }),
+    });
+    if (r.ok) {
+      if (msgEl) { msgEl.style.color = "#16a34a"; msgEl.textContent = "Guardado ✓ — recargá para ver los gráficos"; setTimeout(() => { msgEl.textContent = ""; }, 4000); }
+      // Refrescar series y filtros con la nueva agrupación.
+      if (typeof loadMonthlyChart === "function") loadMonthlyChart();
+    } else if (msgEl) {
+      msgEl.style.color = "#dc2626"; msgEl.textContent = "Error al guardar";
+    }
+  } catch (e) { console.warn("savePeriodoConfig:", e); }
 }
 
 function renderUiSettings() {
@@ -405,7 +480,10 @@ async function loadMonthlyChart() {
   let data;
   try {
     const res = await fetch(`${BASE}/api/gastos/monthly`);
-    data = await res.json();
+    const payload = await res.json();
+    // Backward/forward compatible: el endpoint ahora devuelve {meses, actual}.
+    data = Array.isArray(payload) ? payload : (payload.meses || []);
+    _periodoActual = (payload && payload.actual) || _periodoActual;
   } catch(e) {
     console.error("loadMonthlyChart error:", e);
     // Ensure chart system can still proceed even if this request fails
@@ -465,9 +543,12 @@ function _fmtTs(iso) {
 }
 
 let _monthFilterReady = false;
+// Período que contiene hoy. Con el ciclo de cobro activo puede diferir del mes
+// calendario; lo setea loadMonthlyChart desde /api/gastos/monthly.
+let _periodoActual = new Date().toISOString().slice(0, 7);
 
 function _populateMonthFilter(meses) {
-  const today = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+  const today = _periodoActual; // período corriente (mes calendario si el ciclo está inactivo)
 
   // Gastos/presupuesto: mes activo (puede ser el corriente, con datos parciales)
   const defaultActive = meses.filter(m => m <= today).at(-1) || meses.at(-1) || "";

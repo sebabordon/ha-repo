@@ -23,6 +23,11 @@ _DEFAULT_CONFIG: dict = {
     },
     "reglas_usuario": [],
     "pwa_shortcuts": [],
+    # Ciclo de cobro (período contable ≠ mes calendario). Inactivo por defecto:
+    # cuando está apagado, todos los agregados usan el mes calendario como siempre.
+    "periodo_activo": False,
+    "periodo_dia_ancla": 26,
+    "periodo_overrides": {},
 }
 
 

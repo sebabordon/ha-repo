@@ -1,3 +1,4 @@
+import re
 import yaml
 from fastapi import APIRouter, Body, Request, HTTPException, UploadFile, File
 from fastapi.responses import Response
@@ -149,6 +150,44 @@ def put_dedup_config(body: dict, request: Request):
         cfg["dedup_prefijos"] = [s.strip() for s in body["dedup_prefijos"] if str(s).strip()]
     if "dedup_exactos" in body:
         cfg["dedup_exactos"]  = [s.strip() for s in body["dedup_exactos"]  if str(s).strip()]
+    write_user_config(cfg)
+    return {"ok": True}
+
+
+@router.get("/config/periodo")
+def get_periodo_config(request: Request):
+    require_auth(request)
+    from db import periodo_actual
+    cfg = read_user_config()
+    return {
+        "periodo_activo":    bool(cfg.get("periodo_activo", False)),
+        "periodo_dia_ancla": int(cfg.get("periodo_dia_ancla", 26) or 26),
+        "periodo_overrides": cfg.get("periodo_overrides", {}) or {},
+        "periodo_actual":    periodo_actual(),
+    }
+
+
+@router.put("/config/periodo")
+def put_periodo_config(body: dict, request: Request):
+    require_auth(request)
+    cfg = read_user_config()
+    if "periodo_activo" in body:
+        cfg["periodo_activo"] = bool(body["periodo_activo"])
+    if "periodo_dia_ancla" in body:
+        try:
+            cfg["periodo_dia_ancla"] = max(1, min(28, int(body["periodo_dia_ancla"])))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "periodo_dia_ancla inválido (1..28)")
+    if "periodo_overrides" in body:
+        ovr: dict = {}
+        for k, v in (body["periodo_overrides"] or {}).items():
+            if not re.match(r"^\d{4}-\d{2}$", str(k)):
+                continue
+            try:
+                ovr[str(k)] = max(1, min(28, int(v)))
+            except (TypeError, ValueError):
+                continue
+        cfg["periodo_overrides"] = ovr
     write_user_config(cfg)
     return {"ok": True}
 

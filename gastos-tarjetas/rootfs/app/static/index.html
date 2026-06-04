@@ -490,6 +490,7 @@
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
         <button class="cfg-tab" data-cfgtab="importacion">Importación</button>
+        <button class="cfg-tab" data-cfgtab="periodo">Período</button>
         <button class="cfg-tab cfg-tab-danger" data-cfgtab="borrar">⚠ Borrar</button>
       </div>
 
@@ -814,6 +815,54 @@
           <button class="btn btn-primary" onclick="saveDedupConfig()">Guardar</button>
           <button class="btn" onclick="loadDedupConfig()">Restablecer</button>
           <span id="dedup-save-msg" style="color:#16a34a;font-size:.85em"></span>
+        </div>
+      </div>
+
+      <!-- ── Sub-tab: Período / Ciclo de cobro ─────────────────────── -->
+      <div id="cfg-tab-periodo" class="cfg-tab-content">
+        <h2>Período — Ciclo de cobro</h2>
+        <p class="hint" style="margin-bottom:1rem">
+          Si cobrás cerca de fin de mes, tu "mes contable" no coincide con el mes
+          calendario. Con el ciclo activo, los <strong>gráficos, estadísticas y
+          presupuesto</strong> agrupan cada movimiento por período de cobro en vez
+          del mes calendario. Los listados y el detalle <strong>siempre muestran la
+          fecha real</strong>: esto solo afecta el cálculo y la agrupación.
+        </p>
+
+        <label style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;cursor:pointer">
+          <input type="checkbox" id="periodo-activo" onchange="renderPeriodoState()">
+          <span>Activar ciclo de cobro</span>
+        </label>
+
+        <div id="periodo-body" style="opacity:.5;pointer-events:none">
+          <div style="margin-bottom:1rem">
+            <label class="field-label">Día-ancla del período
+              <span class="hint">(1–28: el día en que arranca tu ciclo de cobro)</span>
+            </label>
+            <input type="number" id="periodo-dia-ancla" min="1" max="28" value="26"
+                   style="width:90px" oninput="renderPeriodoPreview()">
+            <p class="hint" id="periodo-preview" style="margin-top:.4rem"></p>
+          </div>
+
+          <div style="margin-bottom:1rem">
+            <label class="field-label">Excepciones por mes
+              <span class="hint">(opcional: meses donde el corte cayó otro día)</span>
+            </label>
+            <p class="hint" style="margin:.2rem 0 .5rem">
+              Una por línea, formato <code>YYYY-MM = día</code>. Ej:
+              <code>2026-06 = 27</code> · <code>2026-12 = 24</code>.
+              El default cubre el resto automáticamente.
+            </p>
+            <textarea id="periodo-overrides" rows="5"
+                      style="width:100%;font-family:monospace;font-size:0.85em"
+                      placeholder="2026-06 = 27"></textarea>
+          </div>
+        </div>
+
+        <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-primary" onclick="savePeriodoConfig()">Guardar</button>
+          <button class="btn" onclick="loadPeriodoConfig()">Restablecer</button>
+          <span id="periodo-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
       </div>
 
