@@ -273,10 +273,12 @@ class BbvaTarjetasScraper(BbvaScraper):
             driver.get(f"{_BASE_URL}/fnetcore/#/globalposition")
             _time.sleep(8)
 
-        # 1. Inyectar interceptor en la página YA CARGADA
+        # 1. Inyectar interceptor en la página YA CARGADA (fetch + XHR)
         driver.execute_script("""
             window.__fetchLog = [];
-            var _orig = window.fetch;
+
+            // — fetch interceptor —
+            var _origFetch = window.fetch;
             window.fetch = function(url, opts) {
                 opts = opts || {};
                 window.__fetchLog.push({
@@ -284,9 +286,27 @@ class BbvaTarjetasScraper(BbvaScraper):
                     method: String(opts.method || 'GET'),
                     body:   String(opts.body   || '')
                 });
-                return _orig.apply(this, arguments);
+                return _origFetch.apply(this, arguments);
             };
-            console.log('[bbva-tj] fetch interceptor activo');
+
+            // — XMLHttpRequest interceptor (Angular $http usa XHR en algunos builds) —
+            var _origOpen = XMLHttpRequest.prototype.open;
+            var _origSend = XMLHttpRequest.prototype.send;
+            XMLHttpRequest.prototype.open = function(method, url) {
+                this.__logUrl    = String(url);
+                this.__logMethod = String(method);
+                return _origOpen.apply(this, arguments);
+            };
+            XMLHttpRequest.prototype.send = function(body) {
+                window.__fetchLog.push({
+                    url:    this.__logUrl    || '',
+                    method: this.__logMethod || 'XHR',
+                    body:   String(body || '')
+                });
+                return _origSend.apply(this, arguments);
+            };
+
+            console.log('[bbva-tj] fetch+XHR interceptor activo');
         """)
         log_fn("  [intercept] interceptor inyectado")
 
@@ -319,14 +339,15 @@ class BbvaTarjetasScraper(BbvaScraper):
         try:
             fetch_log = driver.execute_script("return window.__fetchLog || [];") or []
             log_fn(f"  [intercept] total calls capturadas: {len(fetch_log)}")
+            # Loguear TODAS las calls sin filtro — el endpoint real puede tener
+            # cualquier path base, no necesariamente "/servicios/"
             for call in fetch_log:
-                url = call.get("url", "")
-                # Mostrar TODAS las calls a /servicios/ para no perdernos nada
-                if "servicios" in url:
-                    log_fn(f"  [intercept] {call.get('method','?')} {url}")
-                    body = (call.get("body") or "").strip()
-                    if body and body != "null" and body != "undefined":
-                        log_fn(f"  [intercept]   body: {body[:400]}")
+                url  = call.get("url", "")
+                meth = call.get("method", "?")
+                body = (call.get("body") or "").strip()
+                log_fn(f"  [intercept] {meth} {url}")
+                if body and body not in ("null", "undefined", ""):
+                    log_fn(f"  [intercept]   body: {body[:400]}")
         except Exception as exc:
             log_fn(f"  [intercept] error leyendo log: {exc}")
 

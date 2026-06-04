@@ -1,5 +1,6 @@
 ## 0.5.118
 
+- **Fix interceptor fetch BBVA tarjetas: log sin filtro + XHR** (`scrapers/bbva_tarjetas.py`): el interceptor descartaba calls sin `"servicios"` en la URL; ahora loguea todas sin filtro. Agrega interceptor de `XMLHttpRequest` además de `fetch` (Angular usa XHR en algunos builds).
 - **UI: tilde verde en widget de vencimientos cuando el pago está confirmado** (`db.py`, `app.js`, `style.css`): `list_vencimientos` ahora incluye el campo `pago_confirmado` (subquery sobre `transfer_pairs`) que indica si existe un pago banco→tarjeta confirmado dentro de la ventana de 90 días antes del vencimiento. Cuando es verdadero, el widget muestra un badge circular verde con ✓ al lado del nombre de la tarjeta.
 
 ## 0.5.117
