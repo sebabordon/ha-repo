@@ -237,11 +237,15 @@ _GENERIC_DESCS = frozenset({
 })
 
 # Prefijos de descripciones temporales de BBVA (match por startswith).
-# Ejemplos: "BANELCO Nro:003164" → reemplazado por "OPERACION EN EFECTIVO TARJE..."
-#           "DB TRF INM COE Nro:XXXXX" → reemplazado por desc estable
-#           "TRANSF DEBITO Nro:XXXXX"  → ídem
+# Ejemplos: "BANELCO Nro:003164"      → reemplazado por "OPERACION EN EFECTIVO TARJE..."
+#           "PAGO SERVICIOS Nro:XXXX" → reemplazado por "PAGO DE SERVICIOS TARJETA..."
+#           "DB TRF INM COE Nro:XXXX" → reemplazado por desc estable
+#           "TRANSF DEBITO Nro:XXXX"  → ídem
+# Nota: "CR TRF INM COE Nro:" y "TRANSF CREDITO Nro:" NO están aquí porque son
+# la versión estable/liquidada (se mantienen, no se reemplazan).
 _GENERIC_PREFIXES = (
     "BANELCO Nro:",
+    "PAGO SERVICIOS Nro:",
     "DB TRF",
     "TRANSF DEBITO",
 )

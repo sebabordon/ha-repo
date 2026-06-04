@@ -1,3 +1,7 @@
+## 0.5.123
+
+- **Dedup: agrega "PAGO SERVICIOS Nro:" a prefijos genéricos** (`scrapers_db.py`): "PAGO SERVICIOS Nro:852962" es la descripción temporal que BBVA muestra antes de liquidar el pago de servicio como "PAGO DE SERVICIOS TARJETA 84296031 OP2962 — MASTERCARD". Al no estar en `_GENERIC_PREFIXES`, ambas versiones se insertaban como duplicados. Agregado el prefijo para que la versión enriquecida (específica) reemplace a la genérica en lugar de duplicarla.
+
 ## 0.5.122
 
 - **Fix BBVA tarjetas: headers extra para /cards/v1/** (`scrapers/bbva_tarjetas.py`): el endpoint `/cards/v1/cards/{pan}/transactions` devolvía HTTP 500 porque requiere tres headers extra que `/cliente/productos/` no necesita: `tsec` (JWT que BBVA devuelve en el *response header* de `GET /seguridad/cliente/obtenerTsec`), `timestamp-uid` (timestamp actual en hora Argentina) y `uid` (UUID v4 por request). Agrega `_fetch_tsec()` que captura el header tsec de la respuesta via fetch JS, y `_api_request_cards()` que inyecta los tres headers en la llamada a transactions.
