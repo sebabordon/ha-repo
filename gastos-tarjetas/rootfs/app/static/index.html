@@ -486,6 +486,7 @@
       <!-- Config sub-tab bar -->
       <div class="cfg-tabs">
         <button class="cfg-tab active" data-cfgtab="categorias">Categorías</button>
+        <button class="cfg-tab" data-cfgtab="categorizacion">Categorización</button>
         <button class="cfg-tab" data-cfgtab="personas">Personas</button>
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
@@ -513,6 +514,47 @@
           Marcá <strong>Especial</strong> para excluirlas de gráficos y totales (reemplaza el flag en rules.yaml).
         </p>
         <div id="categorias-managed-list"></div>
+      </div>
+
+      <!-- ── Sub-tab: Categorización ────────────────────────────────── -->
+      <div id="cfg-tab-categorizacion" class="cfg-tab-content">
+        <h2>Categorización por IA</h2>
+        <p class="hint" style="margin-bottom:1rem">
+          Cuando ninguna regla matchea, el gasto se categoriza con IA (Groq /
+          Gemini / Claude, según las API keys configuradas). Acá editás el prompt
+          y la lista de categorías sugeridas que se le envían.
+        </p>
+        <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px">
+            <label class="field-label">Categorías sugeridas <span class="hint">(una por línea)</span></label>
+            <textarea id="cat-categorias" rows="10" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <label class="field-label">Prompt <span class="hint">placeholders: <code>{categorias}</code> <code>{desc}</code></span></label>
+            <textarea id="cat-prompt" rows="10" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
+            <p class="hint" id="cat-prompt-default" style="margin-top:.3rem"></p>
+          </div>
+        </div>
+        <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-primary" onclick="saveCategorizacionConfig()">Guardar</button>
+          <button class="btn" onclick="loadCategorizacionConfig()">Restablecer</button>
+          <span id="cat-save-msg" style="color:#16a34a;font-size:.85em"></span>
+        </div>
+
+        <h2 style="margin-top:2rem">Categorías especiales fijas</h2>
+        <p class="hint" style="margin-bottom:1rem">
+          Categorías siempre excluidas de totales y gráficos (transferencias,
+          pagos de tarjeta). Se suman a las que marques "Especial" en la pestaña
+          Categorías. Una por línea.
+        </p>
+        <div style="max-width:420px">
+          <textarea id="especiales-builtin" rows="5" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
+        </div>
+        <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-primary" onclick="saveEspecialesConfig()">Guardar</button>
+          <button class="btn" onclick="loadEspecialesConfig()">Restablecer</button>
+          <span id="especiales-save-msg" style="color:#16a34a;font-size:.85em"></span>
+        </div>
       </div>
 
       <!-- ── Sub-tab: Personas ─────────────────────────────────────── -->
@@ -787,6 +829,19 @@
             <span class="ui-prev-tog">$ 1.100.000 −RG</span>
             <span class="ui-prev-accent">Acento</span>
           </div>
+        </div>
+
+        <h3 style="margin-top:2rem">Íconos PWA por fuente</h3>
+        <p class="hint" style="margin-bottom:1rem">
+          Color de fondo y siglas de los íconos de acceso directo (formularios
+          rápidos en la pantalla de inicio). Hasta 2 líneas de texto por ícono.
+        </p>
+        <div id="iconos-list"></div>
+        <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-sm" onclick="addIconRow()">+ Fuente</button>
+          <button class="btn btn-primary btn-sm" onclick="saveIconosConfig()">Guardar</button>
+          <button class="btn btn-sm" onclick="loadIconosConfig()">Restablecer</button>
+          <span id="iconos-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
       </div>
 

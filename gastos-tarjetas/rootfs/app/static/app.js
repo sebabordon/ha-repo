@@ -179,7 +179,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); }
     if (tab.dataset.tab === "cuotas")      { loadCuotas(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); loadPeriodoConfig(); loadVencMatchConfig(); }
+    if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); loadPeriodoConfig(); loadVencMatchConfig(); loadCategorizacionConfig(); loadEspecialesConfig(); loadIconosConfig(); }
   });
 });
 
@@ -396,6 +396,150 @@ async function saveVencMatchConfig() {
       msgEl.style.color = "#dc2626"; msgEl.textContent = "Error al guardar";
     }
   } catch (e) { console.warn("saveVencMatchConfig:", e); }
+}
+
+// ── Categorización por IA (prompt + categorías) ──────────────────────────────
+async function loadCategorizacionConfig() {
+  try {
+    const r = await fetch(`${BASE}/api/config/categorizacion`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const cEl = document.getElementById("cat-categorias");
+    const pEl = document.getElementById("cat-prompt");
+    const dEl = document.getElementById("cat-prompt-default");
+    if (cEl) cEl.value = (d.categorizer_categorias || []).join("\n");
+    if (pEl) pEl.value = d.categorizer_prompt || "";
+    if (dEl && d.default_prompt) dEl.textContent = "Default: " + d.default_prompt;
+  } catch (e) { console.warn("loadCategorizacionConfig:", e); }
+}
+
+async function saveCategorizacionConfig() {
+  const msgEl  = document.getElementById("cat-save-msg");
+  const cats   = (document.getElementById("cat-categorias")?.value || "")
+                   .split("\n").map(s => s.trim()).filter(Boolean);
+  const prompt = (document.getElementById("cat-prompt")?.value || "").trim();
+  try {
+    const r = await fetch(`${BASE}/api/config/categorizacion`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categorizer_categorias: cats, categorizer_prompt: prompt }),
+    });
+    if (r.ok) {
+      if (msgEl) { msgEl.style.color = "#16a34a"; msgEl.textContent = "Guardado ✓"; setTimeout(() => { msgEl.textContent = ""; }, 2500); }
+    } else {
+      const e = await r.json().catch(() => ({}));
+      if (msgEl) { msgEl.style.color = "#dc2626"; msgEl.textContent = e.detail || "Error al guardar"; }
+    }
+  } catch (e) { console.warn("saveCategorizacionConfig:", e); }
+}
+
+// ── Categorías especiales fijas ──────────────────────────────────────────────
+async function loadEspecialesConfig() {
+  try {
+    const r = await fetch(`${BASE}/api/config/especiales`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById("especiales-builtin");
+    if (el) el.value = (d.categorias_especiales_builtin || []).join("\n");
+  } catch (e) { console.warn("loadEspecialesConfig:", e); }
+}
+
+async function saveEspecialesConfig() {
+  const msgEl = document.getElementById("especiales-save-msg");
+  const names = (document.getElementById("especiales-builtin")?.value || "")
+                  .split("\n").map(s => s.trim()).filter(Boolean);
+  try {
+    const r = await fetch(`${BASE}/api/config/especiales`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categorias_especiales_builtin: names }),
+    });
+    if (r.ok) {
+      if (msgEl) { msgEl.style.color = "#16a34a"; msgEl.textContent = "Guardado ✓"; setTimeout(() => { msgEl.textContent = ""; }, 2500); }
+      loadGastos(); loadMonthlyChart();   // los totales/gráficos cambian al excluir distinto
+    }
+  } catch (e) { console.warn("saveEspecialesConfig:", e); }
+}
+
+// ── Íconos PWA por fuente ────────────────────────────────────────────────────
+let _iconStyles = {};
+
+async function loadIconosConfig() {
+  try {
+    const r = await fetch(`${BASE}/api/config/iconos`);
+    if (!r.ok) return;
+    const d = await r.json();
+    // Mostrar siempre las fuentes default + las overrides guardadas.
+    _iconStyles = { ...(d.defaults || {}), ...(d.fuente_icon_styles || {}) };
+    _renderIconRows();
+  } catch (e) { console.warn("loadIconosConfig:", e); }
+}
+
+function _renderIconRows() {
+  const wrap = document.getElementById("iconos-list");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  Object.keys(_iconStyles).sort().forEach(f => _appendIconRow(f, _iconStyles[f]));
+}
+
+function _appendIconRow(fuente, st) {
+  const wrap = document.getElementById("iconos-list");
+  if (!wrap) return;
+  st = st || {};
+  const lines = st.lines || [];
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem;flex-wrap:wrap";
+
+  const fIn = document.createElement("input");
+  fIn.type = "text"; fIn.placeholder = "fuente"; fIn.value = fuente || "";
+  fIn.className = "icon-fuente"; fIn.style.cssText = "width:130px;font-family:monospace;font-size:.85em";
+
+  const bgIn = document.createElement("input");
+  bgIn.type = "color"; bgIn.value = st.bg || "#16213e"; bgIn.className = "icon-bg"; bgIn.title = "Fondo";
+
+  const fgIn = document.createElement("input");
+  fgIn.type = "color"; fgIn.value = st.fg || "#ffffff"; fgIn.className = "icon-fg"; fgIn.title = "Texto";
+
+  const l1 = document.createElement("input");
+  l1.type = "text"; l1.placeholder = "Línea 1"; l1.value = lines[0] || ""; l1.className = "icon-l1"; l1.style.cssText = "width:90px";
+
+  const l2 = document.createElement("input");
+  l2.type = "text"; l2.placeholder = "Línea 2"; l2.value = lines[1] || ""; l2.className = "icon-l2"; l2.style.cssText = "width:90px";
+
+  const del = document.createElement("button");
+  del.className = "btn btn-sm"; del.textContent = "✕"; del.title = "Quitar";
+  del.onclick = () => row.remove();
+
+  row.append(fIn, bgIn, fgIn, l1, l2, del);
+  wrap.appendChild(row);
+}
+
+function addIconRow() { _appendIconRow("", {}); }
+
+async function saveIconosConfig() {
+  const msgEl = document.getElementById("iconos-save-msg");
+  const styles = {};
+  document.querySelectorAll("#iconos-list > div").forEach(row => {
+    const fuente = (row.querySelector(".icon-fuente")?.value || "").trim();
+    if (!fuente) return;
+    const lines = [row.querySelector(".icon-l1")?.value, row.querySelector(".icon-l2")?.value]
+                    .map(s => (s || "").trim()).filter(Boolean);
+    styles[fuente] = {
+      bg:    row.querySelector(".icon-bg")?.value || "",
+      fg:    row.querySelector(".icon-fg")?.value || "",
+      lines: lines,
+    };
+  });
+  try {
+    const r = await fetch(`${BASE}/api/config/iconos`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fuente_icon_styles: styles }),
+    });
+    if (r.ok) {
+      if (msgEl) { msgEl.style.color = "#16a34a"; msgEl.textContent = "Guardado ✓"; setTimeout(() => { msgEl.textContent = ""; }, 2500); }
+    }
+  } catch (e) { console.warn("saveIconosConfig:", e); }
 }
 
 function renderUiSettings() {

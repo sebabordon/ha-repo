@@ -233,6 +233,109 @@ def put_venc_match_config(body: dict, request: Request):
     return {"ok": True}
 
 
+# ── Categorización por IA (prompt + catálogo de categorías) ──────────────────
+
+@router.get("/config/categorizacion")
+def get_categorizacion_config(request: Request):
+    require_auth(request)
+    from user_config import config_default
+    cfg = read_user_config()
+    return {
+        "categorizer_categorias": list(cfg.get("categorizer_categorias")
+                                       or config_default("categorizer_categorias")),
+        "categorizer_prompt": cfg.get("categorizer_prompt")
+                              or config_default("categorizer_prompt"),
+        "default_prompt": config_default("categorizer_prompt"),
+    }
+
+
+@router.put("/config/categorizacion")
+def put_categorizacion_config(body: dict, request: Request):
+    require_auth(request)
+    from user_config import config_default
+    cfg = read_user_config()
+    if "categorizer_categorias" in body:
+        cats = [str(c).strip() for c in (body["categorizer_categorias"] or []) if str(c).strip()]
+        cfg["categorizer_categorias"] = cats or config_default("categorizer_categorias")
+    if "categorizer_prompt" in body:
+        prompt = str(body["categorizer_prompt"] or "").strip()
+        # Validar que el template formatee bien con los placeholders disponibles.
+        try:
+            prompt.format(categorias="x", desc="y")
+        except (KeyError, IndexError, ValueError):
+            raise HTTPException(400, "El prompt tiene placeholders inválidos. "
+                                     "Usá solo {categorias} y {desc}.")
+        cfg["categorizer_prompt"] = prompt or config_default("categorizer_prompt")
+    write_user_config(cfg)
+    return {"ok": True}
+
+
+# ── Categorías especiales fijas (excluidas de totales/gráficos) ──────────────
+
+@router.get("/config/especiales")
+def get_especiales_config(request: Request):
+    require_auth(request)
+    from user_config import config_default
+    cfg = read_user_config()
+    return {
+        "categorias_especiales_builtin": list(
+            cfg.get("categorias_especiales_builtin")
+            or config_default("categorias_especiales_builtin")),
+    }
+
+
+@router.put("/config/especiales")
+def put_especiales_config(body: dict, request: Request):
+    require_auth(request)
+    from user_config import config_default
+    cfg = read_user_config()
+    if "categorias_especiales_builtin" in body:
+        names = [str(c).strip() for c in (body["categorias_especiales_builtin"] or []) if str(c).strip()]
+        cfg["categorias_especiales_builtin"] = names or config_default("categorias_especiales_builtin")
+    write_user_config(cfg)
+    return {"ok": True}
+
+
+# ── Paleta de íconos PWA por fuente ──────────────────────────────────────────
+
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+@router.get("/config/iconos")
+def get_iconos_config(request: Request):
+    require_auth(request)
+    from user_config import config_default
+    cfg = read_user_config()
+    return {
+        "fuente_icon_styles": cfg.get("fuente_icon_styles")
+                              or config_default("fuente_icon_styles"),
+        "defaults": config_default("fuente_icon_styles"),
+    }
+
+
+@router.put("/config/iconos")
+def put_iconos_config(request: Request, body: dict = Body(...)):
+    require_auth(request)
+    styles = body.get("fuente_icon_styles", body)
+    clean: dict = {}
+    for fuente, st in (styles or {}).items():
+        if not isinstance(st, dict):
+            continue
+        bg = str(st.get("bg", "")).strip()
+        fg = str(st.get("fg", "")).strip()
+        lines = [str(l).strip() for l in (st.get("lines") or []) if str(l).strip()][:2]
+        entry: dict = {}
+        if _HEX_RE.match(bg): entry["bg"] = bg.upper()
+        if _HEX_RE.match(fg): entry["fg"] = fg.upper()
+        if lines:             entry["lines"] = lines
+        if entry:
+            clean[str(fuente).strip()] = entry
+    cfg = read_user_config()
+    cfg["fuente_icon_styles"] = clean
+    write_user_config(cfg)
+    return {"ok": True}
+
+
 @router.post("/config/usuarios/rename-db")
 def rename_usuario_in_db(body: dict, request: Request):
     """Rename a persona in all existing gastos rows (called after UI rename)."""

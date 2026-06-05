@@ -104,11 +104,39 @@ def periodo_actual() -> str:
     return _periodo_de_fecha(_date.today().isoformat())
 
 
+# Cache de categorías especiales, keyed por DB path (per-usuario). Se invalida
+# automáticamente cuando cambia el mtime de gastos.db (donde vive la tabla
+# `categorias`) o de rules.yaml, así que cualquier escritura lo refresca solo.
+_specials_cache: dict[str, tuple] = {}
+
+
+def _mtime(path: str) -> float:
+    try:
+        import os as _os
+        return _os.path.getmtime(path)
+    except OSError:
+        return -1.0
+
+
 def get_special_categorias() -> set[str]:
     """
     Return the set of category names to exclude from totals and charts.
     Merges built-in specials, categorias table, and rules.yaml (legacy).
+    Cacheado por (mtime DB, mtime rules.yaml) para no recomputar en cada llamada
+    dentro de un mismo request (se invoca varias veces por request).
     """
+    import os as _os
+    db_path    = get_db_path()
+    rules_path = get_rules_file()
+    cfg_path   = _os.path.join(_os.path.dirname(db_path), "user_config.json")
+    # Con WAL las escrituras van al -wal antes del checkpoint, así que el mtime
+    # del .db solo no alcanza para detectar cambios recientes en `categorias`.
+    key        = (_mtime(db_path), _mtime(db_path + "-wal"),
+                  _mtime(rules_path), _mtime(cfg_path))
+    cached = _specials_cache.get(db_path)
+    if cached is not None and cached[0] == key:
+        return cached[1]
+
     db_specials: set[str] = set()
     try:
         with _conn() as conn:
@@ -119,7 +147,7 @@ def get_special_categorias() -> set[str]:
 
     yaml_specials: set[str] = set()
     try:
-        with open(get_rules_file()) as f:
+        with open(rules_path) as f:
             data = yaml.safe_load(f) or {}
         yaml_specials = {
             r["categoria"] for r in data.get("reglas", [])
@@ -128,11 +156,30 @@ def get_special_categorias() -> set[str]:
     except Exception:
         pass
 
-    return _BUILTIN_SPECIALS | db_specials | yaml_specials
+    # Especiales builtin: ahora configurables desde la UI (antes hardcodeadas).
+    builtin: set[str] = set(_BUILTIN_SPECIALS)
+    try:
+        from user_config import read_user_config, config_default
+        cfg = read_user_config()
+        names = cfg.get("categorias_especiales_builtin")
+        if names is None:
+            names = config_default("categorias_especiales_builtin")
+        builtin = {str(n).strip() for n in (names or []) if str(n).strip()}
+    except Exception:
+        pass
+
+    result = builtin | db_specials | yaml_specials
+    _specials_cache[db_path] = (key, result)
+    return result
 
 
 def init_db():
     with _conn() as conn:
+        # WAL: lecturas concurrentes con una escritura sin bloquearse mutuamente.
+        # Es un setting persistente del archivo; basta con setearlo una vez por DB.
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+
         # ── Migration tracking ──────────────────────────────────────────────────
         conn.execute("""
             CREATE TABLE IF NOT EXISTS db_migrations (
@@ -163,6 +210,16 @@ def init_db():
             conn.execute("ALTER TABLE gastos ADD COLUMN import_id INTEGER")
         if "descripcion_editada" not in gcols:
             conn.execute("ALTER TABLE gastos ADD COLUMN descripcion_editada TEXT")
+
+        # Índices de la tabla `gastos`. Todas las listas/agregados filtran y
+        # ordenan por estas columnas (ver list_gastos, monthly_summary, charts);
+        # sin índices cada query hacía full-scan + sort. IF NOT EXISTS → idempotente.
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gastos_fecha    ON gastos(fecha)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gastos_fuente   ON gastos(fuente)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gastos_categoria ON gastos(categoria)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gastos_import_id ON gastos(import_id)")
+        # Listado principal: WHERE moneda=? ... ORDER BY fecha DESC
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gastos_moneda_fecha ON gastos(moneda, fecha)")
 
         # Confirmed transfer pairs — explicit link between egreso and ingreso sides
         conn.execute("""
@@ -706,8 +763,11 @@ def _run_migrations(conn):
 
 @contextmanager
 def _conn():
-    conn = sqlite3.connect(get_db_path())
+    conn = sqlite3.connect(get_db_path(), timeout=10.0)
     conn.row_factory = sqlite3.Row
+    # Espera hasta 5 s si la DB está bloqueada (scheduler de scrapers escribiendo
+    # mientras llega un request) en vez de tirar "database is locked" de inmediato.
+    conn.execute("PRAGMA busy_timeout=5000")
     try:
         yield conn
         conn.commit()
@@ -919,6 +979,8 @@ def list_gastos(
     moneda: Optional[str] = None,
     import_id: Optional[int] = None,
     excluir_especiales: bool = False,
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> list[dict]:
     query = """SELECT g.*,
                       CASE WHEN g.archivo_origen='manual' THEN 'manual'
@@ -949,6 +1011,8 @@ def list_gastos(
     if mes:
         query += f" AND {_mes_sql('g.fecha')} = ?"; params.append(mes)
     query += " ORDER BY g.fecha DESC"
+    if limit is not None:
+        query += " LIMIT ? OFFSET ?"; params.extend([int(limit), int(offset)])
     with _conn() as conn:
         rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in rows]

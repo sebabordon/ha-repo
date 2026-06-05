@@ -4,7 +4,6 @@ import secrets
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, PlainTextResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, admin, config_route, charts, cuotas
@@ -86,14 +85,15 @@ async def user_data_context(request: Request, call_next):
 app.add_middleware(
     SessionMiddleware,
     secret_key=_load_session_secret(),
+    same_site="lax",
+    https_only=False,  # ingress termina TLS; el acceso directo por LAN puede ser HTTP
+    max_age=14 * 24 * 3600,
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Nota: NO se habilita CORS. La app es una PWA same-origin (ingress / puerto
+# propio); no hay consumidor cross-origin legítimo. Un `allow_origins=["*"]` con
+# `allow_credentials=True` permitiría a cualquier sitio web hacer requests con la
+# cookie de sesión del usuario y leer sus datos. Si en el futuro hace falta un
+# cliente externo, agregar CORS acotado a orígenes explícitos (nunca "*").
 
 app.include_router(auth.router,       prefix="/auth", tags=["auth"])
 app.include_router(upload.router,     prefix="/api",  tags=["upload"])
@@ -193,7 +193,7 @@ async def serve_quick(request: Request, fuente: str = "", label: str = ""):
 async def serve_manifest_quick(fuente: str = "", label: str = ""):
     """Manifest mínimo para las páginas /quick — con el nombre e ícono de la cuenta."""
     title = label.strip() or fuente.upper().replace("_", " ") or "Gasto rápido"
-    style  = _FUENTE_ICON_STYLES.get(fuente, _FUENTE_ICON_STYLES["__default__"])
+    style  = _icon_style(fuente)
     manifest = {
         "name":             title,
         "short_name":       title,
@@ -215,6 +215,8 @@ async def serve_manifest_quick(fuente: str = "", label: str = ""):
 
 
 # ── Paleta de íconos por fuente ────────────────────────────────────────────────
+# Fallback por defecto. La paleta efectiva se obtiene con _icon_style(), que
+# mergea las overrides del usuario (Config → Interfaz → Íconos PWA) por encima.
 _FUENTE_ICON_STYLES: dict[str, dict] = {
     "amex":        {"bg": "#016FD0", "lines": ["AMEX"],          "fg": "#FFFFFF"},
     "mercadopago": {"bg": "#009EE3", "lines": ["MP"],            "fg": "#FFFFFF"},
@@ -226,10 +228,25 @@ _FUENTE_ICON_STYLES: dict[str, dict] = {
 }
 
 
+def _icon_style(fuente: str) -> dict:
+    """Estilo de ícono para `fuente`: override del usuario > default hardcodeado."""
+    style = dict(_FUENTE_ICON_STYLES.get(fuente, _FUENTE_ICON_STYLES["__default__"]))
+    try:
+        from user_config import read_user_config
+        overrides = (read_user_config().get("fuente_icon_styles") or {}).get(fuente)
+        if isinstance(overrides, dict):
+            for k in ("bg", "fg", "lines"):
+                if overrides.get(k):
+                    style[k] = overrides[k]
+    except Exception:
+        pass
+    return style
+
+
 @app.get("/quick-icon/{fuente}.svg")
 async def quick_icon_svg(fuente: str):
     """Genera un ícono SVG con el color y sigla del banco."""
-    style = _FUENTE_ICON_STYLES.get(fuente, _FUENTE_ICON_STYLES["__default__"])
+    style = _icon_style(fuente)
     bg, fg = style["bg"], style["fg"]
     lines  = style["lines"] or [fuente[:4].upper()]
 

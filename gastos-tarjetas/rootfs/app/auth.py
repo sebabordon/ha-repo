@@ -65,7 +65,9 @@ def verify_password(email: str, password: str) -> bool:
     entry = users.get(email)
     if not entry:
         return False
-    return _hash(password, entry["salt"]) == entry["hash"]
+    # compare_digest: comparación de tiempo constante para no filtrar info del
+    # hash vía timing (igual que verify_admin).
+    return hmac.compare_digest(_hash(password, entry["salt"]), entry["hash"])
 
 
 def verify_admin(email: str, password: str) -> bool:

@@ -20,6 +20,11 @@ from db import (list_gastos, list_categorias, monthly_summary, periodo_actual,
 
 router = APIRouter()
 
+# Tope de seguridad de filas para GET /gastos. No es config de comportamiento
+# (el uso normal va acotado por mes); solo evita traer toda la historia a memoria
+# en el caso "ver todo". Generoso para no truncar datasets personales reales.
+_GASTOS_SAFETY_CAP = 20000
+
 
 def _parse_categorias(categorias: Optional[str]) -> Optional[list]:
     if not categorias:
@@ -123,8 +128,13 @@ def get_gastos(
     moneda: Optional[str] = Query(None),
     import_id: Optional[int] = Query(None),
     excluir_especiales: bool = Query(False),
+    limit: int = Query(_GASTOS_SAFETY_CAP, le=_GASTOS_SAFETY_CAP),
+    offset: int = Query(0, ge=0),
 ):
     require_auth(request)
+    # `limit` es un tope de seguridad para que el caso "ver todo" (sin filtro de
+    # mes) no traiga toda la historia a memoria. El front no lo manda; por
+    # defecto trae los más recientes hasta el cap. Acotado a [_GASTOS_SAFETY_CAP].
     return list_gastos(
         fuente=fuente,
         categorias=_parse_categorias(categorias),
@@ -134,6 +144,8 @@ def get_gastos(
         moneda=moneda,
         import_id=import_id,
         excluir_especiales=excluir_especiales,
+        limit=limit,
+        offset=offset,
     )
 
 

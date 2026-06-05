@@ -1,3 +1,24 @@
+## 0.7.0
+
+Tanda de mejoras de seguridad, performance y configurabilidad (review del código).
+
+**Seguridad**
+- **CORS eliminado** (`main.py`): se quitó el `CORSMiddleware` con `allow_origins=["*"]` + `allow_credentials=True`. Esa combinación permitía que cualquier sitio web hiciera requests con la cookie de sesión del usuario y leyera sus datos. La app es una PWA same-origin (ingress / puerto propio), no necesita CORS. Además la cookie de sesión ahora declara `same_site="lax"` y `max_age` explícito.
+- **Rate limiter de login a prueba de spoofing** (`routes/auth.py`): `_client_ip()` usaba `X-Forwarded-For` / `X-Real-IP`, headers que el cliente controla; con el puerto expuesto directo (sin la auth de HA) un atacante los cambiaba en cada intento y evadía el límite de fuerza bruta. Ahora se usa siempre el peer TCP real (`request.client.host`), que no se puede falsificar.
+- **`verify_password` timing-safe** (`auth.py`): reemplaza `==` por `hmac.compare_digest()` al comparar el hash (igual que `verify_admin`).
+
+**Performance**
+- **Índices en la tabla `gastos`** (`db.py`): se agregaron índices en `fecha`, `fuente`, `categoria`, `import_id` y compuesto `(moneda, fecha)`. Antes todos los listados/agregados hacían full-scan + sort. Es la mejora de mayor impacto.
+- **WAL + busy_timeout** (`db.py`): `journal_mode=WAL` + `synchronous=NORMAL` (lecturas concurrentes con la escritura del scheduler sin bloquearse) y `busy_timeout=5000` en cada conexión (espera en vez de tirar "database is locked").
+- **Cache de `get_special_categorias`** (`db.py`): se cacheaba en cada llamada (abría conexión + leía YAML, varias veces por request). Ahora se cachea por usuario, invalidado por mtime de la DB (+ `-wal`), `rules.yaml` y `user_config.json`.
+- **Tope de seguridad en `GET /gastos`** (`db.py`, `routes/gastos.py`): `list_gastos` acepta `limit`/`offset` y el endpoint aplica un cap (`_GASTOS_SAFETY_CAP=20000`) para que el caso "ver todo" no traiga toda la historia a memoria. El uso normal ya va acotado por mes.
+- _Nota:_ `monto` se deja como está (ya se trata como float en todo el flujo: SQL agrega con `CAST AS REAL`, el front hace `parseFloat`); migrar la columna no daba ganancia real y se evita el riesgo sobre datos financieros.
+
+**Configurable desde la UI** (antes hardcodeado en Python)
+- **Categorización por IA** (`categorizer.py`, `user_config.py`, `config_route.py`, `index.html`, `app.js`): el prompt y la lista de categorías sugeridas dejaron de estar fijos en `categorizer.py`. Editables en `Config → Categorización`, persistidos en `user_config.json` (`categorizer_prompt` con placeholders `{categorias}`/`{desc}`, `categorizer_categorias`) vía `GET/PUT /api/config/categorizacion`.
+- **Categorías especiales fijas** (`db.py`, `user_config.py`, `config_route.py`, `index.html`, `app.js`): las antes hardcodeadas `_BUILTIN_SPECIALS` (Transferencia, Transferencia Intercuentas, Pago de Tarjeta) ahora se editan en `Config → Categorización` (`categorias_especiales_builtin`, `GET/PUT /api/config/especiales`); el default sigue siendo el mismo.
+- **Paleta de íconos PWA por fuente** (`main.py`, `user_config.py`, `config_route.py`, `index.html`, `app.js`): la antes hardcodeada `_FUENTE_ICON_STYLES` (color de fondo, color de texto y siglas por banco) se edita en `Config → Interfaz → Íconos PWA` (`fuente_icon_styles`, `GET/PUT /api/config/iconos`, validación hex). `_icon_style()` mergea las overrides del usuario sobre los defaults.
+
 ## 0.6.20
 
 - **Config → Categorías: la subcategoría nueva se inserta debajo del padre** (`app.js`): al tocar el `+` de una categoría padre, el input de la nueva subcategoría ahora aparece indentado justo debajo de los hijos de ese padre, en vez de mandarse al final de toda la lista. `renderCategoriasManaged()` agrupa los ítems `_new` por `parent_nombre` (`newByParent`) y los emite dentro del bloque de su padre; las categorías nuevas de nivel superior (sin padre) siguen yendo al final. El foco tras crear apunta al input por `data-i` en vez de "el último del DOM".

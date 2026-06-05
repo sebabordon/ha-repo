@@ -6,13 +6,27 @@ from typing import Optional
 from config import CLAUDE_API_KEY, GROQ_API_KEY, GEMINI_API_KEY
 from userctx import get_rules_file
 
-_PROMPT = (
-    "Categoriza este gasto de tarjeta de crédito argentina en una sola palabra o frase corta "
-    "(ej: Supermercado, Combustible, Restaurante, Farmacia, Entretenimiento, Viajes, Ropa, "
-    "Tecnología, Servicios, Otros).\n"
-    "Gasto: {desc}\n"
-    "Responde solo con la categoría, sin explicación."
-)
+def _build_prompt(descripcion: str) -> str:
+    """Construye el prompt de categorización desde la config del usuario.
+
+    El template (`categorizer_prompt`) y la lista de categorías sugeridas
+    (`categorizer_categorias`) son editables desde la UI (Config → Categorización).
+    Solo se invoca en el camino IA (cuando ninguna regla matcheó), así que el
+    read del config es despreciable frente a la llamada HTTP que sigue.
+    """
+    from user_config import read_user_config, config_default
+    try:
+        cfg = read_user_config()
+    except Exception:
+        cfg = {}
+    cats     = cfg.get("categorizer_categorias") or config_default("categorizer_categorias")
+    template = cfg.get("categorizer_prompt")     or config_default("categorizer_prompt")
+    try:
+        return template.format(categorias=", ".join(cats), desc=descripcion)
+    except (KeyError, IndexError):
+        # Template inválido (placeholder desconocido) → fallback al default.
+        return config_default("categorizer_prompt").format(
+            categorias=", ".join(cats), desc=descripcion)
 
 # ── Rules cache ───────────────────────────────────────────────────────────────
 _rules_cache: dict = {"rules": None, "mtime": -1.0}
@@ -90,29 +104,29 @@ async def _openai_compat_call(url: str, key: str, model: str, content: str) -> O
         return None
 
 
-async def categorize_by_groq(descripcion: str) -> Optional[str]:
+async def categorize_by_groq(prompt: str) -> Optional[str]:
     """Groq free API — llama-3.1-8b-instant, ~14k req/day."""
     if not GROQ_API_KEY:
         return None
     return await _openai_compat_call(
         "https://api.groq.com/openai/v1/chat/completions",
         GROQ_API_KEY, "llama-3.1-8b-instant",
-        _PROMPT.format(desc=descripcion),
+        prompt,
     )
 
 
-async def categorize_by_gemini(descripcion: str) -> Optional[str]:
+async def categorize_by_gemini(prompt: str) -> Optional[str]:
     """Google Gemini free API — gemini-2.0-flash, ~1500 req/day."""
     if not GEMINI_API_KEY:
         return None
     return await _openai_compat_call(
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         GEMINI_API_KEY, "gemini-2.0-flash",
-        _PROMPT.format(desc=descripcion),
+        prompt,
     )
 
 
-async def categorize_by_claude(descripcion: str) -> Optional[str]:
+async def categorize_by_claude(prompt: str) -> Optional[str]:
     if not CLAUDE_API_KEY:
         return None
     try:
@@ -121,7 +135,7 @@ async def categorize_by_claude(descripcion: str) -> Optional[str]:
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=50,
-            messages=[{"role": "user", "content": _PROMPT.format(desc=descripcion)}],
+            messages=[{"role": "user", "content": prompt}],
         )
         return msg.content[0].text.strip()
     except Exception:
@@ -167,16 +181,18 @@ async def categorize(descripcion: str, monto: float = 0.0, fuente: str = "") -> 
     cat = categorize_by_rules(descripcion, monto=monto, fuente=fuente)
     if cat:
         return cat, "regla"
+    # Camino IA: construimos el prompt (desde config) una sola vez.
+    prompt = _build_prompt(descripcion)
     if GROQ_API_KEY:
-        cat = await categorize_by_groq(descripcion)
+        cat = await categorize_by_groq(prompt)
         if cat:
             return cat, "groq"
     if GEMINI_API_KEY:
-        cat = await categorize_by_gemini(descripcion)
+        cat = await categorize_by_gemini(prompt)
         if cat:
             return cat, "gemini"
     if CLAUDE_API_KEY:
-        cat = await categorize_by_claude(descripcion)
+        cat = await categorize_by_claude(prompt)
         if cat:
             return cat, "claude"
     return None, None

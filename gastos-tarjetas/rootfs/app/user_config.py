@@ -42,7 +42,43 @@ _DEFAULT_CONFIG: dict = {
     # pago a veces queda categorizado como transferencia en vez de Pago de
     # Tarjeta; agregá esas categorías acá desde la UI si querés que cuenten.
     "venc_pago_match_categorias": ["Pago de Tarjeta"],
+    # ── Categorización por IA (configurable desde la UI) ─────────────────────
+    # Lista de categorías sugeridas que se inyectan en el prompt, y el template
+    # del prompt mismo. {categorias} y {desc} son los placeholders disponibles.
+    "categorizer_categorias": [
+        "Supermercado", "Combustible", "Restaurante", "Farmacia",
+        "Entretenimiento", "Viajes", "Ropa", "Tecnología", "Servicios", "Otros",
+    ],
+    "categorizer_prompt": (
+        "Categoriza este gasto de tarjeta de crédito argentina en una sola "
+        "palabra o frase corta (ej: {categorias}).\n"
+        "Gasto: {desc}\n"
+        "Responde solo con la categoría, sin explicación."
+    ),
+    # ── Categorías especiales fijas (excluidas de totales/gráficos) ──────────
+    # Antes hardcodeadas en db.py (_BUILTIN_SPECIALS). Editables desde la UI;
+    # se mergean con las marcadas "Especial" en la tabla categorias y rules.yaml.
+    "categorias_especiales_builtin": [
+        "Transferencia", "Transferencia Intercuentas", "Pago de Tarjeta",
+    ],
+    # ── Paleta de íconos PWA por fuente (color de fondo + siglas) ────────────
+    # Antes hardcodeada en main.py (_FUENTE_ICON_STYLES). Cada entrada:
+    #   {"bg": "#RRGGBB", "fg": "#RRGGBB", "lines": ["LIN1", "LIN2"]}
+    "fuente_icon_styles": {
+        "amex":        {"bg": "#016FD0", "lines": ["AMEX"],         "fg": "#FFFFFF"},
+        "mercadopago": {"bg": "#009EE3", "lines": ["MP"],           "fg": "#FFFFFF"},
+        "bbva_mc":     {"bg": "#004481", "lines": ["BBVA", "MC"],   "fg": "#FFFFFF"},
+        "bbva_visa":   {"bg": "#004481", "lines": ["BBVA", "VISA"], "fg": "#FFFFFF"},
+        "bbva_cuenta": {"bg": "#004481", "lines": ["BBVA", "CTA"],  "fg": "#FFFFFF"},
+        "galicia_mc":  {"bg": "#E31837", "lines": ["GAL", "MC"],    "fg": "#FFFFFF"},
+    },
 }
+
+
+def config_default(key: str):
+    """Default de una clave de config (para que otros módulos no la redefinan)."""
+    import copy
+    return copy.deepcopy(_DEFAULT_CONFIG.get(key))
 
 
 def read_user_config() -> dict:

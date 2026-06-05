@@ -22,10 +22,18 @@ def _safe_prefix(request: Request) -> str:
 
 
 def _client_ip(request: Request) -> str:
-    for header in ("X-Real-IP", "X-Forwarded-For"):
-        val = request.headers.get(header, "")
-        if val:
-            return val.split(",")[0].strip()
+    """IP usada como bucket del rate limiter.
+
+    Usa SIEMPRE el peer TCP real (`request.client.host`), no los headers
+    `X-Forwarded-For` / `X-Real-IP`: esos los controla el cliente y, en el
+    acceso directo al puerto 8000 (sin la auth de HA), un atacante los cambiaría
+    en cada intento para evadir el límite de fuerza bruta. El peer TCP no se
+    puede falsificar.
+
+    Trade-off: por ingress todos los logins comparten la IP del proxy de HA y
+    por ende un mismo bucket. Es aceptable porque ese camino ya exige estar
+    autenticado en Home Assistant; el vector real es el acceso directo.
+    """
     return request.client.host if request.client else "unknown"
 
 
