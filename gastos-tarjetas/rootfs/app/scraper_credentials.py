@@ -1,55 +1,29 @@
 """
 Gestión de credenciales de scrapers — por usuario.
 
-Las credenciales se guardan en {data_dir}/scraper_credentials.json, donde
-data_dir es el directorio del usuario autenticado (/data/{email_sanitizado}/).
+A partir de v0.6.16 las credenciales viven SOLO en la tabla `scraper_instances`
+de la DB del usuario (cifradas con Fernet si SCRAPER_ENCRYPTION_KEY está
+configurada).  El archivo scraper_credentials.json que existía en versiones
+anteriores ya no se escribe; los archivos viejos que queden en disco son
+inofensivos y pueden borrarse manualmente.
 
-Esto significa que cada usuario que configure sus propios scrapers tiene sus
-credenciales separadas y ligadas a su instancia de gastos.db.
-
-El scheduler lee todos los archivos scraper_credentials.json encontrados bajo
-/data/*/  para poder ejecutar jobs sin contexto de request HTTP.
-
-Formato del JSON:
-    {
-      "amex": {
-        "enabled": true,
-        "usuario": "user@mail.com",
-        "password": "...",
-        "schedule": "07:00"
-      },
-      "bbva": {
-        "enabled": false,
-        "usuario": "12345678",
-        "tercer_dato": "mi_usuario_bbva",
-        "password": "...",
-        "dias": "60",
-        "schedule": "07:15"
-      },
-      ...
-    }
-
-Las contraseñas se cifran si SCRAPER_ENCRYPTION_KEY está configurada en el add-on
-(Fernet/AES-128 vía scraper_crypto.py).  Sin esa clave se almacenan en texto claro
-como fallback para no romper instalaciones sin la variable.
+El módulo conserva `BANKS` (metadatos de la UI: campos, labels) y las
+funciones públicas con la misma firma para que el resto del código no cambie.
 """
 
-import glob
-import json
 import logging
 import os
+from contextlib import contextmanager
 
-from scraper_crypto import decrypt_str, encrypt_str
-from userctx import get_data_dir
+from userctx import _user_data_dir, get_data_dir
 
 logger = logging.getLogger(__name__)
 
-_FILENAME = "scraper_credentials.json"
 _DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 # ── Definición de bancos ──────────────────────────────────────────────────────
-# Cada banco tiene nombre visible, campos de credenciales y schedule por defecto.
-# Los campos con type="password" nunca se devuelven en las respuestas GET.
+# Solo metadatos de UI: nombre visible, campos del formulario, schedule default.
+# Los valores reales (credenciales, enabled, schedule) están en scraper_instances.
 
 BANKS: dict[str, dict] = {
     "amex": {
@@ -132,7 +106,7 @@ BANKS: dict[str, dict] = {
              "hint": "El alias/usuario que configuraste en Galicia Online Banking (no el DNI)"},
             {"key": "password",    "label": "Contraseña",           "type": "password", "required": True},
         ],
-        "totp": True,   # puede pedir código de verificación en el primer login
+        "totp": True,
     },
     "invertironline": {
         "nombre":   "InvertirOnline",
@@ -204,199 +178,184 @@ _SECRET_FIELDS = frozenset(
     if f["type"] == "password"
 )
 
-
-# ── Rutas ─────────────────────────────────────────────────────────────────────
-
-def _creds_path(data_dir: str | None = None) -> str:
-    return os.path.join(data_dir or get_data_dir(), _FILENAME)
-
-
-# ── Lectura / escritura ───────────────────────────────────────────────────────
-
-def read_creds(data_dir: str | None = None) -> dict:
-    """Lee el JSON de credenciales del usuario. Devuelve {} si no existe.
-
-    Soporta el formato cifrado ({"_encrypted": true, "_data": "<token>"})
-    generado por write_creds cuando SCRAPER_ENCRYPTION_KEY está configurada.
-    Los archivos en formato plaintext (instalaciones anteriores) se leen tal cual.
-    """
-    path = _creds_path(data_dir)
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path) as f:
-            raw = json.load(f) or {}
-        if raw.get("_encrypted"):
-            plaintext = decrypt_str(raw.get("_data", ""), True)
-            return json.loads(plaintext) if plaintext else {}
-        return raw
-    except Exception as exc:
-        logger.error("Error leyendo scraper_credentials.json: %s", exc)
-        return {}
+# Links cuenta-default por banco (para crear instancias al configurar por primera vez)
+_DEFAULT_LINK: dict[str, tuple[str, str]] = {
+    "bbva":           ("bbva_cuenta",    "ARS"),
+    "bbva_tarjetas":  ("bbva_visa",      "VISA"),
+    "amex":           ("amex",           "main"),
+    "galicia":        ("galicia_mc",     "main"),
+    "mercadopago":    ("mercadopago",    "main"),
+    "invertironline": ("invertironline", "main"),
+}
 
 
-def write_creds(data: dict, data_dir: str | None = None) -> None:
-    """Escribe el JSON de credenciales del usuario.
+# ── Helper de contexto ────────────────────────────────────────────────────────
 
-    Si SCRAPER_ENCRYPTION_KEY está disponible, cifra el contenido completo
-    con Fernet antes de escribir en disco.  De lo contrario escribe plaintext
-    (comportamiento original).
-    """
-    path = _creds_path(data_dir)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    plaintext = json.dumps(data, ensure_ascii=False)
-    encrypted_data, is_enc = encrypt_str(plaintext)
-    to_save = {"_encrypted": True, "_data": encrypted_data} if is_enc else data
-    with open(path, "w") as f:
-        json.dump(to_save, f, ensure_ascii=False, indent=2)
-    logger.info("scraper_credentials.json guardado en %s", os.path.dirname(path))
+@contextmanager
+def _with_data_dir(data_dir: str | None):
+    """Setea temporalmente el data_dir del usuario si se provee explícitamente."""
+    if data_dir is not None:
+        token = _user_data_dir.set(data_dir)
+        try:
+            yield
+        finally:
+            _user_data_dir.reset(token)
+    else:
+        yield
 
+
+# ── API pública ───────────────────────────────────────────────────────────────
 
 def get_bank_config(banco: str, data_dir: str | None = None) -> dict | None:
     """
     Devuelve la config de un banco si está habilitado, o None.
-    Usado por el scheduler y los endpoints HTTP para obtener credenciales reales.
+    Lee de scraper_instances (la instancia default del banco).
     """
-    creds = read_creds(data_dir)
-    cfg   = creds.get(banco, {})
-    if not cfg.get("enabled", False):
+    from scraper_instances_db import get_instance_by_banco_default
+    with _with_data_dir(data_dir):
+        inst = get_instance_by_banco_default(banco)
+    if not inst or not inst.get("enabled"):
         return None
-    # Asegurar que el schedule tenga un valor
+    cfg = dict(inst["config"])
     if "schedule" not in cfg:
-        cfg = dict(cfg)
-        cfg["schedule"] = BANKS[banco]["schedule"] if banco in BANKS else "07:00"
+        cfg["schedule"] = inst.get("schedule") or (
+            BANKS[banco]["schedule"] if banco in BANKS else "07:00"
+        )
     return cfg
 
 
 def set_bank_config(banco: str, updates: dict, data_dir: str | None = None) -> None:
     """
-    Actualiza la config de un banco.
+    Guarda/actualiza la config de un banco en scraper_instances.
 
-    Reglas especiales para las contraseñas:
-      - Si el campo viene vacío ("") → mantener el valor existente
-      - Si viene con valor → sobrescribir
+    Reglas especiales para contraseñas:
+      - Campo vacío ("") → mantener el valor existente.
+      - Campo con valor → sobrescribir.
     """
-    creds   = read_creds(data_dir)
-    existing = creds.get(banco, {})
+    from scraper_instances_db import (
+        get_instance_by_banco_default, update_instance, create_instance, link_cuenta,
+    )
 
-    # Preservar contraseñas existentes si el campo llega vacío
-    merged = dict(existing)
-    for k, v in updates.items():
-        if k in _SECRET_FIELDS and not v:
-            # Mantener el valor previo
-            pass
-        else:
-            merged[k] = v
-
-    creds[banco] = merged
-    write_creds(creds, data_dir)
-
-    # Mirror a la instancia default del banco en `scraper_instances` (v0.4.0+).
-    # Si la instancia no existe, la creamos (caso: usuario habilitó un banco
-    # nuevo después de la migración inicial).
-    try:
-        from scraper_instances_db import (
-            get_instance_by_banco_default, update_instance, create_instance, link_cuenta,
-        )
+    with _with_data_dir(data_dir):
         inst = get_instance_by_banco_default(banco)
-        if inst:
+
+    if inst:
+        merged = dict(inst["config"])
+        for k, v in updates.items():
+            if k in _SECRET_FIELDS and not v:
+                pass  # preservar contraseña existente
+            else:
+                merged[k] = v
+        with _with_data_dir(data_dir):
             update_instance(
                 inst["id"],
                 config=merged,
                 schedule=merged.get("schedule"),
                 enabled=bool(merged.get("enabled")),
             )
-        else:
-            # Crear instancia + linkear cuenta default del banco
-            _DEFAULT_LINK = {
-                "bbva":           ("bbva_cuenta",    "ARS"),
-                "bbva_tarjetas":  ("bbva_visa",      "VISA"),
-                "amex":           ("amex",           "main"),
-                "galicia":        ("galicia_mc",     "main"),
-                "mercadopago":    ("mercadopago",    "main"),
-                "invertironline": ("invertironline", "main"),
-            }
-            link = _DEFAULT_LINK.get(banco)
-            label = banco.upper() if banco != "mercadopago" else "MercadoPago"
+    else:
+        label = banco.upper() if banco != "mercadopago" else "MercadoPago"
+        with _with_data_dir(data_dir):
             new_id = create_instance(
                 banco=banco, nombre=f"{label} default",
-                config=merged, schedule=merged.get("schedule"),
-                enabled=bool(merged.get("enabled")),
+                config=updates,
+                schedule=updates.get("schedule"),
+                enabled=bool(updates.get("enabled")),
             )
+            link = _DEFAULT_LINK.get(banco)
             if link:
                 cuenta_fuente, product_key = link
-                link_cuenta(cuenta_fuente, new_id, product_key)
-    except Exception as exc:
-        logger.warning("Mirror a scraper_instances falló: %s", exc)
+                try:
+                    link_cuenta(cuenta_fuente, new_id, product_key)
+                except Exception as exc:
+                    logger.warning("No se pudo linkear cuenta %s: %s", cuenta_fuente, exc)
 
-
-# ── Respuesta para la API (sin contraseñas) ────────────────────────────────────
 
 def creds_for_api(data_dir: str | None = None) -> dict:
     """
-    Devuelve la config de todos los bancos apta para enviar al browser:
-      - Los campos de tipo 'password' se reemplazan por ""
-      - Se agrega 'has_password': True/False para que la UI sepa si ya hay una
-      - Se incluyen los metadatos de cada banco (nombre, campos, totp)
+    Devuelve la config de todos los bancos apta para el browser:
+      - Campos password reemplazados por "" con has_<field>=True/False.
+      - Metadatos de cada banco (nombre, campos, totp).
+    Lee de scraper_instances (la instancia default por banco).
     """
-    creds = read_creds(data_dir)
-    result = {}
+    from scraper_instances_db import list_instances
+    with _with_data_dir(data_dir):
+        instances = list_instances()
 
+    # Una entrada por banco: la primera instancia (default)
+    by_banco: dict[str, dict] = {}
+    for inst in instances:
+        if inst["banco"] not in by_banco:
+            by_banco[inst["banco"]] = inst
+
+    result = {}
     for banco, bank_def in BANKS.items():
-        stored = creds.get(banco, {})
+        inst = by_banco.get(banco)
+        cfg  = inst["config"] if inst else {}
+
         row: dict = {
-            "enabled":  stored.get("enabled", False),
-            "schedule": stored.get("schedule", bank_def["schedule"]),
+            "enabled":  bool(inst["enabled"]) if inst else False,
+            "schedule": inst["schedule"] if inst else bank_def["schedule"],
             "nombre":   bank_def["nombre"],
             "totp":     bank_def.get("totp", False),
-            "campos":   bank_def["campos"],   # metadatos para renderizar el form
+            "campos":   bank_def["campos"],
         }
-        # Campos de credenciales: devolver el valor salvo si es secret
         for campo in bank_def["campos"]:
             key = campo["key"]
             if campo["type"] == "password":
-                row[key]          = ""               # nunca devolver la contraseña
-                row[f"has_{key}"] = bool(stored.get(key))
+                row[key]          = ""
+                row[f"has_{key}"] = bool(cfg.get(key))
             elif campo["type"] == "checkbox":
-                row[key] = bool(stored.get(key, False))
+                row[key] = bool(cfg.get(key, False))
             else:
-                row[key] = stored.get(key, "")
+                row[key] = cfg.get(key, "")
 
         result[banco] = row
 
     return result
 
 
-# ── Para el scheduler (sin request context) ──────────────────────────────────
-
 def find_all_enabled_configs() -> list[dict]:
     """
-    Escanea /data/*/scraper_credentials.json y devuelve una lista de
-    {banco, data_dir, config} para todos los scrapers habilitados en todos
-    los directorios de usuario.
-
-    Usa read_creds() para soportar archivos cifrados.
+    Devuelve todos los scrapers habilitados en todos los directorios de usuario.
+    Lee de scraper_instances en cada gastos.db encontrado bajo DATA_DIR.
     """
-    results = []
-    pattern = os.path.join(_DATA_DIR, "*", _FILENAME)
-    for creds_path in sorted(glob.glob(pattern)):
-        data_dir = os.path.dirname(creds_path)
+    from scraper_instances_db import list_instances
+
+    results  = []
+    candidates: list[str] = []
+    try:
+        for entry in os.listdir(_DATA_DIR):
+            full = os.path.join(_DATA_DIR, entry)
+            if os.path.isdir(full) and os.path.exists(os.path.join(full, "gastos.db")):
+                candidates.append(full)
+    except FileNotFoundError:
+        pass
+    # Fallback: instalación single-user (gastos.db directo en /data)
+    if not candidates and os.path.exists(os.path.join(_DATA_DIR, "gastos.db")):
+        candidates.append(_DATA_DIR)
+
+    for data_dir in candidates:
+        token = _user_data_dir.set(data_dir)
         try:
-            creds = read_creds(data_dir)
-            for banco, cfg in creds.items():
-                if not isinstance(cfg, dict) or not cfg.get("enabled", False):
-                    continue
-                if banco not in BANKS:
-                    continue
-                full_cfg = dict(cfg)
-                if "schedule" not in full_cfg:
-                    full_cfg["schedule"] = BANKS[banco]["schedule"]
-                results.append({
-                    "banco":    banco,
-                    "data_dir": data_dir,
-                    "config":   full_cfg,
-                })
+            instances = list_instances(enabled_only=True)
         except Exception as exc:
-            logger.warning("Error leyendo %s: %s", creds_path, exc)
+            logger.warning("Error leyendo instancias de %s: %s", data_dir, exc)
+            instances = []
+        finally:
+            _user_data_dir.reset(token)
+
+        for inst in instances:
+            banco = inst["banco"]
+            if banco not in BANKS:
+                continue
+            cfg = dict(inst["config"])
+            if "schedule" not in cfg:
+                cfg["schedule"] = inst.get("schedule") or BANKS[banco]["schedule"]
+            results.append({
+                "banco":    banco,
+                "data_dir": data_dir,
+                "config":   cfg,
+            })
 
     return results

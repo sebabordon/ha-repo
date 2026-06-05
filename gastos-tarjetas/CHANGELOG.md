@@ -1,3 +1,7 @@
+## 0.6.16
+
+- **REFACTOR: credenciales bancarias migradas a DB exclusivamente** (`scraper_credentials.py`): `scraper_credentials.json` ya no se escribe. Todas las lecturas/escrituras de credenciales van directo a `scraper_instances` (cifradas con Fernet si `SCRAPER_ENCRYPTION_KEY` está configurada). Se eliminaron `read_creds` y `write_creds`; `get_bank_config`, `set_bank_config`, `creds_for_api` y `find_all_enabled_configs` usan `scraper_instances_db`. El módulo `BANKS` se conserva solo como metadatos de UI. Los archivos `.json` viejos en disco son inofensivos y pueden borrarse manualmente.
+
 ## 0.6.15
 
 - **SEGURIDAD: SESSION_SECRET auto-generado** (`run.sh`): se genera un secret único de 48 bytes al primer arranque y se persiste en `/data/session_secret`. Elimina el fallback público `"changeme-in-prod"` que permitía forjar cookies de sesión. En `main.py` el fallback también pasó a `secrets.token_urlsafe(48)` (sesiones no persistentes si no hay secret en disco, pero sin secreto predecible).
