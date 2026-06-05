@@ -6343,22 +6343,33 @@ function renderCategoriasManaged() {
   // Separate new (unsaved) items from established tree
   const withIdx  = _categoriasManaged.map((c, i) => ({...c, _i: i}));
   const existing = withIdx.filter(c => !c._new);
-  const newItems = withIdx.filter(c =>  c._new);
 
   const sortAlpha = arr => arr.slice().sort((a, b) => (a.nombre||"").localeCompare(b.nombre||"", "es"));
 
   const byParent = {};
   existing.forEach(c => { (byParent[c.parent_nombre || ""] = byParent[c.parent_nombre || ""] || []).push(c); });
+  // New (unsaved) items grouped by their target parent so a subcategoría aparece
+  // justo debajo de su padre, no al final de toda la lista.
+  const newByParent = {};
+  withIdx.filter(c => c._new).forEach(c => {
+    (newByParent[c.parent_nombre || ""] = newByParent[c.parent_nombre || ""] || []).push(c);
+  });
   const parentSet = new Set(existing.map(c => c.parent_nombre).filter(Boolean));
 
   const ordered = [];
+  const pushChildren = (parentName) => {
+    sortAlpha(byParent[parentName] || []).forEach(child =>
+      ordered.push({...child, _indent: true, _isParent: false}));
+    (newByParent[parentName] || []).forEach(child =>
+      ordered.push({...child, _indent: true, _isParent: false}));
+  };
   sortAlpha(byParent[""] || []).forEach(c => {
-    ordered.push({...c, _indent: false, _isParent: parentSet.has(c.nombre)});
-    sortAlpha(byParent[c.nombre] || []).forEach(child => {
-      ordered.push({...child, _indent: true, _isParent: false});
-    });
+    const isParent = parentSet.has(c.nombre) || (newByParent[c.nombre] || []).length > 0;
+    ordered.push({...c, _indent: false, _isParent: isParent});
+    pushChildren(c.nombre);
   });
-  newItems.forEach(c => ordered.push({...c, _indent: false, _isParent: false}));
+  // Categorías nuevas de nivel superior (sin padre) al final.
+  (newByParent[""] || []).forEach(c => ordered.push({...c, _indent: false, _isParent: false}));
 
   // Duplicate keyword map: kw.toLowerCase() → Set of category names that have it
   const kwOwners = new Map();
@@ -6466,13 +6477,12 @@ function renderCategoriasManaged() {
   wrap.querySelectorAll("[data-del]").forEach(btn => {
     btn.addEventListener("click", () => { _categoriasManaged.splice(+btn.dataset.del, 1); renderCategoriasManaged(); });
   });
-  // Agregar subcategoría a una categoría padre
+  // Agregar subcategoría a una categoría padre (se inserta debajo del padre)
   wrap.querySelectorAll(".cat-addsub-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      _categoriasManaged.push({nombre: "", parent_nombre: btn.dataset.parent, especial: 0, _new: true});
+      const idx = _categoriasManaged.push({nombre: "", parent_nombre: btn.dataset.parent, especial: 0, _new: true}) - 1;
       renderCategoriasManaged();
-      const inputs = document.querySelectorAll(".cat-name-inp");
-      if (inputs.length) inputs[inputs.length - 1].focus();
+      document.querySelector(`.cat-name-inp[data-i="${idx}"]`)?.focus();
     });
   });
   // Remove keyword chip

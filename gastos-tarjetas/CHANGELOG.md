@@ -1,3 +1,7 @@
+## 0.6.20
+
+- **Config → Categorías: la subcategoría nueva se inserta debajo del padre** (`app.js`): al tocar el `+` de una categoría padre, el input de la nueva subcategoría ahora aparece indentado justo debajo de los hijos de ese padre, en vez de mandarse al final de toda la lista. `renderCategoriasManaged()` agrupa los ítems `_new` por `parent_nombre` (`newByParent`) y los emite dentro del bloque de su padre; las categorías nuevas de nivel superior (sin padre) siguen yendo al final. El foco tras crear apunta al input por `data-i` en vez de "el último del DOM".
+
 ## 0.6.19
 
 - **Selector de categoría en Gastos: árbol + sin crear categorías nuevas** (`app.js`): el autocompletado de la columna Categoría en la grilla de Gastos ahora muestra las categorías en forma de árbol (padres y, debajo, sus hijos indentados con `└`), construido desde `_catHierarchy` vía el nuevo helper `_orderedCatTree()`. Al filtrar por texto se conserva el padre de cualquier hijo que matchee para mantener legible la jerarquía. Además, `saveCategoria()` rechaza valores que no existan en `_catList` (salvo vacío para limpiar) mostrando un toast de error: ya no se crean categorías nuevas tipeando desde la grilla; hay que elegirlas de la lista o crearlas en `Config → Categorías`.
