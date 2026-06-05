@@ -380,6 +380,51 @@ def insert_movimientos_raw(
                         (fuente, f'%"{k}": {v}' + '}%', f'%"{k}":{v}' + '}%'),
                     ).fetchone()
 
+            # Dedup de contraasientos (movimientos opuestos el mismo día).
+            # BBVA a veces devuelve dos veces el mismo movimiento: egreso e ingreso opuestos.
+            # Ej: -460.000 (pago en cajero) y +460.000 (acreditación/reversión).
+            # Si encontramos un movimiento con monto OPUESTO el mismo día → skip el nuevo
+            # si el existente es igual o más específico; UPDATE si el nuevo es más específico.
+            if not existing and not scraper_uid:
+                monto_float = float(monto) if monto else 0.0
+                monto_opuesto = -monto_float
+                monto_opuesto_str = str(monto_opuesto)
+
+                _cand_opuesto = conn.execute(
+                    """SELECT id, descripcion FROM movimientos_raw
+                       WHERE fuente = ? AND fecha = ? AND moneda = ?
+                         AND CAST(monto AS REAL) = CAST(? AS REAL)
+                       LIMIT 1""",
+                    (fuente, fecha, moneda, monto_opuesto_str),
+                ).fetchone()
+
+                if _cand_opuesto:
+                    # Existe el opuesto. Decidir: ¿UPDATE al nuevo o SKIP?
+                    desc_existente = _cand_opuesto["descripcion"] or ""
+                    es_existente_generico = _is_generic(desc_existente, _eff_descs, _eff_prefixes)
+                    es_nuevo_generico = _is_generic(desc, _eff_descs, _eff_prefixes)
+
+                    if not es_nuevo_generico and es_existente_generico:
+                        # Nuevo es específico, existente es genérico → UPDATE
+                        conn.execute(
+                            "UPDATE movimientos_raw SET descripcion = ?, monto = ? WHERE id = ?",
+                            (desc, monto, _cand_opuesto["id"]),
+                        )
+                        if _log_fn:
+                            _log_fn(
+                                f"  [dedup-opuesto-update] {fecha} {moneda} {monto:>14} "
+                                f"→ reemplaza opuesto genérico (id={_cand_opuesto['id']})"
+                            )
+                        existing = _cand_opuesto
+                    else:
+                        # Nuevo es genérico o existente es igual/más específico → SKIP
+                        if _log_fn:
+                            _log_fn(
+                                f"  [dedup-opuesto-skip] {fecha} {moneda} {monto:>14} "
+                                f"— existe opuesto {-monto_float:>14} (id={_cand_opuesto['id']})"
+                            )
+                        existing = _cand_opuesto
+
             if not existing and not scraper_uid:
                 # Fallback descriptor solo cuando no hay UID único del scraper.
                 # Si hay scraper_uid y no se encontró, es un movimiento nuevo aunque

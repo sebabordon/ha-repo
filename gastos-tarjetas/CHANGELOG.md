@@ -1,3 +1,7 @@
+## 0.6.10
+
+- **Dedup de contraasientos (movimientos opuestos BBVA)** (`scrapers_db.py`): BBVA devuelve algunos movimientos DOS VECES con signo opuesto (ej. -460.000 y +460.000 el mismo día). Nuevo chequeo en `insert_movimientos_raw`: si llega un movimiento y existe otro con monto opuesto (fuente/fecha/moneda iguales), se skipea el nuevo si el existente es igual/más específico, o se reemplaza el existente si el nuevo es más específico. Emite `[dedup-opuesto-skip]` o `[dedup-opuesto-update]` en el log. Esto resuelve los "duplicados" que veías de $460K y $2.298M del 01/06.
+
 ## 0.6.9
 
 - **Logging de dedup en el log del run** (`scrapers_db.py`, `scraper_scheduler.py`): `insert_movimientos_raw` ahora acepta `_log_fn` opcional; cuando se pasa, emite `[dedup-skip]` para cada movimiento descartado como duplicado y `[dedup-insert]` para cada uno efectivamente insertado. El scheduler pasa un colector y extiende `result.log_lines` con esas líneas, haciéndolas visibles en el log del panel de scrapers.
