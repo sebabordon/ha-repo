@@ -1,3 +1,7 @@
+## 0.6.9
+
+- **Logging de dedup en el log del run** (`scrapers_db.py`, `scraper_scheduler.py`): `insert_movimientos_raw` ahora acepta `_log_fn` opcional; cuando se pasa, emite `[dedup-skip]` para cada movimiento descartado como duplicado y `[dedup-insert]` para cada uno efectivamente insertado. El scheduler pasa un colector y extiende `result.log_lines` con esas líneas, haciéndolas visibles en el log del panel de scrapers.
+
 ## 0.6.8
 
 - **Fix badge "pago probable": ahora también matchea contra el TOTAL del PDF** (`db.py`): la confirmación heurística (0.6.7) solo comparaba el Pago de Tarjeta contra el saldo *computado* sin RG 5617. En resúmenes con discrepancia parser/PDF (donde el saldo calculado difiere del total real —por eso aparece la línea `PDF: $...` en el widget) el pago nunca matcheaba. Ej. real: Galicia MC con saldo computado $935.666,53 pero total PDF y pago efectivo de $1.822.263,66. Ahora el lado ARS acepta el pago si coincide (±tol_ars) con el saldo sin RG **o** con `i.total_ars` (TOTAL A PAGAR del PDF). Mismo criterio para el lado USD (`i.total_usd`). El gate de "tiene saldo USD" también considera el total del PDF.

@@ -532,6 +532,10 @@ def insert_movimientos_raw(
                     pass   # si falla el cálculo de fechas, dejar pasar (INSERT normal)
 
             if existing:
+                if _log_fn:
+                    _log_fn(
+                        f"  [dedup-skip] {fecha} {moneda} {monto:>14} — {desc!r:.60}"
+                    )
                 continue   # ya estaba — skipear
 
             conn.execute(
@@ -552,6 +556,10 @@ def insert_movimientos_raw(
                 ),
             )
             inserted += 1
+            if _log_fn:
+                _log_fn(
+                    f"  [dedup-insert] {fecha} {moneda} {monto:>14} — {desc!r:.60}"
+                )
             if _out_inserted is not None:
                 _out_inserted.append(m)
     return inserted

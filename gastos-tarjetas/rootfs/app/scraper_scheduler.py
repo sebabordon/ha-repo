@@ -236,7 +236,10 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
         inserted_dicts: list[dict] = []
         if result.movimientos:
             dicts = [m.to_dict() for m in result.movimientos]
-            count = insert_movimientos_raw(dicts, _out_inserted=inserted_dicts)
+            _dedup_log: list[str] = []
+            count = insert_movimientos_raw(dicts, _out_inserted=inserted_dicts,
+                                           _log_fn=_dedup_log.append)
+            result.log_lines.extend(_dedup_log)
             emitted_fuentes = {d["fuente"] for d in dicts if d.get("fuente")}
             logger.info(
                 "[scheduler] instancia %d (%s): %d movimientos insertados (fuentes=%s).",
@@ -500,7 +503,10 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
         inserted_dicts: list[dict] = []
         if result.movimientos:
             dicts    = [m.to_dict() for m in result.movimientos]
-            inserted = insert_movimientos_raw(dicts, _out_inserted=inserted_dicts)
+            _dedup_log: list[str] = []
+            inserted = insert_movimientos_raw(dicts, _out_inserted=inserted_dicts,
+                                              _log_fn=_dedup_log.append)
+            result.log_lines.extend(_dedup_log)
             emitted_fuentes = {d["fuente"] for d in dicts if d.get("fuente")}
 
         conc_agg = {"matched": 0, "unmatched": 0, "errors": 0}
