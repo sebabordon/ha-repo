@@ -1,3 +1,7 @@
+## 0.7.2
+
+- **FIX: el grid de los widgets no se aplicaba (estilo inline lo pisaba)** (`static/app.js`): en 0.7.1 pasé `.saldos-widget` y `.vencimientos-widget` a `display:grid` en el CSS, pero `renderSaldos()` y `renderVencimientos()` setean `widget.style.display` **inline** al mostrar el widget, y ese valor era `"flex"` — que tiene mayor prioridad que la hoja de estilos y dejaba ambos widgets en flex (anchos por contenido, cards de distinto ancho). Cambiados los dos a `widget.style.display = "grid"`. Verificado en preview: ahora las columnas son iguales (mismo ancho) y los vencimientos quedan alineados debajo de los saldos.
+
 ## 0.7.1
 
 - **Galicia: próximo cierre y próximo vencimiento** (`parsers/galicia.py`): el parser leía la fila de 6 fechas de Galicia pero solo usaba el cierre/venc actual (índices 2 y 3) y descartaba el próximo cierre/venc (índices 4 y 5), por eso los widgets de vencimiento de Galicia nunca mostraban "Próx. cierre · venc.". `_detect_statement_dates()` ahora devuelve también esos dos y `parse()` los expone en `self.proximo_cierre` / `self.proximo_venc` (leídos por `upload.py`). Verificado con los PDFs de muestra (ej. próx. cierre 28-May-26 · venc. 08-Jun-26). **Requiere re-importar el PDF** para poblar los imports existentes.

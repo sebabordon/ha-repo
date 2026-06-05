@@ -3305,7 +3305,7 @@ function _saldoMonto(saldo, moneda) {
 function renderSaldos(cuentas) {
   const widget = document.getElementById("saldos-widget");
   if (!cuentas.length) { widget.style.display = "none"; return; }
-  widget.style.display = "flex";
+  widget.style.display = "grid";   // grid (no flex): ver .saldos-widget en style.css
   widget.innerHTML = cuentas.map(c => {
     const moneda  = c.moneda || "ARS";
     const isMulti = moneda === "MULTI";
@@ -3420,7 +3420,7 @@ function renderVencimientos(items) {
   const _showRg    = getUiPref("venc_show_rg5617");
   const _showPdf   = getUiPref("venc_show_pdf_ref");
 
-  widget.style.display = "flex";
+  widget.style.display = "grid";   // grid (no flex): ver .vencimientos-widget en style.css
   widget.innerHTML = deduped.map(v => {
     const vencDate = new Date(v.fecha_venc + "T00:00:00");
     const diffMs   = vencDate - today;
