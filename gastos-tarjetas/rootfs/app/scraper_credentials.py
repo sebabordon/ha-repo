@@ -375,15 +375,14 @@ def find_all_enabled_configs() -> list[dict]:
     {banco, data_dir, config} para todos los scrapers habilitados en todos
     los directorios de usuario.
 
-    Usado por el scheduler, que no tiene un request HTTP activo.
+    Usa read_creds() para soportar archivos cifrados.
     """
     results = []
     pattern = os.path.join(_DATA_DIR, "*", _FILENAME)
     for creds_path in sorted(glob.glob(pattern)):
         data_dir = os.path.dirname(creds_path)
         try:
-            with open(creds_path) as f:
-                creds = json.load(f) or {}
+            creds = read_creds(data_dir)
             for banco, cfg in creds.items():
                 if not isinstance(cfg, dict) or not cfg.get("enabled", False):
                     continue
