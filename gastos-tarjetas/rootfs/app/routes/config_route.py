@@ -201,6 +201,7 @@ def get_venc_match_config(request: Request):
         "venc_pago_match_dias":    int(cfg.get("venc_pago_match_dias", 8) or 8),
         "venc_pago_match_tol_ars": float(cfg.get("venc_pago_match_tol_ars", 5000.0) or 5000.0),
         "venc_pago_match_tol_usd": float(cfg.get("venc_pago_match_tol_usd", 1.0) or 1.0),
+        "venc_pago_match_categorias": list(cfg.get("venc_pago_match_categorias", ["Pago de Tarjeta"])),
     }
 
 
@@ -225,6 +226,9 @@ def put_venc_match_config(body: dict, request: Request):
             cfg["venc_pago_match_tol_usd"] = max(0.0, float(body["venc_pago_match_tol_usd"]))
         except (TypeError, ValueError):
             raise HTTPException(400, "venc_pago_match_tol_usd inválido")
+    if "venc_pago_match_categorias" in body:
+        cats = [str(c).strip() for c in (body["venc_pago_match_categorias"] or []) if str(c).strip()]
+        cfg["venc_pago_match_categorias"] = cats or ["Pago de Tarjeta"]
     write_user_config(cfg)
     return {"ok": True}
 

@@ -1,3 +1,7 @@
+## 0.6.18
+
+- **Badge "pago probable": categorías de pago configurables** (`db.py`, `config_route.py`, `user_config.py`, `index.html`, `app.js`): la confirmación heurística solo miraba gastos con categoría exactamente `Pago de Tarjeta`, así que un pago categorizado como transferencia (ej. "PAGO DE TARJETA VISA" quedó como `Transferencia Intercuentas`) no encendía el badge. Ahora la lista de categorías que cuentan como pago es configurable en `Config → Vencimientos` (default `Pago de Tarjeta`, una por línea), persistida en `user_config.json` vía `venc_pago_match_categorias` en `GET/PUT /api/config/venc-match`. La consulta usa `categoria IN (...)` con placeholders generados internamente (sin inyección).
+
 ## 0.6.17
 
 - **FIX: session_secret leído desde archivo en Python** (`main.py`): en lugar de depender de que `run.sh` exporte `SESSION_SECRET` como env var (frágil si el supervisor reinicia uvicorn directamente), `_load_session_secret()` lee el archivo `/data/session_secret` en Python al arrancar. Si no existe lo genera y lo persiste. Esto garantiza que el secreto sea siempre el mismo entre reinicios y evita el logout inesperado al recargar la página.

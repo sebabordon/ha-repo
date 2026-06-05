@@ -795,6 +795,12 @@ def list_vencimientos() -> list[dict]:
         tol_usd = float(cfg.get("venc_pago_match_tol_usd", 1.0) or 1.0)
     except (TypeError, ValueError):
         tol_usd = 1.0
+    # Categorías que cuentan como pago (un pago a veces queda como transferencia).
+    cats = [str(c).strip() for c in cfg.get(
+        "venc_pago_match_categorias", ["Pago de Tarjeta"],
+    ) if str(c).strip()]
+    if not cats:
+        cats = ["Pago de Tarjeta"]
 
     params = {
         "match_activo": match_activo,
@@ -803,9 +809,14 @@ def list_vencimientos() -> list[dict]:
         "tol_ars":      tol_ars,
         "tol_usd":      tol_usd,
     }
+    # Placeholders nombrados para el IN de categorías. Los nombres los generamos
+    # nosotros (no vienen del usuario), así que no hay riesgo de inyección.
+    cat_ph = ",".join(f":cat{i}" for i in range(len(cats)))
+    for i, c in enumerate(cats):
+        params[f"cat{i}"] = c
 
     with _conn() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT i.id, i.fuente, i.archivo, i.mes_resumen, i.fecha_venc,
                    i.total_ars, i.total_usd, i.proximo_cierre, i.proximo_venc,
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='ARS' AND CAST(g.monto AS REAL) > 0
@@ -845,7 +856,7 @@ def list_vencimientos() -> list[dict]:
                    CASE WHEN :match_activo = 1
                          AND EXISTS (
                        SELECT 1 FROM gastos pa
-                       WHERE pa.categoria = 'Pago de Tarjeta'
+                       WHERE pa.categoria IN ({cat_ph})
                          AND pa.moneda = 'ARS'
                          AND CAST(pa.monto AS REAL) > 0
                          AND pa.fecha >= date(i.fecha_venc, :dias_neg)
@@ -873,7 +884,7 @@ def list_vencimientos() -> list[dict]:
                         AND (i.total_usd IS NULL OR i.total_usd <= 0.5))
                        OR EXISTS (
                            SELECT 1 FROM gastos pu
-                           WHERE pu.categoria = 'Pago de Tarjeta'
+                           WHERE pu.categoria IN ({cat_ph})
                              AND pu.moneda = 'USD'
                              AND CAST(pu.monto AS REAL) > 0
                              AND pu.fecha >= date(i.fecha_venc, :dias_neg)

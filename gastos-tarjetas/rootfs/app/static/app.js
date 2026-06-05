@@ -358,10 +358,12 @@ async function loadVencMatchConfig() {
     const dias = document.getElementById("venc-match-dias");
     const ta  = document.getElementById("venc-match-tol-ars");
     const tu  = document.getElementById("venc-match-tol-usd");
+    const cat = document.getElementById("venc-match-categorias");
     if (act)  act.checked = !!d.venc_pago_match_activo;
     if (dias) dias.value  = (d.venc_pago_match_dias ?? 8);
     if (ta)   ta.value    = (d.venc_pago_match_tol_ars ?? 5000);
     if (tu)   tu.value    = (d.venc_pago_match_tol_usd ?? 1);
+    if (cat)  cat.value   = (d.venc_pago_match_categorias ?? ["Pago de Tarjeta"]).join("\n");
     renderVencMatchState();
   } catch (e) { console.warn("loadVencMatchConfig:", e); }
 }
@@ -373,6 +375,8 @@ async function saveVencMatchConfig() {
   const dias    = isNaN(diasRaw) ? 8 : Math.max(0, Math.min(60, diasRaw));
   const tolArs  = Math.max(0, parseFloat(document.getElementById("venc-match-tol-ars")?.value) || 0);
   const tolUsd  = Math.max(0, parseFloat(document.getElementById("venc-match-tol-usd")?.value) || 0);
+  const cats    = (document.getElementById("venc-match-categorias")?.value || "")
+                    .split("\n").map(s => s.trim()).filter(Boolean);
   try {
     const r = await fetch(`${BASE}/api/config/venc-match`, {
       method: "PUT",
@@ -382,6 +386,7 @@ async function saveVencMatchConfig() {
         venc_pago_match_dias:    dias,
         venc_pago_match_tol_ars: tolArs,
         venc_pago_match_tol_usd: tolUsd,
+        venc_pago_match_categorias: cats,
       }),
     });
     if (r.ok) {

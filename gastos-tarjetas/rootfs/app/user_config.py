@@ -38,6 +38,10 @@ _DEFAULT_CONFIG: dict = {
     "venc_pago_match_dias": 8,           # ventana ± días alrededor del vencimiento
     "venc_pago_match_tol_ars": 5000.0,   # tolerancia en pesos (saldo ARS sin RG 5617)
     "venc_pago_match_tol_usd": 1.0,      # tolerancia en dólares (saldo USD)
+    # Categorías que cuentan como "pago de tarjeta" para el badge amarillo. Un
+    # pago a veces queda categorizado como transferencia en vez de Pago de
+    # Tarjeta; agregá esas categorías acá desde la UI si querés que cuenten.
+    "venc_pago_match_categorias": ["Pago de Tarjeta"],
 }
 
 

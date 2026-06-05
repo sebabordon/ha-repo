@@ -911,6 +911,20 @@
             <input type="number" id="venc-match-tol-usd" min="0" step="0.5" value="1"
                    style="width:120px;font:inherit;padding:.4rem;border:1px solid #ccc;border-radius:4px">
           </div>
+
+          <div style="margin-bottom:1rem">
+            <label class="field-label">Categorías que cuentan como pago
+              <span class="hint">(una por línea; un pago a veces queda como transferencia)</span>
+            </label>
+            <p class="hint" style="margin:.2rem 0 .5rem">
+              El badge solo mira gastos en estas categorías. Default:
+              <code>Pago de Tarjeta</code>. Agregá las que uses para tus pagos
+              (ej. <code>Transferencia Intercuentas</code>) si quedan en otra categoría.
+            </p>
+            <textarea id="venc-match-categorias" rows="4"
+                      style="width:100%;font-family:monospace;font-size:0.85em"
+                      placeholder="Pago de Tarjeta"></textarea>
+          </div>
         </div>
 
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
