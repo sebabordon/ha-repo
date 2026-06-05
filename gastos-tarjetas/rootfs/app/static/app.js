@@ -1323,6 +1323,24 @@ function renderCatChips(cats) {
   });
 }
 
+// Ordered category tree (roots first, children indented) for the gastos combo.
+// Returns [{name, depth}] using the loaded hierarchy.
+function _orderedCatTree() {
+  const allChildren = new Set(Object.values(_catHierarchy).flat());
+  const roots = _catList.filter(c => !allChildren.has(c))
+                        .sort((a, b) => a.localeCompare(b, "es"));
+  const out  = [];
+  const seen = new Set();
+  roots.forEach(r => {
+    out.push({ name: r, depth: 0 }); seen.add(r);
+    (_catHierarchy[r] || []).slice().sort((a, b) => a.localeCompare(b, "es"))
+      .forEach(ch => { out.push({ name: ch, depth: 1 }); seen.add(ch); });
+  });
+  // Any category not reached via the hierarchy (orphans) appended as roots.
+  _catList.forEach(c => { if (!seen.has(c)) { out.push({ name: c, depth: 0 }); seen.add(c); } });
+  return out;
+}
+
 function startRenameCat(chip, oldCat) {
   const inp = document.createElement("input");
   inp.type = "text";
@@ -1649,14 +1667,32 @@ function _setupCatAC(input, origCat, saveBtn = null, gastoId = null) {
 
   function _showAC() {
     _hideAC();
-    const q = (input.value || "").toLowerCase();
-    const matches = _catList.filter(c => c.toLowerCase().includes(q));
+    const q    = (input.value || "").toLowerCase();
+    const tree = _orderedCatTree();
+    let matches;
+    if (!q) {
+      matches = tree;
+    } else {
+      // Keep items that match, plus the parent of any matching child so the
+      // tree structure stays readable while filtering.
+      const keep = new Set();
+      tree.forEach(t => { if (t.name.toLowerCase().includes(q)) keep.add(t.name); });
+      tree.forEach(t => {
+        if (t.depth === 1 && keep.has(t.name)) {
+          const par = _catParentOf[t.name];
+          if (par) keep.add(par);
+        }
+      });
+      matches = tree.filter(t => keep.has(t.name));
+    }
     if (!matches.length) return;
 
     acEl = document.createElement("div");
     acEl.className = "cat-ac";
-    acEl.innerHTML = matches.map((c, i) =>
-      `<div class="cat-ac-item" data-i="${i}" data-val="${escHtml(c)}">${escHtml(c)}</div>`
+    acEl.innerHTML = matches.map((t, i) =>
+      `<div class="cat-ac-item${t.depth ? " cat-ac-child" : ""}" data-i="${i}" data-val="${escHtml(t.name)}"${
+        t.depth ? ' style="padding-left:1.6rem"' : ""
+      }>${t.depth ? "└ " : ""}${escHtml(t.name)}</div>`
     ).join("");
 
     // Float below the input, wide enough to show full names
@@ -1765,6 +1801,14 @@ async function _moveKeywordBetweenRules(keyword, fromCat, toCat) {
 
 async function saveCategoria(id, btn) {
   const input = document.querySelector(`.cat-input[data-id="${id}"]`);
+  const val   = input.value.trim();
+  // No crear categorías nuevas desde la grilla: el valor debe estar vacío
+  // (limpiar) o coincidir con una categoría existente.
+  if (val && !_catList.includes(val)) {
+    showToast(`La categoría "${val}" no existe. Elegila de la lista o creala en Config → Categorías.`, "err", 3500);
+    input.focus();
+    return;
+  }
   const res   = await fetch(`${BASE}/api/gastos/${id}/categoria`, {
     method:"PATCH", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({categoria: input.value}),
@@ -6332,19 +6376,20 @@ function renderCategoriasManaged() {
       .filter(n => n !== c.nombre)
       .map(n => `<option value="${escHtml(n)}"${c.parent_nombre === n ? " selected" : ""}>${escHtml(n)}</option>`)
       .join("");
+    const expanded    = !c._new && _isCatExpanded(c.nombre);
+    const rule        = _rules.find(r => r.categoria === c.nombre) || {palabras: [], solo_egresos: false};
+    const kwCount     = rule.palabras.length;
+    const kwBadge     = kwCount ? `<span style="font-size:.75rem;color:#888;margin-left:.3rem">(${kwCount})</span>` : "";
+    const caret       = `<span class="cat-caret" style="color:#999;font-size:.75rem;margin-right:.25rem">${expanded ? "▾" : "▸"}</span>`;
     const nameCell = c._new
       ? `<input class="cat-name-inp" data-i="${c._i}" value="${escHtml(c.nombre||"")}" placeholder="Nombre de categoría" style="width:100%;box-sizing:border-box">`
-      : `<span class="cat-name-static" data-nombre="${escHtml(c.nombre)}" title="Doble clic para renombrar" style="cursor:default">${
+      : `<span class="cat-name-static" data-nombre="${escHtml(c.nombre)}" title="Click para ver/ocultar keywords · Doble clic para renombrar" style="cursor:pointer">${caret}${
           c._isParent
             ? `<strong style="color:var(--color-cat-parent)">${escHtml(c.nombre)}</strong>`
             : escHtml(c.nombre)
         }</span>`;
     const indentStyle = c._indent ? "padding-left:1.6rem;color:var(--color-cat-child)" : "";
     const prefix      = c._indent ? "└ " : "";
-    const expanded    = !c._new && _isCatExpanded(c.nombre);
-    const rule        = _rules.find(r => r.categoria === c.nombre) || {palabras: [], solo_egresos: false};
-    const kwCount     = rule.palabras.length;
-    const kwBadge     = kwCount ? `<span style="font-size:.75rem;color:#888;margin-left:.3rem">(${kwCount})</span>` : "";
 
     tableRows.push(`<tr${c._indent ? ' class="presup-child-row"' : ""}>
       <td style="${indentStyle}">${prefix}${nameCell}${!c._new ? kwBadge : ""}</td>
@@ -6353,7 +6398,7 @@ function renderCategoriasManaged() {
       </select></td>
       <td style="text-align:center"><input type="checkbox" class="cat-especial-chk" data-i="${c._i}"${c.especial ? " checked" : ""}></td>
       <td style="white-space:nowrap">
-        ${!c._new ? `<button class="btn btn-sm cat-expand-btn" data-nombre="${escHtml(c.nombre)}">${expanded ? "−" : "+"}</button>` : ""}
+        ${(!c._new && !c._indent) ? `<button class="btn btn-sm cat-addsub-btn" data-parent="${escHtml(c.nombre)}" title="Agregar subcategoría">+</button>` : ""}
         <button class="btn btn-sm btn-danger" data-del="${c._i}">✕</button>
       </td>
     </tr>`);
@@ -6421,9 +6466,14 @@ function renderCategoriasManaged() {
   wrap.querySelectorAll("[data-del]").forEach(btn => {
     btn.addEventListener("click", () => { _categoriasManaged.splice(+btn.dataset.del, 1); renderCategoriasManaged(); });
   });
-  // Expand/collapse keyword section
-  wrap.querySelectorAll(".cat-expand-btn").forEach(btn => {
-    btn.addEventListener("click", () => toggleCatExpand(btn.dataset.nombre));
+  // Agregar subcategoría a una categoría padre
+  wrap.querySelectorAll(".cat-addsub-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      _categoriasManaged.push({nombre: "", parent_nombre: btn.dataset.parent, especial: 0, _new: true});
+      renderCategoriasManaged();
+      const inputs = document.querySelectorAll(".cat-name-inp");
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
   });
   // Remove keyword chip
   wrap.querySelectorAll(".cat-kw-remove").forEach(btn => {
@@ -6449,9 +6499,16 @@ function renderCategoriasManaged() {
   wrap.querySelectorAll(".cat-preview-btn").forEach(btn => {
     btn.addEventListener("click", () => openCatPreview(btn.dataset.nombre));
   });
-  // Doble clic para renombrar
+  // Click simple = expandir/colapsar keywords · Doble clic = renombrar
   wrap.querySelectorAll(".cat-name-static").forEach(span => {
+    let clickTimer = null;
+    span.addEventListener("click", () => {
+      // Esperamos por un posible doble clic antes de togglear.
+      if (clickTimer) return;
+      clickTimer = setTimeout(() => { clickTimer = null; toggleCatExpand(span.dataset.nombre); }, 220);
+    });
     span.addEventListener("dblclick", () => {
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
       const oldNombre = span.dataset.nombre;
       const inp = document.createElement("input");
       inp.value = oldNombre;
