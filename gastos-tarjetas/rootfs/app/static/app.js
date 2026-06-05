@@ -179,7 +179,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); }
     if (tab.dataset.tab === "cuotas")      { loadCuotas(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
-    if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); loadPeriodoConfig(); }
+    if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); loadPeriodoConfig(); loadVencMatchConfig(); }
   });
 });
 
@@ -338,6 +338,59 @@ async function savePeriodoConfig() {
       msgEl.style.color = "#dc2626"; msgEl.textContent = "Error al guardar";
     }
   } catch (e) { console.warn("savePeriodoConfig:", e); }
+}
+
+// ── Vencimientos / Confirmación de pago ────────────────────────────────────
+function renderVencMatchState() {
+  const on = document.getElementById("venc-match-activo")?.checked;
+  const body = document.getElementById("venc-match-body");
+  if (body) {
+    body.style.opacity = on ? "1" : ".5";
+    body.style.pointerEvents = on ? "auto" : "none";
+  }
+}
+
+async function loadVencMatchConfig() {
+  try {
+    const r = await fetch(`${BASE}/api/config/venc-match`);
+    const d = await r.json();
+    const act = document.getElementById("venc-match-activo");
+    const dias = document.getElementById("venc-match-dias");
+    const ta  = document.getElementById("venc-match-tol-ars");
+    const tu  = document.getElementById("venc-match-tol-usd");
+    if (act)  act.checked = !!d.venc_pago_match_activo;
+    if (dias) dias.value  = (d.venc_pago_match_dias ?? 8);
+    if (ta)   ta.value    = (d.venc_pago_match_tol_ars ?? 5000);
+    if (tu)   tu.value    = (d.venc_pago_match_tol_usd ?? 1);
+    renderVencMatchState();
+  } catch (e) { console.warn("loadVencMatchConfig:", e); }
+}
+
+async function saveVencMatchConfig() {
+  const msgEl  = document.getElementById("venc-match-save-msg");
+  const activo = !!document.getElementById("venc-match-activo")?.checked;
+  const diasRaw = parseInt(document.getElementById("venc-match-dias")?.value, 10);
+  const dias    = isNaN(diasRaw) ? 8 : Math.max(0, Math.min(60, diasRaw));
+  const tolArs  = Math.max(0, parseFloat(document.getElementById("venc-match-tol-ars")?.value) || 0);
+  const tolUsd  = Math.max(0, parseFloat(document.getElementById("venc-match-tol-usd")?.value) || 0);
+  try {
+    const r = await fetch(`${BASE}/api/config/venc-match`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venc_pago_match_activo:  activo,
+        venc_pago_match_dias:    dias,
+        venc_pago_match_tol_ars: tolArs,
+        venc_pago_match_tol_usd: tolUsd,
+      }),
+    });
+    if (r.ok) {
+      if (msgEl) { msgEl.style.color = "#16a34a"; msgEl.textContent = "Guardado ✓"; setTimeout(() => { msgEl.textContent = ""; }, 2500); }
+      loadVencimientos();   // refrescar el widget con los nuevos badges
+    } else if (msgEl) {
+      msgEl.style.color = "#dc2626"; msgEl.textContent = "Error al guardar";
+    }
+  } catch (e) { console.warn("saveVencMatchConfig:", e); }
 }
 
 function renderUiSettings() {
@@ -3255,8 +3308,14 @@ function renderVencimientos(items) {
     const d = vencDate;
     const fechaStr = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
 
-    const pagoHtml = v.pago_confirmado
-      ? `<span class="venc-pago-ok" title="Pago confirmado">✓</span>` : "";
+    // Badge de pago: verde = emparejado confirmado; amarillo = "probable"
+    // (hay un Pago de Tarjeta por monto cerca del vencimiento, sin emparejar).
+    let pagoHtml = "";
+    if (v.pago_confirmado) {
+      pagoHtml = `<span class="venc-pago-ok" title="Pago confirmado — emparejado con la transferencia">✓</span>`;
+    } else if (v.pago_probable) {
+      pagoHtml = `<span class="venc-pago-probable" title="Pago probable — hay un Pago de Tarjeta por el mismo monto cerca del vencimiento, pero no está emparejado. Revisá.">✓</span>`;
+    }
 
     return `<div class="venc-card ${cls}">
       <div class="${fuenteCls}">${escHtml(label)}${pagoHtml}</div>

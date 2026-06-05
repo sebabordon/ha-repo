@@ -30,6 +30,14 @@ _DEFAULT_CONFIG: dict = {
     "periodo_activo": False,
     "periodo_delta_dias": 2,
     "periodo_overrides": {},
+    # Confirmación heurística de pago en el widget de vencimientos. Marca el
+    # badge amarillo "pago probable" cuando hay un gasto 'Pago de Tarjeta' cerca
+    # del vencimiento que matchea el saldo del resumen, aunque no exista un
+    # emparejado explícito. Ver list_vencimientos() en db.py.
+    "venc_pago_match_activo": True,
+    "venc_pago_match_dias": 8,           # ventana ± días alrededor del vencimiento
+    "venc_pago_match_tol_ars": 5000.0,   # tolerancia en pesos (saldo ARS sin RG 5617)
+    "venc_pago_match_tol_usd": 1.0,      # tolerancia en dólares (saldo USD)
 }
 
 

@@ -1,3 +1,11 @@
+## 0.6.7
+
+- **Widget de vencimientos: badge amarillo de "pago probable" (confirmación heurística sin emparejado)** (`db.py`, `config_route.py`, `user_config.py`, `index.html`, `app.js`, `style.css`): hasta ahora el `✓` verde solo aparecía si existía un `transfer_pairs` confirmado bank→tarjeta. Se agregó un segundo estado en `list_vencimientos()` (`pago_probable`) que enciende un **badge amarillo** ("pago hecho pero no 100% validado") cuando hay un gasto categoría **"Pago de Tarjeta"** cerca del vencimiento que matchea el saldo del resumen, aunque no esté emparejado:
+  - Lado ARS: un Pago de Tarjeta (ARS, egreso) dentro de **±N días** del vencimiento cuyo monto coincide (±tolerancia ARS) con el saldo en pesos **sin RG 5617** (`net_ars − rg5617`).
+  - Lado USD: si el resumen tiene saldo en dólares, además se exige un Pago de Tarjeta (USD, egreso) en la misma ventana que coincida (±tolerancia USD) con `net_usd`. Si no hay saldo USD, ese lado no se evalúa.
+  - El pago vive en una cuenta bancaria (fuente distinta a la tarjeta), por eso el monto es la única forma de asociarlo al resumen. El emparejado explícito sigue mostrando el `✓` verde y tiene prioridad sobre el amarillo.
+- **Config en la UI** (`Config → Vencimientos`): nueva sub-tab con activar/desactivar la confirmación heurística, ventana de días (default 8), tolerancia ARS (default 5000) y tolerancia USD (default 1). Persisten en `user_config.json` vía `GET/PUT /api/config/venc-match`. La consulta de `list_vencimientos()` lee estos valores en vez de hardcodearlos.
+
 ## 0.6.6
 
 - **Ciclo de cobro: se reemplaza el día-ancla por un modelo de DELTA de días** (`db.py`, `config_route.py`, `user_config.py`, `index.html`, `app.js`): en vez de un día fijo del calendario, ahora se configura "cuántos días antes de fin de mes cobrás" (`periodo_delta_dias`, 0..28). Los últimos N días de cada mes se imputan al período del mes siguiente. El delta es relativo al fin de mes —que es como cae el cobro (anteúltimo día hábil)— así que el corte ya no se desfasa según el largo del mes y desaparecen los casos especiales de febrero/bisiesto/overflow.

@@ -1076,6 +1076,22 @@ tbody tr:hover { background: #fafbff; }
   vertical-align: middle;
   cursor: default;
 }
+.venc-pago-probable {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: .35em;
+  font-size: .75rem;
+  font-weight: 700;
+  color: #7a5b00;
+  background: #facc15;
+  border-radius: 50%;
+  width: 1.2em;
+  height: 1.2em;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: help;
+}
 .venc-fecha {
   font-size: 1rem;
   font-weight: 700;

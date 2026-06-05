@@ -779,6 +779,31 @@ def list_vencimientos() -> list[dict]:
     always shows something.  When total_ars is present and differs from sum_ars
     the UI flags the discrepancy so the user can investigate.
     """
+    # Parámetros de la confirmación heurística de pago (configurables en la UI).
+    from user_config import read_user_config
+    cfg          = read_user_config()
+    match_activo = 1 if cfg.get("venc_pago_match_activo", True) else 0
+    try:
+        dias = int(cfg.get("venc_pago_match_dias", 8) or 8)
+    except (TypeError, ValueError):
+        dias = 8
+    try:
+        tol_ars = float(cfg.get("venc_pago_match_tol_ars", 5000.0) or 5000.0)
+    except (TypeError, ValueError):
+        tol_ars = 5000.0
+    try:
+        tol_usd = float(cfg.get("venc_pago_match_tol_usd", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        tol_usd = 1.0
+
+    params = {
+        "match_activo": match_activo,
+        "dias_neg":     f"-{dias} days",
+        "dias_pos":     f"+{dias} days",
+        "tol_ars":      tol_ars,
+        "tol_usd":      tol_usd,
+    }
+
     with _conn() as conn:
         rows = conn.execute("""
             SELECT i.id, i.fuente, i.archivo, i.mes_resumen, i.fecha_venc,
@@ -796,21 +821,66 @@ def list_vencimientos() -> list[dict]:
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='ARS' AND UPPER(g.descripcion) LIKE '%5617%'
                                                AND CAST(g.monto AS REAL) > 0
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS rg5617_ars,
-                   -- 1 if a confirmed bank→CC payment exists within 90 days before the due date
+                   -- pago_confirmado = 1: hay un emparejado explícito (transfer_pairs)
+                   -- bank→CC en la misma fuente, entre −90 y +10 días del vencimiento.
+                   -- Es el tilde verde (confirmado al 100%).
                    CASE WHEN EXISTS (
                        SELECT 1 FROM transfer_pairs tp
                        JOIN gastos gp ON gp.id = tp.id_in
                        WHERE gp.fuente = i.fuente
                          AND gp.fecha >= date(i.fecha_venc, '-90 days')
                          AND gp.fecha <= date(i.fecha_venc, '+10 days')
-                   ) THEN 1 ELSE 0 END AS pago_confirmado
+                   ) THEN 1 ELSE 0 END AS pago_confirmado,
+                   -- pago_probable = 1: heurística sin emparejado. Es el badge amarillo
+                   -- ("pago hecho pero no 100% validado"). Se enciende cuando:
+                   --   · hay un gasto 'Pago de Tarjeta' (ARS, egreso) dentro de ±N días
+                   --     del vencimiento cuyo monto coincide (±tol_ars) con el saldo en
+                   --     pesos SIN RG 5617 (net_ars − rg5617), y
+                   --   · si el resumen tiene saldo en USD, además hay un gasto
+                   --     'Pago de Tarjeta' (USD, egreso) en la misma ventana cuyo monto
+                   --     coincide (±tol_usd) con el saldo en dólares (net_usd).
+                   -- El pago vive en una cuenta bancaria (fuente distinta a la tarjeta),
+                   -- por eso el monto es la única forma de asociarlo al resumen.
+                   CASE WHEN :match_activo = 1
+                         AND EXISTS (
+                       SELECT 1 FROM gastos pa
+                       WHERE pa.categoria = 'Pago de Tarjeta'
+                         AND pa.moneda = 'ARS'
+                         AND CAST(pa.monto AS REAL) > 0
+                         AND pa.fecha >= date(i.fecha_venc, :dias_neg)
+                         AND pa.fecha <= date(i.fecha_venc, :dias_pos)
+                         AND ABS(CAST(pa.monto AS REAL) - (
+                                 SELECT COALESCE(SUM(CASE WHEN ga.moneda='ARS'
+                                                               AND UPPER(ga.descripcion) NOT LIKE '%5617%'
+                                                          THEN CAST(ga.monto AS REAL) ELSE 0 END), 0)
+                                   FROM gastos ga WHERE ga.import_id = i.id)
+                             ) <= :tol_ars
+                   ) AND (
+                       -- Lado USD: sólo exigido cuando el resumen tiene saldo en dólares.
+                       (SELECT COALESCE(SUM(CASE WHEN gu.moneda='USD'
+                                                 THEN CAST(gu.monto AS REAL) ELSE 0 END), 0)
+                          FROM gastos gu WHERE gu.import_id = i.id) <= 0.5
+                       OR EXISTS (
+                           SELECT 1 FROM gastos pu
+                           WHERE pu.categoria = 'Pago de Tarjeta'
+                             AND pu.moneda = 'USD'
+                             AND CAST(pu.monto AS REAL) > 0
+                             AND pu.fecha >= date(i.fecha_venc, :dias_neg)
+                             AND pu.fecha <= date(i.fecha_venc, :dias_pos)
+                             AND ABS(CAST(pu.monto AS REAL) - (
+                                     SELECT COALESCE(SUM(CASE WHEN gu2.moneda='USD'
+                                                              THEN CAST(gu2.monto AS REAL) ELSE 0 END), 0)
+                                       FROM gastos gu2 WHERE gu2.import_id = i.id)
+                                 ) <= :tol_usd
+                       )
+                   ) THEN 1 ELSE 0 END AS pago_probable
             FROM importaciones i
             LEFT JOIN gastos g ON g.import_id = i.id
             WHERE i.fecha_venc IS NOT NULL
             GROUP BY i.id
             ORDER BY i.fecha_venc DESC
             LIMIT 20
-        """).fetchall()
+        """, params).fetchall()
     return [dict(r) for r in rows]
 
 

@@ -192,6 +192,43 @@ def put_periodo_config(body: dict, request: Request):
     return {"ok": True}
 
 
+@router.get("/config/venc-match")
+def get_venc_match_config(request: Request):
+    require_auth(request)
+    cfg = read_user_config()
+    return {
+        "venc_pago_match_activo":  bool(cfg.get("venc_pago_match_activo", True)),
+        "venc_pago_match_dias":    int(cfg.get("venc_pago_match_dias", 8) or 8),
+        "venc_pago_match_tol_ars": float(cfg.get("venc_pago_match_tol_ars", 5000.0) or 5000.0),
+        "venc_pago_match_tol_usd": float(cfg.get("venc_pago_match_tol_usd", 1.0) or 1.0),
+    }
+
+
+@router.put("/config/venc-match")
+def put_venc_match_config(body: dict, request: Request):
+    require_auth(request)
+    cfg = read_user_config()
+    if "venc_pago_match_activo" in body:
+        cfg["venc_pago_match_activo"] = bool(body["venc_pago_match_activo"])
+    if "venc_pago_match_dias" in body:
+        try:
+            cfg["venc_pago_match_dias"] = max(0, min(60, int(body["venc_pago_match_dias"])))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "venc_pago_match_dias inválido (0..60)")
+    if "venc_pago_match_tol_ars" in body:
+        try:
+            cfg["venc_pago_match_tol_ars"] = max(0.0, float(body["venc_pago_match_tol_ars"]))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "venc_pago_match_tol_ars inválido")
+    if "venc_pago_match_tol_usd" in body:
+        try:
+            cfg["venc_pago_match_tol_usd"] = max(0.0, float(body["venc_pago_match_tol_usd"]))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "venc_pago_match_tol_usd inválido")
+    write_user_config(cfg)
+    return {"ok": True}
+
+
 @router.post("/config/usuarios/rename-db")
 def rename_usuario_in_db(body: dict, request: Request):
     """Rename a persona in all existing gastos rows (called after UI rename)."""
