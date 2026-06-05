@@ -372,6 +372,8 @@ def insert_movimientos_raw(
                         f'%"{k}":{v},%',     # entero sin espacio, coma
                     ),
                 ).fetchone()
+                if existing:
+                    existing_check_name = "scraper_uid"
                 # Edge case: el campo es el último del objeto (termina en })
                 if not existing:
                     existing = conn.execute(
@@ -380,6 +382,8 @@ def insert_movimientos_raw(
                            LIMIT 1""",
                         (fuente, f'%"{k}": {v}' + '}%', f'%"{k}":{v}' + '}%'),
                     ).fetchone()
+                    if existing:
+                        existing_check_name = "scraper_uid_edge_case"
 
             # Dedup de contraasientos (movimientos opuestos el mismo día).
             # BBVA a veces devuelve dos veces el mismo movimiento: egreso e ingreso opuestos.
@@ -438,6 +442,8 @@ def insert_movimientos_raw(
                        LIMIT 1""",
                     (fuente, fecha, moneda, monto, desc),
                 ).fetchone()
+                if existing:
+                    existing_check_name = "fallback_descriptor"
 
             # Cross-run: descripción específica que reemplaza una genérica existente.
             # Solo actuamos si el monto aparece exactamente una vez en esa fecha
@@ -584,8 +590,10 @@ def insert_movimientos_raw(
                         existing_id = existing['id'] if existing else '?'
                     except (KeyError, TypeError):
                         existing_id = '?'
+                    # Para debuggear: mostrar qué check encontró el existing
+                    check_name = existing_check_name or "unknown"
                     _log_fn(
-                        f"  [dedup-skip] {fecha} {moneda} {monto:>14} — {desc!r:.60} (existing_id={existing_id})"
+                        f"  [dedup-skip] {fecha} {moneda} {monto:>14} — {desc!r:.60} (existing_id={existing_id} via {check_name})"
                     )
                 continue   # ya estaba — skipear
 

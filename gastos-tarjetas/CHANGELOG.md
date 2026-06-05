@@ -1,3 +1,7 @@
+## 0.6.13
+
+- **Logging granular: mostrar QUÉ check encontró el existing en cada [dedup-skip]** (`scrapers_db.py`): el log ahora incluye `via scraper_uid`, `via fallback_descriptor`, etc., para identificar exactamente cuál check está causando cada skip. Así se puede debuggear falsos positivos como el id=108 (05-08) siendo usado para un movimiento del 06-03.
+
 ## 0.6.12
 
 - **Fix: logging de existing_id ahora muestra el ID real en los [dedup-skip]** (`scrapers_db.py`): en v0.6.11 todos mostraban `(existing_id=?)` porque el Row de SQLite no soporta `.get()`. Ahora accede correctamente al 'id' del Row, así que el próximo run mostrará el ID verdadero de los registros encontrados para cada skip.
