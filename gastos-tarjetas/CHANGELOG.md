@@ -1,3 +1,14 @@
+## 0.8.0
+
+Compliance del add-on con la documentación oficial de Home Assistant (apps) y limpieza de configuración (`config.yaml`).
+
+- **Ingress deshabilitado, acceso por puerto 8000** (`config.yaml`): se quitaron `ingress: true`, `ingress_port` y `panel_icon` (este último solo aplica con ingress). El add-on ya no aparece en la barra lateral de HA; se accede directo por `http://<ip-ha>:8000`, que es el modo de uso real. El manejo de `X-Ingress-Path` en `main.py` se deja como está (inocuo: sin ingress el header no llega y el prefijo queda vacío).
+- **`url` agregada** (`config.yaml`): link a la página del add-on (`.../tree/main/gastos-tarjetas`), que es lo que muestra el botón "Visit add-on page".
+- **`stage: stable`** (`config.yaml`): se declara explícito el estado del add-on (antes era el default implícito).
+- **`watchdog` agregado** (`config.yaml`): `tcp://[HOST]:[PORT:8000]` para que el Supervisor detecte si el proceso se cae y reinicie el add-on.
+- **`map: data:rw` eliminado** (`config.yaml`): `/data` siempre se monta persistente y escribible sin declararlo; la entrada era redundante.
+- **Limpieza de iconos viejos**: se borraron `icono-sb.ico/png/svg` de la raíz del add-on (redundantes con `icon.png` y `logo.png`, los únicos que usa HA). Las copias en `rootfs/app/static/icono-sb.*` se mantienen porque las usa la web app.
+
 ## 0.7.2
 
 - **FIX: el grid de los widgets no se aplicaba (estilo inline lo pisaba)** (`static/app.js`): en 0.7.1 pasé `.saldos-widget` y `.vencimientos-widget` a `display:grid` en el CSS, pero `renderSaldos()` y `renderVencimientos()` setean `widget.style.display` **inline** al mostrar el widget, y ese valor era `"flex"` — que tiene mayor prioridad que la hoja de estilos y dejaba ambos widgets en flex (anchos por contenido, cards de distinto ancho). Cambiados los dos a `widget.style.display = "grid"`. Verificado en preview: ahora las columnas son iguales (mismo ancho) y los vencimientos quedan alineados debajo de los saldos.
