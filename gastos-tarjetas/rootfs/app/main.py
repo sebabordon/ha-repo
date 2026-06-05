@@ -1,4 +1,6 @@
 import os
+import re
+import secrets
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, PlainTextResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -49,7 +51,7 @@ async def user_data_context(request: Request, call_next):
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.environ.get("SESSION_SECRET", "changeme-in-prod"),
+    secret_key=os.environ.get("SESSION_SECRET") or secrets.token_urlsafe(48),
 )
 app.add_middleware(
     CORSMiddleware,
@@ -229,8 +231,16 @@ async def serve_sw():
     )
 
 
-def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectResponse:
+_SAFE_PREFIX_RE = re.compile(r'^(/[a-zA-Z0-9_/-]*)?$')
+
+
+def _safe_prefix(request: Request) -> str:
     prefix = request.headers.get("X-Ingress-Path", "")
+    return prefix if _SAFE_PREFIX_RE.match(prefix) else ""
+
+
+def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectResponse:
+    prefix = _safe_prefix(request)
     return RedirectResponse(f"{prefix}{path}", status_code=status_code)
 
 
@@ -238,7 +248,7 @@ def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectRe
 async def root(request: Request):
     if not request.session.get("user"):
         return _redirect(request, "/auth/login")
-    prefix = request.headers.get("X-Ingress-Path", "")
+    prefix = _safe_prefix(request)
     with open("static/index.html") as f:
         html = f.read()
     html = html.replace('href="/static/', f'href="{prefix}/static/')

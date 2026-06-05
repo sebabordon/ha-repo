@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import json
 import os
 from fastapi import HTTPException, Request
@@ -71,7 +72,7 @@ def verify_admin(email: str, password: str) -> bool:
     """Returns True if email is the admin address and password matches ADMIN_PASSWORD."""
     if not ADMIN_PASSWORD:
         return False
-    return email.lower() == ADMIN_EMAIL and password == ADMIN_PASSWORD
+    return email.lower() == ADMIN_EMAIL and hmac.compare_digest(password, ADMIN_PASSWORD)
 
 
 def create_user(email: str, password: str) -> tuple[bool, str]:

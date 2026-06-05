@@ -29,9 +29,9 @@ Formato del JSON:
       ...
     }
 
-Las contraseñas se almacenan en texto claro por ahora. El cifrado con clave
-del addon se puede agregar en una versión futura (AES-GCM con la ADDON_SECRET
-de config.yaml).
+Las contraseñas se cifran si SCRAPER_ENCRYPTION_KEY está configurada en el add-on
+(Fernet/AES-128 vía scraper_crypto.py).  Sin esa clave se almacenan en texto claro
+como fallback para no romper instalaciones sin la variable.
 """
 
 import glob
@@ -39,6 +39,7 @@ import json
 import logging
 import os
 
+from scraper_crypto import decrypt_str, encrypt_str
 from userctx import get_data_dir
 
 logger = logging.getLogger(__name__)
@@ -213,24 +214,41 @@ def _creds_path(data_dir: str | None = None) -> str:
 # ── Lectura / escritura ───────────────────────────────────────────────────────
 
 def read_creds(data_dir: str | None = None) -> dict:
-    """Lee el JSON de credenciales del usuario. Devuelve {} si no existe."""
+    """Lee el JSON de credenciales del usuario. Devuelve {} si no existe.
+
+    Soporta el formato cifrado ({"_encrypted": true, "_data": "<token>"})
+    generado por write_creds cuando SCRAPER_ENCRYPTION_KEY está configurada.
+    Los archivos en formato plaintext (instalaciones anteriores) se leen tal cual.
+    """
     path = _creds_path(data_dir)
     if not os.path.exists(path):
         return {}
     try:
         with open(path) as f:
-            return json.load(f) or {}
+            raw = json.load(f) or {}
+        if raw.get("_encrypted"):
+            plaintext = decrypt_str(raw.get("_data", ""), True)
+            return json.loads(plaintext) if plaintext else {}
+        return raw
     except Exception as exc:
         logger.error("Error leyendo scraper_credentials.json: %s", exc)
         return {}
 
 
 def write_creds(data: dict, data_dir: str | None = None) -> None:
-    """Escribe el JSON de credenciales del usuario (reemplaza todo)."""
+    """Escribe el JSON de credenciales del usuario.
+
+    Si SCRAPER_ENCRYPTION_KEY está disponible, cifra el contenido completo
+    con Fernet antes de escribir en disco.  De lo contrario escribe plaintext
+    (comportamiento original).
+    """
     path = _creds_path(data_dir)
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    plaintext = json.dumps(data, ensure_ascii=False)
+    encrypted_data, is_enc = encrypt_str(plaintext)
+    to_save = {"_encrypted": True, "_data": encrypted_data} if is_enc else data
     with open(path, "w") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(to_save, f, ensure_ascii=False, indent=2)
     logger.info("scraper_credentials.json guardado en %s", os.path.dirname(path))
 
 

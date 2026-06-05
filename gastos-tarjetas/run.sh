@@ -13,6 +13,16 @@ export RULES_FILE="/data/rules.yaml"
 
 mkdir -p "${DATA_DIR}"
 
+# Generar SESSION_SECRET al primer arranque y persistirlo para que las
+# sesiones sobrevivan reinicios del add-on.
+SESSION_SECRET_FILE="${DATA_DIR}/session_secret"
+if [ ! -f "${SESSION_SECRET_FILE}" ]; then
+    python3 -c "import secrets; print(secrets.token_urlsafe(48))" > "${SESSION_SECRET_FILE}"
+    chmod 600 "${SESSION_SECRET_FILE}"
+    bashio::log.info "SESSION_SECRET generado y guardado."
+fi
+export SESSION_SECRET=$(cat "${SESSION_SECRET_FILE}")
+
 if [ ! -f "${RULES_FILE}" ]; then
     cp /app/default_rules.yaml "${RULES_FILE}"
 elif ! python3 -c "import yaml; yaml.safe_load(open('${RULES_FILE}'))" 2>/dev/null; then

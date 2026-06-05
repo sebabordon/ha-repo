@@ -1,8 +1,42 @@
+import re
+import time
+from collections import defaultdict
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from auth import create_user, verify_password, verify_admin, get_registration_enabled, ADMIN_EMAIL
 from config import ALLOWED_DOMAIN
+
+# ── Rate limiting (in-memory, por IP) ─────────────────────────────────────────
+_login_failures: dict[str, list[float]] = defaultdict(list)
+_MAX_FAILURES  = 10
+_WINDOW_SECS   = 900  # 15 minutos
+
+_SAFE_PREFIX_RE = re.compile(r'^(/[a-zA-Z0-9_/-]*)?$')
+
+
+def _safe_prefix(request: Request) -> str:
+    prefix = request.headers.get("X-Ingress-Path", "")
+    return prefix if _SAFE_PREFIX_RE.match(prefix) else ""
+
+
+def _client_ip(request: Request) -> str:
+    for header in ("X-Real-IP", "X-Forwarded-For"):
+        val = request.headers.get(header, "")
+        if val:
+            return val.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _is_rate_limited(ip: str) -> bool:
+    now = time.monotonic()
+    _login_failures[ip] = [t for t in _login_failures[ip] if now - t < _WINDOW_SECS]
+    return len(_login_failures[ip]) >= _MAX_FAILURES
+
+
+def _record_failure(ip: str) -> None:
+    _login_failures[ip].append(time.monotonic())
 
 router = APIRouter()
 
@@ -68,7 +102,7 @@ def _render(template: str, error: str = "", ingress_prefix: str = "", **kwargs) 
 
 
 def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectResponse:
-    prefix = request.headers.get("X-Ingress-Path", "")
+    prefix = _safe_prefix(request)
     return RedirectResponse(f"{prefix}{path}", status_code=status_code)
 
 
@@ -76,7 +110,7 @@ def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectRe
 async def login_get(request: Request):
     if request.session.get("user"):
         return _redirect(request, "/")
-    prefix = request.headers.get("X-Ingress-Path", "")
+    prefix = _safe_prefix(request)
     return _render(_LOGIN_HTML, ingress_prefix=prefix)
 
 
@@ -86,18 +120,23 @@ async def login_post(
     email: str = Form(...),
     password: str = Form(...),
 ):
+    prefix = _safe_prefix(request)
+    ip = _client_ip(request)
+    if _is_rate_limited(ip):
+        return _render(_LOGIN_HTML, "Demasiados intentos fallidos. Intentá de nuevo en 15 minutos.",
+                       ingress_prefix=prefix)
     email = email.lower()
     is_admin = verify_admin(email, password)
     if is_admin or verify_password(email, password):
         request.session["user"] = {"email": email, "is_admin": is_admin}
         return _redirect(request, "/", status_code=303)
-    prefix = request.headers.get("X-Ingress-Path", "")
+    _record_failure(ip)
     return _render(_LOGIN_HTML, "Email o contraseña incorrectos.", ingress_prefix=prefix)
 
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_get(request: Request):
-    prefix = request.headers.get("X-Ingress-Path", "")
+    prefix = _safe_prefix(request)
     if not get_registration_enabled():
         return _render(_LOGIN_HTML, "El registro de nuevos usuarios está deshabilitado.", ingress_prefix=prefix)
     return _render(_REGISTER_HTML, ingress_prefix=prefix)
@@ -110,7 +149,7 @@ async def register_post(
     password: str = Form(...),
     password2: str = Form(...),
 ):
-    prefix = request.headers.get("X-Ingress-Path", "")
+    prefix = _safe_prefix(request)
     if not get_registration_enabled():
         return _render(_LOGIN_HTML, "El registro de nuevos usuarios está deshabilitado.", ingress_prefix=prefix)
     if password != password2:

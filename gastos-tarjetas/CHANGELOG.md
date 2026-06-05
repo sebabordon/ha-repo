@@ -1,3 +1,12 @@
+## 0.6.15
+
+- **SEGURIDAD: SESSION_SECRET auto-generado** (`run.sh`): se genera un secret único de 48 bytes al primer arranque y se persiste en `/data/session_secret`. Elimina el fallback público `"changeme-in-prod"` que permitía forjar cookies de sesión. En `main.py` el fallback también pasó a `secrets.token_urlsafe(48)` (sesiones no persistentes si no hay secret en disco, pero sin secreto predecible).
+- **SEGURIDAD: Rate limiting en login** (`routes/auth.py`): 10 intentos fallidos por IP en 15 minutos disparan un bloqueo temporal. Previene brute force desde internet.
+- **SEGURIDAD: Validación de X-Ingress-Path** (`main.py`, `routes/auth.py`, `routes/admin.py`): el header se valida contra regex `^(/[a-zA-Z0-9_/-]*)?$` antes de usarlo en redirects y en HTML/JS. Cierra XSS y open redirect via header injection.
+- **SEGURIDAD: XSS en panel admin** (`routes/admin.py`): emails de usuarios se escapan con `html.escape()` en todos los lugares donde se inyectan en HTML (spans, inputs hidden, onclick, flash messages).
+- **SEGURIDAD: Comparación timing-safe de ADMIN_PASSWORD** (`auth.py`): reemplaza `==` por `hmac.compare_digest()`.
+- **SEGURIDAD: Cifrado de scraper_credentials.json** (`scraper_credentials.py`): si `SCRAPER_ENCRYPTION_KEY` está configurada, el JSON completo de credenciales bancarias se cifra con Fernet al escribir. Los archivos en formato plaintext se leen sin cambios (migración transparente).
+
 ## 0.6.14
 
 - **FIX CRÍTICO: scraper_uid check ahora filtra por fecha** (`scrapers_db.py`): el check de UID en raw_data NO tenía `AND fecha = ?`, así que UIDs genéricos (como `numero_operacion="00001"`) que se repiten en múltiples días causaban falsos positivos cross-date. Ejemplo: id=108 (858625.0 del 05-08) se usaba como "existing" para el movimiento 288000.0 del 06-03 porque ambos compartían el mismo UID genérico. Ahora el scraper_uid check requiere fecha exacta para el match, evitando estos falsos positivos. **Esto debería resolver los movimientos faltantes del 06-03** (288K ARS, 736.56 USD).

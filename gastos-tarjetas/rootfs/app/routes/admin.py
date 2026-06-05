@@ -1,3 +1,6 @@
+import re
+from html import escape
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -7,6 +10,14 @@ from auth import (
 )
 
 router = APIRouter()
+
+_SAFE_PREFIX_RE = re.compile(r'^(/[a-zA-Z0-9_/-]*)?$')
+
+
+def _safe_prefix(request: Request) -> str:
+    prefix = request.headers.get("X-Ingress-Path", "")
+    return prefix if _SAFE_PREFIX_RE.match(prefix) else ""
+
 
 _STYLE = """
 <style>
@@ -44,12 +55,12 @@ def _require_admin(request: Request):
 
 
 def _redirect(request: Request, path: str, status_code: int = 303) -> RedirectResponse:
-    prefix = request.headers.get("X-Ingress-Path", "")
+    prefix = _safe_prefix(request)
     return RedirectResponse(f"{prefix}{path}", status_code=status_code)
 
 
 def _render_panel(request: Request, msg: str = "") -> HTMLResponse:
-    prefix = request.headers.get("X-Ingress-Path", "")
+    prefix = _safe_prefix(request)
     reg = get_registration_enabled()
     users = list_users()
 
@@ -66,22 +77,23 @@ def _render_panel(request: Request, msg: str = "") -> HTMLResponse:
     if users:
         rows = ""
         for email in users:
+            safe_email = escape(email)
             rows += f"""
             <div class="row">
-              <span>{email}</span>
+              <span>{safe_email}</span>
               <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
                 <form method="post" action="{prefix}/admin/users/reset-password"
                       style="display:flex;gap:.3rem;align-items:center">
-                  <input type="hidden" name="email" value="{email}">
+                  <input type="hidden" name="email" value="{safe_email}">
                   <input type="password" name="new_password" placeholder="Nueva contraseña"
                          minlength="8" required
                          style="padding:.25rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.8rem;width:150px">
                   <button class="btn btn-primary btn-sm" type="submit">Resetear</button>
                 </form>
                 <form method="post" action="{prefix}/admin/users/delete" style="display:inline">
-                  <input type="hidden" name="email" value="{email}">
+                  <input type="hidden" name="email" value="{safe_email}">
                   <button class="btn btn-danger btn-sm" type="submit"
-                    onclick="return confirm('¿Eliminar {email}?')">Eliminar</button>
+                    onclick="return confirm('¿Eliminar {safe_email}?')">Eliminar</button>
                 </form>
               </div>
             </div>"""
@@ -134,7 +146,7 @@ async def admin_delete_user(request: Request, email: str = Form(...)):
     if not _require_admin(request):
         return _redirect(request, "/")
     delete_user(email.lower())
-    return _render_panel(request, f"Usuario {email} eliminado.")
+    return _render_panel(request, f"Usuario {escape(email)} eliminado.")
 
 
 @router.post("/users/reset-password", response_class=HTMLResponse)
@@ -147,5 +159,5 @@ async def admin_reset_password(
         return _redirect(request, "/")
     ok, err = reset_password(email.lower(), new_password)
     if not ok:
-        return _render_panel(request, f"Error: {err}")
-    return _render_panel(request, f"Contraseña de {email} actualizada.")
+        return _render_panel(request, f"Error: {escape(err)}")
+    return _render_panel(request, f"Contraseña de {escape(email)} actualizada.")
