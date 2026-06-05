@@ -1,3 +1,7 @@
+## 0.6.14
+
+- **FIX CRÍTICO: scraper_uid check ahora filtra por fecha** (`scrapers_db.py`): el check de UID en raw_data NO tenía `AND fecha = ?`, así que UIDs genéricos (como `numero_operacion="00001"`) que se repiten en múltiples días causaban falsos positivos cross-date. Ejemplo: id=108 (858625.0 del 05-08) se usaba como "existing" para el movimiento 288000.0 del 06-03 porque ambos compartían el mismo UID genérico. Ahora el scraper_uid check requiere fecha exacta para el match, evitando estos falsos positivos. **Esto debería resolver los movimientos faltantes del 06-03** (288K ARS, 736.56 USD).
+
 ## 0.6.13
 
 - **Logging granular: mostrar QUÉ check encontró el existing en cada [dedup-skip]** (`scrapers_db.py`): el log ahora incluye `via scraper_uid`, `via fallback_descriptor`, etc., para identificar exactamente cuál check está causando cada skip. Así se puede debuggear falsos positivos como el id=108 (05-08) siendo usado para un movimiento del 06-03.

@@ -353,19 +353,22 @@ def insert_movimientos_raw(
             existing_check_name = None  # trackear cuál check encontró el existing
             if scraper_uid:
                 # Buscar por scraper UID dentro de raw_data.
+                # IMPORTANTE: Filtrar también por fecha, porque algunos UIDs son genéricos
+                # (ej. numero_operacion="00001") y pueden repetirse en múltiples días.
                 # Matching tanto string ("123") como integer (123) porque
                 # json.dumps() serializa enteros sin comillas, pero la versión
                 # anterior del código los almacenaba como strings.
                 k, v = scraper_uid
                 existing = conn.execute(
                     """SELECT id FROM movimientos_raw
-                       WHERE fuente = ? AND (
+                       WHERE fuente = ? AND fecha = ? AND (
                          raw_data LIKE ? OR raw_data LIKE ? OR
                          raw_data LIKE ? OR raw_data LIKE ?
                        )
                        LIMIT 1""",
                     (
                         fuente,
+                        fecha,
                         f'%"{k}": "{v}"%',   # string con espacio
                         f'%"{k}":"{v}"%',    # string sin espacio
                         f'%"{k}": {v},%',    # entero seguido de coma
@@ -378,9 +381,9 @@ def insert_movimientos_raw(
                 if not existing:
                     existing = conn.execute(
                         """SELECT id FROM movimientos_raw
-                           WHERE fuente = ? AND (raw_data LIKE ? OR raw_data LIKE ?)
+                           WHERE fuente = ? AND fecha = ? AND (raw_data LIKE ? OR raw_data LIKE ?)
                            LIMIT 1""",
-                        (fuente, f'%"{k}": {v}' + '}%', f'%"{k}":{v}' + '}%'),
+                        (fuente, fecha, f'%"{k}": {v}' + '}%', f'%"{k}":{v}' + '}%'),
                     ).fetchone()
                     if existing:
                         existing_check_name = "scraper_uid_edge_case"
