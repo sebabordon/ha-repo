@@ -350,6 +350,7 @@ def insert_movimientos_raw(
                     break
 
             existing = None
+            existing_check_name = None  # trackear cuál check encontró el existing
             if scraper_uid:
                 # Buscar por scraper UID dentro de raw_data.
                 # Matching tanto string ("123") como integer (123) porque
@@ -578,11 +579,13 @@ def insert_movimientos_raw(
 
             if existing:
                 if _log_fn:
-                    # Log genérico sin indicar CUÁL check encontró el existing
-                    # Esto hace difícil debuggear falsos positivos.
-                    # TODO: trackear en qué punto se setea existing para log más específico
+                    # Extraer el id de existing (puede ser Row o dict)
+                    try:
+                        existing_id = existing['id'] if existing else '?'
+                    except (KeyError, TypeError):
+                        existing_id = '?'
                     _log_fn(
-                        f"  [dedup-skip] {fecha} {moneda} {monto:>14} — {desc!r:.60} (existing_id={existing.get('id') if isinstance(existing, dict) else '?'})"
+                        f"  [dedup-skip] {fecha} {moneda} {monto:>14} — {desc!r:.60} (existing_id={existing_id})"
                     )
                 continue   # ya estaba — skipear
 

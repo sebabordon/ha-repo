@@ -1,3 +1,7 @@
+## 0.6.12
+
+- **Fix: logging de existing_id ahora muestra el ID real en los [dedup-skip]** (`scrapers_db.py`): en v0.6.11 todos mostraban `(existing_id=?)` porque el Row de SQLite no soporta `.get()`. Ahora accede correctamente al 'id' del Row, así que el próximo run mostrará el ID verdadero de los registros encontrados para cada skip.
+
 ## 0.6.11
 
 - **Logging mejorado para debugging de dedup falsos positivos** (`scrapers_db.py`): el log de `[dedup-skip]` ahora muestra el `existing_id` para que se pueda rastrear cuál registro se encontró y por qué. Esto ayuda a diagnosticar casos donde se loguea skip pero el movimiento no existe en la DB (falso positivo de dedup).
