@@ -16,6 +16,40 @@ from config import APP_VERSION
 from scraper_scheduler import start_scheduler
 import userctx
 
+def _load_session_secret() -> str:
+    """Lee (o genera) el secreto de sesión desde /data/session_secret.
+
+    Leer desde archivo en lugar de env var garantiza que el secreto sea el
+    mismo en todos los reinicios del proceso, independientemente de cómo el
+    supervisor arranque uvicorn.
+    """
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    data_dir    = os.environ.get("DATA_DIR", "/data")
+    secret_file = os.path.join(data_dir, "session_secret")
+    try:
+        with open(secret_file) as f:
+            secret = f.read().strip()
+        if secret:
+            return secret
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        _log.warning("No se pudo leer session_secret: %s — generando uno temporal", exc)
+
+    # Generar y persistir un secreto nuevo
+    secret = secrets.token_urlsafe(48)
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        with open(secret_file, "w") as f:
+            f.write(secret)
+        os.chmod(secret_file, 0o600)
+        _log.info("SESSION_SECRET generado y guardado en %s", secret_file)
+    except Exception as exc:
+        _log.warning("No se pudo persistir session_secret: %s — las sesiones no sobrevivan reinicios", exc)
+    return secret
+
+
 app = FastAPI(title="Gastos", docs_url=None, redoc_url=None)
 
 
@@ -51,7 +85,7 @@ async def user_data_context(request: Request, call_next):
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.environ.get("SESSION_SECRET") or secrets.token_urlsafe(48),
+    secret_key=_load_session_secret(),
 )
 app.add_middleware(
     CORSMiddleware,

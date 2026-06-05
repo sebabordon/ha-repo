@@ -1,3 +1,7 @@
+## 0.6.17
+
+- **FIX: session_secret leído desde archivo en Python** (`main.py`): en lugar de depender de que `run.sh` exporte `SESSION_SECRET` como env var (frágil si el supervisor reinicia uvicorn directamente), `_load_session_secret()` lee el archivo `/data/session_secret` en Python al arrancar. Si no existe lo genera y lo persiste. Esto garantiza que el secreto sea siempre el mismo entre reinicios y evita el logout inesperado al recargar la página.
+
 ## 0.6.16
 
 - **REFACTOR: credenciales bancarias migradas a DB exclusivamente** (`scraper_credentials.py`): `scraper_credentials.json` ya no se escribe. Todas las lecturas/escrituras de credenciales van directo a `scraper_instances` (cifradas con Fernet si `SCRAPER_ENCRYPTION_KEY` está configurada). Se eliminaron `read_creds` y `write_creds`; `get_bank_config`, `set_bank_config`, `creds_for_api` y `find_all_enabled_configs` usan `scraper_instances_db`. El módulo `BANKS` se conserva solo como metadatos de UI. Los archivos `.json` viejos en disco son inofensivos y pueden borrarse manualmente.
