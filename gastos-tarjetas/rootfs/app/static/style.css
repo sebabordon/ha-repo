@@ -964,10 +964,13 @@ tbody tr:hover { background: #fafbff; }
 /* ── Saldos widget ───────────────────────────────────────────────────────────*/
 
 .saldos-widget {
-  display: flex;
+  /* Grid de columnas iguales: ancho y alto consistentes por fila (a diferencia
+     de flex, que dimensionaba cada card según su contenido). auto-fill mantiene
+     los cards compactos; minmax baja a 1 columna en pantallas angostas. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: .75rem;
   margin-bottom: 1.25rem;
-  flex-wrap: wrap;
 }
 .saldo-card {
   background: #fff;
@@ -1031,10 +1034,11 @@ tbody tr:hover { background: #fafbff; }
 /* ── Vencimientos widget ─────────────────────────────────────────────────────*/
 
 .vencimientos-widget {
-  display: flex;
+  /* Grid de columnas iguales (ver .saldos-widget). */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: .75rem;
   margin-bottom: 1.25rem;
-  flex-wrap: wrap;
 }
 .venc-card {
   background: #fff;

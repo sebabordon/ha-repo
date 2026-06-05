@@ -1,3 +1,9 @@
+## 0.7.1
+
+- **Galicia: próximo cierre y próximo vencimiento** (`parsers/galicia.py`): el parser leía la fila de 6 fechas de Galicia pero solo usaba el cierre/venc actual (índices 2 y 3) y descartaba el próximo cierre/venc (índices 4 y 5), por eso los widgets de vencimiento de Galicia nunca mostraban "Próx. cierre · venc.". `_detect_statement_dates()` ahora devuelve también esos dos y `parse()` los expone en `self.proximo_cierre` / `self.proximo_venc` (leídos por `upload.py`). Verificado con los PDFs de muestra (ej. próx. cierre 28-May-26 · venc. 08-Jun-26). **Requiere re-importar el PDF** para poblar los imports existentes.
+- **Widgets de saldos y vencimientos con tamaño consistente** (`static/style.css`): los contenedores usaban `display:flex`, que dimensionaba cada card según su contenido (anchos dispares; ej. el card con la línea larga de "Próx. cierre…" quedaba más ancho). Pasan a `display:grid` con `repeat(auto-fill, minmax(190px, 1fr))`: columnas de igual ancho y, por el stretch de grid, igual alto por fila. En pantallas angostas baja a una columna. Verificado en preview.
+- _Nota BBVA Mastercard:_ el parser de BBVA sí extrae el próximo cierre/venc correctamente (probado contra los PDFs de muestra Visa y Master, incl. May26). Si una tarjeta no lo muestra es porque ese import es anterior a la feature — **re-importá el PDF** y aparecerá.
+
 ## 0.7.0
 
 Tanda de mejoras de seguridad, performance y configurabilidad (review del código).

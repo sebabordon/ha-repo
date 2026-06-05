@@ -77,14 +77,16 @@ _INTERES_PUNITOR_RE  = re.compile(r"INTERESES\s+PUNITORIOS\s+([\d\.]+,\d+)", re.
 _TOTAL_PAGAR_RE = re.compile(r"TOTAL\s+A\s+PAGAR\s+([\d\.]+,\d+)(?:\s+([\d\.]+,\d+))?", re.IGNORECASE)
 
 
-def _detect_statement_dates(pdf) -> tuple[Optional[date], Optional[date]]:
+def _detect_statement_dates(pdf) -> tuple[Optional[date], Optional[date], Optional[date], Optional[date]]:
     """
     Scan first 2 pages for the 6-date timeline row that Galicia prints at the
     top of each page.  Format (graphical labels not extractable by pdfplumber):
       [Cierre Ant]  [Venc Ant]  [Cierre Act]  [Venc Act]  [Próx Cierre]  [Próx Venc]
        26-Mar-26     07-Abr-26   30-Abr-26     11-May-26   28-May-26      08-Jun-26
+       idx 0         idx 1       idx 2         idx 3       idx 4          idx 5
 
-    Returns (fecha_cierre [index 2], fecha_vencimiento [index 3]).
+    Returns (fecha_cierre, fecha_vencimiento, proximo_cierre, proximo_venc).
+    Los dos últimos pueden ser None si la fila trae solo 4 fechas.
     """
     for page in pdf.pages[:2]:
         words = page.extract_words(keep_blank_chars=False)
@@ -95,10 +97,17 @@ def _detect_statement_dates(pdf) -> tuple[Optional[date], Optional[date]]:
                 try:
                     cierre = parse_date_dmy(date_words[2])
                     venc   = parse_date_dmy(date_words[3])
-                    return cierre, venc
                 except Exception:
                     continue
-    return None, None
+                proximo_cierre = proximo_venc = None
+                if len(date_words) >= 6:
+                    try:
+                        proximo_cierre = parse_date_dmy(date_words[4])
+                        proximo_venc   = parse_date_dmy(date_words[5])
+                    except Exception:
+                        proximo_cierre = proximo_venc = None
+                return cierre, venc, proximo_cierre, proximo_venc
+    return None, None, None, None
 
 
 def _detect_total_galicia(pdf) -> tuple[Optional["Decimal"], Optional["Decimal"]]:
@@ -175,7 +184,8 @@ class GaliciaParser(BaseParser):
         gastos = []
 
         with pdfplumber.open(file) as pdf:
-            stmt_date, self.fecha_vencimiento = _detect_statement_dates(pdf)
+            (stmt_date, self.fecha_vencimiento,
+             self.proximo_cierre, self.proximo_venc) = _detect_statement_dates(pdf)
             self.stmt_total_ars, self.stmt_total_usd = _detect_total_galicia(pdf)
             comision  = _extract_comision(pdf)
             interes_financ, interes_punitor = _extract_intereses(pdf)
