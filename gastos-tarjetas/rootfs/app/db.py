@@ -834,8 +834,9 @@ def list_vencimientos() -> list[dict]:
                    -- pago_probable = 1: heurística sin emparejado. Es el badge amarillo
                    -- ("pago hecho pero no 100% validado"). Se enciende cuando:
                    --   · hay un gasto 'Pago de Tarjeta' (ARS, egreso) dentro de ±N días
-                   --     del vencimiento cuyo monto coincide (±tol_ars) con el saldo en
-                   --     pesos SIN RG 5617 (net_ars − rg5617), y
+                   --     del vencimiento cuyo monto coincide (±tol_ars) con el saldo
+                   --     en pesos SIN RG 5617 (net_ars − rg5617) O con el TOTAL A
+                   --     PAGAR del PDF (i.total_ars), y
                    --   · si el resumen tiene saldo en USD, además hay un gasto
                    --     'Pago de Tarjeta' (USD, egreso) en la misma ventana cuyo monto
                    --     coincide (±tol_usd) con el saldo en dólares (net_usd).
@@ -849,17 +850,27 @@ def list_vencimientos() -> list[dict]:
                          AND CAST(pa.monto AS REAL) > 0
                          AND pa.fecha >= date(i.fecha_venc, :dias_neg)
                          AND pa.fecha <= date(i.fecha_venc, :dias_pos)
-                         AND ABS(CAST(pa.monto AS REAL) - (
+                         AND (
+                             -- (a) coincide con el saldo computado sin RG 5617, o
+                             ABS(CAST(pa.monto AS REAL) - (
                                  SELECT COALESCE(SUM(CASE WHEN ga.moneda='ARS'
                                                                AND UPPER(ga.descripcion) NOT LIKE '%5617%'
                                                           THEN CAST(ga.monto AS REAL) ELSE 0 END), 0)
                                    FROM gastos ga WHERE ga.import_id = i.id)
-                             ) <= :tol_ars
+                                 ) <= :tol_ars
+                             -- (b) coincide con el TOTAL A PAGAR del PDF (i.total_ars).
+                             -- Necesario cuando el saldo computado difiere del total
+                             -- real (resúmenes con discrepancia parser/PDF).
+                             OR (i.total_ars IS NOT NULL
+                                 AND ABS(CAST(pa.monto AS REAL) - i.total_ars) <= :tol_ars)
+                         )
                    ) AND (
-                       -- Lado USD: sólo exigido cuando el resumen tiene saldo en dólares.
-                       (SELECT COALESCE(SUM(CASE WHEN gu.moneda='USD'
+                       -- Lado USD: sólo exigido cuando el resumen tiene saldo en dólares
+                       -- (ya sea en el computado o en el total del PDF).
+                       ((SELECT COALESCE(SUM(CASE WHEN gu.moneda='USD'
                                                  THEN CAST(gu.monto AS REAL) ELSE 0 END), 0)
                           FROM gastos gu WHERE gu.import_id = i.id) <= 0.5
+                        AND (i.total_usd IS NULL OR i.total_usd <= 0.5))
                        OR EXISTS (
                            SELECT 1 FROM gastos pu
                            WHERE pu.categoria = 'Pago de Tarjeta'
@@ -867,11 +878,15 @@ def list_vencimientos() -> list[dict]:
                              AND CAST(pu.monto AS REAL) > 0
                              AND pu.fecha >= date(i.fecha_venc, :dias_neg)
                              AND pu.fecha <= date(i.fecha_venc, :dias_pos)
-                             AND ABS(CAST(pu.monto AS REAL) - (
+                             AND (
+                                 ABS(CAST(pu.monto AS REAL) - (
                                      SELECT COALESCE(SUM(CASE WHEN gu2.moneda='USD'
                                                               THEN CAST(gu2.monto AS REAL) ELSE 0 END), 0)
                                        FROM gastos gu2 WHERE gu2.import_id = i.id)
-                                 ) <= :tol_usd
+                                     ) <= :tol_usd
+                                 OR (i.total_usd IS NOT NULL
+                                     AND ABS(CAST(pu.monto AS REAL) - i.total_usd) <= :tol_usd)
+                             )
                        )
                    ) THEN 1 ELSE 0 END AS pago_probable
             FROM importaciones i

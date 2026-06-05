@@ -1,3 +1,7 @@
+## 0.6.8
+
+- **Fix badge "pago probable": ahora también matchea contra el TOTAL del PDF** (`db.py`): la confirmación heurística (0.6.7) solo comparaba el Pago de Tarjeta contra el saldo *computado* sin RG 5617. En resúmenes con discrepancia parser/PDF (donde el saldo calculado difiere del total real —por eso aparece la línea `PDF: $...` en el widget) el pago nunca matcheaba. Ej. real: Galicia MC con saldo computado $935.666,53 pero total PDF y pago efectivo de $1.822.263,66. Ahora el lado ARS acepta el pago si coincide (±tol_ars) con el saldo sin RG **o** con `i.total_ars` (TOTAL A PAGAR del PDF). Mismo criterio para el lado USD (`i.total_usd`). El gate de "tiene saldo USD" también considera el total del PDF.
+
 ## 0.6.7
 
 - **Widget de vencimientos: badge amarillo de "pago probable" (confirmación heurística sin emparejado)** (`db.py`, `config_route.py`, `user_config.py`, `index.html`, `app.js`, `style.css`): hasta ahora el `✓` verde solo aparecía si existía un `transfer_pairs` confirmado bank→tarjeta. Se agregó un segundo estado en `list_vencimientos()` (`pago_probable`) que enciende un **badge amarillo** ("pago hecho pero no 100% validado") cuando hay un gasto categoría **"Pago de Tarjeta"** cerca del vencimiento que matchea el saldo del resumen, aunque no esté emparejado:

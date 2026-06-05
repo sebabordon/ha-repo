@@ -302,6 +302,7 @@ def _not_generic_sql_cond(col: str = "descripcion",
 def insert_movimientos_raw(
     movimientos: list[dict],
     _out_inserted: list[dict] | None = None,
+    _log_fn=None,
 ) -> int:
     """
     Inserta una tanda de movimientos scrapeados.
@@ -317,6 +318,7 @@ def insert_movimientos_raw(
 
     _out_inserted: si se pasa una lista, se le agregan los dicts efectivamente
     insertados (útil para calcular delta de saldo solo sobre los reales nuevos).
+    _log_fn: función opcional para loguear skips/inserts en el log del run.
 
     Devuelve cantidad de filas EFECTIVAMENTE insertadas (excluye duplicados).
     """
