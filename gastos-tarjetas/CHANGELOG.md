@@ -1,3 +1,7 @@
+## 0.6.11
+
+- **Logging mejorado para debugging de dedup falsos positivos** (`scrapers_db.py`): el log de `[dedup-skip]` ahora muestra el `existing_id` para que se pueda rastrear cuál registro se encontró y por qué. Esto ayuda a diagnosticar casos donde se loguea skip pero el movimiento no existe en la DB (falso positivo de dedup).
+
 ## 0.6.10
 
 - **Dedup de contraasientos (movimientos opuestos BBVA)** (`scrapers_db.py`): BBVA devuelve algunos movimientos DOS VECES con signo opuesto (ej. -460.000 y +460.000 el mismo día). Nuevo chequeo en `insert_movimientos_raw`: si llega un movimiento y existe otro con monto opuesto (fuente/fecha/moneda iguales), se skipea el nuevo si el existente es igual/más específico, o se reemplaza el existente si el nuevo es más específico. Emite `[dedup-opuesto-skip]` o `[dedup-opuesto-update]` en el log. Esto resuelve los "duplicados" que veías de $460K y $2.298M del 01/06.

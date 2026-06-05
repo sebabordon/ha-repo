@@ -578,8 +578,11 @@ def insert_movimientos_raw(
 
             if existing:
                 if _log_fn:
+                    # Log genérico sin indicar CUÁL check encontró el existing
+                    # Esto hace difícil debuggear falsos positivos.
+                    # TODO: trackear en qué punto se setea existing para log más específico
                     _log_fn(
-                        f"  [dedup-skip] {fecha} {moneda} {monto:>14} — {desc!r:.60}"
+                        f"  [dedup-skip] {fecha} {moneda} {monto:>14} — {desc!r:.60} (existing_id={existing.get('id') if isinstance(existing, dict) else '?'})"
                     )
                 continue   # ya estaba — skipear
 
