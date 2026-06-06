@@ -493,6 +493,7 @@
         <button class="cfg-tab" data-cfgtab="importacion">Importación</button>
         <button class="cfg-tab" data-cfgtab="periodo">Período</button>
         <button class="cfg-tab" data-cfgtab="vencimientos">Vencimientos</button>
+        <button class="cfg-tab" data-cfgtab="datos">Datos</button>
         <button class="cfg-tab cfg-tab-danger" data-cfgtab="borrar">⚠ Borrar</button>
       </div>
 
@@ -990,6 +991,24 @@
       </div>
 
       <!-- ── Sub-tab: Borrar datos ─────────────────────────────────── -->
+      <!-- ── Sub-tab: Datos (backup / export) ───────────────────────── -->
+      <div id="cfg-tab-datos" class="cfg-tab-content">
+        <h2>Copia de seguridad</h2>
+        <p class="rules-hint">
+          Descargá un snapshot consistente de tu base de datos: gastos,
+          categorías, presupuestos, cuentas, importaciones, charts y reglas
+          guardadas en la DB. Se genera con un export íntegro
+          (<code>VACUUM INTO</code>), así que es seguro aunque haya
+          escrituras en curso.
+        </p>
+        <p class="rules-hint">
+          ⚠ Por seguridad, las <strong>credenciales de scrapers NO se
+          incluyen</strong> en el archivo: si lo restaurás, vas a tener que
+          reingresarlas.
+        </p>
+        <button id="btn-export-db" class="btn btn-primary">⬇ Exportar base de datos (.db)</button>
+      </div>
+
       <div id="cfg-tab-borrar" class="cfg-tab-content">
         <div class="danger-zone">
           <select id="delete-target" style="min-width:240px">

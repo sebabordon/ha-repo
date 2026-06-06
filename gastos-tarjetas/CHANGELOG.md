@@ -1,3 +1,7 @@
+## 0.8.1
+
+- **Export de la base de datos desde la UI** (`routes/config_route.py`, `static/index.html`, `static/app.js`): nueva sub-pestaña **Config → Datos** con un botón "Exportar base de datos (.db)". El endpoint `GET /api/config/export-db` genera un snapshot consistente de la DB del usuario actual con `VACUUM INTO` (íntegro aunque la DB esté en modo WAL con escrituras en curso, a diferencia de copiar el archivo crudo) y lo descarga. Por seguridad, las credenciales cifradas de scrapers se vacían del snapshot (`scraper_instances.config='{}'`, `config_encrypted=0`) antes de enviarlo: si se restaura, hay que reingresarlas. El archivo temporal se borra tras la descarga vía `BackgroundTask`.
+
 ## 0.8.0
 
 Compliance del add-on con la documentación oficial de Home Assistant (apps) y limpieza de configuración (`config.yaml`).

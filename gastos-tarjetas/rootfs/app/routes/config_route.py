@@ -336,6 +336,62 @@ def put_iconos_config(request: Request, body: dict = Body(...)):
     return {"ok": True}
 
 
+# ── Export / backup de la base de datos ──────────────────────────────────────
+
+@router.get("/config/export-db")
+def export_db(request: Request):
+    """
+    Exporta un snapshot consistente de la base del usuario actual.
+
+    Usa `VACUUM INTO` (no copia el archivo crudo) para obtener una copia íntegra
+    aunque la DB esté en modo WAL con escrituras en curso. Las credenciales
+    cifradas de scrapers se borran del snapshot antes de descargarlo.
+    """
+    require_auth(request)
+    import os
+    import sqlite3
+    import tempfile
+    from datetime import datetime
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
+    from userctx import get_db_path
+
+    src = get_db_path()
+    if not os.path.exists(src):
+        raise HTTPException(404, "No hay base de datos para exportar todavía.")
+
+    # VACUUM INTO requiere que el destino NO exista todavía.
+    fd, tmp = tempfile.mkstemp(prefix="gastos_export_", suffix=".db")
+    os.close(fd)
+    os.unlink(tmp)
+
+    src_conn = sqlite3.connect(src, timeout=10.0)
+    try:
+        src_conn.execute("PRAGMA busy_timeout=5000")
+        src_conn.execute("VACUUM INTO ?", (tmp,))
+    finally:
+        src_conn.close()
+
+    # Quitar credenciales cifradas del snapshot (no se exportan).
+    exp = sqlite3.connect(tmp)
+    try:
+        exp.execute("UPDATE scraper_instances SET config='{}', config_encrypted=0")
+        exp.commit()
+    except sqlite3.OperationalError:
+        pass  # tabla inexistente en bases viejas — nada que limpiar
+    finally:
+        exp.close()
+
+    stamp    = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"gastos_backup_{stamp}.db"
+    return FileResponse(
+        tmp,
+        media_type="application/octet-stream",
+        filename=filename,
+        background=BackgroundTask(lambda: os.path.exists(tmp) and os.unlink(tmp)),
+    )
+
+
 @router.post("/config/usuarios/rename-db")
 def rename_usuario_in_db(body: dict, request: Request):
     """Rename a persona in all existing gastos rows (called after UI rename)."""

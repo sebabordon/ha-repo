@@ -5595,6 +5595,10 @@ document.getElementById("btn-export-user-rules")?.addEventListener("click", () =
   window.location.href = `${BASE}/api/config/usuarios/rules/export`;
 });
 
+document.getElementById("btn-export-db")?.addEventListener("click", () => {
+  window.location.href = `${BASE}/api/config/export-db`;
+});
+
 document.getElementById("inp-import-user-rules")?.addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file) return;
