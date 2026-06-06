@@ -309,23 +309,30 @@ class AmexScraper(BaseScraper):
                     By.CSS_SELECTOR, "tr.tableStandardText.pagebreak"
                 )
                 _l(f"[{nombre}] Fallback: {len(rows)} filas en div#txnsSection")
-                # En el período abierto las filas NO vienen separadas por titular.
-                # Solo es seguro asignar un cardholder si hay UN único titular;
-                # con varios, atribuir todo al primero sería incorrecto, así que
-                # se deja vacío y el import resuelve por el default de la fuente.
-                default_ch = (
-                    next(iter(cardholder_map.values())) if len(cardholder_map) == 1 else ""
-                )
-                if not default_ch and len(cardholder_map) > 1:
-                    _l(f"[{nombre}] Fallback: {len(cardholder_map)} titulares — "
-                       f"sin separación por titular, cardholder queda vacío")
-                parsed_ok = 0
+                # Vista completa (todos los titulares mezclados). Se indexan por
+                # una clave estable para poder asignar el titular más abajo.
+                baseline: dict[str, MovimientoRaw] = {}
                 for row in rows:
-                    mov = self._parse_row(row, tarjeta, default_ch)
+                    mov = self._parse_row(row, tarjeta, "")
                     if mov:
-                        movimientos.append(mov)
-                        parsed_ok += 1
-                _l(f"[{nombre}] Fallback: {parsed_ok}/{len(rows)} filas parseadas")
+                        baseline[_mov_key(mov)] = mov
+                _l(f"[{nombre}] Fallback: {len(baseline)}/{len(rows)} filas parseadas")
+
+                if len(cardholder_map) == 1:
+                    # Único titular → atribución inequívoca.
+                    only_ch = next(iter(cardholder_map.values()))
+                    for mov in baseline.values():
+                        mov.raw_data["cardholder"] = only_ch
+                elif len(cardholder_map) > 1:
+                    # Varios titulares: la vista no los separa. Se intenta separar
+                    # usando el filtro #cardAccount (un pase por titular). Es
+                    # auto-correctivo: si el filtro no separa o cambia de producto,
+                    # los movimientos quedan ambiguos → cardholder vacío.
+                    self._separar_por_titular(
+                        driver, baseline, cardholder_map, nombre, _l
+                    )
+
+                movimientos.extend(baseline.values())
             else:
                 all_divs = driver.find_elements(By.CSS_SELECTOR, "div[id]")
                 txns_ids = [
@@ -336,6 +343,104 @@ class AmexScraper(BaseScraper):
 
         _l(f"[{nombre}] Total movimientos: {len(movimientos)}")
         return movimientos, saldo_ars, saldo_usd
+
+    # ── Separación por titular en el período abierto ──────────────────────────
+
+    def _separar_por_titular(
+        self,
+        driver,
+        baseline: dict,
+        cardholder_map: dict,
+        nombre: str,
+        _l,
+    ) -> None:
+        """
+        En el período abierto la lista viene mezclada. Se itera el selector
+        #cardAccount, se selecciona cada titular y se registra qué movimientos
+        del `baseline` aparecen bajo su filtro. Un movimiento se asigna a un
+        titular solo si aparece bajo ESE titular y no bajo otros (exclusivo).
+
+        Robusto frente a dos fallos posibles:
+          • el filtro no separa (cada titular muestra todo) → todo ambiguo;
+          • el filtro cambia de producto (colisión name="sorted_index") → las
+            filas del otro producto no matchean el baseline → no se asignan.
+        En ambos casos los movimientos quedan sin titular (cardholder vacío) y
+        el import resuelve por el default de la fuente. Nunca asigna de más.
+        """
+        from collections import defaultdict
+        from selenium.webdriver.common.by import By
+
+        hits: dict[str, set] = defaultdict(set)
+        for val, ch_name in cardholder_map.items():
+            if not self._select_cardholder(driver, val, nombre, _l):
+                continue
+            try:
+                sec  = self.find(driver, "div#txnsSection")
+                rows = sec.find_elements(
+                    By.CSS_SELECTOR, "tr.tableStandardText.pagebreak"
+                ) if sec else []
+            except Exception:
+                rows = []
+            matched = 0
+            for row in rows:
+                mov = self._parse_row(row, "", "")
+                if mov:
+                    k = _mov_key(mov)
+                    if k in baseline:
+                        hits[k].add(ch_name)
+                        matched += 1
+            _l(f"[{nombre}] Filtro titular {ch_name!r}: {len(rows)} filas, "
+               f"{matched} coinciden con baseline")
+
+        asignados = ambiguos = 0
+        for k, mov in baseline.items():
+            chs = hits.get(k)
+            if chs and len(chs) == 1:
+                mov.raw_data["cardholder"] = next(iter(chs))
+                asignados += 1
+            else:
+                ambiguos += 1
+        _l(f"[{nombre}] Separación por titular: {asignados} asignados, "
+           f"{ambiguos} ambiguos (sin titular)")
+
+        # Restaurar la vista a "Todas" (best-effort).
+        self._select_cardholder(driver, "all", nombre, _l)
+
+    def _select_cardholder(self, driver, val: str, nombre: str, _l) -> bool:
+        """
+        Selecciona un titular en el selector #cardAccount y espera a que la
+        tabla de movimientos vuelva a estar presente. Devuelve True si la
+        selección se aplicó y hay una vista de movimientos lista para leer.
+        """
+        from selenium.webdriver.support.ui import Select
+
+        try:
+            sel_el = self.find(driver, "select#cardAccount")
+            if not sel_el:
+                _l(f"[{nombre}] ⚠ select#cardAccount ausente para filtro {val!r}")
+                return False
+            Select(sel_el).select_by_value(val)
+        except Exception as exc:
+            _l(f"[{nombre}] ⚠ No se pudo seleccionar titular {val!r}: {exc}")
+            return False
+
+        # Disparar 'change' explícito (algunos handlers no se gatillan solos).
+        # Puede quedar stale si select_by_value ya navegó; se ignora.
+        try:
+            driver.execute_script(
+                "arguments[0].dispatchEvent(new Event('change',{bubbles:true}))",
+                sel_el,
+            )
+        except Exception:
+            pass
+
+        try:
+            self.wait_for(driver, "div#txnsSection", timeout=15)
+        except Exception:
+            _l(f"[{nombre}] ⚠ Timeout esperando txnsSection tras filtro {val!r}")
+            return False
+        time.sleep(1)
+        return True
 
     # ── Parseo de fila de transacción ─────────────────────────────────────────
 
@@ -460,3 +565,12 @@ def _clean(text: str) -> str:
     Limpia el texto de una celda: elimina &nbsp; y espacios; devuelve '' si vacío.
     """
     return text.replace(_NBSP, "").strip() if text else ""
+
+
+def _mov_key(mov: MovimientoRaw) -> str:
+    """
+    Clave estable de un movimiento (fecha|descripción|monto|moneda) usada para
+    cruzar la vista completa con las vistas filtradas por titular. No incluye la
+    tarjeta a propósito: se compara dentro del mismo producto.
+    """
+    return f"{mov.fecha}|{mov.descripcion}|{mov.monto}|{mov.moneda}"

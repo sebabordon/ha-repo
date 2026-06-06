@@ -1,3 +1,11 @@
+## 0.8.3
+
+- **AMEX: separación por titular en el período abierto** (`scrapers/amex.py`): en la vista "Últimos Movimientos" (período abierto) la página no trae las secciones `txnsCard*` por titular, así que los movimientos venían mezclados y sin atribuir (en 0.8.2 quedaban con `cardholder` vacío). Ahora, cuando hay varios titulares, el scraper itera el selector `#cardAccount`: selecciona cada titular, lee la lista filtrada y asigna cada movimiento al titular bajo cuyo filtro aparece **de forma exclusiva**.
+  - **Auto-correctivo**: se cruza contra la vista completa (`baseline`) por clave `fecha|descripción|monto|moneda`. Si el filtro no separa (cada titular muestra todo) o cambia de producto (colisión `name="sorted_index"`), los movimientos quedan ambiguos → `cardholder` vacío y el import resuelve por el default de la fuente. Nunca asigna de más.
+  - **Diagnóstico en el log**: por cada titular se loguea cuántas filas muestra y cuántas coinciden con el baseline, más un resumen "N asignados, M ambiguos". Esto revela si el filtro de AMEX realmente separa en el período abierto.
+  - Nuevos helpers `_separar_por_titular()`, `_select_cardholder()` y `_mov_key()`.
+  - _Nota:_ los movimientos ya importados no se reasignan retroactivamente (el dedup los saltea); la separación aplica a resúmenes/movimientos nuevos.
+
 ## 0.8.2
 
 - **AMEX: atribución de movimientos por titular de tarjeta** (`scrapers/amex.py`, `scrapers_db.py`, `user_config.py`, `routes/config_route.py`, `static/index.html`, `static/app.js`): las tarjetas AMEX con adicionales (ej. Magdalena, Sebastián, Alberto) ahora pueden asignar cada movimiento a la persona correcta. El scraper ya leía el titular del selector `#cardAccount` y lo guardaba en `raw_data.cardholder`, pero ese dato nunca se usaba: al importar, el movimiento solo miraba `raw_data.usuario` y caía al default por fuente, quedando todo bajo una sola persona.
