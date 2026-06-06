@@ -5241,7 +5241,7 @@ async function submitCreateCuenta() {
 }
 
 // ── Personas (Config tab) ─────────────────────────────────────────────────────
-let _usuariosConfig = {usuarios: ["Titular","Adicional"], fuente_usuario: {}, reglas_usuario: []};
+let _usuariosConfig = {usuarios: ["Titular","Adicional"], fuente_usuario: {}, reglas_usuario: [], cardholder_usuario: {}};
 let _userRules = [];
 
 async function loadUsuarios() {
@@ -5318,6 +5318,62 @@ function renderUsuarios() {
         </tr>`).join("")}
       </tbody>
     </table>`;
+
+  renderCardholderMap();
+}
+
+// Titulares de tarjeta vistos (cacheados tras la 1ra carga de la sección).
+let _cardholdersSeen = null;
+
+async function renderCardholderMap() {
+  const box = document.getElementById("cardholder-usuario-map");
+  if (!box) return;
+  const users = _usuariosConfig.usuarios || [];
+  const chMap = _usuariosConfig.cardholder_usuario || {};
+
+  // Cargar titulares vistos del backend una sola vez.
+  if (_cardholdersSeen === null) {
+    try {
+      const res = await fetch(`${BASE}/api/config/cardholders`);
+      _cardholdersSeen = (await res.json()).cardholders || [];
+    } catch { _cardholdersSeen = []; }
+  }
+
+  // Unión de titulares vistos + los ya mapeados (por si dejaron de aparecer).
+  const titulares = [...new Set([..._cardholdersSeen, ...Object.keys(chMap)])].sort();
+
+  if (titulares.length === 0) {
+    box.innerHTML = `<p class="rules-hint" style="margin:0;opacity:.7">
+      Todavía no se detectaron titulares. Corré el scraper al menos una vez.</p>`;
+    return;
+  }
+
+  box.innerHTML = `
+    <table class="presup-table" style="max-width:520px">
+      <thead><tr><th>Titular</th><th>Persona</th></tr></thead>
+      <tbody>
+        ${titulares.map(ch => `<tr>
+          <td style="font-family:monospace;font-size:.82rem">${escHtml(ch)}</td>
+          <td>
+            <select class="cardholder-usuario-sel" data-ch="${escHtml(ch)}"
+                    onchange="saveCardholderUsuario(this.dataset.ch,this.value)">
+              <option value="">— Sin asignar —</option>
+              ${users.map(u =>
+                `<option value="${escHtml(u)}" ${chMap[ch]===u?"selected":""}>${escHtml(u)}</option>`
+              ).join("")}
+            </select>
+          </td>
+        </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+async function saveCardholderUsuario(cardholder, usuario) {
+  _usuariosConfig.cardholder_usuario = _usuariosConfig.cardholder_usuario || {};
+  if (usuario) _usuariosConfig.cardholder_usuario[cardholder] = usuario;
+  else         delete _usuariosConfig.cardholder_usuario[cardholder];
+  await _saveUsuariosConfig();
+  showToast("✓ Guardado", "ok", 1500);
 }
 
 async function removeUsuario(i) {
@@ -5404,6 +5460,11 @@ async function saveRenameUsuario(i) {
   Object.keys(_usuariosConfig.fuente_usuario || {}).forEach(f => {
     if (_usuariosConfig.fuente_usuario[f] === oldName)
       _usuariosConfig.fuente_usuario[f] = newName;
+  });
+  // Propagate rename into cardholder_usuario map
+  Object.keys(_usuariosConfig.cardholder_usuario || {}).forEach(ch => {
+    if (_usuariosConfig.cardholder_usuario[ch] === oldName)
+      _usuariosConfig.cardholder_usuario[ch] = newName;
   });
   // Propagate into user rules
   _userRules.forEach(r => { if (r.usuario === oldName) r.usuario = newName; });

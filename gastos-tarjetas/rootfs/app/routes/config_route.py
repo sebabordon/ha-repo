@@ -33,8 +33,25 @@ def put_usuarios_config(body: dict, request: Request):
             if palabras and usuario:
                 reglas.append({"palabras": palabras, "usuario": usuario, "fuentes": fuentes})
         cfg["reglas_usuario"] = reglas
+    if "cardholder_usuario" in body:
+        cfg["cardholder_usuario"] = {
+            str(k): str(v).strip()
+            for k, v in (body["cardholder_usuario"] or {}).items()
+            if str(k).strip() and str(v).strip()
+        }
     write_user_config(cfg)
     return {"ok": True}
+
+
+@router.get("/config/cardholders")
+def list_cardholders(request: Request):
+    """
+    Titulares de tarjeta distintos vistos en movimientos_raw (raw_data.cardholder),
+    para poblar el mapeo cardholder → persona en la UI sin tipearlos a mano.
+    """
+    require_auth(request)
+    from scrapers_db import list_cardholders as _list_cardholders
+    return {"cardholders": _list_cardholders()}
 
 
 @router.post("/config/usuarios/apply")

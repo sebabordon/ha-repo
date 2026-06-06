@@ -22,6 +22,12 @@ _DEFAULT_CONFIG: dict = {
         "mercadopago": "Titular",
     },
     "reglas_usuario": [],
+    # Mapeo titular de tarjeta → persona. Las claves son el texto exacto del
+    # cardholder tal como aparece en el resumen (ej. "SEBASTIAN ALB - 11005").
+    # Se resuelve al importar movimientos del scraper, ANTES del default por
+    # fuente, para que tarjetas con varios titulares (ej. AMEX adicionales)
+    # asignen la persona correcta. Editable en Config → Usuarios.
+    "cardholder_usuario": {},
     "pwa_shortcuts": [],
     # Ciclo de cobro (período contable ≠ mes calendario). Inactivo por defecto:
     # cuando está apagado, todos los agregados usan el mes calendario como siempre.
@@ -94,6 +100,8 @@ def read_user_config() -> dict:
                 data["fuente_usuario"] = dict(_DEFAULT_CONFIG["fuente_usuario"])
             if "reglas_usuario" not in data:
                 data["reglas_usuario"] = []
+            if "cardholder_usuario" not in data:
+                data["cardholder_usuario"] = {}
             if "pwa_shortcuts" not in data:
                 data["pwa_shortcuts"] = []
             return data

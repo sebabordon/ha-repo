@@ -309,8 +309,16 @@ class AmexScraper(BaseScraper):
                     By.CSS_SELECTOR, "tr.tableStandardText.pagebreak"
                 )
                 _l(f"[{nombre}] Fallback: {len(rows)} filas en div#txnsSection")
-                # Cardholder: primer titular del selector (o vacío si "Todas")
-                default_ch = next(iter(cardholder_map.values()), "")
+                # En el período abierto las filas NO vienen separadas por titular.
+                # Solo es seguro asignar un cardholder si hay UN único titular;
+                # con varios, atribuir todo al primero sería incorrecto, así que
+                # se deja vacío y el import resuelve por el default de la fuente.
+                default_ch = (
+                    next(iter(cardholder_map.values())) if len(cardholder_map) == 1 else ""
+                )
+                if not default_ch and len(cardholder_map) > 1:
+                    _l(f"[{nombre}] Fallback: {len(cardholder_map)} titulares — "
+                       f"sin separación por titular, cardholder queda vacío")
                 parsed_ok = 0
                 for row in rows:
                     mov = self._parse_row(row, tarjeta, default_ch)

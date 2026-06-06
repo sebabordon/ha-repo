@@ -884,27 +884,46 @@ def importar_a_gastos(
         if not raw:
             return None
 
-        # Extraer usuario del raw_data si el scraper lo guardó (1ra prioridad)
+        # ── Resolución de usuario ──────────────────────────────────────────
+        # Prioridad: 1) usuario explícito en raw_data → 2) mapeo titular de
+        # tarjeta (raw_data.cardholder → persona) → 3) default por fuente.
         usuario = None
+        rd: dict = {}
         if raw["raw_data"]:
             try:
-                rd = json.loads(raw["raw_data"])
-                u = (rd.get("usuario") or "").strip()
-                if u:
-                    usuario = u
+                rd = json.loads(raw["raw_data"]) or {}
             except Exception:
-                pass
-        # Fallback: si el scraper no setea `usuario`, usar el default de
-        # user_config.fuente_usuario[fuente] (configurable en la UI:
-        # Config → Usuarios).  Esto garantiza que TODOS los gastos importados
-        # por un scraper tengan un usuario asignado (no NULL).
+                rd = {}
+
+        # 1ra prioridad: usuario explícito que el scraper haya guardado.
+        u = (rd.get("usuario") or "").strip()
+        if u:
+            usuario = u
+
+        # Config de usuarios (compartida por las prioridades 2 y 3).
+        ucfg: dict = {}
         if usuario is None:
             try:
                 from user_config import read_user_config
                 ucfg = read_user_config()
-                usuario = (ucfg.get("fuente_usuario", {}) or {}).get(raw["fuente"]) or None
             except Exception:
-                pass
+                ucfg = {}
+
+        # 2da prioridad: mapeo titular de tarjeta → persona (Config → Usuarios).
+        # Permite que tarjetas con varios titulares (ej. AMEX adicionales)
+        # asignen la persona correcta según el cardholder del movimiento.
+        if usuario is None:
+            ch = (rd.get("cardholder") or "").strip()
+            if ch:
+                mapped = (ucfg.get("cardholder_usuario", {}) or {}).get(ch)
+                if mapped and str(mapped).strip():
+                    usuario = str(mapped).strip()
+
+        # 3ra prioridad: default de user_config.fuente_usuario[fuente]. Esto
+        # garantiza que TODOS los gastos importados por un scraper tengan un
+        # usuario asignado (no NULL).
+        if usuario is None:
+            usuario = (ucfg.get("fuente_usuario", {}) or {}).get(raw["fuente"]) or None
 
         cur = conn.execute(
             """INSERT INTO gastos
@@ -929,3 +948,25 @@ def importar_a_gastos(
             (new_id, raw_id),
         )
     return new_id
+
+
+def list_cardholders() -> list[str]:
+    """
+    Titulares de tarjeta distintos (raw_data.cardholder) presentes en
+    movimientos_raw, ordenados alfabéticamente. Sirve para poblar el mapeo
+    cardholder → persona en la UI (Config → Usuarios) sin tipearlos a mano.
+    """
+    seen: set[str] = set()
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT raw_data FROM movimientos_raw "
+            "WHERE raw_data LIKE '%cardholder%'"
+        ).fetchall()
+    for r in rows:
+        try:
+            ch = (json.loads(r["raw_data"] or "{}").get("cardholder") or "").strip()
+        except Exception:
+            ch = ""
+        if ch:
+            seen.add(ch)
+    return sorted(seen)
