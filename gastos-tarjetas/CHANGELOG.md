@@ -1,3 +1,7 @@
+## 0.8.19
+
+- **Fix log tab** (`static/app.js`): corregido `ReferenceError: Can't find variable: apiFetch` — las funciones `loadLogs`, `loadLogSources` y `clearLogs` usaban `apiFetch()` que no existe; reemplazado por `fetch(\`${BASE}/api/...\`)` como el resto de la app.
+
 ## 0.8.18
 
 - **Log unificado** (`app_log.py`, `routes/logs.py`, `main.py`, `scraper_scheduler.py`, `db.py`): todos los eventos de la app ahora se guardan en la tabla `app_log` de cada usuario (ring buffer de 2000 entradas en `gastos.db`). Un nuevo `DBLogHandler` se adjunta al root logger en el startup para capturar todo `logger.info/warning/error` de los módulos Python. Los runs de scrapers también escriben su log detallado (incluyendo el desglose de saldo por movimiento) al finalizar cada ejecución, vía `write_scraper_run_log`. Nueva pestaña **Config → Log** en la UI con tabla de logs, filtros por origen y nivel, autorefresh cada 30 segundos y botón para borrar. Resuelve el problema fundamental de que los `logger.info()` de los módulos Python eran invisibles en el log del add-on (solo uvicorn loggueaba).
