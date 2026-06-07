@@ -3321,16 +3321,16 @@ function renderSaldos(cuentas) {
       <div style="display:flex;flex-direction:column;gap:.2rem">
         <div style="display:flex;gap:.3rem;align-items:center">
           <span style="font-size:.72rem;color:#999;width:26px">ARS</span>
-          <input type="text" id="saldo-input-ars-${c.fuente}" value="${_fmtNum2(sArs)}" style="width:80px"
+          <input type="text" inputmode="decimal" id="saldo-input-ars-${c.fuente}" value="${_fmtNum2(sArs)}" style="width:80px"
                  onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')">
         </div>
         <div style="display:flex;gap:.3rem;align-items:center">
           <span style="font-size:.72rem;color:#999;width:26px">USD</span>
-          <input type="text" id="saldo-input-usd-${c.fuente}" value="${_fmtNum2(sUsd)}" style="width:80px"
+          <input type="text" inputmode="decimal" id="saldo-input-usd-${c.fuente}" value="${_fmtNum2(sUsd)}" style="width:80px"
                  onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')">
         </div>
       </div>` : `
-      <input type="text" id="saldo-input-${c.fuente}" value="${_fmtNum2(isUsd ? sUsd : sArs)}"
+      <input type="text" inputmode="decimal" id="saldo-input-${c.fuente}" value="${_fmtNum2(isUsd ? sUsd : sArs)}"
              onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')" style="width:90px">`;
 
     return `
@@ -3654,7 +3654,7 @@ function renderPresupuesto() {
           return `<tr${r._indent ? " class=\"presup-child-row\"" : ""}>
             <td ${nameCss}>${prefix}${escHtml(r.categoria)}</td>
             <td>
-              <input type="text" class="presup-input" data-cat="${escHtml(r.categoria)}"
+              <input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
                      value="${_fmtNum2(budget)}"
                      onfocus="this.select()"
                      onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />
@@ -3846,7 +3846,7 @@ function renderPresupuestoUsuario() {
           return `<tr>
             <td>${escHtml(r.usuario)}</td>
             <td>
-              <input type="text" class="presup-u-input" data-usr="${escHtml(r.usuario)}"
+              <input type="text" inputmode="decimal" class="presup-u-input" data-usr="${escHtml(r.usuario)}"
                      value="${_fmtNum2(budget)}"
                      onfocus="this.select()"
                      onchange="updatePresupUItem('${escHtml(r.usuario)}',this.value)" />
@@ -4140,10 +4140,10 @@ function _renderCuentaCard(c) {
     editSaldoRow = `
     <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none;padding:0 1rem .75rem;flex-wrap:wrap">
       <label style="font-size:.8rem;align-self:center">ARS</label>
-      <input id="ce-inp-ars-${c.fuente}" type="text" value="${_fmtNum2(c.saldo||0)}" style="width:110px"
+      <input id="ce-inp-ars-${c.fuente}" type="text" inputmode="decimal" value="${_fmtNum2(c.saldo||0)}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <label style="font-size:.8rem;align-self:center">USD</label>
-      <input id="ce-inp-usd-${c.fuente}" type="text" value="${_fmtNum2(c.saldo_usd||0)}" style="width:110px"
+      <input id="ce-inp-usd-${c.fuente}" type="text" inputmode="decimal" value="${_fmtNum2(c.saldo_usd||0)}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
       <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">Cancelar</button>
@@ -4152,7 +4152,7 @@ function _renderCuentaCard(c) {
     const curVal = isUsd ? (c.saldo_usd||0) : (c.saldo||0);
     editSaldoRow = `
     <div class="saldo-edit-row" id="ce-edit-${c.fuente}" style="display:none;padding:0 1rem .75rem">
-      <input id="ce-inp-${c.fuente}" type="text" value="${_fmtNum2(curVal)}" style="width:110px"
+      <input id="ce-inp-${c.fuente}" type="text" inputmode="decimal" value="${_fmtNum2(curVal)}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
       <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">Cancelar</button>

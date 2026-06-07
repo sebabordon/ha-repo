@@ -1,3 +1,8 @@
+## 0.8.9
+
+- **Usabilidad en iOS — fin del zoom automático al tocar campos** (`static/style.css`): Safari/iOS hace zoom-in (y no vuelve) cuando se enfoca un input con `font-size < 16px`, lo que rompía la navegación en iPhone porque casi todos los controles estaban en `.85rem`. Se agregó una media query `@media (pointer: coarse)` que fuerza `font-size:16px` en `input`/`select`/`textarea` en dispositivos táctiles (con `!important` para ganarle a los estilos inline que genera `app.js`; se excluyen checkbox/radio/color/range/file que no disparan el zoom).
+- **Teclado numérico en campos de monto** (`static/app.js`): los inputs de saldo (`saldo-input-*`, `ce-inp-*`) y de presupuesto (`presup-input`, `presup-u-input`) son `type="text"` porque usan formato con separadores (`1.234,56`), así que no podían ser `type="number"`. Se les agregó `inputmode="decimal"` para que en móvil abran el teclado numérico en vez del alfabético.
+
 ## 0.8.8
 
 - **Backup completo (.zip) y restore desde la UI** (`routes/config_route.py`, `static/index.html`, `static/app.js`): la sub-pestaña **Config → Datos** ahora ofrece un backup completo, no solo la DB suelta.

@@ -1456,6 +1456,20 @@ tbody tr:hover { background: #fafbff; }
   .scraper-fields { grid-template-columns: 1fr; }
 }
 
+/* ── iOS: evitar zoom automático al enfocar campos ───────────────────────────── */
+/* Safari/iOS hace zoom-in (y no vuelve) cuando un input enfocado tiene
+   font-size < 16px. En táctil forzamos 16px en todos los controles de texto.
+   !important porque muchos inputs se generan con font-size inline en app.js.
+   Se excluyen checkbox/radio/color/range/file: no disparan el zoom y el
+   tamaño de fuente sí afectaría su layout. */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]):not([type=file]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* ── Scrapers config ──────────────────────────────────────────────────────────*/
 .scraper-card {
   border: 1px solid #ddd;
