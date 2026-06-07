@@ -1,3 +1,7 @@
+## 0.8.14
+
+- **Galicia: pagos al resumen no importaban** (`scrapers/galicia.py`): el BFF de Galicia no usa `transaction_date` ni `date` para los pagos, sino campos como `payment_date`, `posting_date`, `operation_date`, `processing_date`, `value_date` o `submission_date`. `_parse_payment` ahora prueba todos esos nombres en orden. También se agregó un log de los campos disponibles cuando el pago se saltea por falta de fecha, para facilitar futuros diagnósticos.
+
 ## 0.8.13
 
 - **Home más compacta: resumen colapsable + chips** (`static/index.html`, `static/app.js`, `static/style.css`): la zona superior (saldos + tarjetas), que antes ocupaba media pantalla en *todas* las tabs, se rediseñó en una sola UI más liviana.

@@ -957,6 +957,9 @@ class GaliciaScraper(BaseScraper):
             if mov:
                 result.append(mov)
                 log_fn(f"  pago: {mov.fecha}  {mov.descripcion[:50]}  {mov.monto:+.2f}")
+            else:
+                # Mostrar campos disponibles para diagnóstico
+                log_fn(f"  pago ignorado (sin fecha) — campos BFF: {list(p.keys())}")
 
         # Autorizaciones (pendientes de procesamiento)
         authorizations = block.get("authorizations") or []
@@ -1073,12 +1076,40 @@ class GaliciaScraper(BaseScraper):
     @staticmethod
     def _parse_payment(p: dict, fuente: str) -> Optional[MovimientoRaw]:
         """Parsea un pago al resumen (crédito)."""
-        fecha  = p.get("transaction_date") or p.get("date") or ""
+        # El BFF usa distintos nombres según la versión del endpoint
+        fecha = (
+            p.get("transaction_date")
+            or p.get("date")
+            or p.get("payment_date")
+            or p.get("posting_date")
+            or p.get("operation_date")
+            or p.get("processing_date")
+            or p.get("value_date")
+            or p.get("submission_date")
+            or ""
+        )
         if not fecha:
+            # Loguear el dict completo para facilitar diagnóstico si el campo
+            # tiene otro nombre en el BFF
+            logger.warning("[galicia] _parse_payment: sin fecha — campos: %s", list(p.keys()))
             return None
-        amount = float(p.get("amount") or p.get("final_amount") or 0)
-        moneda = (p.get("currency") or p.get("final_currency") or "ARS").upper()
-        desc   = (p.get("description") or "Pago Galicia").strip()
+        # Tomar solo los primeros 10 chars (YYYY-MM-DD) por si hay datetime completo
+        fecha = str(fecha)[:10]
+
+        amount = float(
+            p.get("amount")
+            or p.get("final_amount")
+            or p.get("transaction_amount")
+            or p.get("payment_amount")
+            or 0
+        )
+        moneda = (
+            p.get("currency")
+            or p.get("final_currency")
+            or p.get("transaction_currency")
+            or "ARS"
+        ).upper()
+        desc = (p.get("description") or p.get("concept") or "Pago Galicia").strip()
 
         # Pago = ingreso = monto negativo
         monto = -abs(amount)
