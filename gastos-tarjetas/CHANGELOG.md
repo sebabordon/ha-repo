@@ -1,3 +1,7 @@
+## 0.8.24
+
+- **Fix: barra de estado de iOS pisaba el navbar** (`static/index.html`): en la PWA agregada a la pantalla de inicio, el reloj/batería de iOS se superponían con "Gastos" y el email (la versión quedaba tapada). Se cambió `apple-mobile-web-app-status-bar-style` de `black-translucent` a `black`: así iOS reserva el espacio de la barra de estado en vez de dibujar el contenido por debajo, sin depender de que `env(safe-area-inset-top)` resuelva correctamente (estaba dando 0 en ese contexto). La barra negra combina con el navbar azul oscuro.
+
 ## 0.8.23
 
 - **Versión más legible en el navbar** (`static/style.css`): el número de versión junto a "Gastos" (`.app-version`) pasó de `#94a3b8` a `#cbd5e1`, bastante más claro, para que se lea bien sobre el fondo oscuro del navbar (también en iOS PWA).
