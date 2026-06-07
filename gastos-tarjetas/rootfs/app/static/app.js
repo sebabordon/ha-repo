@@ -221,7 +221,8 @@ function toggleCfgSection(id) {
 }
 
 function _restoreCfgSections() {
-  ["pers-list", "pers-rules"].forEach(id => {
+  ["pers-list", "pers-rules",
+   "proc-categorizacion", "proc-importacion", "proc-periodo", "proc-vencimientos"].forEach(id => {
     if (localStorage.getItem(`cfg-section-${id}`) !== "1") return;
     const body  = document.getElementById(`cfg-body-${id}`);
     const arrow = document.getElementById(`cfg-arr-${id}`);
@@ -2096,8 +2097,9 @@ document.getElementById("filter-tipo").addEventListener("change", function() { t
 document.getElementById("chk-excluir-especiales").addEventListener("change", loadGastos);
 document.getElementById("chk-excluir-especiales-graf").addEventListener("change", loadCharts);
 document.getElementById("btn-load").addEventListener("click", loadGastos);
+// Export vive en Config → Datos: baja SIEMPRE todos los gastos (sin filtros).
 document.getElementById("btn-export").addEventListener("click", () =>
-  window.open(`${BASE}/api/gastos/export?${_gastosParams()}`, "_blank"));
+  window.open(`${BASE}/api/gastos/export`, "_blank"));
 
 // Mobile sort bar (the thead is hidden in card mode, so sorting lives here)
 document.getElementById("gastos-sort-sel")?.addEventListener("change", function () {
@@ -3687,7 +3689,9 @@ function renderPresupuesto() {
                 <span class="presup-pct">${pct}%</span>
               ` : "—"}
             </td>
-            <td>
+            <td style="white-space:nowrap">
+              ${r.gastado ? `<button class="btn btn-sm presup-jump-btn" title="Ver gastos de esta categoría en la tab Gastos"
+                      data-presup-jump="${escHtml(r.categoria)}">↗</button>` : ""}
               <button class="btn btn-sm btn-danger"
                       onclick="removePresupItem('${escHtml(r.categoria)}')">✕</button>
             </td>
@@ -3713,6 +3717,37 @@ function renderPresupuesto() {
       </tfoot>
     </table>
     </div>`;
+
+  // Wire "↗ ver gastos" buttons (data-attr + .onclick: robusto ante apóstrofos en la categoría)
+  wrap.querySelectorAll("[data-presup-jump]").forEach(b => {
+    b.onclick = () => jumpToGastosFromPresup(b.dataset.presupJump);
+  });
+}
+
+// Salta a la tab Gastos filtrando por una categoría del presupuesto + el mes seleccionado.
+function jumpToGastosFromPresup(categoria) {
+  const presupMes = document.getElementById("presup-mes")?.value || "";
+  const mesSel    = document.getElementById("filter-mes");
+  if (mesSel && presupMes && [...mesSel.options].some(o => o.value === presupMes)) {
+    mesSel.value = presupMes;
+  }
+  // Filtrar por esta única categoría (sus descendientes se incluyen vía _catFilterParam)
+  _sinCat = false;
+  _selectedCats.clear();
+  _selectedCats.add(categoria);
+
+  // Activar la tab principal Gastos
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tab-content").forEach(s => s.classList.remove("active"));
+  document.querySelector('.tab[data-tab="gastos"]')?.classList.add("active");
+  document.getElementById("tab-gastos")?.classList.add("active");
+
+  // Reflejar la selección en los chips y recargar
+  renderCatChips(_catList);
+  _syncChipUI();
+  _renderSubChips();
+  loadGastos();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function updatePresupItem(categoria, rawValue) {

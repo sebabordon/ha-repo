@@ -263,7 +263,6 @@
               <option value="ingreso">Ingreso</option>
             </select>
             <button id="btn-load" class="btn">↺</button>
-            <button id="btn-export" class="btn">Exportar Excel</button>
             <label class="chk-especiales" title="Ocultar categorías especiales (Transferencias, Pagos de tarjeta, etc.)">
               <input type="checkbox" id="chk-excluir-especiales" checked> Sin especiales
             </label>
@@ -499,15 +498,11 @@
       <!-- Config sub-tab bar -->
       <div class="cfg-tabs">
         <button class="cfg-tab active" data-cfgtab="categorias">Categorías</button>
-        <button class="cfg-tab" data-cfgtab="categorizacion">Categorización</button>
         <button class="cfg-tab" data-cfgtab="personas">Personas</button>
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
+        <button class="cfg-tab" data-cfgtab="procesamiento">Procesamiento</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
-        <button class="cfg-tab" data-cfgtab="importacion">Importación</button>
-        <button class="cfg-tab" data-cfgtab="periodo">Período</button>
-        <button class="cfg-tab" data-cfgtab="vencimientos">Vencimientos</button>
         <button class="cfg-tab" data-cfgtab="datos">Datos</button>
-        <button class="cfg-tab cfg-tab-danger" data-cfgtab="borrar">⚠ Borrar</button>
       </div>
 
       <!-- ── Sub-tab: Categorías ────────────────────────────────────── -->
@@ -528,47 +523,6 @@
           Marcá <strong>Especial</strong> para excluirlas de gráficos y totales (reemplaza el flag en rules.yaml).
         </p>
         <div id="categorias-managed-list"></div>
-      </div>
-
-      <!-- ── Sub-tab: Categorización ────────────────────────────────── -->
-      <div id="cfg-tab-categorizacion" class="cfg-tab-content">
-        <h2>Categorización por IA</h2>
-        <p class="hint" style="margin-bottom:1rem">
-          Cuando ninguna regla matchea, el gasto se categoriza con IA (Groq /
-          Gemini / Claude, según las API keys configuradas). Acá editás el prompt
-          y la lista de categorías sugeridas que se le envían.
-        </p>
-        <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
-          <div style="flex:1;min-width:260px">
-            <label class="field-label">Categorías sugeridas <span class="hint">(una por línea)</span></label>
-            <textarea id="cat-categorias" rows="10" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
-          </div>
-          <div style="flex:1;min-width:260px">
-            <label class="field-label">Prompt <span class="hint">placeholders: <code>{categorias}</code> <code>{desc}</code></span></label>
-            <textarea id="cat-prompt" rows="10" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
-            <p class="hint" id="cat-prompt-default" style="margin-top:.3rem"></p>
-          </div>
-        </div>
-        <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
-          <button class="btn btn-primary" onclick="saveCategorizacionConfig()">Guardar</button>
-          <button class="btn" onclick="loadCategorizacionConfig()">Restablecer</button>
-          <span id="cat-save-msg" style="color:#16a34a;font-size:.85em"></span>
-        </div>
-
-        <h2 style="margin-top:2rem">Categorías especiales fijas</h2>
-        <p class="hint" style="margin-bottom:1rem">
-          Categorías siempre excluidas de totales y gráficos (transferencias,
-          pagos de tarjeta). Se suman a las que marques "Especial" en la pestaña
-          Categorías. Una por línea.
-        </p>
-        <div style="max-width:420px">
-          <textarea id="especiales-builtin" rows="5" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
-        </div>
-        <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
-          <button class="btn btn-primary" onclick="saveEspecialesConfig()">Guardar</button>
-          <button class="btn" onclick="loadEspecialesConfig()">Restablecer</button>
-          <span id="especiales-save-msg" style="color:#16a34a;font-size:.85em"></span>
-        </div>
       </div>
 
       <!-- ── Sub-tab: Personas ─────────────────────────────────────── -->
@@ -868,7 +822,68 @@
       </div>
 
       <!-- ── Sub-tab: Importación ──────────────────────────────────── -->
-      <div id="cfg-tab-importacion" class="cfg-tab-content">
+      <!-- ── Sub-tab: Procesamiento (categorización · importación · período · vencimientos) ── -->
+      <div id="cfg-tab-procesamiento" class="cfg-tab-content">
+        <p class="rules-hint" style="margin-bottom:1rem">
+          Cómo se interpretan y procesan los movimientos al importar: categorización
+          automática, fusión de duplicados, ciclo de cobro y confirmación de pagos.
+          Tocá cada sección para expandirla.
+        </p>
+
+        <!-- Sección: Categorización -->
+        <div class="cfg-section">
+          <div class="cfg-section-header" onclick="toggleCfgSection('proc-categorizacion')">
+            <span class="cfg-arr" id="cfg-arr-proc-categorizacion">+</span>
+            Categorización
+          </div>
+          <div class="cfg-section-body" id="cfg-body-proc-categorizacion" style="display:none">
+        <h2>Categorización por IA</h2>
+        <p class="hint" style="margin-bottom:1rem">
+          Cuando ninguna regla matchea, el gasto se categoriza con IA (Groq /
+          Gemini / Claude, según las API keys configuradas). Acá editás el prompt
+          y la lista de categorías sugeridas que se le envían.
+        </p>
+        <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px">
+            <label class="field-label">Categorías sugeridas <span class="hint">(una por línea)</span></label>
+            <textarea id="cat-categorias" rows="10" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <label class="field-label">Prompt <span class="hint">placeholders: <code>{categorias}</code> <code>{desc}</code></span></label>
+            <textarea id="cat-prompt" rows="10" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
+            <p class="hint" id="cat-prompt-default" style="margin-top:.3rem"></p>
+          </div>
+        </div>
+        <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-primary" onclick="saveCategorizacionConfig()">Guardar</button>
+          <button class="btn" onclick="loadCategorizacionConfig()">Restablecer</button>
+          <span id="cat-save-msg" style="color:#16a34a;font-size:.85em"></span>
+        </div>
+
+        <h2 style="margin-top:2rem">Categorías especiales fijas</h2>
+        <p class="hint" style="margin-bottom:1rem">
+          Categorías siempre excluidas de totales y gráficos (transferencias,
+          pagos de tarjeta). Se suman a las que marques "Especial" en la pestaña
+          Categorías. Una por línea.
+        </p>
+        <div style="max-width:420px">
+          <textarea id="especiales-builtin" rows="5" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
+        </div>
+        <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
+          <button class="btn btn-primary" onclick="saveEspecialesConfig()">Guardar</button>
+          <button class="btn" onclick="loadEspecialesConfig()">Restablecer</button>
+          <span id="especiales-save-msg" style="color:#16a34a;font-size:.85em"></span>
+        </div>
+          </div>
+        </div>
+
+        <!-- Sección: Importación -->
+        <div class="cfg-section">
+          <div class="cfg-section-header" onclick="toggleCfgSection('proc-importacion')">
+            <span class="cfg-arr" id="cfg-arr-proc-importacion">+</span>
+            Importación — dedup
+          </div>
+          <div class="cfg-section-body" id="cfg-body-proc-importacion" style="display:none">
         <h2>Importación — Reglas de dedup</h2>
         <p class="hint" style="margin-bottom:1rem">
           Cuando un movimiento llega con una descripción genérica/temporal y ya existe
@@ -894,10 +909,16 @@
           <button class="btn" onclick="loadDedupConfig()">Restablecer</button>
           <span id="dedup-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
-      </div>
+          </div>
+        </div>
 
-      <!-- ── Sub-tab: Período / Ciclo de cobro ─────────────────────── -->
-      <div id="cfg-tab-periodo" class="cfg-tab-content">
+        <!-- Sección: Período -->
+        <div class="cfg-section">
+          <div class="cfg-section-header" onclick="toggleCfgSection('proc-periodo')">
+            <span class="cfg-arr" id="cfg-arr-proc-periodo">+</span>
+            Período — ciclo de cobro
+          </div>
+          <div class="cfg-section-body" id="cfg-body-proc-periodo" style="display:none">
         <h2>Período — Ciclo de cobro</h2>
         <p class="hint" style="margin-bottom:1rem">
           Si cobrás cerca de fin de mes, tu "mes contable" no coincide con el mes
@@ -943,10 +964,16 @@
           <button class="btn" onclick="loadPeriodoConfig()">Restablecer</button>
           <span id="periodo-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
-      </div>
+          </div>
+        </div>
 
-      <!-- ── Sub-tab: Vencimientos / Confirmación de pago ──────────── -->
-      <div id="cfg-tab-vencimientos" class="cfg-tab-content">
+        <!-- Sección: Vencimientos -->
+        <div class="cfg-section">
+          <div class="cfg-section-header" onclick="toggleCfgSection('proc-vencimientos')">
+            <span class="cfg-arr" id="cfg-arr-proc-vencimientos">+</span>
+            Vencimientos — confirmación de pago
+          </div>
+          <div class="cfg-section-body" id="cfg-body-proc-vencimientos" style="display:none">
         <h2>Vencimientos — Confirmación de pago</h2>
         <p class="hint" style="margin-bottom:1rem">
           El widget de vencimientos marca un <strong>tilde verde</strong> cuando el
@@ -1009,11 +1036,22 @@
           <button class="btn" onclick="loadVencMatchConfig()">Restablecer</button>
           <span id="venc-match-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
-      </div>
+          </div>
+        </div>
+      </div><!-- /cfg-tab-procesamiento -->
 
-      <!-- ── Sub-tab: Borrar datos ─────────────────────────────────── -->
-      <!-- ── Sub-tab: Datos (backup / restore) ──────────────────────── -->
+      <!-- ── Sub-tab: Datos (export · backup · borrar) ──────────────── -->
       <div id="cfg-tab-datos" class="cfg-tab-content">
+        <h2>Exportar a Excel</h2>
+        <p class="rules-hint">
+          Descargá <strong>todos los gastos</strong> en una planilla
+          <code>.xlsx</code> (fecha, descripción, monto, moneda, fuente,
+          categoría y persona).
+        </p>
+        <div style="margin-bottom:1.75rem">
+          <button id="btn-export" class="btn btn-primary">⬇ Exportar gastos (.xlsx)</button>
+        </div>
+
         <h2>Copia de seguridad</h2>
         <p class="rules-hint">
           El <strong>backup completo</strong> baja un único <code>.zip</code> con
@@ -1041,9 +1079,12 @@
         <label class="btn btn-danger" style="cursor:pointer">⬆ Restaurar desde backup (.zip)
           <input type="file" id="inp-import-backup" accept=".zip" style="display:none">
         </label>
-      </div>
 
-      <div id="cfg-tab-borrar" class="cfg-tab-content">
+        <h2 style="margin-top:2rem">⚠ Borrar datos</h2>
+        <p class="rules-hint">
+          Eliminá movimientos por fuente o por importación individual. Útil para
+          reimportar un resumen sin perder el resto. Esta acción no se puede deshacer.
+        </p>
         <div class="danger-zone">
           <select id="delete-target" style="min-width:240px">
             <option value="" disabled selected>Seleccioná fuente o importación…</option>
