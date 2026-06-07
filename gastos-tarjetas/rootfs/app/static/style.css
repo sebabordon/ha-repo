@@ -1169,13 +1169,18 @@ tbody tr:hover { background: #fafbff; }
 .home-summary-toggle .hs-arrow { font-size: .65rem; }
 .home-summary-body { margin-top: .55rem; }
 
-/* ── Saldos como chips (uniformes: llenan la celda del grid) ─────────────────*/
+/* Ancho uniforme (columnas iguales) pero alto según contenido: la grilla no
+   estira las celdas, así los chips simples quedan compactos y solo los que
+   envuelven (ej. IOL multi-moneda) crecen, sin afectar a los demás. */
+.saldos-widget, .vencimientos-widget { align-items: start; }
+
+/* ── Saldos como chips (ancho uniforme, alto compacto) ───────────────────────*/
 .saldo-chip { display: flex; flex-direction: column; gap: .25rem; width: 100%; }
 .saldo-chip-btn {
   display: flex; flex-direction: column; align-items: flex-start; gap: .1rem;
   width: 100%; box-sizing: border-box; cursor: pointer; text-align: left;
   background: #fff; border: 1px solid #ddd; border-radius: 10px;
-  padding: .5rem .75rem; font: inherit; min-height: 3rem; justify-content: center;
+  padding: .4rem .75rem; font: inherit;
 }
 .saldo-chip-btn:hover { border-color: #bbb; background: #fafafa; }
 .saldo-chip-name {
@@ -1189,10 +1194,10 @@ tbody tr:hover { background: #fafbff; }
 /* ── Vencimientos como chips (tap para expandir a la card) ───────────────────*/
 .venc-chipwrap { display: block; width: 100%; }
 .venc-chip {
-  width: 100%; box-sizing: border-box; text-align: left; min-height: 3rem;
+  width: 100%; box-sizing: border-box; text-align: left;
   cursor: pointer; background: #fff; border: 1px solid #ddd;
   border-left: 4px solid #94a3b8; border-radius: 10px;
-  padding: .5rem .75rem; font: inherit; font-size: .9rem; font-weight: 600;
+  padding: .4rem .75rem; font: inherit; font-size: .9rem; font-weight: 600;
   color: #475569;
 }
 .venc-chip:hover { background: #fafafa; }

@@ -1,3 +1,7 @@
+## 0.8.29
+
+- **Chips de la home más bajos** (`static/style.css`): se sacó el `min-height:3rem` (y el centrado vertical) de los chips de saldos y vencimientos, y se bajó el padding, volviendo al alto compacto anterior. Además los grids ahora usan `align-items:start`: las celdas ya no se estiran a la más alta, así un chip que envuelve (ej. IOL multi-moneda) crece solo él sin agrandar a los demás. Se mantiene el ancho uniforme (columnas iguales). El formato de IOL (moneda y valor en dos renglones) se dejó tal cual a pedido.
+
 ## 0.8.28
 
 - **Widgets de la home: chips uniformes** (`static/app.js`, `static/style.css`): los chips de saldos y de vencimientos quedaban del ancho de su contenido (tamaños dispares). Ahora ambos widgets vuelven a `display:grid` con columnas iguales (`minmax(190px,1fr)`) y cada chip llena su celda (`width:100%`, `min-height:3rem`, esquinas redondeadas de 10px), así quedan parejos. La línea "Tarjetas al día" ocupa toda la fila.
