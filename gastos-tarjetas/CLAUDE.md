@@ -21,6 +21,30 @@ unless the changes are deployed separately.
    Every session that produces a commit must end with a push — GitHub must
    never lag behind the local repo.
 
+## Exhaustive analysis before proposing (MANDATORY)
+
+Before proposing a fix or adding diagnostic code, **read and understand the
+relevant code in full**. Do not jump to "add logging to find out" if the answer
+is already in the code.
+
+Concrete checklist when a bug is reported:
+
+1. **Read every line of the relevant function(s)** — not just the part that
+   seems related. A sign bug in `_parse_one` is visible by reading `_parse_one`;
+   there is no need for a diagnostic commit first.
+2. **Trace the data path end-to-end** before drawing conclusions: API response →
+   parser/scraper → `insert_movimientos_raw` → DB → UI. Each step can transform
+   the value.
+3. **Check for unconditional transforms** (`abs()`, sign flips, type casts) that
+   apply regardless of the condition being tested. These are a common source of
+   "the code looks right but the result is wrong" bugs.
+4. **Cross-check with similar code** — if AMEX and Galicia scrapers handle the
+   same concept (payments), read how they do it before writing new logic.
+
+Only add diagnostic logging when the cause genuinely cannot be determined from
+reading the code (e.g., unknown external API response shape). Never add a
+diagnostic commit as a substitute for code analysis.
+
 ## Implementation quality (MANDATORY)
 
 Before committing any feature, mentally trace the **full path** from the code
