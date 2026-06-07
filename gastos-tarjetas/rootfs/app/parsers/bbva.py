@@ -41,11 +41,10 @@ _INSTALL_RE = re.compile(r"\s+C\.(\d+)/(\d+)$")
 # text that sometimes bleeds into the amount columns (e.g. "ocnaB" = "Banco" mirrored).
 _AMOUNT_WORD_RE = re.compile(r"^-?[\d.,]+$")
 
-# Only skip actual payment rows; taxes, withholdings and credit returns are
-# intentionally included. Negative amounts (credits) come through as ingresos.
-# SALDO / TOTAL CONSUMOS rows have no date prefix so they are already excluded
-# by the _DATE_RE guard above.
-_SKIP_RE = re.compile(r"^SU PAGO\b", re.IGNORECASE)
+# "SU PAGO EN PESOS" / "SU PAGO EN DOLARES" se importan como ingresos (monto < 0)
+# para que puedan ser taggeados como "Pago de Tarjeta" y activar pago_confirmado.
+# SALDO / TOTAL CONSUMOS ya están excluidos por el guard _DATE_RE de arriba.
+_SKIP_RE = re.compile(r"(?!)")  # nunca hace match — placeholder por si hace falta en el futuro
 
 # Column boundaries
 _ARS_X0 = 440.0

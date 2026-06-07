@@ -1,3 +1,8 @@
+## 0.8.22
+
+- **pago_confirmado (tilde verde) ahora cubre pagos del propio scraper/PDF de la TC** (`db.py`): antes solo se ponía verde si había un vínculo `transfer_pairs` (banco↔TC emparejados). Ahora también se activa cuando existe un gasto con `categoria="Pago de Tarjeta"` y `fuente = fuente_de_la_TC` (es decir, el pago fue importado desde los propios movimientos de la tarjeta — scraper Galicia, scraper BBVA, o parser PDF). Diferencia con amarillo: amarillo acepta pagos de cualquier fuente; verde exige que sea la TC misma quien confirme el pago recibido.
+- **Parser BBVA MC/Visa: importar "SU PAGO EN PESOS" y "SU PAGO EN DOLARES"** (`parsers/bbva.py`): estos registros eran skipeados por `_SKIP_RE`. Ahora se importan como ingresos (`monto < 0`). Taggeados como "Pago de Tarjeta" activan el tilde verde de pago confirmado.
+
 ## 0.8.21
 
 - **Diagnóstico vencimientos en Log unificado** (`db.py`): `list_vencimientos()` ahora loguea en `[venc]` la config de matching (días, tolerancia, categorías) y una línea por fuente con `sum_ars`, `total_ars`, `pago_confirmado` y `pago_probable`. Visible en Config → Log filtrando por origen `db`. Se dispara cada vez que se carga la pantalla principal.

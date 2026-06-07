@@ -909,15 +909,43 @@ def list_vencimientos() -> list[dict]:
                    COALESCE(ROUND(SUM(CASE WHEN g.moneda='ARS' AND UPPER(g.descripcion) LIKE '%5617%'
                                                AND CAST(g.monto AS REAL) > 0
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS rg5617_ars,
-                   -- pago_confirmado = 1: hay un emparejado explícito (transfer_pairs)
-                   -- bank→CC en la misma fuente, entre −90 y +10 días del vencimiento.
-                   -- Es el tilde verde (confirmado al 100%).
-                   CASE WHEN EXISTS (
-                       SELECT 1 FROM transfer_pairs tp
-                       JOIN gastos gp ON gp.id = tp.id_in
-                       WHERE gp.fuente = i.fuente
-                         AND gp.fecha >= date(i.fecha_venc, '-90 days')
-                         AND gp.fecha <= date(i.fecha_venc, '+10 days')
+                   -- pago_confirmado = 1: tilde VERDE. Dos casos:
+                   -- (a) vínculo explícito banco→TC (transfer_pairs): el egreso del banco
+                   --     y el crédito de la TC están emparejados en la misma fuente.
+                   -- (b) pago importado desde los propios movimientos de la TC (scraper o
+                   --     parser PDF de esa fuente): la TC misma registró el pago recibido
+                   --     y el gasto tiene fuente = i.fuente + categoría "Pago de Tarjeta"
+                   --     + monto y fecha compatibles con el vencimiento.
+                   -- Distinción con pago_probable (amarillo): probable acepta cualquier
+                   -- fuente (ej. pago desde BBVA cuenta); confirmado exige que el registro
+                   -- venga de la TC misma o de un par transfer_pairs explícito.
+                   CASE WHEN (
+                       EXISTS (
+                           SELECT 1 FROM transfer_pairs tp
+                           JOIN gastos gp ON gp.id = tp.id_in
+                           WHERE gp.fuente = i.fuente
+                             AND gp.fecha >= date(i.fecha_venc, '-90 days')
+                             AND gp.fecha <= date(i.fecha_venc, '+10 days')
+                       )
+                       OR (:match_activo = 1 AND EXISTS (
+                           SELECT 1 FROM gastos pa
+                           WHERE pa.categoria IN ({cat_ph})
+                             AND pa.fuente = i.fuente
+                             AND pa.moneda = 'ARS'
+                             AND CAST(pa.monto AS REAL) != 0
+                             AND pa.fecha >= date(i.fecha_venc, :dias_neg)
+                             AND pa.fecha <= date(i.fecha_venc, :dias_pos)
+                             AND (
+                                 ABS(ABS(CAST(pa.monto AS REAL)) - (
+                                     SELECT COALESCE(SUM(CASE WHEN ga.moneda='ARS'
+                                                                   AND UPPER(ga.descripcion) NOT LIKE '%5617%'
+                                                              THEN CAST(ga.monto AS REAL) ELSE 0 END), 0)
+                                       FROM gastos ga WHERE ga.import_id = i.id)
+                                     ) <= :tol_ars
+                                 OR (i.total_ars IS NOT NULL
+                                     AND ABS(ABS(CAST(pa.monto AS REAL)) - i.total_ars) <= :tol_ars)
+                             )
+                       ))
                    ) THEN 1 ELSE 0 END AS pago_confirmado,
                    -- pago_probable = 1: heurística sin emparejado. Es el badge amarillo
                    -- ("pago hecho pero no 100% validado"). Se enciende cuando:
