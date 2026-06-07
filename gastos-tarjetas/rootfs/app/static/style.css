@@ -1169,28 +1169,30 @@ tbody tr:hover { background: #fafbff; }
 .home-summary-toggle .hs-arrow { font-size: .65rem; }
 .home-summary-body { margin-top: .55rem; }
 
-/* ── Saldos como chips ───────────────────────────────────────────────────────*/
-.saldo-chip { display: inline-flex; flex-direction: column; gap: .25rem; }
+/* ── Saldos como chips (uniformes: llenan la celda del grid) ─────────────────*/
+.saldo-chip { display: flex; flex-direction: column; gap: .25rem; width: 100%; }
 .saldo-chip-btn {
-  display: inline-flex; align-items: baseline; gap: .45rem; cursor: pointer;
-  background: #fff; border: 1px solid #ddd; border-radius: 999px;
-  padding: .35rem .8rem; font: inherit;
+  display: flex; flex-direction: column; align-items: flex-start; gap: .1rem;
+  width: 100%; box-sizing: border-box; cursor: pointer; text-align: left;
+  background: #fff; border: 1px solid #ddd; border-radius: 10px;
+  padding: .5rem .75rem; font: inherit; min-height: 3rem; justify-content: center;
 }
 .saldo-chip-btn:hover { border-color: #bbb; background: #fafafa; }
 .saldo-chip-name {
   font-size: .7rem; font-weight: 600; color: #888;
   text-transform: uppercase; letter-spacing: .03em;
 }
-.saldo-chip-monto { font-size: .95rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.saldo-chip-monto { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .saldo-chip-monto .ars-val { color: var(--color-ars); }
 .saldo-chip-monto .usd-val { color: var(--color-usd); }
 
 /* ── Vencimientos como chips (tap para expandir a la card) ───────────────────*/
-.venc-chipwrap { display: inline-block; vertical-align: top; }
+.venc-chipwrap { display: block; width: 100%; }
 .venc-chip {
+  width: 100%; box-sizing: border-box; text-align: left; min-height: 3rem;
   cursor: pointer; background: #fff; border: 1px solid #ddd;
-  border-left: 4px solid #94a3b8; border-radius: 999px;
-  padding: .35rem .8rem; font: inherit; font-size: .85rem; font-weight: 600;
+  border-left: 4px solid #94a3b8; border-radius: 10px;
+  padding: .5rem .75rem; font: inherit; font-size: .9rem; font-weight: 600;
   color: #475569;
 }
 .venc-chip:hover { background: #fafafa; }
@@ -1199,8 +1201,11 @@ tbody tr:hover { background: #fafbff; }
 .venc-chip.ok      { border-left-color: var(--color-ars); }
 .venc-chip.vencido { border-left-color: #dc2626; color: #b91c1c; }
 .venc-chip.paid    { border-left-color: #22c55e; color: #9ca3af; font-weight: 500; }
-.venc-aldia { font-size: .85rem; color: #16a34a; font-weight: 600; align-self: center; padding: .35rem .5rem; }
-.venc-detail { margin-top: .45rem; max-width: 240px; }
+.venc-aldia {
+  grid-column: 1 / -1; display: flex; align-items: center;
+  font-size: .85rem; color: #16a34a; font-weight: 600; padding: .25rem .25rem;
+}
+.venc-detail { margin-top: .45rem; }
 
 /* ── Cuentas tab ─────────────────────────────────────────────────────────────*/
 

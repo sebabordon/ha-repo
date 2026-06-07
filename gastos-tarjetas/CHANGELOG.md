@@ -1,3 +1,8 @@
+## 0.8.28
+
+- **Widgets de la home: chips uniformes** (`static/app.js`, `static/style.css`): los chips de saldos y de vencimientos quedaban del ancho de su contenido (tamaños dispares). Ahora ambos widgets vuelven a `display:grid` con columnas iguales (`minmax(190px,1fr)`) y cada chip llena su celda (`width:100%`, `min-height:3rem`, esquinas redondeadas de 10px), así quedan parejos. La línea "Tarjetas al día" ocupa toda la fila.
+- **Vencimientos respetan el nombre custom de la cuenta** (`static/app.js`): el widget de tarjetas mostraba el label fijo de la fuente (`_FUENTE_LABELS`, ej. "BBVA Mastercard") en vez del nombre editado en Config → Cuentas. Se agregó `_cuentaNombre(fuente)` que toma `cuenta.nombre` de `/api/cuentas` (con fallback al label fijo). Como saldos y vencimientos se cargan en paralelo, `loadSaldos` ahora re-renderiza los vencimientos al terminar (cacheados en `_vencData`) para garantizar que los chips muestren el nombre correcto sin importar el orden de carga.
+
 ## 0.8.27
 
 - **Fix scraper BBVA tarjetas: signo de "SU PAGO EN PESOS/DOLARES"** (`scrapers/bbva_tarjetas.py`): el `else: abs(monto)` forzaba positivo cualquier transacción cuyo `transactionType.id` no estuviera en `_CREDITO_TYPES`, pisando el signo negativo que manda la API para los pagos. Ahora: si el monto ya viene negativo de la API, se respeta como crédito (`monto < 0`) sin importar el tx_type.

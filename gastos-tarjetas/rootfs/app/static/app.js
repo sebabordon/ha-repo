@@ -3333,6 +3333,9 @@ async function loadSaldos() {
   _cuentasData = _widgetCuentas;
   _populateFuenteSelects();
   renderSaldos(_widgetCuentas.filter(c => c.activa));
+  // Ya tenemos los nombres custom de las cuentas → re-render de vencimientos
+  // para que los chips muestren el nombre editado, no el label fijo de la fuente.
+  if (_vencData.length) renderVencimientos(_vencData);
 }
 
 function _saldoChipMonto(saldo, moneda) {
@@ -3344,8 +3347,7 @@ function _saldoChipMonto(saldo, moneda) {
 function renderSaldos(cuentas) {
   const widget = document.getElementById("saldos-widget");
   if (!cuentas.length) { widget.style.display = "none"; return; }
-  widget.style.display = "flex";
-  widget.style.flexWrap = "wrap";
+  widget.style.display = "grid";
   widget.innerHTML = cuentas.map(c => {
     const moneda  = c.moneda || "ARS";
     const isMulti = moneda === "MULTI";
@@ -3429,11 +3431,21 @@ const _FUENTE_LABELS = {
   mercadopago: "MercadoPago",
 };
 
+// Nombre custom de la cuenta (el que edita el usuario en Config → Cuentas).
+// Cae al label fijo de la fuente si todavía no se cargaron las cuentas.
+function _cuentaNombre(fuente) {
+  const c = _widgetCuentas.find(x => x.fuente === fuente);
+  return (c && c.nombre) || _FUENTE_LABELS[fuente] || fuente;
+}
+
+let _vencData = [];  // último payload de vencimientos (para re-render al cargar cuentas)
+
 async function loadVencimientos() {
   try {
     const res  = await fetch(`${BASE}/api/stats/vencimientos`);
     const data = await res.json();
-    renderVencimientos(data.vencimientos || []);
+    _vencData = data.vencimientos || [];
+    renderVencimientos(_vencData);
   } catch(e) {
     console.error("loadVencimientos error:", e);
   }
@@ -3461,8 +3473,7 @@ function renderVencimientos(items) {
   const _showRg    = getUiPref("venc_show_rg5617");
   const _showPdf   = getUiPref("venc_show_pdf_ref");
 
-  widget.style.display = "flex";
-  widget.style.flexWrap = "wrap";
+  widget.style.display = "grid";
 
   const pendientes = [];
   const pagadas    = [];
@@ -3495,7 +3506,7 @@ function renderVencimientos(items) {
       diasShort = `${dias}d`;
     }
 
-    const label  = _FUENTE_LABELS[v.fuente] || v.fuente;
+    const label  = _cuentaNombre(v.fuente);
 
     // Primary: always show computed sum of egresos from the gastos table.
     // Secondary: if the PDF total is available and differs from the computed sum
