@@ -299,6 +299,63 @@ def _not_generic_sql_cond(col: str = "descripcion",
     return sql, (*d, *(px + "%" for px in p))
 
 
+def _backfill_cardholder(conn, raw_id: int, cardholder: str, fuente: str) -> bool:
+    """
+    Completa el `cardholder` en raw_data de un movimiento ya existente que no lo
+    tenía, y propaga el usuario al gasto vinculado (si ya fue importado) cuando:
+      • hay un mapeo cardholder→persona configurado para ese titular, y
+      • el gasto todavía tiene el usuario por defecto de la fuente (o NULL),
+        para no pisar una asignación manual o por regla.
+    Devuelve True si actualizó algo. No pisa un cardholder ya seteado.
+    """
+    row = conn.execute(
+        "SELECT raw_data, gasto_id FROM movimientos_raw WHERE id=?", (raw_id,)
+    ).fetchone()
+    if not row:
+        return False
+    rd = {}
+    if row["raw_data"]:
+        try:
+            rd = json.loads(row["raw_data"]) or {}
+        except Exception:
+            rd = {}
+
+    changed = False
+    # Completar el cardholder en el raw si faltaba (no pisar uno ya seteado).
+    if not (rd.get("cardholder") or "").strip():
+        rd["cardholder"] = cardholder
+        conn.execute(
+            "UPDATE movimientos_raw SET raw_data=? WHERE id=?",
+            (json.dumps(rd), raw_id),
+        )
+        changed = True
+
+    # Propagar el usuario al gasto SIEMPRE que haya mapeo y el gasto siga con el
+    # default de la fuente (o NULL) — incluso si el cardholder del raw ya estaba.
+    # Esto permite que, si el usuario configura el mapeo DESPUÉS de que el raw ya
+    # tenía cardholder, una corrida posterior corrija el usuario del gasto.
+    gid = row["gasto_id"]
+    if gid:
+        try:
+            from user_config import read_user_config
+            ucfg   = read_user_config()
+            mapped = (ucfg.get("cardholder_usuario", {}) or {}).get(cardholder)
+            mapped = str(mapped).strip() if mapped else ""
+            if mapped:
+                src_default = (ucfg.get("fuente_usuario", {}) or {}).get(fuente)
+                g = conn.execute("SELECT usuario FROM gastos WHERE id=?", (gid,)).fetchone()
+                if g is not None:
+                    cur_u = g["usuario"]
+                    if (cur_u is None or cur_u == src_default) and cur_u != mapped:
+                        conn.execute(
+                            "UPDATE gastos SET usuario=? WHERE id=?", (mapped, gid)
+                        )
+                        changed = True
+        except Exception:
+            pass
+    return changed
+
+
 def insert_movimientos_raw(
     movimientos: list[dict],
     _out_inserted: list[dict] | None = None,
@@ -587,16 +644,27 @@ def insert_movimientos_raw(
                     pass   # si falla el cálculo de fechas, dejar pasar (INSERT normal)
 
             if existing:
-                if _log_fn:
-                    # Extraer el id de existing (puede ser Row o dict)
+                # Extraer el id de existing (puede ser Row o dict)
+                try:
+                    existing_id = existing['id'] if existing else None
+                except (KeyError, TypeError):
+                    existing_id = None
+                # Backfill de titular: si el movimiento nuevo trae cardholder y el
+                # registro existente no lo tenía, completarlo (y propagar el
+                # usuario al gasto si todavía tiene el default de la fuente). Esto
+                # permite que movimientos importados sin titular (ej. AMEX en
+                # período abierto, antes de poder separarlos) se atribuyan al
+                # detectarse el titular en una corrida posterior.
+                new_ch = (raw.get("cardholder") or "").strip() if isinstance(raw, dict) else ""
+                if new_ch and existing_id is not None:
                     try:
-                        existing_id = existing['id'] if existing else '?'
-                    except (KeyError, TypeError):
-                        existing_id = '?'
-                    # Para debuggear: mostrar qué check encontró el existing
+                        _backfill_cardholder(conn, existing_id, new_ch, fuente)
+                    except Exception:
+                        pass
+                if _log_fn:
                     check_name = existing_check_name or "unknown"
                     _log_fn(
-                        f"  [dedup-skip] {fecha} {moneda} {monto:>14} — {desc!r:.60} (existing_id={existing_id} via {check_name})"
+                        f"  [dedup-skip] {fecha} {moneda} {monto:>14} — {desc!r:.60} (existing_id={existing_id if existing_id is not None else '?'} via {check_name})"
                     )
                 continue   # ya estaba — skipear
 

@@ -1,6 +1,6 @@
 name: "Gastos"
 description: "Parsea y categoriza gastos de AMEX, Mastercard, Visa y MercadoLibre Argentina"
-version: "0.8.5"
+version: "0.8.6"
 slug: "gastos_tarjetas"
 url: "https://github.com/sebabordon/ha-repo/tree/main/gastos-tarjetas"
 stage: stable
