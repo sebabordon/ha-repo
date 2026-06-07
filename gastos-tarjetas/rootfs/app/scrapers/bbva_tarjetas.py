@@ -412,6 +412,14 @@ class BbvaTarjetasScraper(BbvaScraper):
 
         movimientos = []
         for item in items:
+            # Log tx_type para cada transacción (diagnóstico de signo)
+            concept  = (item.get("concept") or "").strip()[:40]
+            tx_raw   = (item.get("transactionType") or {})
+            tx_id    = str(tx_raw.get("id") or "").upper()
+            tx_desc  = str(tx_raw.get("description") or "")
+            amount   = (item.get("localAmount") or {}).get("amount", "?")
+            log_fn(f"  [tx] {concept!r:42s} type={tx_id!r} ({tx_desc}) amount={amount}")
+
             mov = self._parse_one(item, fuente, usuario_default, nombre_tarjeta)
             if mov:
                 movimientos.append(mov)

@@ -1,3 +1,8 @@
+## 0.8.26
+
+- **Scraper BBVA tarjetas: log de transactionType** (`scrapers/bbva_tarjetas.py`): agrega línea `[tx]` al log por cada transacción, mostrando `concept`, `transactionType.id`, `transactionType.description` y `amount` tal como los devuelve la API. Permite diagnosticar el signo correcto para "SU PAGO EN PESOS/DOLARES" y otros tipos.
+- **Parser BBVA: comentario corregido** (`parsers/bbva.py`): el comentario sobre "SU PAGO" decía "monto < 0" cuando ahora se importa como positivo.
+
 ## 0.8.25
 
 - **Parser BBVA: "SU PAGO EN PESOS/DOLARES" como positivo** (`parsers/bbva.py`): el PDF de BBVA muestra estos registros con monto negativo (crédito sobre el saldo). Ahora se aplica `abs()` al monto para que queden positivos (`monto > 0` = egreso), consistente con la convención del sistema y con cómo aparece "Pago de Tarjeta" desde el lado del banco.

@@ -41,8 +41,9 @@ _INSTALL_RE = re.compile(r"\s+C\.(\d+)/(\d+)$")
 # text that sometimes bleeds into the amount columns (e.g. "ocnaB" = "Banco" mirrored).
 _AMOUNT_WORD_RE = re.compile(r"^-?[\d.,]+$")
 
-# "SU PAGO EN PESOS" / "SU PAGO EN DOLARES" se importan como ingresos (monto < 0)
-# para que puedan ser taggeados como "Pago de Tarjeta" y activar pago_confirmado.
+# "SU PAGO EN PESOS" / "SU PAGO EN DOLARES" se importan como egresos (monto > 0)
+# — el PDF los muestra negativos (crédito sobre la deuda), pero se aplica abs()
+# abajo para que queden positivos, consistente con monto > 0 = egreso.
 # SALDO / TOTAL CONSUMOS ya están excluidos por el guard _DATE_RE de arriba.
 _SKIP_RE = re.compile(r"(?!)")  # nunca hace match — placeholder por si hace falta en el futuro
 
