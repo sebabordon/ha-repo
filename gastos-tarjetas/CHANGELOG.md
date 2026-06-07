@@ -1,3 +1,9 @@
+## 0.8.10
+
+- **Usabilidad móvil — tap targets y safe-area del notch** (`static/index.html`, `static/style.css`): se agregó `viewport-fit=cover` al viewport y padding con `env(safe-area-inset-*)` en navbar, contenedor y botón "volver arriba", para que en PWA standalone el contenido no quede bajo el notch / barra de estado. En dispositivos táctiles (`@media (pointer: coarse)`) se ampliaron las áreas táctiles: botones de acción 40×38px, selects/inputs de fila ≥38px, tabs ≥42px. (Las columnas de Transferencias ya colapsaban a 1 columna en móvil.)
+- **Config → Categorías: filas como tarjetas en móvil** (`static/style.css`, `static/app.js`): la tabla de categorías era demasiado ancha en iPhone (scroll horizontal). En móvil ahora cada fila se apila como tarjeta: el nombre ocupa la primera línea y los campos "Padre"/"Especial" bajan etiquetados (`data-lbl` + `::before`). El select de categoría padre pasa a ancho completo.
+- **Gastos: lista más angosta en móvil** (`static/index.html`, `static/style.css`, `static/app.js`): las columnas Fuente y Persona se ocultan en móvil y su info se muestra como meta-línea (badge de fuente + persona) debajo de la descripción, que ahora puede usar todo el ancho. El monto se agranda y se pone en negrita para destacarlo.
+
 ## 0.8.9
 
 - **Usabilidad en iOS — fin del zoom automático al tocar campos** (`static/style.css`): Safari/iOS hace zoom-in (y no vuelve) cuando se enfoca un input con `font-size < 16px`, lo que rompía la navegación en iPhone porque casi todos los controles estaban en `.85rem`. Se agregó una media query `@media (pointer: coarse)` que fuerza `font-size:16px` en `input`/`select`/`textarea` en dispositivos táctiles (con `!important` para ganarle a los estilos inline que genera `app.js`; se excluyen checkbox/radio/color/range/file que no disparan el zoom).

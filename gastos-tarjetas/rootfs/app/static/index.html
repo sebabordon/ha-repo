@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Gastos</title>
   <link rel="stylesheet" href="/static/style.css" />
   <!-- Favicon & PWA -->
@@ -291,8 +291,8 @@
                 <th class="th-sort" onclick="sortGastos('descripcion')">Descripción<span class="sort-ind" id="gsort-descripcion"></span></th>
                 <th class="th-sort" onclick="sortGastos('monto')">Monto<span class="sort-ind" id="gsort-monto"></span></th>
                 <th class="col-moneda">Mon.</th>
-                <th>Fuente</th>
-                <th class="th-sort" onclick="sortGastos('usuario')">Persona<span class="sort-ind" id="gsort-usuario"></span></th>
+                <th class="col-fuente">Fuente</th>
+                <th class="th-sort col-persona" onclick="sortGastos('usuario')">Persona<span class="sort-ind" id="gsort-usuario"></span></th>
                 <th class="th-sort" onclick="sortGastos('categoria')">Categoría<span class="sort-ind" id="gsort-categoria"></span></th>
                 <th></th>
               </tr>

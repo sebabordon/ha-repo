@@ -1757,11 +1757,12 @@ function _renderGastos() {
       <td><input class="fecha-input" data-id="${g.id}" type="date" value="${g.fecha}"></td>
       <td class="desc-cell" data-id="${g.id}" data-original="${escHtml(g.descripcion)}" data-edited="${escHtml(g.descripcion_editada||"")}">
         <span class="desc-display${g.descripcion_editada?" desc-overridden":""}" title="${g.descripcion_editada?"Original: "+escHtml(g.descripcion):"Click para editar descripción"}">${escHtml(g.descripcion_editada||g.descripcion)}</span>${g.descripcion_editada?'<span class="desc-edit-mark" title="Descripción editada — click para modificar">✏</span>':''}
+        <span class="mov-mobile-meta"><span class="badge badge-${g.fuente}">${g.fuente.replace("_"," ")}</span>${u?`<span class="mov-mobile-user">${escHtml(u)}</span>`:""}</span>
       </td>
       <td class="monto ${g.moneda==="USD"?"usd":""} ${egreso?"egreso":"ingreso"}">${displayStr}</td>
       <td class="col-moneda">${g.moneda}</td>
-      <td><span class="badge badge-${g.fuente}">${g.fuente.replace("_"," ")}</span></td>
-      <td>
+      <td class="col-fuente"><span class="badge badge-${g.fuente}">${g.fuente.replace("_"," ")}</span></td>
+      <td class="col-persona">
         <select class="usuario-select" onchange="saveUsuario(${g.id},this)">
           <option value="" ${!u?"selected":""}>—</option>
           ${(_usuariosConfig.usuarios||["Titular","Adicional"]).map(usr=>`<option value="${escHtml(usr)}" ${u===usr?"selected":""}>${escHtml(usr)}</option>`).join("")}
@@ -6638,10 +6639,10 @@ function renderCategoriasManaged() {
 
     tableRows.push(`<tr${c._indent ? ' class="presup-child-row"' : ""}>
       <td style="${indentStyle}">${prefix}${nameCell}${!c._new ? kwBadge : ""}</td>
-      <td><select class="cat-parent-sel" data-i="${c._i}" style="width:100%;max-width:220px">
+      <td data-lbl="Padre"><select class="cat-parent-sel" data-i="${c._i}" style="width:100%;max-width:220px">
         <option value="">— Sin padre —</option>${opts}
       </select></td>
-      <td style="text-align:center"><input type="checkbox" class="cat-especial-chk" data-i="${c._i}"${c.especial ? " checked" : ""}></td>
+      <td data-lbl="Especial" style="text-align:center"><input type="checkbox" class="cat-especial-chk" data-i="${c._i}"${c.especial ? " checked" : ""}></td>
       <td style="white-space:nowrap">
         ${(!c._new && !c._indent) ? `<button class="btn btn-sm cat-addsub-btn" data-parent="${escHtml(c.nombre)}" title="Agregar subcategoría">+</button>` : ""}
         <button class="btn btn-sm btn-danger" data-del="${c._i}">✕</button>

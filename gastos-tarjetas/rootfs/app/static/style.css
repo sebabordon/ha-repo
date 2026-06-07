@@ -54,8 +54,12 @@ body {
 .navbar {
   background: var(--color-accent);
   color: #fff;
-  padding: 0 1.5rem;
-  height: 52px;
+  /* respetar el notch / barra de estado en PWA standalone (env()=0 sin notch) */
+  padding-top: env(safe-area-inset-top);
+  padding-left: max(1.5rem, env(safe-area-inset-left));
+  padding-right: max(1.5rem, env(safe-area-inset-right));
+  height: calc(52px + env(safe-area-inset-top));
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -278,7 +282,9 @@ body {
 
 /* ── Scroll-to-top floating button ─────────────────────────────────────────*/
 #btn-scroll-top {
-  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  position: fixed;
+  bottom: max(1.5rem, env(safe-area-inset-bottom));
+  right: max(1.5rem, env(safe-area-inset-right));
   width: 2.4rem; height: 2.4rem;
   border-radius: 50%;
   background: var(--color-accent); color: #fff;
@@ -425,6 +431,11 @@ tbody tr:hover { background: #fafbff; }
 .monto.egreso  { color: #dc2626; }          /* rojo — dinero que sale  */
 .monto.ingreso { color: #16a34a; }          /* verde — dinero que entra */
 .monto.usd     { font-style: italic; }      /* USD en itálica (el color viene de egreso/ingreso) */
+
+/* Meta de fuente/persona dentro de la descripción — solo visible en móvil
+   (en escritorio van en sus propias columnas) */
+.mov-mobile-meta { display: none; }
+.mov-mobile-user { color: #6b7280; font-size: .78rem; }
 
 .cat-input { border: 1px solid #ddd; border-radius: 4px; padding: .2rem .5rem; width: 130px; font-size: .85rem; }
 .cat-input.dirty { border-color: #f59e0b; }
@@ -1399,7 +1410,11 @@ tbody tr:hover { background: #fafbff; }
   .nav-right { gap: .6rem; }
   .toast  { top: 46px; }
 
-  .container { margin: .75rem auto; padding: 0 .5rem; }
+  .container {
+    margin: .75rem auto;
+    padding-left: max(.5rem, env(safe-area-inset-left));
+    padding-right: max(.5rem, env(safe-area-inset-right));
+  }
 
   .chart-card { padding: .75rem .75rem 1rem; margin-bottom: .9rem; }
   #monthly-chart { max-height: 190px; }
@@ -1425,6 +1440,15 @@ tbody tr:hover { background: #fafbff; }
 
   /* Hide less important columns on very small screens */
   .col-moneda, th.col-moneda { display: none; }
+  /* Gastos: fuente y persona pasan a una meta-línea bajo la descripción */
+  .col-fuente, .col-persona { display: none; }
+  #gastos-table .desc-cell { max-width: none; }
+  .mov-mobile-meta {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: .35rem; margin-top: .25rem;
+  }
+  /* Monto más protagonista en la lista de gastos */
+  #gastos-table td.monto { font-size: .95rem; font-weight: 600; }
 
   .cat-input { width: 100px; }
 
@@ -1447,6 +1471,30 @@ tbody tr:hover { background: #fafbff; }
   .presup-input { width: 90px; }
   .progress-bar-wrap { width: 60px; }
 
+  /* ── Config → Categorías: filas como tarjetas (la tabla era muy ancha) ── */
+  #categorias-managed-list thead { display: none; }
+  #categorias-managed-list .presup-table,
+  #categorias-managed-list tbody { display: block; width: 100%; }
+  #categorias-managed-list tbody tr {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: .35rem .6rem; padding: .5rem .25rem;
+    border-bottom: 1px solid #eee;
+  }
+  #categorias-managed-list tbody td {
+    display: flex; align-items: center; gap: .3rem;
+    width: auto; padding: 0; border: none;
+    white-space: normal; text-align: left;
+  }
+  /* Nombre ocupa toda la primera línea */
+  #categorias-managed-list tbody td:first-child { flex: 1 1 100%; }
+  /* Etiqueta los campos de config que perdieron su encabezado */
+  #categorias-managed-list tbody td[data-lbl]::before {
+    content: attr(data-lbl) ":"; color: #888; font-size: .8rem; flex-shrink: 0;
+  }
+  #categorias-managed-list .cat-parent-sel { max-width: 100% !important; flex: 1; }
+  /* La fila de keywords (colspan) ocupa el ancho completo */
+  #categorias-managed-list tbody td[colspan] { flex: 1 1 100%; }
+
   .cfg-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; padding: .45rem .6rem 0; }
   .cfg-tab  { white-space: nowrap; padding: .38rem .75rem; font-size: .8rem; }
   .cfg-tab-content { padding: .9rem .75rem; }
@@ -1468,6 +1516,12 @@ tbody tr:hover { background: #fafbff; }
   textarea {
     font-size: 16px !important;
   }
+
+  /* Áreas táctiles más cómodas (Apple recomienda ~44px) */
+  .btn.btn-action { min-width: 40px; min-height: 38px; }
+  .usuario-select, .cat-input, .fecha-input { min-height: 38px; }
+  .tab, .gtab, .cfg-tab { min-height: 42px; }
+  .cat-chip, .tag, .saldo-edit-btn { min-height: 32px; }
 }
 
 /* ── Scrapers config ──────────────────────────────────────────────────────────*/
