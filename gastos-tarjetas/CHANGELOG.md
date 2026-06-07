@@ -1,3 +1,7 @@
+## 0.8.16
+
+- **Saldo delta: desglose por movimiento con saldo corriente** (`scraper_scheduler.py`): cuando el auto-saldo está activo y hay movimientos nuevos, el log ahora muestra una línea por movimiento (ordenados cronológicamente) con el efecto sobre el saldo y el saldo acumulado resultante. Facilita identificar drifts cuando el saldo calculado no coincide con el real. Ejemplo: `2026-06-06  Merpago*knowhere  -$91.300,00  →  +$2.600.294,75`
+
 ## 0.8.15
 
 - **Widget vencimientos: detectar pago importado por el scraper de la misma tarjeta** (`db.py`): el `pago_probable` exigía `monto > 0`, asumiendo que el pago siempre viene de la cuenta bancaria (egreso). Pero el scraper de Galicia (y en general cualquier scraper de TC) importa el "Pago de tu tarjeta" con `monto < 0` (crédito en la TC). El fix: cambiar la condición a `monto != 0` y usar `ABS(monto)` en la comparación de importe, para que funcione en ambas direcciones.

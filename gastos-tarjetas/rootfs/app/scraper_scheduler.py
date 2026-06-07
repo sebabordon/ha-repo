@@ -74,6 +74,17 @@ def _apply_saldo_delta(
             f"delta={_fmt(delta)}  "
             f"saldo_nuevo={_fmt(saldo_nuevo)}"
         )
+        # Detalle por movimiento: saldo corriente después de cada uno
+        # Ordenar cronológicamente para que el saldo sea rastreable
+        # mov_delta = efecto sobre el saldo: egreso (monto>0) → negativo; ingreso (monto<0) → positivo
+        saldo_corriente = saldo_ant
+        for m in sorted(movs, key=lambda x: x.fecha):
+            mov_delta = -float(m.monto)
+            saldo_corriente = round(saldo_corriente + mov_delta, 2)
+            desc = (m.descripcion or "")[:45]
+            log_lines.append(
+                f"  {m.fecha}  {desc:<45}  {_fmt(mov_delta):>16}  →  {_fmt(saldo_corriente)}"
+            )
     else:
         log_lines.append(
             f"Delta saldo {fuente} ({moneda}): "
