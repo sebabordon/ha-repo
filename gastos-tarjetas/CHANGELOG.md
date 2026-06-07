@@ -1,3 +1,7 @@
+## 0.8.15
+
+- **Widget vencimientos: detectar pago importado por el scraper de la misma tarjeta** (`db.py`): el `pago_probable` exigía `monto > 0`, asumiendo que el pago siempre viene de la cuenta bancaria (egreso). Pero el scraper de Galicia (y en general cualquier scraper de TC) importa el "Pago de tu tarjeta" con `monto < 0` (crédito en la TC). El fix: cambiar la condición a `monto != 0` y usar `ABS(monto)` en la comparación de importe, para que funcione en ambas direcciones.
+
 ## 0.8.14
 
 - **Galicia: pagos al resumen no importaban** (`scrapers/galicia.py`): el BFF de Galicia no usa `transaction_date` ni `date` para los pagos, sino campos como `payment_date`, `posting_date`, `operation_date`, `processing_date`, `value_date` o `submission_date`. `_parse_payment` ahora prueba todos esos nombres en orden. También se agregó un log de los campos disponibles cuando el pago se saltea por falta de fecha, para facilitar futuros diagnósticos.

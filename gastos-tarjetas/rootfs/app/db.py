@@ -911,19 +911,20 @@ def list_vencimientos() -> list[dict]:
                    --   · si el resumen tiene saldo en USD, además hay un gasto
                    --     'Pago de Tarjeta' (USD, egreso) en la misma ventana cuyo monto
                    --     coincide (±tol_usd) con el saldo en dólares (net_usd).
-                   -- El pago vive en una cuenta bancaria (fuente distinta a la tarjeta),
-                   -- por eso el monto es la única forma de asociarlo al resumen.
+                   -- El pago puede venir de la cuenta bancaria (monto > 0, egreso del banco)
+                   -- o del scraper de la misma tarjeta (monto < 0, crédito en la CC).
+                   -- Por eso se acepta cualquier signo y se compara ABS(monto).
                    CASE WHEN :match_activo = 1
                          AND EXISTS (
                        SELECT 1 FROM gastos pa
                        WHERE pa.categoria IN ({cat_ph})
                          AND pa.moneda = 'ARS'
-                         AND CAST(pa.monto AS REAL) > 0
+                         AND CAST(pa.monto AS REAL) != 0
                          AND pa.fecha >= date(i.fecha_venc, :dias_neg)
                          AND pa.fecha <= date(i.fecha_venc, :dias_pos)
                          AND (
                              -- (a) coincide con el saldo computado sin RG 5617, o
-                             ABS(CAST(pa.monto AS REAL) - (
+                             ABS(ABS(CAST(pa.monto AS REAL)) - (
                                  SELECT COALESCE(SUM(CASE WHEN ga.moneda='ARS'
                                                                AND UPPER(ga.descripcion) NOT LIKE '%5617%'
                                                           THEN CAST(ga.monto AS REAL) ELSE 0 END), 0)
@@ -933,7 +934,7 @@ def list_vencimientos() -> list[dict]:
                              -- Necesario cuando el saldo computado difiere del total
                              -- real (resúmenes con discrepancia parser/PDF).
                              OR (i.total_ars IS NOT NULL
-                                 AND ABS(CAST(pa.monto AS REAL) - i.total_ars) <= :tol_ars)
+                                 AND ABS(ABS(CAST(pa.monto AS REAL)) - i.total_ars) <= :tol_ars)
                          )
                    ) AND (
                        -- Lado USD: sólo exigido cuando el resumen tiene saldo en dólares
@@ -946,17 +947,17 @@ def list_vencimientos() -> list[dict]:
                            SELECT 1 FROM gastos pu
                            WHERE pu.categoria IN ({cat_ph})
                              AND pu.moneda = 'USD'
-                             AND CAST(pu.monto AS REAL) > 0
+                             AND CAST(pu.monto AS REAL) != 0
                              AND pu.fecha >= date(i.fecha_venc, :dias_neg)
                              AND pu.fecha <= date(i.fecha_venc, :dias_pos)
                              AND (
-                                 ABS(CAST(pu.monto AS REAL) - (
+                                 ABS(ABS(CAST(pu.monto AS REAL)) - (
                                      SELECT COALESCE(SUM(CASE WHEN gu2.moneda='USD'
                                                               THEN CAST(gu2.monto AS REAL) ELSE 0 END), 0)
                                        FROM gastos gu2 WHERE gu2.import_id = i.id)
                                      ) <= :tol_usd
                                  OR (i.total_usd IS NOT NULL
-                                     AND ABS(CAST(pu.monto AS REAL) - i.total_usd) <= :tol_usd)
+                                     AND ABS(ABS(CAST(pu.monto AS REAL)) - i.total_usd) <= :tol_usd)
                              )
                        )
                    ) THEN 1 ELSE 0 END AS pago_probable
