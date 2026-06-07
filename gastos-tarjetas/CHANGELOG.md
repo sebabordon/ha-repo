@@ -1,3 +1,7 @@
+## 0.8.20
+
+- **Fix crítico: tabla app_log nunca se creaba** (`db.py`): `_run_migrations(conn)` intentaba crear la tabla `app_log` llamando a `init_app_log_table()`, que internamente abría una **segunda conexión** a la misma DB. Como `init_db()` ya tenía una transacción activa en la primera conexión, SQLite tiraba "database is locked" luego del timeout → la tabla nunca se creaba → todos los `write_log()` fallaban en silencio. Fix: crear la tabla directamente con el `conn` ya abierto que recibe `_run_migrations`, sin abrir una segunda conexión.
+
 ## 0.8.19
 
 - **Fix log tab** (`static/app.js`): corregido `ReferenceError: Can't find variable: apiFetch` — las funciones `loadLogs`, `loadLogSources` y `clearLogs` usaban `apiFetch()` que no existe; reemplazado por `fetch(\`${BASE}/api/...\`)` como el resto de la app.

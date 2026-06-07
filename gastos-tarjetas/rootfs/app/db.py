@@ -760,12 +760,22 @@ def _run_migrations(conn):
             )
         conn.execute("INSERT INTO db_migrations (name) VALUES ('fix_orphaned_movimientos_raw_v1')")
 
-    # app_log table (no migration guard — CREATE IF NOT EXISTS es idempotente)
-    try:
-        from app_log import init_app_log_table
-        init_app_log_table()
-    except Exception:
-        pass
+    # app_log table — creada directamente con el conn existente para evitar
+    # el conflicto de lock que ocurriría si abriéramos una segunda conexión
+    # mientras _run_migrations ya tiene una transacción activa.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS app_log (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts      TEXT    NOT NULL,
+            level   TEXT    NOT NULL DEFAULT 'INFO',
+            source  TEXT,
+            message TEXT    NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_app_log_id "
+        "ON app_log(id DESC)"
+    )
 
 
 @contextmanager
