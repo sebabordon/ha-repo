@@ -1717,11 +1717,16 @@ function _renderGastos() {
     });
   }
 
-  // Update sort indicators
+  // Update sort indicators (header on desktop)
   ["fecha","descripcion","monto","usuario","categoria"].forEach(c => {
     const el = document.getElementById(`gsort-${c}`);
     if (el) el.textContent = _gastosSort.col === c ? (_gastosSort.dir > 0 ? "▲" : "▼") : "";
   });
+  // Keep the mobile sort bar in sync with current sort state
+  const _gsSel = document.getElementById("gastos-sort-sel");
+  const _gsDir = document.getElementById("gastos-sort-dir");
+  if (_gsSel && _gastosSort.col) _gsSel.value = _gastosSort.col;
+  if (_gsDir) _gsDir.textContent = _gastosSort.dir > 0 ? "▲" : "▼";
 
   const tbody  = document.getElementById("gastos-body");
   tbody.innerHTML = "";
@@ -1754,10 +1759,9 @@ function _renderGastos() {
     const displayMonto = Math.abs(parseFloat(g.monto));
     const displayStr   = egreso ? _fmtNum2(displayMonto) : `+${_fmtNum2(displayMonto)}`;
     tr.innerHTML = `
-      <td><input class="fecha-input" data-id="${g.id}" type="date" value="${g.fecha}"></td>
+      <td class="col-fecha"><input class="fecha-input" data-id="${g.id}" type="date" value="${g.fecha}"></td>
       <td class="desc-cell" data-id="${g.id}" data-original="${escHtml(g.descripcion)}" data-edited="${escHtml(g.descripcion_editada||"")}">
         <span class="desc-display${g.descripcion_editada?" desc-overridden":""}" title="${g.descripcion_editada?"Original: "+escHtml(g.descripcion):"Click para editar descripción"}">${escHtml(g.descripcion_editada||g.descripcion)}</span>${g.descripcion_editada?'<span class="desc-edit-mark" title="Descripción editada — click para modificar">✏</span>':''}
-        <span class="mov-mobile-meta"><span class="badge badge-${g.fuente}">${g.fuente.replace("_"," ")}</span>${u?`<span class="mov-mobile-user">${escHtml(u)}</span>`:""}</span>
       </td>
       <td class="monto ${g.moneda==="USD"?"usd":""} ${egreso?"egreso":"ingreso"}">${displayStr}</td>
       <td class="col-moneda">${g.moneda}</td>
@@ -1768,12 +1772,13 @@ function _renderGastos() {
           ${(_usuariosConfig.usuarios||["Titular","Adicional"]).map(usr=>`<option value="${escHtml(usr)}" ${u===usr?"selected":""}>${escHtml(usr)}</option>`).join("")}
         </select>
       </td>
-      <td>
+      <td class="col-cat">
         <input class="cat-input" data-id="${g.id}" value="${escHtml(g.categoria||"")}"
           title="${g.categoria_fuente?"Fuente: "+g.categoria_fuente:""}"
+          placeholder="Categoría"
           autocomplete="off" spellcheck="false" />
       </td>
-      <td style="white-space:nowrap">
+      <td class="col-act" style="white-space:nowrap">
         <button class="btn btn-sm btn-action" onclick="saveCategoria(${g.id},this)">✓</button>
         ${g.tipo==="manual"?`<button class="btn btn-sm btn-action btn-danger" title="Eliminar movimiento manual" onclick="deleteGasto(${g.id})">✕</button>`:`<button class="btn btn-sm btn-action" style="visibility:hidden">✕</button>`}
       </td>`;
@@ -2093,6 +2098,18 @@ document.getElementById("chk-excluir-especiales-graf").addEventListener("change"
 document.getElementById("btn-load").addEventListener("click", loadGastos);
 document.getElementById("btn-export").addEventListener("click", () =>
   window.open(`${BASE}/api/gastos/export?${_gastosParams()}`, "_blank"));
+
+// Mobile sort bar (the thead is hidden in card mode, so sorting lives here)
+document.getElementById("gastos-sort-sel")?.addEventListener("change", function () {
+  _gastosSort.col = this.value;
+  _gastosSort.dir = this.value === "monto" ? -1 : 1;   // amounts default to descending
+  _renderGastos();
+});
+document.getElementById("gastos-sort-dir")?.addEventListener("click", () => {
+  if (!_gastosSort.col) _gastosSort.col = document.getElementById("gastos-sort-sel").value;
+  _gastosSort.dir *= -1;
+  _renderGastos();
+});
 
 // Initial loadGastos() is triggered by _populateMonthFilter (called from loadMonthlyChart)
 // so it runs with the auto-selected month filter already set.

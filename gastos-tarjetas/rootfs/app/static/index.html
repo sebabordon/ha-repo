@@ -283,6 +283,19 @@
           </div>
         </div>
 
+        <!-- Barra de orden — solo visible en móvil (el thead se oculta en modo tarjeta) -->
+        <div class="gastos-sort-mobile" id="gastos-sort-mobile">
+          <span class="gastos-sort-lbl">Ordenar:</span>
+          <select id="gastos-sort-sel">
+            <option value="fecha">Fecha</option>
+            <option value="monto">Monto</option>
+            <option value="categoria">Categoría</option>
+            <option value="descripcion">Descripción</option>
+            <option value="usuario">Persona</option>
+          </select>
+          <button id="gastos-sort-dir" class="btn btn-sm" title="Invertir orden">▼</button>
+        </div>
+
         <div class="table-wrap">
           <table id="gastos-table">
             <thead>

@@ -1,3 +1,11 @@
+## 0.8.11
+
+- **Gastos: lista como tarjetas en móvil** (`static/index.html`, `static/style.css`, `static/app.js`): en pantallas ≤640px cada movimiento se muestra como una tarjeta apilada en vez de una tabla con scroll horizontal. Se mantiene un único DOM (la misma `<tr>/<td>`); en móvil el `<tr>` pasa a `display:flex` y cada celda se reordena con `order` (fecha + monto grande arriba, descripción a ancho completo, fuente + persona, y categoría + acciones). Como el orden del DOM no cambia, todos los handlers de edición (fecha, persona, categoría con su autocomplete flotante, descripción in-place, borrar) siguen funcionando sin tocar el JS de eventos. El escritorio queda idéntico (tabla normal).
+  - Se restauró el indicador de moneda (ARS/USD) en la tarjeta, que en móvil estaba oculto.
+  - Se agregó `placeholder="Categoría"` al input de categoría para que las celdas vacías sean claras.
+  - Se eliminó la meta-línea `mov-mobile-meta` introducida en 0.8.10 (ya no hace falta: fuente y persona son celdas propias dentro de la tarjeta), lo que además corrige que esa línea se borrara al editar la descripción.
+- **Barra de orden en móvil** (`static/index.html`, `static/style.css`, `static/app.js`): como en modo tarjeta se oculta el `<thead>` (donde vivía el ordenamiento por columna), se agregó una barra "Ordenar:" con un select (Fecha / Monto / Categoría / Descripción / Persona) y un botón para invertir la dirección, visible solo en móvil y sincronizada con el estado de orden (`_gastosSort`).
+
 ## 0.8.10
 
 - **Usabilidad móvil — tap targets y safe-area del notch** (`static/index.html`, `static/style.css`): se agregó `viewport-fit=cover` al viewport y padding con `env(safe-area-inset-*)` en navbar, contenedor y botón "volver arriba", para que en PWA standalone el contenido no quede bajo el notch / barra de estado. En dispositivos táctiles (`@media (pointer: coarse)`) se ampliaron las áreas táctiles: botones de acción 40×38px, selects/inputs de fila ≥38px, tabs ≥42px. (Las columnas de Transferencias ya colapsaban a 1 columna en móvil.)
