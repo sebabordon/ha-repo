@@ -7094,7 +7094,9 @@ async function loadLogs() {
   const tbody = document.getElementById("log-tbody");
   if (!tbody) return;
   try {
-    const r = await apiFetch(`/api/logs?${params}`);
+    const res = await fetch(`${BASE}/api/logs?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const r = await res.json();
     const entries = r.entries || [];
     if (!entries.length) {
       tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888">Sin entradas</td></tr>';
@@ -7118,7 +7120,9 @@ async function loadLogs() {
 
 async function loadLogSources() {
   try {
-    const r = await apiFetch("/api/logs/sources");
+    const res = await fetch(`${BASE}/api/logs/sources`);
+    if (!res.ok) return;
+    const r = await res.json();
     const sel = document.getElementById("log-filter-source");
     if (!sel) return;
     const current = sel.value;
@@ -7135,7 +7139,7 @@ async function loadLogSources() {
 
 async function clearLogs() {
   if (!confirm("¿Borrar todo el log unificado? Esta acción no se puede deshacer.")) return;
-  await apiFetch("/api/logs", { method: "DELETE" });
+  await fetch(`${BASE}/api/logs`, { method: "DELETE" });
   loadLogs();
 }
 
