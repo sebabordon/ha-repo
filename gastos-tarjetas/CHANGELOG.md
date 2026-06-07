@@ -1,3 +1,11 @@
+## 0.8.13
+
+- **Home más compacta: resumen colapsable + chips** (`static/index.html`, `static/app.js`, `static/style.css`): la zona superior (saldos + tarjetas), que antes ocupaba media pantalla en *todas* las tabs, se rediseñó en una sola UI más liviana.
+  - **Gráfico mes-a-mes movido a la tab Gráficos**: el `home-chart-card` salió del tope global y vive ahora dentro de Gráficos (junto a "Presupuesto vs real"). Se agregó un `_monthlyChart?.resize()` al activar la tab para evitar que Chart.js quede mal dimensionado al volver. La carga inicial no cambia: `loadMonthlyChart()` sigue corriendo al arranque (mantiene el poblado del filtro de meses y el primer `loadGastos`).
+  - **Resumen colapsable**: saldos + tarjetas quedan arriba (visibles en todas las tabs) envueltos en un contenedor con botón "Resumen ▾/▸" que pliega/despliega todo, recordando el estado en `localStorage` (`home-summary-collapsed`).
+  - **Saldos como chips**: cada cuenta es un chip `NOMBRE $X`; el tap abre el input de edición inline (se reusa `toggleSaldoEdit`/`saveSaldo`, mismos IDs).
+  - **Vencimientos como chips**: las pendientes se muestran prominentes (`💳 AMEX $X · 3d`, coloreadas por urgencia) y las **pagadas** (✓ confirmado o probable) colapsan a un chip tenue `✓ AMEX` al final. Si están todas pagadas, una sola línea "💳 Tarjetas al día". El **tap sobre el chip expande la card completa** (monto, RG 5617, PDF, próximos), donde sigue funcionando el doble-clic para ver el monto sin RG.
+
 ## 0.8.12
 
 - **Config: menos pestañas, mejor agrupadas** (`static/index.html`, `static/app.js`): la barra de Config pasó de 10 a 6 pestañas. Se creó la pestaña **Procesamiento** que junta Categorización + Importación (dedup) + Período + Vencimientos como **secciones colapsables** (mismo patrón de acordeón que Personas, con estado recordado en `localStorage` vía `_restoreCfgSections`). **Interfaz** quedó como anteúltima y **Datos** como última. La pestaña **Datos** ahora absorbe la antigua **⚠ Borrar** (como sección al pie) y suma el export a Excel. Orden final: Categorías · Personas · Cuentas · Procesamiento · Interfaz · Datos.

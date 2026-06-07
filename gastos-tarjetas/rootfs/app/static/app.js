@@ -176,7 +176,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.querySelectorAll(".tab-content").forEach(s => s.classList.remove("active"));
     tab.classList.add("active");
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
-    if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); }
+    if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); _monthlyChart?.resize(); }
     if (tab.dataset.tab === "cuotas")      { loadCuotas(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
     if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); loadPeriodoConfig(); loadVencMatchConfig(); loadCategorizacionConfig(); loadEspecialesConfig(); loadIconosConfig(); }
@@ -230,6 +230,23 @@ function _restoreCfgSections() {
     if (arrow) arrow.textContent  = "−";
   });
 }
+
+// ── Resumen home (saldos + tarjetas) colapsable ───────────────────────────────
+function _setHomeSummary(collapsed) {
+  const body = document.getElementById("home-summary-body");
+  const btn  = document.getElementById("home-summary-toggle");
+  if (!body || !btn) return;
+  body.style.display = collapsed ? "none" : "";
+  btn.setAttribute("aria-expanded", String(!collapsed));
+  const arr = btn.querySelector(".hs-arrow");
+  if (arr) arr.textContent = collapsed ? "▸" : "▾";
+}
+function toggleHomeSummary() {
+  const collapsed = document.getElementById("home-summary-body")?.style.display !== "none";
+  _setHomeSummary(collapsed);
+  localStorage.setItem("home-summary-collapsed", collapsed ? "1" : "0");
+}
+_setHomeSummary(localStorage.getItem("home-summary-collapsed") === "1");
 
 // ── UI settings (Interfaz tab) ────────────────────────────────────────────────
 // ── Dedup config (Config → Importación) ──────────────────────────────────────
@@ -3317,15 +3334,17 @@ async function loadSaldos() {
   renderSaldos(_widgetCuentas.filter(c => c.activa));
 }
 
-function _saldoMonto(saldo, moneda) {
+function _saldoChipMonto(saldo, moneda) {
   const cls = moneda === "USD" ? "usd-val" : "ars-val";
-  return `<div class="saldo-monto ${cls}">${_fmtSaldo(saldo)} ${moneda}</div>`;
+  const sym = moneda === "USD" ? "U$S" : "$";
+  return `<span class="${cls}">${sym} ${_fmtSaldo(saldo)}</span>`;
 }
 
 function renderSaldos(cuentas) {
   const widget = document.getElementById("saldos-widget");
   if (!cuentas.length) { widget.style.display = "none"; return; }
-  widget.style.display = "grid";   // grid (no flex): ver .saldos-widget en style.css
+  widget.style.display = "flex";
+  widget.style.flexWrap = "wrap";
   widget.innerHTML = cuentas.map(c => {
     const moneda  = c.moneda || "ARS";
     const isMulti = moneda === "MULTI";
@@ -3334,8 +3353,8 @@ function renderSaldos(cuentas) {
     const sUsd    = c.saldo_usd || 0;
 
     const montoHtml = isMulti
-      ? _saldoMonto(sArs, "ARS") + _saldoMonto(sUsd, "USD")
-      : isUsd ? _saldoMonto(sUsd, "USD") : _saldoMonto(sArs, "ARS");
+      ? `${_saldoChipMonto(sArs, "ARS")} · ${_saldoChipMonto(sUsd, "USD")}`
+      : isUsd ? _saldoChipMonto(sUsd, "USD") : _saldoChipMonto(sArs, "ARS");
 
     const editInputs = isMulti ? `
       <div style="display:flex;flex-direction:column;gap:.2rem">
@@ -3353,12 +3372,13 @@ function renderSaldos(cuentas) {
       <input type="text" inputmode="decimal" id="saldo-input-${c.fuente}" value="${_fmtNum2(isUsd ? sUsd : sArs)}"
              onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')" style="width:90px">`;
 
+    const fechaTitle = c.fecha_actualizacion ? `Actualizado ${c.fecha_actualizacion}` : "Sin datos";
     return `
-      <div class="saldo-card" id="saldo-card-${c.fuente}">
-        <button class="saldo-edit-btn" title="Editar saldo" onclick="toggleSaldoEdit('${c.fuente}')">✏</button>
-        <div class="saldo-nombre">${escHtml(c.nombre)}</div>
-        ${montoHtml}
-        <div class="saldo-fecha">${c.fecha_actualizacion ? `Actualizado ${c.fecha_actualizacion}` : "Sin datos"}</div>
+      <div class="saldo-chip" id="saldo-card-${c.fuente}">
+        <button class="saldo-chip-btn" onclick="toggleSaldoEdit('${c.fuente}')" title="${fechaTitle} — tap para editar">
+          <span class="saldo-chip-name">${escHtml(c.nombre)}</span>
+          <span class="saldo-chip-monto">${montoHtml}</span>
+        </button>
         <div class="saldo-edit-row" id="saldo-edit-${c.fuente}" style="display:none">
           ${editInputs}
           <button class="btn btn-sm btn-primary" onclick="saveSaldo('${c.fuente}')">✓</button>
@@ -3440,28 +3460,38 @@ function renderVencimientos(items) {
   const _showRg    = getUiPref("venc_show_rg5617");
   const _showPdf   = getUiPref("venc_show_pdf_ref");
 
-  widget.style.display = "grid";   // grid (no flex): ver .vencimientos-widget en style.css
-  widget.innerHTML = deduped.map(v => {
+  widget.style.display = "flex";
+  widget.style.flexWrap = "wrap";
+
+  const pendientes = [];
+  const pagadas    = [];
+
+  deduped.forEach(v => {
     const vencDate = new Date(v.fecha_venc + "T00:00:00");
     const diffMs   = vencDate - today;
     const dias     = Math.round(diffMs / 86400000);
 
-    let cls, diasTxt;
+    let cls, diasTxt, diasShort;
     if (dias < 0) {
       cls = "vencido";
       diasTxt = `Vencido hace ${-dias} día${-dias === 1 ? "" : "s"}`;
+      diasShort = "vencido";
     } else if (dias === 0) {
       cls = "urgente";
       diasTxt = "Vence hoy";
+      diasShort = "hoy";
     } else if (dias <= _tUrgente) {
       cls = "urgente";
       diasTxt = `Vence en ${dias} día${dias === 1 ? "" : "s"}`;
+      diasShort = `${dias}d`;
     } else if (dias <= _tPronto) {
       cls = "pronto";
       diasTxt = `En ${dias} días`;
+      diasShort = `${dias}d`;
     } else {
       cls = "ok";
       diasTxt = `En ${dias} días`;
+      diasShort = `${dias}d`;
     }
 
     const label  = _FUENTE_LABELS[v.fuente] || v.fuente;
@@ -3530,7 +3560,7 @@ function renderVencimientos(items) {
       pagoHtml = `<span class="venc-pago-probable" title="Pago probable — hay un Pago de Tarjeta por el mismo monto cerca del vencimiento, pero no está emparejado. Revisá.">✓</span>`;
     }
 
-    return `<div class="venc-card ${cls}">
+    const fullCard = `<div class="venc-card ${cls}">
       <div class="${fuenteCls}">${escHtml(label)}${pagoHtml}</div>
       <div class="venc-fecha">${fechaStr}</div>
       <div class="venc-dias">${diasTxt}</div>
@@ -3539,7 +3569,35 @@ function renderVencimientos(items) {
       ${pdfHtml}
       ${proxHtml}
     </div>`;
-  }).join("");
+
+    // Pagada (✓ verde/amarillo) → chip tenue al final; pendiente → chip prominente.
+    const pagada    = !!(v.pago_confirmado || v.pago_probable);
+    const chipMonto = arsSum > 0 ? `$ ${_fmtNum(arsSum)}`
+                    : usdSum > 0 ? `U$S ${_fmtNum2(usdSum)}` : "";
+    (pagada ? pagadas : pendientes).push({ fuente: v.fuente, label: escHtml(label), cls, diasShort, chipMonto, fullCard });
+  });
+
+  // Chip + detalle (la card completa) que se expande al tocar.
+  const chipHtml = (e, paid) => `
+    <div class="venc-chipwrap">
+      <button class="venc-chip ${paid ? "paid" : e.cls}" onclick="toggleVencDetail('${e.fuente}')"
+              title="Tap para ver el detalle">
+        ${paid ? `✓ ${e.label}`
+               : `💳 ${e.label}${e.chipMonto ? ` · ${e.chipMonto}` : ""}${e.diasShort ? ` · ${e.diasShort}` : ""}`}
+      </button>
+      <div class="venc-detail" id="venc-detail-${e.fuente}" style="display:none">${e.fullCard}</div>
+    </div>`;
+
+  let html = pendientes.map(e => chipHtml(e, false)).join("");
+  if (!pendientes.length && pagadas.length) html += `<span class="venc-aldia">💳 Tarjetas al día</span>`;
+  html += pagadas.map(e => chipHtml(e, true)).join("");
+  widget.innerHTML = html;
+}
+
+function toggleVencDetail(fuente) {
+  const d = document.getElementById(`venc-detail-${fuente}`);
+  if (!d) return;
+  d.style.display = d.style.display === "none" ? "" : "none";
 }
 
 loadVencimientos();

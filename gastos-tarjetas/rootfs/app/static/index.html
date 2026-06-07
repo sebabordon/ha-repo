@@ -31,20 +31,18 @@
 
   <main class="container">
 
-    <!-- Monthly overview chart (always visible) -->
-    <div class="chart-card" id="home-chart-card">
-      <div class="chart-title">
-        Movimientos ARS — mes a mes
-        <button class="chart-toggle-btn" id="home-chart-toggle" onclick="toggleChartMode()" title="Alternar tamaño del gráfico"></button>
+    <!-- Resumen home: saldos + tarjetas (colapsable, siempre arriba) -->
+    <div id="home-summary" class="home-summary">
+      <button id="home-summary-toggle" class="home-summary-toggle" onclick="toggleHomeSummary()" aria-expanded="true">
+        <span class="hs-arrow">▾</span> Resumen
+      </button>
+      <div id="home-summary-body" class="home-summary-body">
+        <!-- Account balances widget -->
+        <div id="saldos-widget" class="saldos-widget"></div>
+        <!-- Credit-card due dates widget -->
+        <div id="vencimientos-widget" class="vencimientos-widget" style="display:none"></div>
       </div>
-      <canvas id="monthly-chart"></canvas>
     </div>
-
-    <!-- Account balances widget -->
-    <div id="saldos-widget" class="saldos-widget"></div>
-
-    <!-- Credit-card due dates widget -->
-    <div id="vencimientos-widget" class="vencimientos-widget" style="display:none"></div>
 
     <!-- Tabs -->
     <div class="tabs">
@@ -77,6 +75,15 @@
         <div id="bud-chart-empty" style="display:none;text-align:center;padding:1.5rem 0;color:#aaa;font-size:.88rem">
           No hay presupuesto ni gastos registrados para este mes.
         </div>
+      </div>
+
+      <!-- Monthly overview chart -->
+      <div class="chart-card" id="home-chart-card">
+        <div class="chart-title">
+          Movimientos ARS — mes a mes
+          <button class="chart-toggle-btn" id="home-chart-toggle" onclick="toggleChartMode()" title="Alternar tamaño del gráfico"></button>
+        </div>
+        <canvas id="monthly-chart"></canvas>
       </div>
 
       <div class="chart-filters">

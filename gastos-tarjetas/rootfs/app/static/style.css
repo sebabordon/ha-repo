@@ -1156,6 +1156,52 @@ tbody tr:hover { background: #fafbff; }
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Resumen home colapsable (saldos + tarjetas) ─────────────────────────────*/
+.home-summary { margin-bottom: 1rem; }
+.home-summary-toggle {
+  background: none; border: none; cursor: pointer;
+  font-size: .72rem; font-weight: 600; color: #888;
+  text-transform: uppercase; letter-spacing: .04em;
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .2rem 0;
+}
+.home-summary-toggle:hover { color: #555; }
+.home-summary-toggle .hs-arrow { font-size: .65rem; }
+.home-summary-body { margin-top: .55rem; }
+
+/* ── Saldos como chips ───────────────────────────────────────────────────────*/
+.saldo-chip { display: inline-flex; flex-direction: column; gap: .25rem; }
+.saldo-chip-btn {
+  display: inline-flex; align-items: baseline; gap: .45rem; cursor: pointer;
+  background: #fff; border: 1px solid #ddd; border-radius: 999px;
+  padding: .35rem .8rem; font: inherit;
+}
+.saldo-chip-btn:hover { border-color: #bbb; background: #fafafa; }
+.saldo-chip-name {
+  font-size: .7rem; font-weight: 600; color: #888;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.saldo-chip-monto { font-size: .95rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.saldo-chip-monto .ars-val { color: var(--color-ars); }
+.saldo-chip-monto .usd-val { color: var(--color-usd); }
+
+/* ── Vencimientos como chips (tap para expandir a la card) ───────────────────*/
+.venc-chipwrap { display: inline-block; vertical-align: top; }
+.venc-chip {
+  cursor: pointer; background: #fff; border: 1px solid #ddd;
+  border-left: 4px solid #94a3b8; border-radius: 999px;
+  padding: .35rem .8rem; font: inherit; font-size: .85rem; font-weight: 600;
+  color: #475569;
+}
+.venc-chip:hover { background: #fafafa; }
+.venc-chip.urgente { border-left-color: #dc2626; color: #b91c1c; }
+.venc-chip.pronto  { border-left-color: #f59e0b; color: #b45309; }
+.venc-chip.ok      { border-left-color: var(--color-ars); }
+.venc-chip.vencido { border-left-color: #dc2626; color: #b91c1c; }
+.venc-chip.paid    { border-left-color: #22c55e; color: #9ca3af; font-weight: 500; }
+.venc-aldia { font-size: .85rem; color: #16a34a; font-weight: 600; align-self: center; padding: .35rem .5rem; }
+.venc-detail { margin-top: .45rem; max-width: 240px; }
+
 /* ── Cuentas tab ─────────────────────────────────────────────────────────────*/
 
 .cuenta-card {
