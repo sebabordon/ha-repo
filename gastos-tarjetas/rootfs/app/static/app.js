@@ -5261,7 +5261,8 @@ function openCreateCuentaModal() {
           ${typeOpts ? `<optgroup label="Crear nueva instancia">${typeOpts}</optgroup>` : ""}
         </select>
         <span class="field-hint">
-          Para BBVA el "producto" se asigna por moneda (ARS → Pesos, USD → Dolares).
+          Para BBVA e InvertirOnline el "producto" se asigna por moneda (ARS → Pesos, USD → Dolares):
+          podés linkear una cuenta USD a la misma instancia que ya tenés para separar pesos y dólares.
           Si elegís "Nueva instancia", la creo deshabilitada y luego completás credenciales en el panel inline de la cuenta.
         </span>
       </div>
@@ -5309,7 +5310,7 @@ async function submitCreateCuenta() {
       const sugg  = `${tdef?.nombre || banco} ${nombre}`.trim();
       const instNombre = prompt(`Nombre para la nueva instancia de ${tdef?.nombre || banco}:`, sugg);
       if (!instNombre) return;   // canceló → abortar todo
-      if (banco === "bbva") {
+      if (banco === "bbva" || banco === "invertironline") {
         productKey = (moneda || "ARS").toUpperCase();
       }
       try {
@@ -5333,7 +5334,7 @@ async function submitCreateCuenta() {
       // Instancia existente
       instanceId = parseInt(scrSel, 10);
       const inst = _getInstanceById(instanceId);
-      if (inst?.banco === "bbva") {
+      if (inst?.banco === "bbva" || inst?.banco === "invertironline") {
         productKey = (moneda || "ARS").toUpperCase();
       }
     }

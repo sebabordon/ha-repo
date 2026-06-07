@@ -6,6 +6,7 @@ from db import (
     create_cuenta_manual, create_cuenta_auto, delete_cuenta_manual,
     delete_cuenta_any, count_gastos_cuenta, update_cuenta_parser,
     get_movimientos_cuenta, insert_movimiento_manual, delete_movimiento_manual,
+    split_iol_multi_to_ars,
 )
 
 router = APIRouter()
@@ -53,7 +54,14 @@ async def post_cuenta(body: dict, request: Request):
                 raise HTTPException(404, f"Instancia {inst_id} no encontrada")
             if inst["banco"] == "bbva" and product_key.upper() not in ("ARS", "USD", "EUR"):
                 product_key = "ARS"
+            # IOL separa cuentas por moneda: el product_key ES la moneda.
+            if inst["banco"] == "invertironline":
+                product_key = moneda.upper()
         new = create_cuenta_auto(nombre, moneda, inst_id, product_key)
+        # Al crear la cuenta USD de IOL, migrar la cuenta MULTI preexistente a ARS
+        # pura (su saldo USD pasa a vivir en la cuenta nueva).
+        if inst_id is not None and inst and inst["banco"] == "invertironline" and moneda == "USD":
+            split_iol_multi_to_ars(inst_id)
         # Si linkeamos a una instancia, reload del scheduler para captar la nueva cuenta
         if inst_id is not None:
             try:

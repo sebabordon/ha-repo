@@ -210,13 +210,24 @@ class InvertirOnlineScraper(BaseScraper):
                 else:
                     _l(f"Portafolio no disponible: HTTP {resp_pf.status_code}")
 
+                # Resolver fuentes destino (split ARS/USD o MULTI legacy)
+                fuente_ars, fuente_usd = self._resolve_fuentes(config, _l)
+
                 # 3. Operaciones (opcional)
                 movimientos: list[MovimientoRaw] = []
                 if config.get("importar_operaciones"):
                     dias = int(config.get("dias") or _DIAS_DEFAULT)
-                    movimientos = await self._fetch_operaciones(client, hdrs, dias, _l)
+                    movimientos = await self._fetch_operaciones(
+                        client, hdrs, dias, _l, fuente_ars, fuente_usd
+                    )
 
-            saldos = {self.fuente: {"saldo_ars": saldo_ars, "saldo_usd": saldo_usd}}
+            if fuente_usd:
+                saldos = {
+                    fuente_ars: {"saldo_ars": saldo_ars},
+                    fuente_usd: {"saldo_usd": saldo_usd},
+                }
+            else:
+                saldos = {fuente_ars: {"saldo_ars": saldo_ars, "saldo_usd": saldo_usd}}
             self._persist_saldos(saldos)
 
             result = ScraperResult(
@@ -252,6 +263,36 @@ class InvertirOnlineScraper(BaseScraper):
                 self.fuente, estado="error", error_msg=err, last_log="\n".join(log)
             )
             return ScraperResult(fuente=self.fuente, error=err, log_lines=log)
+
+    # ── Resolución de fuentes (split ARS/USD) ──────────────────────────────────
+
+    def _resolve_fuentes(self, config: dict, log_fn) -> tuple[str, Optional[str]]:
+        """
+        Resuelve las fuentes destino para ARS y USD a partir de `__cuentas__`.
+
+        - Si hay una cuenta linkeada con product_key="USD" (distinta de la ARS),
+          modo SPLIT: el saldo y las operaciones en pesos van a una cuenta y los
+          de dólares a otra.
+        - Si no, modo MULTI (legacy): ambas monedas conviven en una sola cuenta
+          (`self.fuente`), que se renderiza como chip "ARS · USD".
+
+        El product_key lo asigna la UI/backend según la moneda de la cuenta
+        (ver routes/cuentas.py), igual que el split ARS/USD/EUR de BBVA.
+        """
+        product_to_fuente: dict[str, str] = {}
+        for c in config.get("__cuentas__") or []:
+            pk = (c.get("product_key") or "").upper()
+            if pk and c.get("fuente"):
+                product_to_fuente[pk] = c["fuente"]
+
+        fuente_ars = product_to_fuente.get("ARS") or self.fuente
+        fuente_usd = product_to_fuente.get("USD")
+        if fuente_usd and fuente_usd != fuente_ars:
+            log_fn(f"Modo split — ARS→{fuente_ars}  USD→{fuente_usd}")
+            return fuente_ars, fuente_usd
+
+        log_fn(f"Modo MULTI — ARS+USD→{fuente_ars}")
+        return fuente_ars, None
 
     # ── Estado de cuenta (saldos) ──────────────────────────────────────────────
 
@@ -340,6 +381,8 @@ class InvertirOnlineScraper(BaseScraper):
         headers: dict,
         dias: int,
         log_fn,
+        fuente_ars: str,
+        fuente_usd: Optional[str],
     ) -> list[MovimientoRaw]:
         today = datetime.now(_ART).date()
         desde = today - timedelta(days=dias - 1)
@@ -361,11 +404,16 @@ class InvertirOnlineScraper(BaseScraper):
             log_fn(f"Operaciones no disponibles: {exc}")
             return []
 
-        movimientos = [m for op in ops if (m := self._op_to_movimiento(op))]
+        movimientos = [
+            m for op in ops
+            if (m := self._op_to_movimiento(op, fuente_ars, fuente_usd))
+        ]
         log_fn(f"Operaciones importadas: {len(movimientos)}")
         return movimientos
 
-    def _op_to_movimiento(self, op: dict) -> Optional[MovimientoRaw]:
+    def _op_to_movimiento(
+        self, op: dict, fuente_ars: str, fuente_usd: Optional[str]
+    ) -> Optional[MovimientoRaw]:
         try:
             tipo   = (op.get("tipo") or "").strip()
             estado = (op.get("estado") or "").strip().lower()
@@ -381,6 +429,8 @@ class InvertirOnlineScraper(BaseScraper):
                 return None
 
             moneda = _to_moneda(op.get("moneda"))
+            # En modo split, las operaciones en dólares van a la cuenta USD.
+            fuente_dest = fuente_usd if (moneda == "USD" and fuente_usd) else fuente_ars
             tipo_l = tipo.lower()
             sign   = -1 if any(k in tipo_l for k in _SIGN_INGRESO) else +1
 
@@ -392,7 +442,7 @@ class InvertirOnlineScraper(BaseScraper):
                 parts.append(nombre_inst)
 
             return MovimientoRaw(
-                fuente      = self.fuente,
+                fuente      = fuente_dest,
                 fecha       = fecha_str,
                 descripcion = " — ".join(parts),
                 monto       = round(monto_raw * sign, 2),

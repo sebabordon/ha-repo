@@ -1,3 +1,11 @@
+## 0.8.30
+
+- **IOL: separar saldo en pesos y dólares en dos cuentas** (`scrapers/invertironline.py`, `routes/cuentas.py`, `db.py`, `static/app.js`): hasta ahora InvertirOnline volcaba ARS y USD en una sola cuenta `MULTI` (un chip "ARS · USD"). Ahora el scraper rutea por `product_key` igual que BBVA: lee `__cuentas__`, resuelve `fuente_ars`/`fuente_usd` y, si existe una cuenta linkeada con product_key="USD", entra en **modo split** (saldo y operaciones en dólares van a la cuenta USD; pesos a la ARS). Si no hay cuenta USD, mantiene el **modo MULTI** legacy intacto (compatibilidad hacia atrás).
+  - `_resolve_fuentes()` nuevo helper que decide split vs MULTI y loguea el mapeo.
+  - `_fetch_operaciones`/`_op_to_movimiento` ahora reciben `fuente_ars`/`fuente_usd` y asignan la fuente de cada operación según su moneda.
+  - Backend (`routes/cuentas.py`): al crear una cuenta auto linkeada a una instancia IOL, el `product_key` se fuerza a la moneda (ARS/USD), análogo a BBVA. Al crear la cuenta USD se invoca `split_iol_multi_to_ars()` que migra la cuenta MULTI preexistente a ARS pura (moneda='ARS', product_key='ARS', `saldo_usd=0`).
+  - UI (`static/app.js`): el modal "Crear nueva cuenta" ya asigna `product_key` por moneda también para InvertirOnline (antes solo BBVA), y el hint lo aclara. Flujo: crear cuenta "InvertirOnline USD" (moneda USD, tipo Scraper) y linkearla a la **misma instancia IOL** existente — no hace falta un segundo login ni un parser nuevo.
+
 ## 0.8.29
 
 - **Chips de la home más bajos** (`static/style.css`): se sacó el `min-height:3rem` (y el centrado vertical) de los chips de saldos y vencimientos, y se bajó el padding, volviendo al alto compacto anterior. Además los grids ahora usan `align-items:start`: las celdas ya no se estiran a la más alta, así un chip que envuelve (ej. IOL multi-moneda) crece solo él sin agrandar a los demás. Se mantiene el ancho uniforme (columnas iguales). El formato de IOL (moneda y valor en dos renglones) se dejó tal cual a pedido.

@@ -2037,6 +2037,24 @@ def create_cuenta_auto(nombre: str, moneda: str = "ARS",
     }
 
 
+def split_iol_multi_to_ars(instance_id: int) -> None:
+    """
+    Convierte la cuenta MULTI de una instancia IOL en una cuenta ARS pura.
+
+    Se invoca al crear la cuenta USD de InvertirOnline: la cuenta preexistente
+    (que mostraba ARS+USD en un solo chip) pasa a moneda='ARS' con
+    product_key='ARS', y se limpia su `saldo_usd` (ese saldo ahora vive en la
+    cuenta USD nueva y lo escribirá el próximo run del scraper).
+    """
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE cuentas "
+            "SET moneda='ARS', scraper_product_key='ARS', saldo_usd=0 "
+            "WHERE scraper_instance_id=? AND moneda='MULTI'",
+            (instance_id,),
+        )
+
+
 def delete_cuenta_manual(fuente: str) -> bool:
     with _conn() as conn:
         row = conn.execute("SELECT tipo FROM cuentas WHERE fuente=?", (fuente,)).fetchone()
