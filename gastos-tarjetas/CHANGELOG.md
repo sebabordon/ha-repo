@@ -1,3 +1,10 @@
+## 0.8.8
+
+- **Backup completo (.zip) y restore desde la UI** (`routes/config_route.py`, `static/index.html`, `static/app.js`): la sub-pestaña **Config → Datos** ahora ofrece un backup completo, no solo la DB suelta.
+  - `GET /api/config/export-backup` arma un `.zip` con `gastos.db` (snapshot consistente vía `VACUUM INTO`, sin credenciales de scrapers) + los archivos de config/reglas que viven fuera de la DB (`rules.yaml`, `match_rules.yaml`, `user_config.json`) + un `backup_manifest.json` informativo. El snapshot de la DB se factorizó en el helper `_snapshot_db_no_creds()`, reusado también por el export de solo-DB.
+  - `POST /api/config/import-backup` restaura ese `.zip`: valida que traiga un `gastos.db` con header SQLite e `integrity_check=ok` (read-only) **antes** de pisar nada, borra los `-wal`/`-shm` viejos para que no se apliquen sobre la base nueva, reemplaza la DB de forma atómica (`os.replace`), restaura los archivos de config por whitelist de basename (sin zip-slip) y corre `init_db()` para re-migrar si el backup viene de un esquema más viejo.
+  - UI: botones "Backup completo (.zip)" y "Solo base de datos (.db)", más "Restaurar desde backup (.zip)" con confirmación (`showConfirm`) por ser destructivo; tras restaurar recarga la página.
+
 ## 0.8.7
 
 - **FIX backfill: corregir titular incorrecto de corridas viejas** (`scrapers_db.py`): el backfill de 0.8.6 tenía un guard "no pisar un cardholder ya seteado", que impedía corregir los movimientos que corridas antiguas (≤0.8.1, cuando el fallback estampaba el primer titular del selector) habían marcado mal con un único titular (ej. todos como "ALBERTO ELISE"). Por eso en la UI aparecía un solo titular. Como el `cardholder` proviene del scrape y NO es editable por el usuario, ahora el backfill **sobrescribe** el titular almacenado cuando difiere del recién scrapeado. El caller solo invoca con titular no vacío, así que el fallback (cardholder vacío) nunca borra uno correcto. Tras correr el scraper con esta versión, los tres titulares aparecen en Config → Usuarios.

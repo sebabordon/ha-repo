@@ -5660,6 +5660,31 @@ document.getElementById("btn-export-db")?.addEventListener("click", () => {
   window.location.href = `${BASE}/api/config/export-db`;
 });
 
+document.getElementById("btn-export-backup")?.addEventListener("click", () => {
+  window.location.href = `${BASE}/api/config/export-backup`;
+});
+
+document.getElementById("inp-import-backup")?.addEventListener("change", e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  showConfirm(
+    "⚠️ Restaurar REEMPLAZA todos tus datos actuales por los del backup. No se puede deshacer.",
+    async () => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res  = await fetch(`${BASE}/api/config/import-backup`, {method: "POST", body: fd});
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast(`✓ Backup restaurado (${(data.restaurados || []).join(", ")}). Recargando…`, "ok", 2500);
+        setTimeout(() => window.location.reload(), 1800);
+      } else {
+        showToast(`❌ ${data.detail || "Error al restaurar"}`, "err", 0);
+      }
+    }
+  );
+});
+
 document.getElementById("inp-import-user-rules")?.addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file) return;

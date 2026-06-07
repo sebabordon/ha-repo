@@ -999,22 +999,35 @@
       </div>
 
       <!-- ── Sub-tab: Borrar datos ─────────────────────────────────── -->
-      <!-- ── Sub-tab: Datos (backup / export) ───────────────────────── -->
+      <!-- ── Sub-tab: Datos (backup / restore) ──────────────────────── -->
       <div id="cfg-tab-datos" class="cfg-tab-content">
         <h2>Copia de seguridad</h2>
         <p class="rules-hint">
-          Descargá un snapshot consistente de tu base de datos: gastos,
-          categorías, presupuestos, cuentas, importaciones, charts y reglas
-          guardadas en la DB. Se genera con un export íntegro
-          (<code>VACUUM INTO</code>), así que es seguro aunque haya
-          escrituras en curso.
+          El <strong>backup completo</strong> baja un único <code>.zip</code> con
+          tu base de datos (gastos, categorías, presupuestos, cuentas,
+          importaciones, charts) más las reglas y configuración que viven fuera
+          de la DB (<code>rules.yaml</code>, <code>match_rules.yaml</code>,
+          <code>user_config.json</code>). La DB se exporta con
+          <code>VACUUM INTO</code>: íntegra aunque haya escrituras en curso.
         </p>
         <p class="rules-hint">
           ⚠ Por seguridad, las <strong>credenciales de scrapers NO se
-          incluyen</strong> en el archivo: si lo restaurás, vas a tener que
-          reingresarlas.
+          incluyen</strong>: si restaurás, tenés que reingresarlas.
         </p>
-        <button id="btn-export-db" class="btn btn-primary">⬇ Exportar base de datos (.db)</button>
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center">
+          <button id="btn-export-backup" class="btn btn-primary">⬇ Backup completo (.zip)</button>
+          <button id="btn-export-db" class="btn btn-sm">⬇ Solo base de datos (.db)</button>
+        </div>
+
+        <h2 style="margin-top:2rem">Restaurar</h2>
+        <p class="rules-hint">
+          ⚠ Restaurar <strong>reemplaza todos tus datos actuales</strong>
+          (gastos, categorías, presupuestos, reglas, configuración) por los del
+          backup. Esta acción no se puede deshacer.
+        </p>
+        <label class="btn btn-danger" style="cursor:pointer">⬆ Restaurar desde backup (.zip)
+          <input type="file" id="inp-import-backup" accept=".zip" style="display:none">
+        </label>
       </div>
 
       <div id="cfg-tab-borrar" class="cfg-tab-content">
