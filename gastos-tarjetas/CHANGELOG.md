@@ -1,3 +1,7 @@
+## 0.8.4
+
+- **AMEX: revertida la separación por titular en período abierto** (`scrapers/amex.py`): la iteración del selector `#cardAccount` agregada en 0.8.3 no funciona y se quitó. Confirmado en vivo: en la vista "Últimos Movimientos" (período abierto), seleccionar cada titular deja las **mismas 17 filas** (`17 coinciden con baseline` para los tres → `0 asignados`). El selector solo togglea client-side las secciones `txnsCard*`, que en el período abierto **no existen**, así que filtrar no separa nada. La iteración costaba 3 page-loads por corrida sin beneficio. Se vuelve al fallback simple: con un único titular se asigna; con varios, `cardholder` queda vacío y el import resuelve por el default de la fuente. **La atribución por titular solo es posible desde resúmenes CERRADOS** (secciones `txnsCard0/1/2`), que el scraper ya maneja. Eliminados `_separar_por_titular()`, `_select_cardholder()` y `_mov_key()`.
+
 ## 0.8.3
 
 - **AMEX: separación por titular en el período abierto** (`scrapers/amex.py`): en la vista "Últimos Movimientos" (período abierto) la página no trae las secciones `txnsCard*` por titular, así que los movimientos venían mezclados y sin atribuir (en 0.8.2 quedaban con `cardholder` vacío). Ahora, cuando hay varios titulares, el scraper itera el selector `#cardAccount`: selecciona cada titular, lee la lista filtrada y asigna cada movimiento al titular bajo cuyo filtro aparece **de forma exclusiva**.
