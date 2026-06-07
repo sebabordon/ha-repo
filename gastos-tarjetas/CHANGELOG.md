@@ -1,3 +1,7 @@
+## 0.8.23
+
+- **Versión más legible en el navbar** (`static/style.css`): el número de versión junto a "Gastos" (`.app-version`) pasó de `#94a3b8` a `#cbd5e1`, bastante más claro, para que se lea bien sobre el fondo oscuro del navbar (también en iOS PWA).
+
 ## 0.8.22
 
 - **pago_confirmado (tilde verde) ahora cubre pagos del propio scraper/PDF de la TC** (`db.py`): antes solo se ponía verde si había un vínculo `transfer_pairs` (banco↔TC emparejados). Ahora también se activa cuando existe un gasto con `categoria="Pago de Tarjeta"` y `fuente = fuente_de_la_TC` (es decir, el pago fue importado desde los propios movimientos de la tarjeta — scraper Galicia, scraper BBVA, o parser PDF). Diferencia con amarillo: amarillo acepta pagos de cualquier fuente; verde exige que sea la TC misma quien confirme el pago recibido.
