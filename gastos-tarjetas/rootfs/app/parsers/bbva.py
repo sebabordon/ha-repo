@@ -226,6 +226,15 @@ class BBVAParser(BaseParser):
                     ars = parse_ar_amount("".join(w["text"] for w in ars_words))
                     usd = parse_ar_amount("".join(w["text"] for w in usd_words))
 
+                    # "SU PAGO EN PESOS/DOLARES": el PDF los muestra como negativos
+                    # (crédito sobre el saldo), pero en el sistema deben ser positivos
+                    # (egreso = pago de tarjeta) para ser consistentes con la convención
+                    # monto > 0 = egreso.  El pago_confirmado usa ABS() así que funciona
+                    # con cualquier signo, pero el display en la tab Gastos queda correcto.
+                    if re.match(r"^SU PAGO\b", description, re.IGNORECASE):
+                        if ars: ars = abs(ars)
+                        if usd: usd = abs(usd)
+
                     # Include both positive (charges) and negative (credits/refunds).
                     # upload.py normalises the sign for all CC sources at import time.
                     if usd:

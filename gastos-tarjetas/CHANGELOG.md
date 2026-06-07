@@ -1,3 +1,7 @@
+## 0.8.25
+
+- **Parser BBVA: "SU PAGO EN PESOS/DOLARES" como positivo** (`parsers/bbva.py`): el PDF de BBVA muestra estos registros con monto negativo (crédito sobre el saldo). Ahora se aplica `abs()` al monto para que queden positivos (`monto > 0` = egreso), consistente con la convención del sistema y con cómo aparece "Pago de Tarjeta" desde el lado del banco.
+
 ## 0.8.24
 
 - **Fix: barra de estado de iOS pisaba el navbar** (`static/index.html`): en la PWA agregada a la pantalla de inicio, el reloj/batería de iOS se superponían con "Gastos" y el email (la versión quedaba tapada). Se cambió `apple-mobile-web-app-status-bar-style` de `black-translucent` a `black`: así iOS reserva el espacio de la barra de estado en vez de dibujar el contenido por debajo, sin depender de que `env(safe-area-inset-top)` resuelva correctamente (estaba dando 0 en ese contexto). La barra negra combina con el navbar azul oscuro.
