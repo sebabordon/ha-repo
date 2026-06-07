@@ -1,3 +1,7 @@
+## 0.8.21
+
+- **Diagnóstico vencimientos en Log unificado** (`db.py`): `list_vencimientos()` ahora loguea en `[venc]` la config de matching (días, tolerancia, categorías) y una línea por fuente con `sum_ars`, `total_ars`, `pago_confirmado` y `pago_probable`. Visible en Config → Log filtrando por origen `db`. Se dispara cada vez que se carga la pantalla principal.
+
 ## 0.8.20
 
 - **Fix crítico: tabla app_log nunca se creaba** (`db.py`): `_run_migrations(conn)` intentaba crear la tabla `app_log` llamando a `init_app_log_table()`, que internamente abría una **segunda conexión** a la misma DB. Como `init_db()` ya tenía una transacción activa en la primera conexión, SQLite tiraba "database is locked" luego del timeout → la tabla nunca se creaba → todos los `write_log()` fallaban en silencio. Fix: crear la tabla directamente con el `conn` ya abierto que recibe `_run_migrations`, sin abrir una segunda conexión.

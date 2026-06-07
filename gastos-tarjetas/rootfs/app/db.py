@@ -985,7 +985,22 @@ def list_vencimientos() -> list[dict]:
             ORDER BY i.fecha_venc DESC
             LIMIT 20
         """, params).fetchall()
-    return [dict(r) for r in rows]
+
+    result = [dict(r) for r in rows]
+    # Log diagnóstico de cada vencimiento — visible en Config → Log (filtrar source=db)
+    logger.info(
+        "[venc] cfg: dias=±%d  tol_ars=$%.0f  cats=%s",
+        dias, tol_ars, cats,
+    )
+    for r in result:
+        logger.info(
+            "[venc] %s  venc=%s  sum_ars=%.2f  total_ars=%s  "
+            "pago_confirmado=%s  pago_probable=%s",
+            r["fuente"], r["fecha_venc"],
+            r["sum_ars"], r.get("total_ars"),
+            bool(r["pago_confirmado"]), bool(r["pago_probable"]),
+        )
+    return result
 
 
 def list_gastos(
