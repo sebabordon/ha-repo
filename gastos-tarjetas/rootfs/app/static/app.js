@@ -4202,12 +4202,12 @@ function renderCuentas() {
     list.innerHTML = `<p style="color:#aaa;padding:1rem 0">Sin cuentas.</p>`;
     return;
   }
-  list.innerHTML = _cuentasData.map(c => _renderCuentaCard(c)).join("");
+  list.innerHTML = _cuentasData.map((c, i) => _renderCuentaCard(c, i)).join("");
   // Auto-load movements for manual accounts
   _cuentasData.filter(c => c.tipo === "manual").forEach(c => loadMovimientos(c.fuente));
 }
 
-function _renderCuentaCard(c) {
+function _renderCuentaCard(c, idx = 0) {
   const tipo     = c.tipo || "auto";
   const isManual = tipo === "manual";
   const isMulti  = c.moneda === "MULTI";
@@ -4315,6 +4315,10 @@ function _renderCuentaCard(c) {
   return `
   <div class="cuenta-card${expanded ? ' cuenta-card-expanded' : ''}" id="cuenta-card-${c.fuente}">
     <div class="cuenta-header cuenta-header-clickable" onclick="toggleCuentaExpand('${c.fuente}')">
+      <span class="cuenta-reorder" onclick="event.stopPropagation()">
+        <button class="cuenta-move-btn" title="Subir" onclick="moveCuenta('${c.fuente}',-1)" ${idx === 0 ? 'disabled' : ''}>▲</button>
+        <button class="cuenta-move-btn" title="Bajar" onclick="moveCuenta('${c.fuente}',1)" ${idx === _cuentasData.length - 1 ? 'disabled' : ''}>▼</button>
+      </span>
       <button class="cuenta-collapse-btn" id="cuenta-toggle-${c.fuente}"
               title="${expanded ? 'Colapsar' : 'Expandir'}">${toggleSym}</button>
       <span class="cuenta-nombre" title="Click para renombrar"
@@ -5079,6 +5083,30 @@ async function saveCuentaTipo(fuente, cuenta_tipo) {
   });
   loadCuentas();
   showToast(`Tipo actualizado: ${cuenta_tipo === "credit_card" ? "💳 Tarjeta" : "🏦 Banco"}`, "ok");
+}
+
+async function moveCuenta(fuente, dir) {
+  const idx = _cuentasData.findIndex(c => c.fuente === fuente);
+  if (idx < 0) return;
+  const j = idx + dir;
+  if (j < 0 || j >= _cuentasData.length) return;
+  // Swap optimista para feedback inmediato
+  const arr = _cuentasData.slice();
+  [arr[idx], arr[j]] = [arr[j], arr[idx]];
+  _cuentasData = arr;
+  renderCuentas();
+  _populateFuenteSelects();
+  try {
+    const res = await fetch(`${BASE}/api/cuentas/reorder`, {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ fuentes: _cuentasData.map(c => c.fuente) }),
+    });
+    if (!res.ok) throw new Error("reorder falló");
+    loadSaldos();   // refleja el nuevo orden en los chips de la home
+  } catch (e) {
+    showToast("✗ No se pudo guardar el orden", "err");
+    loadCuentas();  // resync desde backend
+  }
 }
 
 async function toggleCuentaActiva(fuente, activa) {

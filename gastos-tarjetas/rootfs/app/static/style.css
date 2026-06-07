@@ -2086,6 +2086,35 @@ tbody tr:hover { background: #fafbff; }
   color: white;
   border-color: #475569;
 }
+.cuenta-reorder {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.cuenta-move-btn {
+  background: none;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
+  width: 22px;
+  height: 13px;
+  line-height: 1;
+  font-size: .6rem;
+  color: #475569;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cuenta-move-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+.cuenta-move-btn:disabled {
+  opacity: .3;
+  cursor: default;
+}
 .cuenta-body {
   border-top: 1px solid #f1f5f9;
 }

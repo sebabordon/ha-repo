@@ -1,3 +1,10 @@
+## 0.8.31
+
+- **Ordenar cuentas con flechas ▲▼** (`db.py`, `routes/cuentas.py`, `static/app.js`, `static/style.css`): ahora se puede definir el orden de las cuentas y se respeta en todos lados (tab Cuentas, chips de saldos de la home y combos de filtro de fuente), porque todos consumen `get_cuentas()` en orden de array.
+  - DB: nueva columna `cuentas.orden` (INTEGER). Migración con backfill del orden actual (activa primero, luego alfabético) para no alterar nada al actualizar. Cuentas nuevas (`create_cuenta_auto`/`create_cuenta_manual`) reciben `orden = max+1` (van al final). `get_cuentas()` ordena por `orden`.
+  - `reorder_cuentas(fuentes)` reasigna el orden según la lista recibida; expone `POST /api/cuentas/reorder`.
+  - UI: cada tarjeta del tab Cuentas tiene flechas subir/bajar en el header (deshabilitadas en los extremos). El reorden es optimista (re-render inmediato + persiste; si falla, resync y toast de error) y refresca chips y combos. Se eligieron botones en vez de drag&drop por robustez en la PWA de iOS (el drag nativo no anda por touch en Safari).
+
 ## 0.8.30
 
 - **IOL: separar saldo en pesos y dólares en dos cuentas** (`scrapers/invertironline.py`, `routes/cuentas.py`, `db.py`, `static/app.js`): hasta ahora InvertirOnline volcaba ARS y USD en una sola cuenta `MULTI` (un chip "ARS · USD"). Ahora el scraper rutea por `product_key` igual que BBVA: lee `__cuentas__`, resuelve `fuente_ars`/`fuente_usd` y, si existe una cuenta linkeada con product_key="USD", entra en **modo split** (saldo y operaciones en dólares van a la cuenta USD; pesos a la ARS). Si no hay cuenta USD, mantiene el **modo MULTI** legacy intacto (compatibilidad hacia atrás).

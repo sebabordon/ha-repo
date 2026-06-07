@@ -6,7 +6,7 @@ from db import (
     create_cuenta_manual, create_cuenta_auto, delete_cuenta_manual,
     delete_cuenta_any, count_gastos_cuenta, update_cuenta_parser,
     get_movimientos_cuenta, insert_movimiento_manual, delete_movimiento_manual,
-    split_iol_multi_to_ars,
+    split_iol_multi_to_ars, reorder_cuentas,
 )
 
 router = APIRouter()
@@ -16,6 +16,20 @@ router = APIRouter()
 def list_cuentas(request: Request):
     require_auth(request)
     return get_cuentas()
+
+
+@router.post("/cuentas/reorder")
+def post_reorder_cuentas(body: dict, request: Request):
+    """
+    Reordena las cuentas. Body: {"fuentes": ["fuente1","fuente2", ...]} en el
+    orden deseado (primera = arriba). Se refleja en el tab, los chips y los combos.
+    """
+    require_auth(request)
+    fuentes = body.get("fuentes")
+    if not isinstance(fuentes, list) or not all(isinstance(f, str) for f in fuentes):
+        raise HTTPException(400, "fuentes debe ser una lista de strings")
+    reorder_cuentas(fuentes)
+    return {"ok": True, "cuentas": get_cuentas()}
 
 
 @router.post("/cuentas")

@@ -302,6 +302,16 @@ def init_db():
             conn.execute(
                 "UPDATE cuentas SET moneda='MULTI' WHERE fuente IN ('amex','bbva_mc','bbva_visa','galicia_mc')"
             )
+        if "orden" not in ccols:
+            # Orden custom de las cuentas (tab, chips y combos). Backfill con el
+            # orden actual (activa primero, luego alfabético) para no alterar la
+            # disposición existente al actualizar.
+            conn.execute("ALTER TABLE cuentas ADD COLUMN orden INTEGER")
+            existentes = conn.execute(
+                "SELECT fuente FROM cuentas ORDER BY activa DESC, fuente"
+            ).fetchall()
+            for i, r in enumerate(existentes):
+                conn.execute("UPDATE cuentas SET orden=? WHERE fuente=?", (i, r[0]))
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS presupuestos (
@@ -1920,8 +1930,47 @@ def save_categorias(items: list[dict]):
 
 def get_cuentas() -> list[dict]:
     with _conn() as conn:
-        rows = conn.execute("SELECT * FROM cuentas ORDER BY activa DESC, fuente").fetchall()
+        rows = conn.execute(
+            "SELECT * FROM cuentas "
+            "ORDER BY CASE WHEN orden IS NULL THEN 1 ELSE 0 END, orden, activa DESC, fuente"
+        ).fetchall()
     return [dict(r) for r in rows]
+
+
+def _next_orden(conn) -> int:
+    """Devuelve el siguiente `orden` libre (para cuentas nuevas: van al final)."""
+    row = conn.execute("SELECT MAX(orden) AS m FROM cuentas").fetchone()
+    return (row["m"] + 1) if row and row["m"] is not None else 0
+
+
+def reorder_cuentas(fuentes: list[str]) -> None:
+    """
+    Reasigna el `orden` de las cuentas según la lista `fuentes` (de primera a
+    última).  Las fuentes no incluidas conservan su orden relativo, después de
+    las listadas.
+    """
+    with _conn() as conn:
+        existentes = {
+            r[0] for r in conn.execute("SELECT fuente FROM cuentas").fetchall()
+        }
+        i = 0
+        for f in fuentes:
+            if f in existentes:
+                conn.execute("UPDATE cuentas SET orden=? WHERE fuente=?", (i, f))
+                i += 1
+        # Resto (no listadas) detrás, en su orden previo
+        restantes = conn.execute(
+            "SELECT fuente FROM cuentas WHERE fuente NOT IN ({}) "
+            "ORDER BY CASE WHEN orden IS NULL THEN 1 ELSE 0 END, orden, fuente".format(
+                ",".join("?" * len(fuentes))
+            ),
+            list(fuentes),
+        ).fetchall() if fuentes else conn.execute(
+            "SELECT fuente FROM cuentas ORDER BY orden, fuente"
+        ).fetchall()
+        for r in restantes:
+            conn.execute("UPDATE cuentas SET orden=? WHERE fuente=?", (i, r[0]))
+            i += 1
 
 
 def adjust_cuenta_saldo(fuente: str, delta: float, moneda: str = "ARS") -> None:
@@ -1997,9 +2046,9 @@ def create_cuenta_manual(nombre: str, moneda: str = "ARS") -> dict:
         while conn.execute("SELECT 1 FROM cuentas WHERE fuente=?", (fuente,)).fetchone():
             fuente = f"{base}_{i}"; i += 1
         conn.execute(
-            "INSERT INTO cuentas (fuente,nombre,saldo,saldo_usd,moneda,activa,auto_saldo,tipo) "
-            "VALUES (?,?,0,0,?,1,0,'manual')",
-            (fuente, nombre, moneda),
+            "INSERT INTO cuentas (fuente,nombre,saldo,saldo_usd,moneda,activa,auto_saldo,tipo,orden) "
+            "VALUES (?,?,0,0,?,1,0,'manual',?)",
+            (fuente, nombre, moneda, _next_orden(conn)),
         )
     return {"fuente": fuente, "nombre": nombre, "saldo": 0.0, "saldo_usd": 0.0,
             "moneda": moneda, "activa": 1, "auto_saldo": 0, "tipo": "manual",
@@ -2023,9 +2072,10 @@ def create_cuenta_auto(nombre: str, moneda: str = "ARS",
         conn.execute(
             "INSERT INTO cuentas "
             "(fuente,nombre,saldo,saldo_usd,moneda,activa,auto_saldo,tipo,"
-            " scraper_instance_id,scraper_product_key) "
-            "VALUES (?,?,0,0,?,1,1,'auto',?,?)",
-            (fuente, nombre, moneda, scraper_instance_id, scraper_product_key),
+            " scraper_instance_id,scraper_product_key,orden) "
+            "VALUES (?,?,0,0,?,1,1,'auto',?,?,?)",
+            (fuente, nombre, moneda, scraper_instance_id, scraper_product_key,
+             _next_orden(conn)),
         )
     return {
         "fuente": fuente, "nombre": nombre,
