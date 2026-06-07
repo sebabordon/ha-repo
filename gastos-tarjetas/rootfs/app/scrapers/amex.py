@@ -277,7 +277,20 @@ class AmexScraper(BaseScraper):
         except Exception as exc:
             _l(f"[{nombre}] ⚠ Error leyendo cardholders: {exc}")
 
-        # ── Secciones por cardholder ──────────────────────────────────────────
+        # ── Parseo desde el HTML CRUDO del servidor (vía primaria) ────────────
+        # El JS de AMEX colapsa las secciones txnsCard0/1/2 (una por titular) en
+        # una lista plana tras cargar, así que el DOM en vivo pierde la separación
+        # por titular en el período abierto. El HTML CRUDO del servidor sí trae
+        # esas secciones: se lo trae con un XHR same-origin y se parsea con el
+        # DOMParser del browser (que NO ejecuta scripts → las secciones quedan
+        # intactas). Funciona igual para resumen abierto y cerrado.
+        raw_movs = self._scrape_raw_txns(driver, url, tarjeta, cardholder_map, nombre, _l)
+        if raw_movs:
+            movimientos.extend(raw_movs)
+            _l(f"[{nombre}] Total movimientos: {len(movimientos)}")
+            return movimientos, saldo_ars, saldo_usd
+
+        # ── Fallback: DOM en vivo (si el XHR falla o cambia la estructura) ─────
         card_divs = driver.find_elements(By.CSS_SELECTOR, "div[id^='txnsCard']")
         _l(f"[{nombre}] Secciones div[id^='txnsCard'] encontradas: {len(card_divs)}")
 
@@ -340,6 +353,148 @@ class AmexScraper(BaseScraper):
 
         _l(f"[{nombre}] Total movimientos: {len(movimientos)}")
         return movimientos, saldo_ars, saldo_usd
+
+    # ── Parseo desde el HTML crudo del servidor ───────────────────────────────
+
+    def _scrape_raw_txns(
+        self,
+        driver,
+        url: str,
+        tarjeta: str,
+        cardholder_map: dict,
+        nombre: str,
+        _l,
+    ) -> list[MovimientoRaw]:
+        """
+        Trae el HTML crudo de `url` con un XHR síncrono same-origin y lo parsea
+        con el DOMParser del browser (que no ejecuta scripts). Extrae las filas
+        de cada sección div#txnsCardN — una por titular — que el JS de la página
+        colapsa en el DOM en vivo. Devuelve [] si no encuentra secciones (ahí el
+        caller usa el fallback sobre el DOM en vivo).
+        """
+        js = r"""
+        var url = arguments[0];
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, false);
+            xhr.send(null);
+            if (xhr.status !== 200) return {error: 'status ' + xhr.status};
+            var doc = new DOMParser().parseFromString(xhr.responseText, 'text/html');
+            var out = [];
+            doc.querySelectorAll("div[id^='txnsCard']").forEach(function (div) {
+                var idx = div.id.replace('txnsCard', '');
+                div.querySelectorAll("tr.tableStandardText.pagebreak").forEach(function (tr) {
+                    var td = tr.querySelectorAll('td');
+                    if (td.length < 6) return;
+                    out.push({
+                        card:      idx,
+                        dateText:  (td[0].textContent || '').trim(),
+                        dateId:    td[0].id || '',
+                        desc:      (td[1].textContent || '').trim(),
+                        arsPago:   (td[2].textContent || '').trim(),
+                        arsCargo:  (td[3].textContent || '').trim(),
+                        usdPago:   (td[4].textContent || '').trim(),
+                        usdCargo:  (td[5].textContent || '').trim(),
+                        isDollar:  (tr.className || '').indexOf('dollarText') >= 0
+                    });
+                });
+            });
+            return {rows: out};
+        } catch (e) {
+            return {error: String(e)};
+        }
+        """
+        try:
+            res = driver.execute_script(js, url) or {}
+        except Exception as exc:
+            _l(f"[{nombre}] HTML crudo: error ejecutando XHR/DOMParser: {exc}")
+            return []
+
+        if res.get("error"):
+            _l(f"[{nombre}] HTML crudo: {res['error']} — uso fallback DOM en vivo")
+            return []
+
+        rows = res.get("rows") or []
+        if not rows:
+            _l(f"[{nombre}] HTML crudo: 0 secciones txnsCard — uso fallback DOM en vivo")
+            return []
+
+        movimientos: list[MovimientoRaw] = []
+        por_titular: dict[str, int] = {}
+        for r in rows:
+            cardholder = cardholder_map.get(r.get("card", ""), "")
+            mov = self._row_from_raw(r, tarjeta, cardholder)
+            if mov:
+                movimientos.append(mov)
+                por_titular[cardholder or "(sin titular)"] = (
+                    por_titular.get(cardholder or "(sin titular)", 0) + 1
+                )
+        _l(f"[{nombre}] HTML crudo: {len(movimientos)} movimientos por titular: {por_titular}")
+        return movimientos
+
+    def _row_from_raw(
+        self, r: dict, tarjeta: str, cardholder: str
+    ) -> MovimientoRaw | None:
+        """Convierte un dict de fila cruda (del DOMParser) en MovimientoRaw."""
+        try:
+            # ── Fecha ─────────────────────────────────────────────────────────
+            fecha_text = (r.get("dateText") or "").strip()
+            if fecha_text:
+                fecha_iso = self.parse_date_ar(fecha_text)
+            else:
+                ts_attr = (r.get("dateId") or "").strip()
+                if ts_attr.isdigit():
+                    dt = datetime.fromtimestamp(int(ts_attr) / 1000, tz=timezone.utc)
+                    fecha_iso = dt.strftime("%Y-%m-%d")
+                else:
+                    return None
+            if not fecha_iso:
+                return None
+
+            # ── Descripción ───────────────────────────────────────────────────
+            desc = (r.get("desc") or "").replace(_NBSP, " ").strip()
+            if not desc:
+                return None
+
+            # ── Moneda y monto ────────────────────────────────────────────────
+            if r.get("isDollar"):
+                txt_pago  = _clean(r.get("usdPago", ""))
+                txt_cargo = _clean(r.get("usdCargo", ""))
+                if txt_cargo:
+                    monto =  abs(self._parse_usd_amount(txt_cargo))
+                elif txt_pago:
+                    monto = -abs(self._parse_usd_amount(txt_pago))
+                else:
+                    return None
+                moneda = "USD"
+            else:
+                txt_pago  = _clean(r.get("arsPago", ""))
+                txt_cargo = _clean(r.get("arsCargo", ""))
+                if txt_cargo:
+                    monto =  abs(self.parse_amount(txt_cargo))
+                elif txt_pago:
+                    monto = -abs(self.parse_amount(txt_pago))
+                else:
+                    return None
+                moneda = "ARS"
+
+            raw_data: dict = {"cardholder": cardholder}
+            cuota_m = _CUOTA_RE.search(desc)
+            if cuota_m:
+                raw_data["cuota"] = cuota_m.group(1)
+
+            return MovimientoRaw(
+                fuente      = "amex",
+                fecha       = fecha_iso,
+                descripcion = desc,
+                monto       = monto,
+                moneda      = moneda,
+                tarjeta     = tarjeta,
+                raw_data    = raw_data,
+            )
+        except Exception as exc:
+            logger.warning("[amex] Error parseando fila cruda: %s", exc)
+            return None
 
     # ── Parseo de fila de transacción ─────────────────────────────────────────
 
