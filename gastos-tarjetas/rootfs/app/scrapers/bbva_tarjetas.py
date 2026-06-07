@@ -461,9 +461,14 @@ class BbvaTarjetasScraper(BbvaScraper):
 
         moneda = "USD" if "USD" in str(local.get("currency") or "").upper() else "ARS"
 
-        # Signo: créditos/pagos → monto negativo
+        # Signo: créditos/pagos → monto negativo.
+        # Se aplica en dos pasos:
+        # 1. Si tx_type es explícitamente un crédito → negativo.
+        # 2. Si la API ya mandó el monto negativo (ej. SU PAGO EN PESOS con
+        #    tx_type desconocido) → respetar ese signo negativo en lugar de
+        #    forzar abs(). Esto evita que abs() convierta pagos en egresos.
         tx_type = str((item.get("transactionType") or {}).get("id") or "").upper()
-        if tx_type in _CREDITO_TYPES:
+        if tx_type in _CREDITO_TYPES or monto < 0:
             monto = -abs(monto)
         else:
             monto = abs(monto)

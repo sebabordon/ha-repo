@@ -1,3 +1,7 @@
+## 0.8.27
+
+- **Fix scraper BBVA tarjetas: signo de "SU PAGO EN PESOS/DOLARES"** (`scrapers/bbva_tarjetas.py`): el `else: abs(monto)` forzaba positivo cualquier transacción cuyo `transactionType.id` no estuviera en `_CREDITO_TYPES`, pisando el signo negativo que manda la API para los pagos. Ahora: si el monto ya viene negativo de la API, se respeta como crédito (`monto < 0`) sin importar el tx_type.
+
 ## 0.8.26
 
 - **Scraper BBVA tarjetas: log de transactionType** (`scrapers/bbva_tarjetas.py`): agrega línea `[tx]` al log por cada transacción, mostrando `concept`, `transactionType.id`, `transactionType.description` y `amount` tal como los devuelve la API. Permite diagnosticar el signo correcto para "SU PAGO EN PESOS/DOLARES" y otros tipos.
