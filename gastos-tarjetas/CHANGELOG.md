@@ -1,3 +1,7 @@
+## 0.8.17
+
+- **Diagnóstico vencimientos** (`db.py`): log temporal de `pago_confirmado`/`pago_probable` por fuente y de los gastos candidatos a "pago" evaluados en `list_vencimientos`. Aparece en el log del add-on como `[venc-diag]` y `[venc-diag-cand]`. Se eliminará una vez resuelto el issue de detección de pago en galicia_mc.
+
 ## 0.8.16
 
 - **Saldo delta: desglose por movimiento con saldo corriente** (`scraper_scheduler.py`): cuando el auto-saldo está activo y hay movimientos nuevos, el log ahora muestra una línea por movimiento (ordenados cronológicamente) con el efecto sobre el saldo y el saldo acumulado resultante. Facilita identificar drifts cuando el saldo calculado no coincide con el real. Ejemplo: `2026-06-06  Merpago*knowhere  -$91.300,00  →  +$2.600.294,75`

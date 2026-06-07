@@ -876,6 +876,35 @@ def list_vencimientos() -> list[dict]:
         params[f"cat{i}"] = c
 
     with _conn() as conn:
+        # Diagnóstico temporal: gastos candidatos a ser "pago" para cada vencimiento
+        try:
+            cand_rows = conn.execute(f"""
+                SELECT pa.fecha, pa.monto, pa.moneda, pa.categoria, pa.fuente,
+                       i.fuente AS imp_fuente, i.fecha_venc, i.total_ars
+                FROM gastos pa
+                JOIN importaciones i ON i.fecha_venc IS NOT NULL
+                WHERE pa.categoria IN ({cat_ph})
+                  AND pa.moneda = 'ARS'
+                  AND CAST(pa.monto AS REAL) != 0
+                  AND pa.fecha >= date(i.fecha_venc, :dias_neg)
+                  AND pa.fecha <= date(i.fecha_venc, :dias_pos)
+                ORDER BY i.fecha_venc DESC, pa.fecha DESC
+                LIMIT 20
+            """, params).fetchall()
+            for cr in cand_rows:
+                monto_abs = abs(float(cr["monto"]))
+                total_ars = cr["total_ars"]
+                diff_b = abs(monto_abs - float(total_ars)) if total_ars is not None else None
+                logger.info(
+                    "[venc-diag-cand] pa.fecha=%s pa.monto=%s imp_fuente=%s "
+                    "fecha_venc=%s total_ars=%s |monto|-total_ars=%s",
+                    cr["fecha"], cr["monto"], cr["imp_fuente"],
+                    cr["fecha_venc"], total_ars,
+                    f"{diff_b:.2f}" if diff_b is not None else "N/A",
+                )
+        except Exception as _diag_exc:
+            logger.warning("[venc-diag] error en diagnóstico candidatos: %s", _diag_exc)
+
         rows = conn.execute(f"""
             SELECT i.id, i.fuente, i.archivo, i.mes_resumen, i.fecha_venc,
                    i.total_ars, i.total_usd, i.proximo_cierre, i.proximo_venc,
@@ -968,7 +997,17 @@ def list_vencimientos() -> list[dict]:
             ORDER BY i.fecha_venc DESC
             LIMIT 20
         """, params).fetchall()
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+
+    # Diagnóstico temporal: loguear pago_confirmado/probable para detectar issues
+    for row in result:
+        logger.info(
+            "[venc-diag] fuente=%s fecha_venc=%s total_ars=%s "
+            "pago_confirmado=%s pago_probable=%s",
+            row.get("fuente"), row.get("fecha_venc"), row.get("total_ars"),
+            row.get("pago_confirmado"), row.get("pago_probable"),
+        )
+    return result
 
 
 def list_gastos(
