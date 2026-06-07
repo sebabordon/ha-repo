@@ -306,7 +306,10 @@ def _backfill_cardholder(conn, raw_id: int, cardholder: str, fuente: str) -> boo
       • hay un mapeo cardholder→persona configurado para ese titular, y
       • el gasto todavía tiene el usuario por defecto de la fuente (o NULL),
         para no pisar una asignación manual o por regla.
-    Devuelve True si actualizó algo. No pisa un cardholder ya seteado.
+    Devuelve True si actualizó algo. El `cardholder` del scrape es la fuente de
+    verdad (no es editable por el usuario): si el almacenado difiere, se pisa —
+    esto corrige movimientos que corridas viejas estamparon con un titular
+    incorrecto. El caller solo invoca con `cardholder` no vacío.
     """
     row = conn.execute(
         "SELECT raw_data, gasto_id FROM movimientos_raw WHERE id=?", (raw_id,)
@@ -321,8 +324,8 @@ def _backfill_cardholder(conn, raw_id: int, cardholder: str, fuente: str) -> boo
             rd = {}
 
     changed = False
-    # Completar el cardholder en el raw si faltaba (no pisar uno ya seteado).
-    if not (rd.get("cardholder") or "").strip():
+    # Setear/corregir el cardholder en el raw si difiere del scrapeado.
+    if (rd.get("cardholder") or "").strip() != cardholder:
         rd["cardholder"] = cardholder
         conn.execute(
             "UPDATE movimientos_raw SET raw_data=? WHERE id=?",

@@ -1,3 +1,7 @@
+## 0.8.7
+
+- **FIX backfill: corregir titular incorrecto de corridas viejas** (`scrapers_db.py`): el backfill de 0.8.6 tenía un guard "no pisar un cardholder ya seteado", que impedía corregir los movimientos que corridas antiguas (≤0.8.1, cuando el fallback estampaba el primer titular del selector) habían marcado mal con un único titular (ej. todos como "ALBERTO ELISE"). Por eso en la UI aparecía un solo titular. Como el `cardholder` proviene del scrape y NO es editable por el usuario, ahora el backfill **sobrescribe** el titular almacenado cuando difiere del recién scrapeado. El caller solo invoca con titular no vacío, así que el fallback (cardholder vacío) nunca borra uno correcto. Tras correr el scraper con esta versión, los tres titulares aparecen en Config → Usuarios.
+
 ## 0.8.6
 
 - **Backfill de titular sobre movimientos ya importados** (`scrapers_db.py`): hasta ahora, si un movimiento se importaba sin titular (ej. AMEX en período abierto antes de poder separarlos) y luego el scraper lo volvía a ver con titular, el dedup lo salteaba y el titular nunca se completaba. Ahora, al detectar un duplicado, si el movimiento nuevo trae `cardholder` y el existente no lo tenía, se completa en `raw_data` y —si el gasto ya fue importado— se propaga el usuario según el mapeo titular→persona, **solo si el gasto todavía tiene el usuario por defecto de la fuente (o NULL)**, para no pisar asignaciones manuales ni por regla. Nuevo helper `_backfill_cardholder()`.
