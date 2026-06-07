@@ -42,6 +42,7 @@ def get_vencimientos(request: Request):
     return {"vencimientos": list_vencimientos()}
 
 
+
 @router.get("/stats/forecast")
 def get_forecast(
     request: Request,

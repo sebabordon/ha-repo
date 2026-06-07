@@ -510,6 +510,7 @@
         <button class="cfg-tab" data-cfgtab="procesamiento">Procesamiento</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
         <button class="cfg-tab" data-cfgtab="datos">Datos</button>
+        <button class="cfg-tab" data-cfgtab="log">📋 Log</button>
       </div>
 
       <!-- ── Sub-tab: Categorías ────────────────────────────────────── -->
@@ -1110,6 +1111,46 @@
           <span class="danger-hint">Eliminá por fuente o por importación individual. Útil para reimportar un resumen sin perder el resto.</span>
         </div>
       </div>
+
+      <!-- ── Sub-tab: Log unificado ──────────────────────────────────── -->
+      <div id="cfg-tab-log" class="cfg-tab-content">
+        <h2>Log unificado</h2>
+        <p class="rules-hint">
+          Todos los eventos de la app: runs de scrapers, importaciones, errores y avisos.
+          Se conservan hasta 2000 entradas recientes.
+        </p>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:.8rem">
+          <select id="log-filter-source" style="min-width:160px">
+            <option value="">Todos los orígenes</option>
+          </select>
+          <select id="log-filter-level" style="min-width:130px">
+            <option value="">Todos los niveles</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+          <button class="btn btn-sm" onclick="loadLogs()">↺ Actualizar</button>
+          <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.85rem">
+            <input type="checkbox" id="log-autorefresh" onchange="toggleLogAutorefresh()"> Auto (30s)
+          </label>
+          <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="clearLogs()">🗑 Borrar todo</button>
+        </div>
+        <div class="table-wrap">
+          <table id="log-table" style="font-size:.8rem;font-family:monospace">
+            <thead>
+              <tr>
+                <th style="width:140px">Timestamp</th>
+                <th style="width:70px">Nivel</th>
+                <th style="width:160px">Origen</th>
+                <th>Mensaje</th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody">
+              <tr><td colspan="4" style="text-align:center;color:#888">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div><!-- /cfg-tab-log -->
 
     </section>
 

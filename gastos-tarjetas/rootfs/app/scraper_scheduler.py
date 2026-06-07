@@ -233,6 +233,11 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
                 ultimo_run=_dt.utcnow().isoformat(),
                 last_log="\n".join(result.log_lines) if result.log_lines else None,
             )
+            try:
+                from app_log import write_scraper_run_log
+                write_scraper_run_log(banco, result.log_lines)
+            except Exception:
+                pass
             return
 
         # Remap fuente para scrapers single-product (AMEX/Galicia/MP) — BBVA
@@ -303,6 +308,12 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
             saldo_usd=_any_saldo.get("saldo_usd"),
             last_log="\n".join(result.log_lines) if result.log_lines else None,
         )
+        # Escribir log del run al log unificado
+        try:
+            from app_log import write_scraper_run_log
+            write_scraper_run_log(banco, result.log_lines)
+        except Exception:
+            pass
 
     finally:
         _user_data_dir.reset(token)
@@ -499,6 +510,11 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
                 ultimo_run=_dt.utcnow().isoformat(),
                 last_log="\n".join(result.log_lines) if result.log_lines else None,
             )
+            try:
+                from app_log import write_scraper_run_log
+                write_scraper_run_log(banco, result.log_lines)
+            except Exception:
+                pass
             return {"ok": False, "error": result.error,
                     "session_expired": result.session_expired}
 
@@ -559,6 +575,12 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
             movimientos_nuevos=inserted,
             last_log="\n".join(result.log_lines) if result.log_lines else None,
         )
+        # Escribir log del run al log unificado
+        try:
+            from app_log import write_scraper_run_log
+            write_scraper_run_log(banco, result.log_lines)
+        except Exception:
+            pass
 
         return {
             "ok":            True,

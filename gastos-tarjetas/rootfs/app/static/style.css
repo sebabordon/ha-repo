@@ -2346,3 +2346,14 @@ tbody tr:hover { background: #fafbff; }
 .tw-card-row:hover { background: #e0f2fe; }
 #tw-card-section > .tw-zone-title { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
 #tw-card-section { border-color: #bae6fd; }
+
+/* ── Log unificado ────────────────────────────────────────────────────────── */
+.log-level { display: inline-block; padding: .1rem .4rem; border-radius: 4px; font-size: .75rem; font-weight: 600; text-transform: uppercase; }
+.log-info    { background: #dbeafe; color: #1d4ed8; }
+.log-warning { background: #fef3c7; color: #92400e; }
+.log-error   { background: #fee2e2; color: #b91c1c; }
+#log-table tbody tr.log-err  td { background: #fff5f5; }
+#log-table tbody tr.log-warn td { background: #fffbeb; }
+#log-table { table-layout: fixed; }
+#log-table td { vertical-align: top; padding: .3rem .5rem; border-bottom: 1px solid #f0f0f0; }
+#log-table th { padding: .4rem .5rem; background: #f8fafc; }

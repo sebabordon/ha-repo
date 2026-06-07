@@ -206,6 +206,7 @@ function switchCfgTab(id) {
 document.querySelectorAll(".cfg-tab").forEach(tab => {
   tab.addEventListener("click", () => {
     switchCfgTab(tab.dataset.cfgtab);
+    if (tab.dataset.cfgtab === "log") loadLogs();
   });
 });
 
@@ -7080,6 +7081,77 @@ function _renderCuotas(data) {
   document.getElementById(id).addEventListener("change", function() { this.blur(); loadCuotas(); }));
 document.getElementById("cq-chk-excluir-especiales").addEventListener("change", loadCuotas);
 document.getElementById("btn-cq-load").addEventListener("click", loadCuotas);
+
+// ── Log unificado ────────────────────────────────────────────────────────────
+let _logAutorefreshTimer = null;
+
+async function loadLogs() {
+  const source = document.getElementById("log-filter-source")?.value || "";
+  const level  = document.getElementById("log-filter-level")?.value  || "";
+  const params = new URLSearchParams({ limit: 500 });
+  if (source) params.set("source", source);
+  if (level)  params.set("level",  level);
+  const tbody = document.getElementById("log-tbody");
+  if (!tbody) return;
+  try {
+    const r = await apiFetch(`/api/logs?${params}`);
+    const entries = r.entries || [];
+    if (!entries.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888">Sin entradas</td></tr>';
+      return;
+    }
+    // Render newest-first (API returns oldest-first; we reverse)
+    const rows = [...entries].reverse().map(e => {
+      const lvlCls = e.level === "ERROR" ? "log-err" : e.level === "WARNING" ? "log-warn" : "";
+      return `<tr class="${lvlCls}">
+        <td style="white-space:nowrap">${escHtml(e.ts)}</td>
+        <td><span class="log-level log-${(e.level||"").toLowerCase()}">${escHtml(e.level||"")}</span></td>
+        <td style="word-break:break-all">${escHtml(e.source||"")}</td>
+        <td style="word-break:break-all;white-space:pre-wrap">${escHtml(e.message||"")}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows.join("");
+  } catch(err) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--danger)">Error cargando logs: ${escHtml(String(err))}</td></tr>`;
+  }
+}
+
+async function loadLogSources() {
+  try {
+    const r = await apiFetch("/api/logs/sources");
+    const sel = document.getElementById("log-filter-source");
+    if (!sel) return;
+    const current = sel.value;
+    // Keep the "all" option, add sources
+    sel.innerHTML = '<option value="">Todos los orígenes</option>';
+    (r.sources || []).forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s; opt.textContent = s;
+      if (s === current) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch(_) {}
+}
+
+async function clearLogs() {
+  if (!confirm("¿Borrar todo el log unificado? Esta acción no se puede deshacer.")) return;
+  await apiFetch("/api/logs", { method: "DELETE" });
+  loadLogs();
+}
+
+function toggleLogAutorefresh() {
+  const chk = document.getElementById("log-autorefresh");
+  if (!chk) return;
+  if (chk.checked) {
+    _logAutorefreshTimer = setInterval(loadLogs, 30000);
+  } else {
+    clearInterval(_logAutorefreshTimer);
+    _logAutorefreshTimer = null;
+  }
+}
+
+// Cargar fuentes disponibles al abrir la sección por primera vez
+document.querySelector('.cfg-tab[data-cfgtab="log"]')?.addEventListener("click", loadLogSources, { once: true });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {

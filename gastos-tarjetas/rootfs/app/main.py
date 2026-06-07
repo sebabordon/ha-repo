@@ -10,6 +10,7 @@ from routes import upload, gastos, rules, stats, auth, cuentas, presupuesto, adm
 from routes import scrapers as scrapers_routes
 from routes import scraper_instances_routes
 from routes import categorias_route
+from routes import logs as logs_route
 from db import init_db
 from config import APP_VERSION
 from scraper_scheduler import start_scheduler
@@ -55,6 +56,9 @@ app = FastAPI(title="Gastos", docs_url=None, redoc_url=None)
 @app.on_event("startup")
 async def on_startup():
     init_db()          # inicializa la DB raíz (fuente de migraciones)
+    # Instalar handler de log unificado (escribe en app_log table)
+    from app_log import setup_db_log_handler
+    setup_db_log_handler()
     start_scheduler()  # arranca scrapers programados (no-op si no hay scrapers.yaml)
 
 
@@ -108,6 +112,7 @@ app.include_router(cuotas.router,          prefix="/api",   tags=["cuotas"])
 app.include_router(scrapers_routes.router, prefix="/api",   tags=["scrapers"])
 app.include_router(scraper_instances_routes.router, prefix="/api", tags=["scraper_instances"])
 app.include_router(categorias_route.router, prefix="/api",   tags=["categorias"])
+app.include_router(logs_route.router,       prefix="/api",   tags=["logs"])
 app.include_router(admin.router,            prefix="/admin", tags=["admin"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

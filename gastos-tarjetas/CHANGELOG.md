@@ -1,3 +1,8 @@
+## 0.8.18
+
+- **Log unificado** (`app_log.py`, `routes/logs.py`, `main.py`, `scraper_scheduler.py`, `db.py`): todos los eventos de la app ahora se guardan en la tabla `app_log` de cada usuario (ring buffer de 2000 entradas en `gastos.db`). Un nuevo `DBLogHandler` se adjunta al root logger en el startup para capturar todo `logger.info/warning/error` de los módulos Python. Los runs de scrapers también escriben su log detallado (incluyendo el desglose de saldo por movimiento) al finalizar cada ejecución, vía `write_scraper_run_log`. Nueva pestaña **Config → Log** en la UI con tabla de logs, filtros por origen y nivel, autorefresh cada 30 segundos y botón para borrar. Resuelve el problema fundamental de que los `logger.info()` de los módulos Python eran invisibles en el log del add-on (solo uvicorn loggueaba).
+- **Cleanup diagnóstico 0.8.17** (`routes/stats.py`): se eliminó el endpoint temporal `/stats/vencimientos/debug` y el import de `_conn as _db_conn` en ese archivo.
+
 ## 0.8.17
 
 - **Diagnóstico vencimientos** (`db.py`): log temporal de `pago_confirmado`/`pago_probable` por fuente y de los gastos candidatos a "pago" evaluados en `list_vencimientos`. Aparece en el log del add-on como `[venc-diag]` y `[venc-diag-cand]`. Se eliminará una vez resuelto el issue de detección de pago en galicia_mc.
