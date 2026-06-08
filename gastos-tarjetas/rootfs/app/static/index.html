@@ -217,7 +217,7 @@
           <div id="gastos-summary"></div>
           <div style="display:flex;gap:.5rem">
             <button id="btn-new-mov" class="btn btn-sm">+ Movimiento</button>
-            <button id="btn-toggle-filters" class="btn btn-sm" aria-expanded="true">Filtros ▴</button>
+            <button id="btn-toggle-filters" class="btn btn-sm" aria-expanded="false">Filtros +</button>
           </div>
         </div>
 
@@ -242,7 +242,7 @@
           </div>
         </div>
 
-        <div id="filter-panel">
+        <div id="filter-panel" style="display:none">
           <div class="filters">
             <select id="filter-fuente">
               <option value="">Todas las fuentes</option>
@@ -280,13 +280,15 @@
               <option value="">Todas las importaciones</option>
             </select>
           </div>
-          <div class="cat-slicer">
-            <span class="cat-label">Categorías:</span>
-            <div id="cat-chips">
-              <span class="cat-chip cat-todos active" onclick="toggleAllCats()">Todas</span>
-            </div>
-            <div id="cat-subchips" style="display:none;margin-top:.3rem;padding-left:.4rem"></div>
+        </div>
+
+        <!-- Categorías: siempre visibles (fuera del panel colapsable de filtros) -->
+        <div class="cat-slicer">
+          <span class="cat-label">Categorías:</span>
+          <div id="cat-chips">
+            <span class="cat-chip cat-todos active" onclick="toggleAllCats()">Todas</span>
           </div>
+          <div id="cat-subchips" style="display:none;margin-top:.3rem;padding-left:.4rem"></div>
         </div>
 
         <!-- Barra de orden — solo visible en móvil (el thead se oculta en modo tarjeta) -->

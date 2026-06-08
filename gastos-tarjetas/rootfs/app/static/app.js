@@ -1647,21 +1647,32 @@ function toggleAllCats() {
 loadHierarchy().then(loadCategorias);
 
 // ── Filter toggle ─────────────────────────────────────────────────────────────
-document.getElementById("btn-toggle-filters").addEventListener("click", function () {
+// El botón "Filtros" muestra/oculta SOLO los filtros de detalle (fuente, persona,
+// mes, etc.). El slicer de Categorías queda siempre visible (vive fuera del panel).
+// El estado abierto/cerrado se recuerda en localStorage.
+function _setGastosFilters(open) {
   const panel = document.getElementById("filter-panel");
-  const open  = panel.style.display !== "none";
-  panel.style.display = open ? "none" : "";
-  this.textContent = open ? "Filtros ▾" : "Filtros ▴";
-  this.setAttribute("aria-expanded", !open);
-  // Hide import filter row too when collapsing the whole filter panel
-  if (open) {
+  const btn   = document.getElementById("btn-toggle-filters");
+  panel.style.display = open ? "" : "none";
+  btn.textContent = open ? "Filtros −" : "Filtros +";
+  btn.setAttribute("aria-expanded", String(open));
+  // Al cerrar, también ocultar la sub-fila de filtro por importación
+  if (!open) {
     const importRow = document.getElementById("import-filter-row");
     const importBtn = document.getElementById("btn-toggle-import-filter");
-    importRow.style.display = "none";
-    importBtn.textContent = "+";
-    importBtn.setAttribute("aria-expanded", "false");
+    if (importRow) importRow.style.display = "none";
+    if (importBtn) { importBtn.textContent = "+"; importBtn.setAttribute("aria-expanded", "false"); }
   }
+}
+
+document.getElementById("btn-toggle-filters").addEventListener("click", function () {
+  const open = document.getElementById("filter-panel").style.display === "none";
+  _setGastosFilters(open);
+  localStorage.setItem("gastos-filters-open", open ? "1" : "0");
 });
+
+// Aplicar el estado recordado al cargar (default: cerrado → aparece al hacer click).
+_setGastosFilters(localStorage.getItem("gastos-filters-open") === "1");
 
 document.getElementById("btn-toggle-import-filter").addEventListener("click", function () {
   const row  = document.getElementById("import-filter-row");

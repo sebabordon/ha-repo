@@ -1,3 +1,7 @@
+## 0.8.34
+
+- **Gastos: Categorías siempre visibles + botón "Filtros" recuerda su estado** (`static/index.html`, `static/app.js`, `static/style.css`): en el tab Gastos → Movimientos, el slicer de **Categorías** se sacó del panel colapsable y ahora queda **siempre visible**. El botón "Filtros" muestra/oculta **solo** los filtros de detalle (fuente, persona, mes, moneda, tipo, importación), arranca **colapsado** ("Filtros +") y **recuerda** si lo dejaste abierto/cerrado vía `localStorage` (`gastos-filters-open`). Label cambia entre "Filtros +" (cerrado) y "Filtros −" (abierto).
+
 ## 0.8.33
 
 - **Fix: el scheduler programaba schedules sin migrar en multi-usuario** (`scraper_scheduler.py`): al arrancar, `on_startup()` corre `init_db()` solo sobre la DB raíz; las migraciones de cada DB de usuario corren *lazy* (en el primer request del usuario, vía middleware). Pero `start_scheduler()` también corre al arranque y leía las instancias de cada DB de usuario **antes** de que su migración `scraper_schedule_interval_v1` se aplicara, programando el schedule legacy (`"07:45"` diario) en vez de `every:4h`. Síntoma: MercadoPago mostraba "Próximo: mañana 7:45" en vez de cada 4h. Ahora `start_scheduler()` corre `init_db()` para cada DB de usuario antes de leer sus instancias, garantizando que las migraciones estén aplicadas. (También aplica a `reload_scheduler()`, que reusa `start_scheduler()`.)
