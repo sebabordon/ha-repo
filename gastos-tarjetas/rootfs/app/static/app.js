@@ -3344,6 +3344,71 @@ function _saldoChipMonto(saldo, moneda) {
   return `<span class="${cls}">${sym} ${_fmtSaldo(saldo)}</span>`;
 }
 
+// Horas entre corridas según el schedule de la instancia.
+// "every:Nh" → N ; "HH:MM" (legacy diario) → 24.
+function _scheduleIntervalHours(schedule) {
+  const m = /^every:(\d+)h$/.exec(schedule || "");
+  return m ? parseInt(m[1], 10) : 24;
+}
+
+// Estado del último scrape de una cuenta, para la barrita de la home.
+//   "err"  (rojo)     → el último run falló (o sesión expirada)
+//   "warn" (amarillo) → no corrió a horario (sin OK reciente / nunca corrió)
+//   "ok"   (verde)    → corrió OK dentro de la ventana esperada
+//   null              → la cuenta no tiene scraper (manual) o está deshabilitado
+function _scraperStatusColor(c) {
+  if (!c || !c.scraper_instance_id || !c.scraper_enabled) return null;
+  if (c.scraper_estado === "error" || c.scraper_estado === "session_expired") return "err";
+  const last = c.scraper_ultimo_ok || c.scraper_ultimo_run;
+  if (!last) return "warn";  // nunca tuvo un run exitoso
+  const iso  = last.endsWith("Z") ? last : last + "Z";  // timestamps guardados en UTC
+  const ageH = (Date.now() - new Date(iso).getTime()) / 3600000;
+  const interval = _scheduleIntervalHours(c.scraper_schedule);
+  // Amarillo si pasaron más de 2 intervalos sin un run exitoso.
+  if (ageH > interval * 2) return "warn";
+  return "ok";
+}
+
+// Tooltip explicativo para la barrita de estado.
+function _scraperStatusTitle(c) {
+  const st = _scraperStatusColor(c);
+  if (!st) return "";
+  const last = c.scraper_ultimo_ok || c.scraper_ultimo_run;
+  const when = last ? _fmtTs(last) : "nunca";
+  if (st === "err")  return `Último scrape: FALLÓ — ${when}${c.scraper_error_msg ? ` (${c.scraper_error_msg})` : ""}`;
+  if (st === "warn") return `Scrape atrasado — último OK: ${when}`;
+  return `Último scrape OK — ${when}`;
+}
+
+// Devuelve la cuenta (con campos scraper_*) por fuente, desde el cache del widget.
+function _cuentaByFuente(fuente) {
+  return (_widgetCuentas || []).find(c => c.fuente === fuente);
+}
+
+// Selector de frecuencia del scraper. Valores "every:Nh" (mín 2h, default 4h).
+// Si la instancia trae un schedule legacy "HH:MM", lo conserva como opción extra
+// para no perderlo hasta que el usuario elija un intervalo.
+const SCHEDULE_INTERVALS = [
+  ["every:2h",  "Cada 2 horas"],
+  ["every:3h",  "Cada 3 horas"],
+  ["every:4h",  "Cada 4 horas"],
+  ["every:6h",  "Cada 6 horas"],
+  ["every:8h",  "Cada 8 horas"],
+  ["every:12h", "Cada 12 horas"],
+  ["every:24h", "1 vez al día"],
+];
+function _scheduleSelect(id, current) {
+  const cur = current || "every:4h";
+  const isLegacy = !/^every:\d+h$/.test(cur);
+  let opts = SCHEDULE_INTERVALS.map(([val, lbl]) =>
+    `<option value="${val}"${val === cur ? " selected" : ""}>${lbl}</option>`
+  ).join("");
+  if (isLegacy) {
+    opts = `<option value="${escHtml(cur)}" selected>Diario ${escHtml(cur)} (legacy)</option>` + opts;
+  }
+  return `<select id="${id}">${opts}</select>`;
+}
+
 function renderSaldos(cuentas) {
   const widget = document.getElementById("saldos-widget");
   if (!cuentas.length) { widget.style.display = "none"; return; }
@@ -3376,9 +3441,12 @@ function renderSaldos(cuentas) {
              onkeydown="if(event.key==='Enter')saveSaldo('${c.fuente}')" style="width:90px">`;
 
     const fechaTitle = c.fecha_actualizacion ? `Actualizado ${c.fecha_actualizacion}` : "Sin datos";
+    const scrape     = _scraperStatusColor(c);
+    const scrapeCls  = scrape ? ` scrape-${scrape}` : "";
+    const scrapeTtl  = scrape ? ` · ${_scraperStatusTitle(c)}` : "";
     return `
       <div class="saldo-chip" id="saldo-card-${c.fuente}">
-        <button class="saldo-chip-btn" onclick="toggleSaldoEdit('${c.fuente}')" title="${fechaTitle} — tap para editar">
+        <button class="saldo-chip-btn${scrapeCls}" onclick="toggleSaldoEdit('${c.fuente}')" title="${escHtml(fechaTitle)} — tap para editar${escHtml(scrapeTtl)}">
           <span class="saldo-chip-name">${escHtml(c.nombre)}</span>
           <span class="saldo-chip-monto">${montoHtml}</span>
         </button>
@@ -3442,6 +3510,11 @@ let _vencData = [];  // último payload de vencimientos (para re-render al carga
 
 async function loadVencimientos() {
   try {
+    // Necesitamos las cuentas (con estado de scrape) para pintar la barrita de
+    // cada chip de tarjeta. Si todavía no están cacheadas, cargarlas primero.
+    if (!_widgetCuentas || !_widgetCuentas.length) {
+      try { await loadSaldos(); } catch(_) {}
+    }
     const res  = await fetch(`${BASE}/api/stats/vencimientos`);
     const data = await res.json();
     _vencData = data.vencimientos || [];
@@ -3590,15 +3663,22 @@ function renderVencimientos(items) {
   });
 
   // Chip + detalle (la card completa) que se expande al tocar.
-  const chipHtml = (e, paid) => `
+  // Borde izquierdo = estado del vencimiento; borde derecho = estado del último scrape.
+  const chipHtml = (e, paid) => {
+    const cuenta    = _cuentaByFuente(e.fuente);
+    const scrape    = _scraperStatusColor(cuenta);
+    const scrapeCls = scrape ? ` scrape-${scrape}` : "";
+    const scrapeTtl = scrape ? ` — ${_scraperStatusTitle(cuenta)}` : "";
+    return `
     <div class="venc-chipwrap">
-      <button class="venc-chip ${paid ? "paid" : e.cls}" onclick="toggleVencDetail('${e.fuente}')"
-              title="Tap para ver el detalle">
+      <button class="venc-chip ${paid ? "paid" : e.cls}${scrapeCls}" onclick="toggleVencDetail('${e.fuente}')"
+              title="Tap para ver el detalle${escHtml(scrapeTtl)}">
         ${paid ? `✓ ${e.label}`
                : `💳 ${e.label}${e.chipMonto ? ` · ${e.chipMonto}` : ""}${e.diasShort ? ` · ${e.diasShort}` : ""}`}
       </button>
       <div class="venc-detail" id="venc-detail-${e.fuente}" style="display:none">${e.fullCard}</div>
     </div>`;
+  };
 
   let html = pendientes.map(e => chipHtml(e, false)).join("");
   if (!pendientes.length && pagadas.length) html += `<span class="venc-aldia">💳 Tarjetas al día</span>`;
@@ -4747,9 +4827,9 @@ function _renderInstanceFullPanel(c, inst) {
         <label for="ci-${inst.id}-nombre">Nombre</label>
         <input id="ci-${inst.id}-nombre" type="text" value="${escHtml(inst.nombre)}">
       </div>
-      <div class="scraper-field" style="flex:1 1 130px">
-        <label for="ci-${inst.id}-schedule">Hora diaria</label>
-        <input id="ci-${inst.id}-schedule" type="time" value="${escHtml(inst.schedule || tdef.schedule_default || '07:00')}">
+      <div class="scraper-field" style="flex:1 1 150px">
+        <label for="ci-${inst.id}-schedule">Frecuencia</label>
+        ${_scheduleSelect(`ci-${inst.id}-schedule`, inst.schedule || tdef.schedule_default)}
       </div>
       <div class="scraper-field scraper-field-checkbox" style="flex:0 0 auto;align-self:end">
         <label>
@@ -4891,7 +4971,7 @@ async function _createInstanceForCuenta(fuente, banco) {
       body: JSON.stringify({
         banco, nombre,
         config: { enabled: false },   // crear deshabilitada, usuario completa credenciales después
-        schedule: tdef.schedule_default || "07:00",
+        schedule: tdef.schedule_default || "every:4h",
         enabled: false,
         cuenta_fuente: fuente,
         product_key,
@@ -5347,7 +5427,7 @@ async function submitCreateCuenta() {
           body: JSON.stringify({
             banco, nombre: instNombre,
             config: { enabled: false },
-            schedule: tdef?.schedule_default || "07:00",
+            schedule: tdef?.schedule_default || "every:4h",
             enabled: false,
           }),
         });
@@ -5999,9 +6079,8 @@ function _buildScraperCard(banco, data) {
       <div class="scraper-fields">
         ${fieldsHtml}
         <div class="scraper-field">
-          <label for="scr-${banco}-schedule">Hora de ejecución diaria</label>
-          <input id="scr-${banco}-schedule" type="time"
-                 value="${escHtml(data.schedule || '07:00')}">
+          <label for="scr-${banco}-schedule">Frecuencia de ejecución</label>
+          ${_scheduleSelect(`scr-${banco}-schedule`, data.schedule)}
         </div>
       </div>
       ${totpHtml}

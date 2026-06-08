@@ -32,6 +32,52 @@ logger = logging.getLogger(__name__)
 
 _scheduler: Optional[AsyncIOScheduler] = None
 
+# Intervalos permitidos (horas).  Deben dividir 24 para que el cron `*/N`
+# reparta las corridas de forma uniforme a lo largo del día.
+# Mínimo 2h (para no martillar el homebanking), default 4h.
+ALLOWED_INTERVAL_HOURS = (2, 3, 4, 6, 8, 12, 24)
+DEFAULT_INTERVAL_HOURS = 4
+DEFAULT_SCHEDULE = f"every:{DEFAULT_INTERVAL_HOURS}h"
+
+
+def parse_schedule(schedule_str: str, instance_id: int = 0) -> CronTrigger:
+    """
+    Convierte el `schedule` de una instancia en un CronTrigger.
+
+    Formatos soportados:
+      - "every:Nh"  → cada N horas (cron `hour=*/N`).  N ∈ ALLOWED_INTERVAL_HOURS.
+                      Las corridas se escalonan por instancia (offset en minutos
+                      derivado del id) para no pegarle a todos los bancos al :00.
+      - "HH:MM"     → diario a esa hora (formato legacy, pre-v0.8.32).
+
+    Cualquier valor inválido cae al default (cada 4h).
+    """
+    s = (schedule_str or "").strip()
+
+    # Offset estable por instancia: reparte los minutos para evitar que todas
+    # las instancias arranquen exactamente en el mismo instante.
+    minute_offset = (instance_id * 7) % 60
+
+    if s.startswith("every:"):
+        try:
+            n = int(s[len("every:"):].rstrip("h"))
+        except ValueError:
+            n = DEFAULT_INTERVAL_HOURS
+        if n not in ALLOWED_INTERVAL_HOURS:
+            n = DEFAULT_INTERVAL_HOURS
+        if n >= 24:
+            # "1 vez al día": `*/24` no es válido (el rango de horas es 0-23),
+            # así que lo expresamos como una corrida diaria a la hora 0.
+            return CronTrigger(hour=0, minute=minute_offset)
+        return CronTrigger(hour=f"*/{n}", minute=minute_offset)
+
+    # Legacy "HH:MM" → diario
+    try:
+        hour, minute = s.split(":")
+        return CronTrigger(hour=int(hour), minute=int(minute))
+    except (ValueError, AttributeError):
+        return CronTrigger(hour=f"*/{DEFAULT_INTERVAL_HOURS}", minute=minute_offset)
+
 
 def _apply_saldo_delta(
     fuente: str,
@@ -377,17 +423,10 @@ def start_scheduler() -> None:
             _user_data_dir.reset(token)
 
         for inst in instances:
-            schedule_str = inst.get("schedule") or "07:00"
-            try:
-                hour, minute = schedule_str.split(":")
-                hour = int(hour); minute = int(minute)
-            except (ValueError, AttributeError):
-                logger.warning("[scheduler] Horario inválido para inst %d (%s): %r → 07:00",
-                               inst["id"], inst["banco"], schedule_str)
-                hour, minute = 7, 0
+            schedule_str = inst.get("schedule") or DEFAULT_SCHEDULE
+            trigger = parse_schedule(schedule_str, inst["id"])
 
             job_id = f"scraper_inst_{inst['id']}_{os.path.basename(data_dir)}"
-            trigger = CronTrigger(hour=hour, minute=minute)
             _scheduler.add_job(
                 _run_instance_job,
                 trigger=trigger,
@@ -399,9 +438,9 @@ def start_scheduler() -> None:
             )
             jobs_added += 1
             logger.info(
-                "[scheduler] Programado inst %d (%s/%s) @ %02d:%02d en %s",
+                "[scheduler] Programado inst %d (%s/%s) schedule=%r en %s",
                 inst["id"], inst["banco"], inst["nombre"],
-                hour, minute, os.path.basename(data_dir),
+                schedule_str, os.path.basename(data_dir),
             )
 
     if jobs_added == 0:

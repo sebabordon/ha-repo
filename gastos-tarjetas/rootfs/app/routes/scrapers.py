@@ -139,11 +139,11 @@ async def put_credentials(banco: str, body: dict, request: Request):
     if banco not in BANKS:
         raise HTTPException(400, f"Banco desconocido: {banco}. Opciones: {list(BANKS)}")
 
-    # Validar formato HH:MM del schedule
+    # Validar formato del schedule: "every:Nh" (intervalo) o "HH:MM" (legacy diario)
     if "schedule" in body:
         import re
-        if not re.match(r"^\d{1,2}:\d{2}$", str(body["schedule"])):
-            raise HTTPException(400, "schedule debe tener formato HH:MM")
+        if not re.match(r"^(every:(2|3|4|6|8|12|24)h|\d{1,2}:\d{2})$", str(body["schedule"])):
+            raise HTTPException(400, "schedule debe ser 'every:Nh' (N∈2,3,4,6,8,12,24) o 'HH:MM'")
 
     set_bank_config(banco, body)
     reload_scheduler()

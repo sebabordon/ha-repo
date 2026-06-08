@@ -1,3 +1,12 @@
+## 0.8.32
+
+- **Scheduler por intervalo (cada N horas) en vez de 1 vez al día** (`scraper_scheduler.py`, `db.py`, `scraper_credentials.py`, `routes/scrapers.py`, `routes/scraper_instances_routes.py`, `static/app.js`): el schedule de cada instancia deja de ser una hora fija diaria y pasa a un intervalo configurable. Mínimo cada 2h (para no martillar el homebanking), default cada 4h.
+  - Nuevo formato de schedule `"every:Nh"` con N ∈ {2,3,4,6,8,12,24}. Se sigue soportando el formato legacy `"HH:MM"` (diario) por compatibilidad. `parse_schedule()` arma el `CronTrigger` (`hour=*/N`); el caso 24h corre 1 vez al día a la hora 0 (porque `*/24` no es válido en cron). Cada instancia recibe un offset de minutos estable derivado de su id para escalonar las corridas y no pegarle a todos los bancos al mismo instante.
+  - Migración `scraper_schedule_interval_v1`: convierte los schedules legacy `"HH:MM"` de las instancias existentes a `every:4h`. Los defaults de las plantillas (`BANKS`) también pasan a `every:4h`.
+  - UI: el campo "Hora diaria" del panel de cada cuenta (y la card legacy de Scrapers) se reemplaza por un selector de "Frecuencia" (cada 2/3/4/6/8/12/24h). Si una instancia trae un schedule legacy se muestra como opción extra hasta que se elija un intervalo. La validación de los endpoints acepta ambos formatos.
+- **Barrita de estado del último scrape en los chips de la home** (`db.py`, `static/app.js`, `static/style.css`): cada chip de cuenta (saldos) y de tarjeta (vencimientos) muestra una barra de color en el borde derecho según cómo le fue al último scrape: verde = corrió OK, rojo = falló (o sesión expirada), amarillo = no corrió a horario (sin un OK reciente, > 2× el intervalo). Las cuentas manuales (sin scraper) no muestran barra.
+  - `get_cuentas()` ahora hace LEFT JOIN con `scraper_instances` y expone `scraper_estado`/`scraper_ultimo_run`/`scraper_ultimo_ok`/`scraper_schedule`/`scraper_enabled`/`scraper_error_msg` por cuenta. El color y el cálculo de "atraso" se hacen en el front (`_scraperStatusColor`), usando el intervalo del schedule para definir el umbral del amarillo. El chip muestra el detalle (último OK / error) en el tooltip.
+
 ## 0.8.31
 
 - **Ordenar cuentas con flechas ▲▼** (`db.py`, `routes/cuentas.py`, `static/app.js`, `static/style.css`): ahora se puede definir el orden de las cuentas y se respeta en todos lados (tab Cuentas, chips de saldos de la home y combos de filtro de fuente), porque todos consumen `get_cuentas()` en orden de array.

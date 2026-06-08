@@ -770,6 +770,27 @@ def _run_migrations(conn):
             )
         conn.execute("INSERT INTO db_migrations (name) VALUES ('fix_orphaned_movimientos_raw_v1')")
 
+    if "scraper_schedule_interval_v1" not in done:
+        # v0.8.32: el scheduler pasa de "1 vez al día a HH:MM" a "cada N horas".
+        # Convertir los schedules legacy (formato "HH:MM") de todas las instancias
+        # al default por intervalo (every:4h).  Las que ya estén en formato
+        # "every:Nh" se respetan.
+        try:
+            conn.execute(
+                "UPDATE scraper_instances SET schedule='every:4h' "
+                "WHERE schedule IS NULL OR schedule NOT LIKE 'every:%'"
+            )
+            migrated = conn.execute("SELECT changes()").fetchone()[0]
+            if migrated:
+                import logging as _log
+                _log.getLogger(__name__).info(
+                    "[scraper_schedule_interval_v1] %d instancia(s) migradas a every:4h",
+                    migrated,
+                )
+        except Exception:
+            pass  # tabla aún no existe en instalaciones muy viejas
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('scraper_schedule_interval_v1')")
+
     # app_log table — creada directamente con el conn existente para evitar
     # el conflicto de lock que ocurriría si abriéramos una segunda conexión
     # mientras _run_migrations ya tiene una transacción activa.
@@ -1929,10 +1950,24 @@ def save_categorias(items: list[dict]):
 # ── Cuentas ────────────────────────────────────────────────────────────────────
 
 def get_cuentas() -> list[dict]:
+    """
+    Lista las cuentas con el estado del scraper que las alimenta (si tienen uno).
+    Los campos `scraper_*` permiten a la home pintar la barrita de estado del
+    último scrape en cada chip (verde=ok, rojo=falló, amarillo=no corrió a horario).
+    """
     with _conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM cuentas "
-            "ORDER BY CASE WHEN orden IS NULL THEN 1 ELSE 0 END, orden, activa DESC, fuente"
+            "SELECT c.*, "
+            "       si.estado     AS scraper_estado, "
+            "       si.ultimo_run AS scraper_ultimo_run, "
+            "       si.ultimo_ok  AS scraper_ultimo_ok, "
+            "       si.schedule   AS scraper_schedule, "
+            "       si.enabled    AS scraper_enabled, "
+            "       si.error_msg  AS scraper_error_msg "
+            "FROM cuentas c "
+            "LEFT JOIN scraper_instances si ON si.id = c.scraper_instance_id "
+            "ORDER BY CASE WHEN c.orden IS NULL THEN 1 ELSE 0 END, c.orden, "
+            "         c.activa DESC, c.fuente"
         ).fetchall()
     return [dict(r) for r in rows]
 

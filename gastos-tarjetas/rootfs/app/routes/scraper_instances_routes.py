@@ -177,8 +177,10 @@ async def update_instance_route(instance_id: int, body: dict, request: Request):
 
     if "schedule" in body:
         import re
-        if body["schedule"] and not re.match(r"^\d{1,2}:\d{2}$", str(body["schedule"])):
-            raise HTTPException(400, "schedule debe tener formato HH:MM")
+        if body["schedule"] and not re.match(
+            r"^(every:(2|3|4|6|8|12|24)h|\d{1,2}:\d{2})$", str(body["schedule"])
+        ):
+            raise HTTPException(400, "schedule debe ser 'every:Nh' (N∈2,3,4,6,8,12,24) o 'HH:MM'")
 
     update_instance(
         instance_id,

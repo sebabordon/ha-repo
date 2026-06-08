@@ -28,7 +28,7 @@ _DATA_DIR = os.environ.get("DATA_DIR", "/data")
 BANKS: dict[str, dict] = {
     "amex": {
         "nombre":   "AMEX Argentina",
-        "schedule": "07:00",
+        "schedule": "every:4h",
         "campos": [
             {"key": "usuario",  "label": "Usuario (email)",  "type": "text",     "required": True},
             {"key": "password", "label": "Contraseña",       "type": "password", "required": True},
@@ -36,7 +36,7 @@ BANKS: dict[str, dict] = {
     },
     "bbva": {
         "nombre":   "BBVA Argentina",
-        "schedule": "07:15",
+        "schedule": "every:4h",
         "campos": [
             {"key": "usuario",     "label": "Número de DNI",       "type": "text",     "required": True,
              "hint": "Solo el número, sin puntos (ej. 12345678)"},
@@ -79,7 +79,7 @@ BANKS: dict[str, dict] = {
     },
     "bbva_tarjetas": {
         "nombre":   "BBVA Argentina — Tarjetas de Crédito",
-        "schedule": "07:20",
+        "schedule": "every:4h",
         "campos": [
             {"key": "usuario",     "label": "Número de DNI",       "type": "text",     "required": True,
              "hint": "Solo el número, sin puntos (ej. 12345678)"},
@@ -98,7 +98,7 @@ BANKS: dict[str, dict] = {
     },
     "galicia": {
         "nombre":   "Banco Galicia",
-        "schedule": "07:30",
+        "schedule": "every:4h",
         "campos": [
             {"key": "usuario",     "label": "Número de DNI",       "type": "text",     "required": True,
              "hint": "Solo el número, sin puntos (ej. 12345678)"},
@@ -110,7 +110,7 @@ BANKS: dict[str, dict] = {
     },
     "invertironline": {
         "nombre":   "InvertirOnline",
-        "schedule": "08:00",
+        "schedule": "every:4h",
         "campos": [
             {"key": "usuario",  "label": "Usuario",    "type": "text",     "required": True,
              "hint": "Tu usuario de IOL (generalmente tu email)"},
@@ -134,7 +134,7 @@ BANKS: dict[str, dict] = {
     },
     "mercadopago": {
         "nombre":   "MercadoPago",
-        "schedule": "07:45",
+        "schedule": "every:4h",
         "campos": [
             {
                 "key":      "access_token",
