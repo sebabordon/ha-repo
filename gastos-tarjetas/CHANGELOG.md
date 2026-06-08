@@ -1,3 +1,7 @@
+## 0.8.33
+
+- **Fix: el scheduler programaba schedules sin migrar en multi-usuario** (`scraper_scheduler.py`): al arrancar, `on_startup()` corre `init_db()` solo sobre la DB raíz; las migraciones de cada DB de usuario corren *lazy* (en el primer request del usuario, vía middleware). Pero `start_scheduler()` también corre al arranque y leía las instancias de cada DB de usuario **antes** de que su migración `scraper_schedule_interval_v1` se aplicara, programando el schedule legacy (`"07:45"` diario) en vez de `every:4h`. Síntoma: MercadoPago mostraba "Próximo: mañana 7:45" en vez de cada 4h. Ahora `start_scheduler()` corre `init_db()` para cada DB de usuario antes de leer sus instancias, garantizando que las migraciones estén aplicadas. (También aplica a `reload_scheduler()`, que reusa `start_scheduler()`.)
+
 ## 0.8.32
 
 - **Scheduler por intervalo (cada N horas) en vez de 1 vez al día** (`scraper_scheduler.py`, `db.py`, `scraper_credentials.py`, `routes/scrapers.py`, `routes/scraper_instances_routes.py`, `static/app.js`): el schedule de cada instancia deja de ser una hora fija diaria y pasa a un intervalo configurable. Mínimo cada 2h (para no martillar el homebanking), default cada 4h.

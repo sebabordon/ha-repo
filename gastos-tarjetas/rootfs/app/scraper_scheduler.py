@@ -410,10 +410,20 @@ def start_scheduler() -> None:
 
     from userctx import _user_data_dir
     from scraper_instances_db import list_instances
+    from db import init_db
 
     for data_dir in candidates:
         token = _user_data_dir.set(data_dir)
         try:
+            # Asegurar que las migraciones de ESTA DB de usuario ya corrieron antes
+            # de leer sus instancias.  En multi-usuario, init_db() de cada DB corre
+            # lazy (en el primer request del usuario), que puede ser DESPUÉS de este
+            # start_scheduler() del arranque.  Sin esto, el scheduler programaría
+            # schedules sin migrar (ej. el legacy "HH:MM" diario en vez de every:4h).
+            try:
+                init_db()
+            except Exception as exc:
+                logger.warning("[scheduler] init_db() falló para %s: %s", data_dir, exc)
             instances = list_instances(enabled_only=True)
         except Exception as exc:
             logger.warning("[scheduler] No pude listar instancias de %s: %s",
