@@ -187,19 +187,26 @@ async def serve_quick(request: Request, fuente: str = "", label: str = ""):
     user = request.session.get("user")
     if not user:
         return _redirect(request, "/auth/login")
+    from html import escape as _esc
+    from urllib.parse import quote as _q
     title = label.strip() or fuente.upper().replace("_", " ") or "Gasto rápido"
+    # `label`/`fuente` vienen de la query string → escapar SIEMPRE antes de
+    # interpolarlos en HTML (evita XSS reflejado). `quote=True` también escapa
+    # las comillas para que no rompan el atributo content="...".
+    title_html = _esc(title, quote=True)
     with open("static/quick.html") as f:
         html = f.read()
-    html = html.replace("<title>Gasto Rápido</title>", f"<title>{title}</title>")
+    html = html.replace("<title>Gasto Rápido</title>", f"<title>{title_html}</title>")
     html = html.replace(
         'content="Gastos"',
-        f'content="{title}"',
+        f'content="{title_html}"',
         1,  # solo el primer apple-mobile-web-app-title
     )
-    # Apunta al manifest específico del formulario rápido (con el nombre correcto)
+    # Apunta al manifest específico del formulario rápido (con el nombre correcto).
+    # URL-encodear los params: evita romper el atributo y la query.
     html = html.replace(
         'href="/manifest.json"',
-        f'href="/manifest-quick.json?fuente={fuente}&label={label}"',
+        f'href="/manifest-quick.json?fuente={_q(fuente)}&label={_q(label)}"',
     )
     return HTMLResponse(html)
 
@@ -261,9 +268,14 @@ def _icon_style(fuente: str) -> dict:
 @app.get("/quick-icon/{fuente}.svg")
 async def quick_icon_svg(fuente: str):
     """Genera un ícono SVG con el color y sigla del banco."""
+    from html import escape as _esc
     style = _icon_style(fuente)
     bg, fg = style["bg"], style["fg"]
     lines  = style["lines"] or [fuente[:4].upper()]
+    # `fuente` (path param) y `lines` (overrides de config de usuario) se
+    # interpolan en el SVG → escapar para que no inyecten markup/script.
+    lines = [_esc(str(l), quote=True) for l in lines]
+    bg, fg = _esc(str(bg), quote=True), _esc(str(fg), quote=True)
 
     # Dos líneas → fuente más chica y posicionadas arriba/abajo del centro
     if len(lines) == 1:

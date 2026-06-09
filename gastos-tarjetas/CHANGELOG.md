@@ -1,3 +1,7 @@
+## 0.8.38
+
+- **FIX de seguridad: XSS reflejado en `/quick`** (`main.py`): la ruta `/quick` inyectaba los query params `label` y `fuente` **sin escapar** en el `<title>`, en el atributo `content="..."` y en el `href` del manifest. Un atacante podía mandarle a un usuario logueado un link same-origin tipo `/quick?label=</title><script>…</script>` y ejecutar JS en su sesión autenticada (robo/exfiltración de todos sus datos, acciones en su nombre). Ahora `title` se escapa con `html.escape(quote=True)` y `label`/`fuente` se URL-encodean (`urllib.parse.quote`) antes de interpolarse. Igual hardening en `/quick-icon/{fuente}.svg`, que interpolaba `fuente` y los `lines` de la config de usuario en el SVG. Nota: el hardening XSS de v0.6.15 cubrió `admin.py` y login pero `/quick` quedó afuera porque no estaba en ese diff — esta clase de bug solo se ve con una auditoría de todo el código, no con el review acotado al diff de una rama.
+
 ## 0.8.37
 
 - **FIX de seguridad: el logout ahora invalida la sesión del lado servidor** (`auth.py`, `routes/auth.py`, `main.py`, `static/index.html`, `static/app.js`): la sesión vivía 100% en una cookie firmada, sin estado server-side. Eso hacía que el logout solo le *pidiera* al navegador borrar la cookie; cuando el navegador no la borraba (PWA standalone de iOS, cookie duplicada por `path` reescrito por el proxy, etc.), la cookie vieja **seguía autenticando** y un logoff→login dejaba ver/loguear al usuario anterior tras un refresh — una fuga de datos entre usuarios.
