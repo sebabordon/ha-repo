@@ -791,6 +791,112 @@ def _run_migrations(conn):
             pass  # tabla aún no existe en instalaciones muy viejas
         conn.execute("INSERT INTO db_migrations (name) VALUES ('scraper_schedule_interval_v1')")
 
+    if "dedup_bbva_saldo_v1" not in done:
+        # v0.8.35: limpieza one-shot de duplicados BBVA preexistentes.
+        # Antes del fix de dedup por saldo real, dos errores generaban filas
+        # duplicadas: el enriquecimiento de descripción (sufijo de detalleservicio,
+        # ej. "— SJOSE P DIOS") que rompía el match por descripción, y re-inserciones
+        # por cambios de descripción/fecha.  Acá agrupamos las filas BBVA por
+        # (fuente, moneda, monto, saldo-corriente-real): un saldo idéntico ⇒ es el
+        # MISMO movimiento.  Dejamos una sola fila por grupo (la de descripción más
+        # específica, prefiriendo la ya importada), borrando las copias y sus gastos
+        # vinculados.  Preserva categoría y descripción editada si la copia las tenía.
+        try:
+            import json as _json
+
+            def _ar(s):
+                if s is None:
+                    return None
+                if isinstance(s, (int, float)):
+                    return float(s)
+                s = str(s).strip()
+                if not s:
+                    return None
+                s = s.replace(".", "").replace(",", ".")
+                try:
+                    return float(s)
+                except ValueError:
+                    return None
+
+            _rows = conn.execute(
+                """SELECT id, fuente, moneda, monto, descripcion, gasto_id, raw_data
+                   FROM movimientos_raw WHERE fuente LIKE '%bbva%'"""
+            ).fetchall()
+
+            _clusters: dict = {}
+            for _r in _rows:
+                try:
+                    _rd = _json.loads(_r["raw_data"]) if _r["raw_data"] else {}
+                except Exception:
+                    _rd = {}
+                if _rd.get("manual_quick"):
+                    continue
+                _saldo = _ar(_rd.get("saldo"))
+                _monto = _ar(_r["monto"])
+                if _saldo in (None, 0.0) or _monto is None:
+                    continue
+                _key = (_r["fuente"], _r["moneda"], round(_monto, 2), round(_saldo, 2))
+                _clusters.setdefault(_key, []).append(_r)
+
+            _removed = 0
+            for _grp in _clusters.values():
+                if len(_grp) < 2:
+                    continue
+                # keeper: prefiere la fila ya importada, luego la descripción más
+                # larga (enriquecida/estable), desempate por id más bajo (más estable).
+                _keeper = max(
+                    _grp,
+                    key=lambda r: (1 if r["gasto_id"] else 0, len(r["descripcion"] or ""), -r["id"]),
+                )
+                _keeper_g = None
+                if _keeper["gasto_id"]:
+                    _keeper_g = conn.execute(
+                        "SELECT id, categoria, categoria_fuente, descripcion_editada "
+                        "FROM gastos WHERE id=?",
+                        (_keeper["gasto_id"],),
+                    ).fetchone()
+
+                for _v in _grp:
+                    if _v["id"] == _keeper["id"]:
+                        continue
+                    if _v["gasto_id"]:
+                        _vg = conn.execute(
+                            "SELECT categoria, categoria_fuente, descripcion_editada "
+                            "FROM gastos WHERE id=?",
+                            (_v["gasto_id"],),
+                        ).fetchone()
+                        # preservar trabajo manual en el keeper si éste no lo tiene
+                        if _keeper_g and _vg:
+                            if (not _keeper_g["categoria"]) and _vg["categoria"]:
+                                conn.execute(
+                                    "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE id=?",
+                                    (_vg["categoria"], _vg["categoria_fuente"], _keeper_g["id"]),
+                                )
+                            if (not _keeper_g["descripcion_editada"]) and _vg["descripcion_editada"]:
+                                conn.execute(
+                                    "UPDATE gastos SET descripcion_editada=? WHERE id=?",
+                                    (_vg["descripcion_editada"], _keeper_g["id"]),
+                                )
+                        conn.execute("DELETE FROM gastos WHERE id=?", (_v["gasto_id"],))
+                        conn.execute(
+                            "DELETE FROM transfer_pairs WHERE id_out=? OR id_in=?",
+                            (_v["gasto_id"], _v["gasto_id"]),
+                        )
+                    conn.execute("DELETE FROM movimientos_raw WHERE id=?", (_v["id"],))
+                    _removed += 1
+
+            if _removed:
+                import logging as _log
+                _log.getLogger(__name__).info(
+                    "[dedup_bbva_saldo_v1] %d fila(s) duplicada(s) BBVA eliminadas", _removed
+                )
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "[dedup_bbva_saldo_v1] no se pudo limpiar duplicados: %s", _e
+            )
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_bbva_saldo_v1')")
+
     # app_log table — creada directamente con el conn existente para evitar
     # el conflicto de lock que ocurriría si abriéramos una segunda conexión
     # mientras _run_migrations ya tiene una transacción activa.

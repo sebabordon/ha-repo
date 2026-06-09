@@ -1,3 +1,7 @@
+## 0.8.36
+
+- **Limpieza one-shot de duplicados BBVA preexistentes** (`db.py`, migración `dedup_bbva_saldo_v1`): el fix de dedup por saldo (0.8.35) evita nuevos duplicados, pero los que ya estaban en la DB seguían ahí. Esta migración corre una sola vez al arrancar: agrupa las filas BBVA por `(fuente, moneda, monto, saldo-corriente-real)` —un saldo idéntico ⇒ es el MISMO movimiento— y deja una sola fila por grupo, borrando las copias y sus gastos vinculados (más sus `transfer_pairs`). Conserva la fila de descripción más específica (prefiriendo la ya importada) y preserva categoría/descripción editada si la copia las tenía. Solo actúa sobre filas con saldo real ≠ 0 (no toca cuentas legacy con `saldo=0` ni pares legítimos opuestos, que tienen saldos distintos). Idempotente vía `db_migrations`.
+
 ## 0.8.35
 
 - **BBVA: dedup por saldo corriente real + arreglo de duplicados y pares opuestos** (`scrapers_db.py`): en modo `filtro_fecha_api=False` ("saldo real"), BBVA devuelve el saldo resultante de cada movimiento, pero `insert_movimientos_raw` lo ignoraba por completo y deduplicaba solo por descripción. Eso causaba dos errores:
