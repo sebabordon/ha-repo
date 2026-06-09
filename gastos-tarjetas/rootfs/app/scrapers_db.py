@@ -472,19 +472,32 @@ def insert_movimientos_raw(
                         existing_check_name = "scraper_uid_edge_case"
 
             # Dedup por saldo corriente real (modo filtro_fecha_api=False).
-            # BBVA devuelve el saldo RESULTANTE de cada movimiento: es único por
-            # operación y estable entre runs, así que identifica el mismo movimiento
+            # BBVA devuelve el saldo RESULTANTE de cada movimiento: para el MISMO
+            # movimiento es estable entre runs, así que identifica el mismo registro
             # aunque cambie la descripción (enriquecimiento de detalleservicio,
             # temp→estable) o la fecha contable.  Clave: (fuente, moneda, monto, saldo).
-            # Esto reemplaza al heurístico frágil de descripción/contraasiento cuando
-            # hay saldo real disponible.
+            #
+            # IMPORTANTE: el saldo NO es globalmente único — la cuenta puede volver
+            # al mismo saldo en otra fecha (sube y baja al mismo valor).  Por eso se
+            # acota a una ventana de ±2 días alrededor de la fecha del movimiento:
+            # cubre el corrimiento de fecha contable de BBVA (±1 día) sin permitir
+            # que un movimiento se concilie con otro de otra fecha que casualmente
+            # tenga el mismo monto y saldo (típico al importar rangos largos).
             saldo_in = _parse_ar_amount(raw.get("saldo")) if isinstance(raw, dict) else None
             if not existing and not scraper_uid and saldo_in not in (None, 0.0):
+                from datetime import date as _date, timedelta as _td
+                try:
+                    _sfd     = _date.fromisoformat(fecha)
+                    _s_from  = (_sfd - _td(days=2)).isoformat()
+                    _s_to    = (_sfd + _td(days=2)).isoformat()
+                except ValueError:
+                    _s_from = _s_to = fecha
                 _cands = conn.execute(
                     """SELECT id, descripcion, raw_data FROM movimientos_raw
                        WHERE fuente = ? AND moneda = ?
-                         AND CAST(monto AS REAL) = CAST(? AS REAL)""",
-                    (fuente, moneda, monto),
+                         AND CAST(monto AS REAL) = CAST(? AS REAL)
+                         AND fecha BETWEEN ? AND ?""",
+                    (fuente, moneda, monto, _s_from, _s_to),
                 ).fetchall()
                 for _c in _cands:
                     try:

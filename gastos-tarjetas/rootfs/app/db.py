@@ -819,10 +819,13 @@ def _run_migrations(conn):
                     return None
 
             _rows = conn.execute(
-                """SELECT id, fuente, moneda, monto, descripcion, gasto_id, raw_data
+                """SELECT id, fuente, fecha, moneda, monto, descripcion, gasto_id, raw_data
                    FROM movimientos_raw WHERE fuente LIKE '%bbva%'"""
             ).fetchall()
 
+            # Clave incluye la FECHA: el saldo no es globalmente único (la cuenta
+            # puede volver al mismo saldo en otra fecha), así que solo agrupamos
+            # como duplicados los registros de la MISMA fecha + monto + saldo.
             _clusters: dict = {}
             for _r in _rows:
                 try:
@@ -835,7 +838,7 @@ def _run_migrations(conn):
                 _monto = _ar(_r["monto"])
                 if _saldo in (None, 0.0) or _monto is None:
                     continue
-                _key = (_r["fuente"], _r["moneda"], round(_monto, 2), round(_saldo, 2))
+                _key = (_r["fuente"], _r["fecha"], _r["moneda"], round(_monto, 2), round(_saldo, 2))
                 _clusters.setdefault(_key, []).append(_r)
 
             _removed = 0
