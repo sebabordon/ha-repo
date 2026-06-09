@@ -2,13 +2,19 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 from fastapi import HTTPException, Request
 
 from config import DATA_DIR, ALLOWED_DOMAIN, REGISTRATION_ENABLED_DEFAULT, ADMIN_PASSWORD
 
-USERS_FILE    = os.path.join(DATA_DIR, "users.json")
-SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
-ADMIN_EMAIL   = f"admin@{ALLOWED_DOMAIN}"
+USERS_FILE          = os.path.join(DATA_DIR, "users.json")
+SETTINGS_FILE       = os.path.join(DATA_DIR, "settings.json")
+SESSION_TOKENS_FILE = os.path.join(DATA_DIR, "session_tokens.json")
+ADMIN_EMAIL         = f"admin@{ALLOWED_DOMAIN}"
+
+# Máximo de sesiones activas (tokens) por usuario. Cada login agrega una; el
+# logout la quita. Limita el crecimiento si las cookies expiran sin logout.
+_MAX_TOKENS_PER_USER = 10
 
 
 # ── Settings (runtime overrides stored in /data/settings.json) ────────────────
@@ -38,6 +44,75 @@ def set_registration_enabled(val: bool):
     s = _load_settings()
     s["registration_enabled"] = val
     _save_settings(s)
+
+
+# ── Session tokens (validación server-side de la sesión) ──────────────────────
+# La sesión vive en una cookie firmada, pero la firma por sí sola no permite
+# invalidar una sesión (un logout solo le pide al navegador que borre la cookie;
+# si no la borra, la cookie vieja sigue autenticando). Para que el logout corte
+# de verdad guardamos, por usuario, el set de tokens de sesión activos. Cada
+# cookie lleva su token (`stoken`); en cada request validamos que el token siga
+# en el set. El logout quita el token de ESTE dispositivo; reset de password y
+# borrado de usuario quitan TODOS (cierran sesión en todos lados).
+
+def _load_session_tokens() -> dict:
+    try:
+        with open(SESSION_TOKENS_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_session_tokens(d: dict):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(SESSION_TOKENS_FILE, "w") as f:
+        json.dump(d, f, indent=2)
+
+
+def issue_session_token(email: str) -> str:
+    """Crea un token de sesión nuevo para *email* y lo agrega al set activo."""
+    email = email.lower()
+    d = _load_session_tokens()
+    tokens = d.get(email, [])
+    token = secrets.token_urlsafe(32)
+    tokens.append(token)
+    if len(tokens) > _MAX_TOKENS_PER_USER:
+        tokens = tokens[-_MAX_TOKENS_PER_USER:]
+    d[email] = tokens
+    _save_session_tokens(d)
+    return token
+
+
+def revoke_session_token(email: str, token: str) -> None:
+    """Revoca un token puntual (logout de este dispositivo)."""
+    if not email or not token:
+        return
+    email = email.lower()
+    d = _load_session_tokens()
+    tokens = d.get(email, [])
+    if token in tokens:
+        tokens.remove(token)
+        d[email] = tokens
+        _save_session_tokens(d)
+
+
+def revoke_all_session_tokens(email: str) -> None:
+    """Revoca todas las sesiones del usuario (reset de password / borrado)."""
+    if not email:
+        return
+    email = email.lower()
+    d = _load_session_tokens()
+    if email in d:
+        d.pop(email, None)
+        _save_session_tokens(d)
+
+
+def is_session_token_valid(email: str, token: str) -> bool:
+    """True si *token* está en el set activo de *email*."""
+    if not email or not token:
+        return False
+    d = _load_session_tokens()
+    return token in d.get(email.lower(), [])
 
 
 # ── Users ──────────────────────────────────────────────────────────────────────
@@ -104,6 +179,8 @@ def delete_user(email: str) -> bool:
         return False
     del users[email]
     _save_users(users)
+    # Invalidar cualquier sesión activa del usuario borrado.
+    revoke_all_session_tokens(email)
     return True
 
 
@@ -116,6 +193,8 @@ def reset_password(email: str, new_password: str) -> tuple[bool, str]:
     salt = os.urandom(16).hex()
     users[email] = {"hash": _hash(new_password, salt), "salt": salt}
     _save_users(users)
+    # Cambiar la contraseña cierra todas las sesiones abiertas del usuario.
+    revoke_all_session_tokens(email)
     return True, ""
 
 
@@ -123,4 +202,8 @@ def require_auth(request: Request) -> dict:
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="No autenticado")
+    if not is_session_token_valid(user.get("email", ""), user.get("stoken", "")):
+        # Cookie revocada o anterior al esquema de tokens → forzar re-login.
+        request.session.clear()
+        raise HTTPException(status_code=401, detail="Sesión expirada")
     return user

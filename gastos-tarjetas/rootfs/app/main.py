@@ -72,6 +72,16 @@ _initialized_users: set[str] = set()
 async def user_data_context(request: Request, call_next):
     """Set the per-user data directory for the duration of each request."""
     user = request.session.get("user")
+    # Validar el token de sesión server-side. Una cookie revocada (logout en
+    # otro request, reset de password) o anterior al esquema de tokens se
+    # descarta acá: se limpia la sesión (SessionMiddleware borrará la cookie) y
+    # se trata el request como no autenticado. Esto evita que una cookie vieja
+    # re-loguee al usuario anterior tras un logout/login.
+    if user and user.get("email"):
+        from auth import is_session_token_valid
+        if not is_session_token_valid(user["email"], user.get("stoken", "")):
+            request.session.clear()
+            user = None
     token = None
     if user and user.get("email"):
         email = user["email"]

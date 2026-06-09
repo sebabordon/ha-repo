@@ -5,7 +5,10 @@ from collections import defaultdict
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from auth import create_user, verify_password, verify_admin, get_registration_enabled, ADMIN_EMAIL
+from auth import (
+    create_user, verify_password, verify_admin, get_registration_enabled,
+    ADMIN_EMAIL, issue_session_token, revoke_session_token,
+)
 from config import ALLOWED_DOMAIN
 
 # ── Rate limiting (in-memory, por IP) ─────────────────────────────────────────
@@ -136,7 +139,10 @@ async def login_post(
     email = email.lower()
     is_admin = verify_admin(email, password)
     if is_admin or verify_password(email, password):
-        request.session["user"] = {"email": email, "is_admin": is_admin}
+        request.session["user"] = {
+            "email": email, "is_admin": is_admin,
+            "stoken": issue_session_token(email),
+        }
         return _redirect(request, "/", status_code=303)
     _record_failure(ip)
     return _render(_LOGIN_HTML, "Email o contraseña incorrectos.", ingress_prefix=prefix)
@@ -167,14 +173,27 @@ async def register_post(
     ok, err = create_user(email.lower(), password)
     if not ok:
         return _render(_REGISTER_HTML, err, ingress_prefix=prefix)
-    request.session["user"] = {"email": email.lower(), "is_admin": False}
+    request.session["user"] = {
+        "email": email.lower(), "is_admin": False,
+        "stoken": issue_session_token(email.lower()),
+    }
     return _redirect(request, "/", status_code=303)
 
 
 @router.get("/logout")
 async def logout(request: Request):
+    # Revocar el token de ESTA sesión server-side: aunque el navegador no borre
+    # la cookie (iOS PWA standalone, cookie duplicada por path del proxy, etc.),
+    # la cookie vieja deja de autenticar en el próximo request.
+    user = request.session.get("user")
+    if user and user.get("email"):
+        revoke_session_token(user["email"], user.get("stoken", ""))
     request.session.clear()
-    return _redirect(request, "/auth/login")
+    resp = _redirect(request, "/auth/login")
+    # Borrado explícito además del que hace SessionMiddleware al ver la sesión
+    # vacía — belt-and-suspenders con el mismo path con que se setea la cookie.
+    resp.delete_cookie("session", path="/")
+    return resp
 
 
 @router.get("/me")

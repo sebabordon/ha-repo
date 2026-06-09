@@ -696,6 +696,32 @@ fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {
   }
 });
 
+// ── Logout: limpiar caché del cliente antes de navegar ────────────────────────
+// El logout server-side revoca el token de sesión; acá además limpiamos restos
+// del lado cliente (service worker caches + preferencias en localStorage) para
+// que al cambiar de usuario no queden datos/UI del usuario anterior visibles.
+const _logoutLink = document.getElementById("logout-link");
+if (_logoutLink) {
+  _logoutLink.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const dest = _logoutLink.href;  // ya viene con el prefijo de ingress
+    try {
+      if (window.caches) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      if (navigator.serviceWorker) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      try { localStorage.clear(); } catch (_) {}
+    } catch (_) {
+      /* best-effort — igual navegamos al logout */
+    }
+    window.location.href = dest;
+  });
+}
+
 // ── Monthly overview chart ────────────────────────────────────────────────────
 let _monthlyChart = null;
 
