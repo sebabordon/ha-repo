@@ -251,6 +251,29 @@ _GENERIC_PREFIXES = (
 )
 
 
+def _parse_ar_amount(s) -> Optional[float]:
+    """
+    Parsea un monto/saldo en formato AR ('413.346,84', '-177.653,16', '700,28')
+    a float. Devuelve None si no es parseable o está vacío.
+
+    Usado para dedup por saldo corriente real: en modo filtro_fecha_api=False BBVA
+    devuelve el saldo resultante de cada movimiento, que es único por operación y
+    estable entre runs (sobrevive a cambios de descripción y de fecha contable).
+    """
+    if s is None:
+        return None
+    if isinstance(s, (int, float)):
+        return float(s)
+    s = str(s).strip()
+    if not s:
+        return None
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
 def _load_dedup_config() -> tuple[frozenset, tuple]:
     """
     Carga los sets de dedup desde user_config.json.
@@ -448,12 +471,48 @@ def insert_movimientos_raw(
                     if existing:
                         existing_check_name = "scraper_uid_edge_case"
 
+            # Dedup por saldo corriente real (modo filtro_fecha_api=False).
+            # BBVA devuelve el saldo RESULTANTE de cada movimiento: es único por
+            # operación y estable entre runs, así que identifica el mismo movimiento
+            # aunque cambie la descripción (enriquecimiento de detalleservicio,
+            # temp→estable) o la fecha contable.  Clave: (fuente, moneda, monto, saldo).
+            # Esto reemplaza al heurístico frágil de descripción/contraasiento cuando
+            # hay saldo real disponible.
+            saldo_in = _parse_ar_amount(raw.get("saldo")) if isinstance(raw, dict) else None
+            if not existing and not scraper_uid and saldo_in not in (None, 0.0):
+                _cands = conn.execute(
+                    """SELECT id, descripcion, raw_data FROM movimientos_raw
+                       WHERE fuente = ? AND moneda = ?
+                         AND CAST(monto AS REAL) = CAST(? AS REAL)""",
+                    (fuente, moneda, monto),
+                ).fetchall()
+                for _c in _cands:
+                    try:
+                        _c_raw = json.loads(_c["raw_data"]) if _c["raw_data"] else {}
+                    except Exception:
+                        _c_raw = {}
+                    _c_saldo = _parse_ar_amount(_c_raw.get("saldo"))
+                    if _c_saldo is not None and abs(_c_saldo - saldo_in) < 0.005:
+                        # Mismo movimiento real. Conservar la descripción más
+                        # específica (la más larga gana: el sufijo de detalleservicio
+                        # y la versión estable son más largos que la provisoria).
+                        if len(desc) > len(_c["descripcion"] or ""):
+                            conn.execute(
+                                "UPDATE movimientos_raw SET descripcion = ?, fecha = ? WHERE id = ?",
+                                (desc, fecha, _c["id"]),
+                            )
+                        existing = _c
+                        existing_check_name = "saldo"
+                        break
+
             # Dedup de contraasientos (movimientos opuestos el mismo día).
-            # BBVA a veces devuelve dos veces el mismo movimiento: egreso e ingreso opuestos.
-            # Ej: -460.000 (pago en cajero) y +460.000 (acreditación/reversión).
-            # Si encontramos un movimiento con monto OPUESTO el mismo día → skip el nuevo
-            # si el existente es igual o más específico; UPDATE si el nuevo es más específico.
-            if not existing and not scraper_uid:
+            # SOLO en modo legacy sin saldo real (saldo=0): cuando BBVA filtra
+            # server-side devuelve saldo=0 y no se puede distinguir un egreso de un
+            # ingreso del mismo monto el mismo día por saldo.  Con saldo real este
+            # heurístico NO debe correr porque colapsa pares legítimos (una extracción
+            # y una transferencia entrante del mismo importe son movimientos distintos).
+            # Ej legacy: -460.000 (pago en cajero) y +460.000 (acreditación/reversión).
+            if not existing and not scraper_uid and not saldo_in:
                 monto_float = float(monto) if monto else 0.0
                 monto_opuesto = -monto_float
                 monto_opuesto_str = str(monto_opuesto)

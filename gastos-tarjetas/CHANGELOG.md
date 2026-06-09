@@ -1,3 +1,10 @@
+## 0.8.35
+
+- **BBVA: dedup por saldo corriente real + arreglo de duplicados y pares opuestos** (`scrapers_db.py`): en modo `filtro_fecha_api=False` ("saldo real"), BBVA devuelve el saldo resultante de cada movimiento, pero `insert_movimientos_raw` lo ignoraba por completo y deduplicaba solo por descripción. Eso causaba dos errores:
+  - **Duplicados por enriquecimiento de descripción**: un movimiento scrapeado sin `detalleservicio` se guardaba con la descripción base (ej. `PAGO DE SERVICIOS TARJETA 84296031 OP1409`); un run posterior agregaba el sufijo del detalle (`— SJOSE P DIOS`) y, como no hay `numeroOperacion` y la descripción no es genérica, ningún check matcheaba → fila duplicada. Le pasaba a cualquier extracción/pago con detalle que se enriqueciera en un run posterior.
+  - **Pares legítimos opuestos colapsados/dados vuelta** por el heurístico `dedup-opuesto` (v0.6.10): una extracción de +460K y una transferencia entrante de −460K del mismo día son movimientos distintos, pero se descartaba/sobreescribía uno como "contraasiento". Ese heurístico era un parche de la época en que BBVA devolvía `saldo=0`.
+  - **Fix**: nuevo check primario que deduplica por `(fuente, moneda, monto, saldo)` cuando hay saldo real (≠ 0) — el saldo es único por operación y estable entre runs, inmune a cambios de descripción y de fecha contable; conserva la descripción más específica. El heurístico `dedup-opuesto` ahora solo corre en modo legacy sin saldo real. Gateado a "saldo presente y ≠ 0", no afecta MP/AMEX/Galicia ni cuentas viejas.
+
 ## 0.8.34
 
 - **Gastos: Categorías siempre visibles + botón "Filtros" recuerda su estado** (`static/index.html`, `static/app.js`, `static/style.css`): en el tab Gastos → Movimientos, el slicer de **Categorías** se sacó del panel colapsable y ahora queda **siempre visible**. El botón "Filtros" muestra/oculta **solo** los filtros de detalle (fuente, persona, mes, moneda, tipo, importación), arranca **colapsado** ("Filtros +") y **recuerda** si lo dejaste abierto/cerrado vía `localStorage` (`gastos-filters-open`). Label cambia entre "Filtros +" (cerrado) y "Filtros −" (abierto).
