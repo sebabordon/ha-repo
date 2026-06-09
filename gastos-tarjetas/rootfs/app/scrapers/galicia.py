@@ -533,7 +533,8 @@ class GaliciaScraper(BaseScraper):
             logger.warning("[galicia] *** Input DNI NO encontrado — formulario puede fallar ***")
 
         # ── Paso 3: campo UserName (alias) ────────────────────────────────────
-        logger.info("[galicia] Paso 3 — buscando campo usuario (alias=%r)", username or "(vacío)")
+        logger.info("[galicia] Paso 3 — buscando campo usuario (alias %s)",
+                    "presente" if username else "vacío")
         if username:
             user_input = None
             for sel in [

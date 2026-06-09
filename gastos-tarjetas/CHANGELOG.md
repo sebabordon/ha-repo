@@ -1,3 +1,9 @@
+## 0.8.40
+
+- **Hardening de seguridad (DOM-XSS + logging de credenciales)** (`static/app.js`, `scrapers/galicia.py`): producto de la auditoría de las zonas 1 (DOM-XSS) y 2 (credenciales).
+  - **`escHtml` ahora también escapa la comilla simple** (`'` → `&#39;`): defense-in-depth para que valores escapados que terminen en atributos con comillas simples no puedan romperlos. Los datos de origen externo (descripciones bancarias, errores/logs de scraper) ya se escapaban de forma consistente; esto cierra un footgun latente. (No se tocaron las ~80 interpolaciones de `${fuente}` porque `fuente` siempre sale de `_slugify()` → `[a-z0-9_]`, no es inyectable.)
+  - **Galicia: no loguear el alias/usuario de homebanking** (`galicia.py`): el log de arranque del scraper imprimía el valor del alias (`alias=%r`). Ahora solo registra si está presente o vacío. La contraseña nunca se logueaba (solo su longitud); el `config` con credenciales descifradas tampoco se vuelca a ningún log. Nota de postura: si `SCRAPER_ENCRYPTION_KEY` no está seteada, las credenciales quedan en plaintext en `gastos.db` (fallback documentado).
+
 ## 0.8.39
 
 - **Fix: dedup por saldo conciliaba movimientos de distinta fecha (rangos largos)** (`scrapers_db.py`, `db.py`): el check de dedup por saldo (0.8.35) y la migración de limpieza (0.8.36) buscaban un movimiento con el mismo `(fuente, moneda, monto, saldo)` **sin acotar la fecha**. Pero el saldo corriente **no es globalmente único**: la cuenta puede volver al mismo saldo en otra fecha (sube y baja al mismo valor — p.ej. `4.357,29` aparece dos veces el mismo día en una cuenta BBVA). Al importar rangos largos (ej. 60 días), un movimiento podía conciliarse con otro de **otra fecha** que casualmente tenía igual monto y saldo, perdiéndose o pisándose registros viejos.

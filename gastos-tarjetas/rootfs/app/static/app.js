@@ -7315,6 +7315,6 @@ document.querySelector('.cfg-tab[data-cfgtab="log"]')?.addEventListener("click",
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s) {
-  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
 function showResult(el, msg, ok) { el.textContent = msg; el.className = ok?"ok":"err"; }
