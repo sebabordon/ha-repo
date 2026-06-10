@@ -6,7 +6,6 @@ seteado por el scheduler). Si no hay contexto, escanea /data/*/gastos.db como
 fallback para mantener compatibilidad.
 """
 
-import glob
 import json
 import logging
 import os
@@ -71,27 +70,27 @@ def fuentes_for_banco(banco_or_fuente: str) -> list[str]:
 
 def _find_db_path() -> str:
     """
-    Localiza la DB del usuario activo.
+    Localiza la DB del usuario activo vía el ContextVar de userctx.
 
-    Orden de prioridad:
-    1. ContextVar de userctx (seteado por el scheduler o por requests HTTP)
-    2. Primer subdirectorio de /data/ que tenga gastos.db
-    3. /data/gastos.db (fallback raíz)
+    Si NO hay contexto, **no** se elige una DB de usuario arbitraria (eso
+    mezclaría datos entre usuarios — el viejo `candidates[0]` agarraba la del
+    primer usuario alfabético).  Se cae al `/data/gastos.db` raíz (huérfano) y
+    se loguea, porque todos los llamadores legítimos (middleware HTTP, scheduler,
+    find_all_enabled_configs) setean el contexto antes de llamar.
     """
-    # Si hay un contexto de usuario activo, usarlo directamente
     try:
-        from userctx import get_data_dir, _user_data_dir
+        from userctx import _user_data_dir
         data_dir = _user_data_dir.get()
         if data_dir:
             return os.path.join(data_dir, "gastos.db")
     except Exception:
         pass
 
-    # Escanear subdirectorios
-    candidates = sorted(glob.glob(os.path.join(_DATA_DIR, "*/gastos.db")))
-    if candidates:
-        return candidates[0]
-
+    logger.error(
+        "[scrapers_db] _find_db_path() llamado SIN contexto de usuario — "
+        "usando /data/gastos.db raíz (no se elige la DB de otro usuario). "
+        "Esto es un bug del llamador: debería setear el contexto antes."
+    )
     return os.path.join(_DATA_DIR, "gastos.db")
 
 

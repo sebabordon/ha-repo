@@ -1,3 +1,9 @@
+## 0.8.41
+
+- **FIX de seguridad: fin de la fuga de datos entre usuarios (migración legacy)** (`userctx.py`, `scrapers_db.py`): la causa raíz del problema que originó toda esta tanda. `set_user_context` copiaba `/data/gastos.db` raíz + `rules.yaml`/`match_rules.yaml`/`user_config.json` al **primer usuario que logueaba**, guardado solo por un sentinel best-effort. Resultado: quien entraba primero (o cualquier usuario nuevo si el sentinel fallaba al escribirse) **heredaba TODA la data legacy de otro** — gastos, cuotas, cuentas, credenciales.
+  - **Se eliminó la copia de data legacy.** Un usuario nuevo ahora arranca con una DB **limpia** que crea `init_db()` (schema + 7 cuentas default + categorías), y un `rules.yaml` sembrado desde los **defaults bundleados** (`default_rules.yaml`) — nunca desde la data de otro usuario. `match_rules.yaml` y `user_config.json` quedan ausentes (los lectores los tratan como vacío/defaults, que es lo correcto para un usuario nuevo). Los usuarios existentes no se ven afectados (su data ya vive en su dir). Para asignar data legacy a un usuario puntual: `cp /data/gastos.db /data/{email_sanitizado}/gastos.db` antes de su primer login.
+  - **`_find_db_path()` ya no elige una DB arbitraria sin contexto** (`scrapers_db.py`): el fallback `sorted(glob(...))[0]` agarraba la DB del primer usuario alfabético cuando no había contexto de usuario, otra vía de cruce de datos. Ahora cae al `/data/gastos.db` raíz (huérfano) y loguea un error — todos los llamadores legítimos setean el contexto antes, así que en la práctica nunca se usa.
+
 ## 0.8.40
 
 - **Hardening de seguridad (DOM-XSS + logging de credenciales)** (`static/app.js`, `scrapers/galicia.py`): producto de la auditoría de las zonas 1 (DOM-XSS) y 2 (credenciales).

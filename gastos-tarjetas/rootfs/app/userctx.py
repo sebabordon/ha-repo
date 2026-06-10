@@ -10,9 +10,13 @@ A ContextVar holds the active directory for the current request so that all
 DB / file operations automatically use the right user's data without any
 changes to their call signatures.
 
-Migration:  on the user's very first request we copy any root-level legacy
-files (/data/gastos.db, rules.yaml, match_rules.yaml) into their directory
-so that existing data is preserved seamlessly.
+Usuarios nuevos:  arrancan con una DB limpia que siembra init_db() (schema +
+cuentas default + categorías) y un rules.yaml copiado de los DEFAULTS bundleados
+(default_rules.yaml).  NO se copia data legacy de /data/gastos.db ni de ningún
+otro usuario: hacerlo (como hacía la migración vieja "el primero que loguea se
+queda con todo") entregaba la data de un usuario a otro.  Para asignar data
+legacy a un usuario puntual, copiala manualmente a su dir antes de su 1er login:
+    cp /data/gastos.db /data/{sanitized_email}/gastos.db
 """
 
 import os
@@ -21,16 +25,10 @@ import shutil
 from contextvars import ContextVar
 
 # ── Base paths (fall back to env vars, mirroring config.py) ──────────────────
-_DATA_DIR        = os.environ.get("DATA_DIR",        "/data")
-_DEFAULT_DB          = os.path.join(_DATA_DIR, "gastos.db")
-_DEFAULT_RULES       = os.environ.get("RULES_FILE",       os.path.join(_DATA_DIR, "rules.yaml"))
-_DEFAULT_MATCH       = os.environ.get("MATCH_RULES_FILE", os.path.join(_DATA_DIR, "match_rules.yaml"))
-_DEFAULT_USER_CONFIG = os.path.join(_DATA_DIR, "user_config.json")
+_DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
-# Sentinel written after legacy data is migrated to the first user's directory.
-# Its presence tells us NOT to copy root-level files for any subsequent user
-# (they would otherwise inherit another user's data).
-_MIGRATED_SENTINEL = os.path.join(_DATA_DIR, ".migrated_to_per_user")
+# rules.yaml default bundleado (junto al código), para sembrar usuarios nuevos.
+_BUNDLED_DEFAULT_RULES = os.path.join(os.path.dirname(__file__), "default_rules.yaml")
 
 # ── Context variable ──────────────────────────────────────────────────────────
 _user_data_dir: ContextVar[str | None] = ContextVar("user_data_dir", default=None)
@@ -65,46 +63,27 @@ def get_match_rules_file() -> str:
 
 def set_user_context(email: str):
     """
-    Point the context at *email*'s data directory.
+    Point the context at *email*'s data directory, creating it if needed.
 
-    Creates the directory if needed and copies any existing root-level data
-    files (one-time migration for legacy single-user installations).
+    Para un usuario nuevo siembra su rules.yaml desde los defaults bundleados
+    (para que tenga las categorías por defecto).  NUNCA copia data de otro
+    usuario ni de /data/gastos.db raíz — la DB la crea limpia init_db().
 
     Returns a ContextVar token — call reset_user_context(token) when done.
     """
     user_dir = os.path.join(_DATA_DIR, _sanitize(email))
     os.makedirs(user_dir, exist_ok=True)
 
-    # Set context BEFORE migration so init_db() also sees the right path
+    # Set context BEFORE init_db() (que lo llama el middleware después) vea el path.
     token = _user_data_dir.set(user_dir)
 
-    # One-time legacy migration: copy root-level files to this user's directory.
-    # Only runs if the sentinel doesn't exist yet — once the first user's data
-    # has been migrated we write the sentinel so that any NEW users who register
-    # afterwards start with an empty DB instead of inheriting existing data.
-    if not os.path.exists(_MIGRATED_SENTINEL):
-        copied_any = False
-        for src, fname in [
-            (_DEFAULT_DB,          "gastos.db"),
-            (_DEFAULT_RULES,       "rules.yaml"),
-            (_DEFAULT_MATCH,       "match_rules.yaml"),
-            (_DEFAULT_USER_CONFIG, "user_config.json"),
-        ]:
-            dest = os.path.join(user_dir, fname)
-            if not os.path.exists(dest) and os.path.exists(src):
-                try:
-                    shutil.copy2(src, dest)
-                    copied_any = True
-                except OSError:
-                    pass  # non-fatal — DB will be created fresh by init_db()
-
-        if copied_any:
-            # Mark migration done so future new users don't get a copy of this data
-            try:
-                with open(_MIGRATED_SENTINEL, "w") as f:
-                    f.write(email + "\n")
-            except OSError:
-                pass
+    # Seed rules.yaml default para usuarios nuevos (no-op si ya existe).
+    dest_rules = os.path.join(user_dir, "rules.yaml")
+    if not os.path.exists(dest_rules) and os.path.exists(_BUNDLED_DEFAULT_RULES):
+        try:
+            shutil.copy2(_BUNDLED_DEFAULT_RULES, dest_rules)
+        except OSError:
+            pass  # no-fatal — categorizer trata rules.yaml ausente como vacío
 
     return token
 
