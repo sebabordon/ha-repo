@@ -153,9 +153,11 @@ def get_dedup_config(request: Request):
     require_auth(request)
     from scrapers_db import _GENERIC_DESCS, _GENERIC_PREFIXES
     cfg = read_user_config()
+    _pago_def = ["PAGO", "ACREDITAC", "AJUSTE", "PERCEPCION", "RG 5617"]
     return {
         "dedup_prefijos": list(cfg.get("dedup_prefijos", list(_GENERIC_PREFIXES))),
         "dedup_exactos":  list(cfg.get("dedup_exactos",  sorted(_GENERIC_DESCS))),
+        "tarjeta_consumo_pago_patrones": list(cfg.get("tarjeta_consumo_pago_patrones", _pago_def)),
     }
 
 
@@ -167,6 +169,10 @@ def put_dedup_config(body: dict, request: Request):
         cfg["dedup_prefijos"] = [s.strip() for s in body["dedup_prefijos"] if str(s).strip()]
     if "dedup_exactos" in body:
         cfg["dedup_exactos"]  = [s.strip() for s in body["dedup_exactos"]  if str(s).strip()]
+    if "tarjeta_consumo_pago_patrones" in body:
+        cfg["tarjeta_consumo_pago_patrones"] = [
+            s.strip() for s in body["tarjeta_consumo_pago_patrones"] if str(s).strip()
+        ]
     write_user_config(cfg)
     return {"ok": True}
 

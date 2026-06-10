@@ -259,22 +259,27 @@ async function loadDedupConfig() {
     const d = await r.json();
     const pEl = document.getElementById("dedup-prefijos");
     const eEl = document.getElementById("dedup-exactos");
+    const cEl = document.getElementById("tarjeta-consumo-patrones");
     if (pEl) pEl.value = (d.dedup_prefijos || []).join("\n");
     if (eEl) eEl.value = (d.dedup_exactos  || []).join("\n");
+    if (cEl) cEl.value = (d.tarjeta_consumo_pago_patrones || []).join("\n");
   } catch(e) { console.warn("loadDedupConfig:", e); }
 }
 
 async function saveDedupConfig() {
   const pEl = document.getElementById("dedup-prefijos");
   const eEl = document.getElementById("dedup-exactos");
+  const cEl = document.getElementById("tarjeta-consumo-patrones");
   const msgEl = document.getElementById("dedup-save-msg");
   const prefijos = (pEl?.value || "").split("\n").map(s => s.trim()).filter(Boolean);
   const exactos  = (eEl?.value || "").split("\n").map(s => s.trim()).filter(Boolean);
+  const patrones = (cEl?.value || "").split("\n").map(s => s.trim()).filter(Boolean);
   try {
     const r = await fetch(`${BASE}/api/config/dedup`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dedup_prefijos: prefijos, dedup_exactos: exactos }),
+      body: JSON.stringify({ dedup_prefijos: prefijos, dedup_exactos: exactos,
+                             tarjeta_consumo_pago_patrones: patrones }),
     });
     if (r.ok) {
       if (msgEl) { msgEl.textContent = "Guardado ✓"; setTimeout(() => { msgEl.textContent = ""; }, 2500); }

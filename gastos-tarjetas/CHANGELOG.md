@@ -1,3 +1,8 @@
+## 0.8.44
+
+- **Consumo de tarjeta: ahora resta los reintegros de comercio (matchea el total de "Cargos" del banco)** (`scraper_scheduler.py`, `user_config.py`, `routes/config_route.py`, `static/index.html`, `static/app.js`). El cálculo anterior sumaba sólo los cargos positivos (`monto > 0`), así que cuando un crédito era un **reintegro de compra** (ej. AMEX `COTO 091 DIGITAL 000984` por −$37.785,57, que AMEX muestra en la columna "Pagos" pero **descuenta de los Cargos**) el widget quedaba inflado por ese monto. Ahora `_apply_tarjeta_consumo()` suma los cargos y **resta los créditos que NO son pagos**: un crédito (monto < 0) se ignora si su descripción matchea un patrón de pago/acreditación/percepción/ajuste, o se resta si no (= reintegro de comercio). Verificado contra el resumen real de AMEX: ARS $1.267.987,75 y USD $20,00 exactos.
+- **Nuevo setting configurable `tarjeta_consumo_pago_patrones`** (Config → Importación): lista de patrones (substring, case-insensitive) que identifican un crédito como "no consumo". Defaults: `PAGO`, `ACREDITAC`, `AJUSTE`, `PERCEPCION`, `RG 5617`. Se aplica sólo a montos negativos, así que los cargos positivos (ej. `MERPAGO*TECNOFAST`) nunca se ven afectados. Los otros scrapers (Galicia/BBVA/Visa) no cambian su número: sus pagos negativos siguen matcheando `PAGO` y se siguen excluyendo.
+
 ## 0.8.43
 
 - **Widget de tarjetas: ahora muestra siempre el consumo scrappeado del período abierto** (`scraper_scheduler.py`, `db.py`, `static/app.js`, `static/style.css`). Antes los chips de tarjeta sólo se basaban en el último resumen PDF (`importaciones`) y al tocar mostraban ese detalle. Ahora:

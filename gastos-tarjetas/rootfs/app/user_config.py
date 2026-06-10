@@ -48,6 +48,15 @@ _DEFAULT_CONFIG: dict = {
     # pago a veces queda categorizado como transferencia en vez de Pago de
     # Tarjeta; agregá esas categorías acá desde la UI si querés que cuenten.
     "venc_pago_match_categorias": ["Pago de Tarjeta"],
+    # Patrones (substring, case-insensitive) que identifican un crédito de tarjeta
+    # como PAGO / acreditación / percepción / ajuste — es decir, algo que NO es un
+    # gasto del período. Se aplican SOLO a movimientos con monto < 0: si la
+    # descripción matchea, el crédito se ignora (es un pago); si NO matchea, el
+    # crédito se RESTA del consumo (es un reintegro de comercio, ej. devolución de
+    # una compra). Los cargos (monto > 0) siempre cuentan. Usado por
+    # _apply_tarjeta_consumo() para que el consumo del widget matchee el total de
+    # "Cargos" que muestra el banco. Editable en Config → Importación.
+    "tarjeta_consumo_pago_patrones": ["PAGO", "ACREDITAC", "AJUSTE", "PERCEPCION", "RG 5617"],
     # ── Categorización por IA (configurable desde la UI) ─────────────────────
     # Lista de categorías sugeridas que se inyectan en el prompt, y el template
     # del prompt mismo. {categorias} y {desc} son los placeholders disponibles.

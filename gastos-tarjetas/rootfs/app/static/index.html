@@ -914,6 +914,20 @@
             <p class="hint">Ej: <code>TRANSFERENCIA</code> · <code>Transferencia inmediata</code></p>
           </div>
         </div>
+
+        <div style="margin-top:1.25rem">
+          <label class="field-label">Patrones de pago/crédito que NO son consumo
+            <span class="hint">(substring, case-insensitive, uno por línea)</span></label>
+          <textarea id="tarjeta-consumo-patrones" rows="5" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
+          <p class="hint">
+            Usado por el widget de tarjetas para que el consumo del período matchee el total
+            de "Cargos" del banco. Se aplica sólo a los créditos (monto negativo): si la
+            descripción matchea, el crédito se ignora (es un pago/acreditación/percepción/ajuste);
+            si NO matchea, se resta del consumo (es un reintegro de comercio).
+            Ej: <code>PAGO</code> · <code>ACREDITAC</code> · <code>AJUSTE</code> · <code>PERCEPCION</code> · <code>RG 5617</code>
+          </p>
+        </div>
+
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
           <button class="btn btn-primary" onclick="saveDedupConfig()">Guardar</button>
           <button class="btn" onclick="loadDedupConfig()">Restablecer</button>

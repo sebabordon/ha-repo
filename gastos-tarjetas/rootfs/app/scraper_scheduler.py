@@ -142,29 +142,54 @@ def _apply_saldo_delta(
         adjust_fn(fuente, delta, moneda)
 
 
+def _es_pago_credito(descripcion: str, patrones: list) -> bool:
+    """True si la descripción matchea algún patrón de pago/acreditación/percepción/
+    ajuste — es decir, un crédito que NO es un reintegro de comercio."""
+    desc = (descripcion or "").upper()
+    return any(p and p.upper() in desc for p in patrones)
+
+
 def _apply_tarjeta_consumo(
     fuente: str,
     movimientos: list,
     log_lines: list,
     set_fn,
+    pago_patrones: list,
 ) -> None:
     """
-    Calcula el consumo del período abierto de una tarjeta de crédito sumando los
-    EGRESOS (monto > 0) del snapshot completo que trae el scraper —no sólo los
-    insertados nuevos—, separados por moneda, y lo guarda vía set_fn.
+    Calcula el consumo del período abierto de una tarjeta de crédito a partir del
+    snapshot completo que trae el scraper (no sólo lo insertado nuevo), separado
+    por moneda, y lo guarda vía set_fn.
 
-    Los scrapers de tarjetas (galicia/bbva_tarjetas/amex) devuelven en cada run
-    el período vigente completo, así que `result.movimientos` ya ES el total del
-    período. Los pagos/créditos vienen con monto < 0 y quedan excluidos por el
-    filtro monto > 0.
+    Los scrapers de tarjetas (galicia/bbva_tarjetas/amex) devuelven en cada run el
+    período vigente completo, así que `result.movimientos` ya ES el total del
+    período. La fórmula imita el total de "Cargos" que muestra el banco:
+      · cargos (monto > 0)        → siempre suman
+      · créditos (monto < 0):
+          - si la descripción matchea `pago_patrones` (PAGO/ACREDITAC/AJUSTE/
+            PERCEPCION/RG 5617) → es un pago/percepción/ajuste → se IGNORA
+          - si NO matchea        → es un reintegro de comercio → se RESTA
+    Así un reintegro (ej. devolución de COTO que AMEX muestra en la columna
+    "Pagos" pero descuenta de los Cargos) reduce el consumo, mientras que el pago
+    del resumen y las devoluciones de percepción no lo tocan.
     """
+    def _consumo(moneda: str) -> float:
+        total = 0.0
+        for m in movimientos:
+            if m.fuente != fuente or m.moneda != moneda:
+                continue
+            if m.monto < 0 and _es_pago_credito(m.descripcion, pago_patrones):
+                continue  # pago/acreditación/percepción/ajuste → no es consumo
+            total += m.monto
+        return round(total, 2)
+
     movs = [m for m in movimientos if m.fuente == fuente]
-    ars  = round(sum(m.monto for m in movs if m.moneda == "ARS" and m.monto > 0), 2)
-    usd  = round(sum(m.monto for m in movs if m.moneda == "USD" and m.monto > 0), 2)
+    ars  = _consumo("ARS")
+    usd  = _consumo("USD")
     set_fn(fuente, ars, usd)
     log_lines.append(
         f"Consumo tarjeta {fuente}: ARS ${ars:,.2f} · USD ${usd:,.2f} "
-        f"({len(movs)} mov. del período abierto)"
+        f"({len(movs)} mov. del período abierto; reintegros restados, pagos ignorados)"
     )
 
 
@@ -361,12 +386,18 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
             for d in inserted_dicts
         ]
         _cc_fuentes = get_credit_card_fuentes()
+        from user_config import read_user_config as _ruc
+        _pago_patrones = _ruc().get(
+            "tarjeta_consumo_pago_patrones",
+            ["PAGO", "ACREDITAC", "AJUSTE", "PERCEPCION", "RG 5617"],
+        )
         for fuente in emitted_fuentes:
             if fuente in _cc_fuentes:
                 # Tarjeta: el consumo del período abierto es la suma del snapshot
                 # completo del scraper (result.movimientos), no el delta nuevo.
                 _apply_tarjeta_consumo(
                     fuente, result.movimientos, result.log_lines, set_tarjeta_consumo,
+                    _pago_patrones,
                 )
             elif fuente not in result.saldos:
                 for moneda in ("ARS", "USD"):
@@ -638,10 +669,16 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
             for d in inserted_dicts
         ]
         _cc_fuentes = get_credit_card_fuentes()
+        from user_config import read_user_config as _ruc
+        _pago_patrones = _ruc().get(
+            "tarjeta_consumo_pago_patrones",
+            ["PAGO", "ACREDITAC", "AJUSTE", "PERCEPCION", "RG 5617"],
+        )
         for fuente in emitted_fuentes:
             if fuente in _cc_fuentes:
                 _apply_tarjeta_consumo(
                     fuente, result.movimientos, result.log_lines, set_tarjeta_consumo,
+                    _pago_patrones,
                 )
             elif fuente not in result.saldos:
                 for moneda in ("ARS", "USD"):
