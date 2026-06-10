@@ -62,13 +62,19 @@ _BFF_MOVEMENTS  = "https://bff-cards-movements-tc-pota-cards.bff.bancogalicia.co
 # {request_id: {"event": threading.Event, "code": str|None, "status": str, "error": str|None}}
 _pending_totp: dict[str, dict] = {}
 
-# Archivo de estado para detección de cierre de período
-_PERIOD_STATE_PATH = os.path.join(_DATA_DIR, "sessions", "galicia_period_state.json")
+# Archivo de estado para detección de cierre de período — por usuario (runtime).
+def _period_state_path() -> str:
+    try:
+        from userctx import get_data_dir
+        base = get_data_dir()
+    except Exception:
+        base = _DATA_DIR
+    return os.path.join(base, "sessions", "galicia_period_state.json")
 
 
 def _read_period_state() -> dict:
     try:
-        with open(_PERIOD_STATE_PATH) as f:
+        with open(_period_state_path()) as f:
             return _json.load(f)
     except Exception:
         return {}
@@ -78,8 +84,9 @@ def _write_period_state(fuente: str, current_date: str) -> None:
     try:
         state = _read_period_state()
         state[fuente] = current_date
-        os.makedirs(os.path.dirname(_PERIOD_STATE_PATH), exist_ok=True)
-        with open(_PERIOD_STATE_PATH, "w") as f:
+        path = _period_state_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
             _json.dump(state, f)
     except Exception as exc:
         logger.warning("[galicia] Error guardando period state: %s", exc)

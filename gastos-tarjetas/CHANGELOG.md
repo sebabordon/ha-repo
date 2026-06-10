@@ -1,3 +1,7 @@
+## 0.8.42
+
+- **FIX de seguridad: sesiones de browser de scrapers ahora son per-usuario** (`scrapers/base.py`, `scrapers/galicia.py`): el dir de sesiones era la constante global `_SESSIONS_DIR = /data/sessions`, así que los scrapers guardaban las cookies de sesión bancaria en `/data/sessions/{fuente}.json` **compartido entre todos los usuarios**. Dos usuarios con el mismo banco (ej. dos con AMEX) pisaban/compartían cookies → un usuario podía correr el scraper con la sesión del otro. (BBVA/Galicia usan `save_session=False` y no persistían; AMEX/MP/IOL heredan el default `True` y sí.) Ahora `_sessions_dir()` y `_period_state_path()` (Galicia) resuelven en **runtime** desde el ContextVar de userctx → cada usuario guarda en `/data/{email}/sessions/`. Cierra el último gap de aislamiento multi-usuario de la familia de la migración legacy. Las sesiones globales viejas en `/data/sessions/` quedan huérfanas (se pueden borrar; el próximo scrape hace login limpio y guarda en el dir correcto).
+
 ## 0.8.41
 
 - **FIX de seguridad: fin de la fuga de datos entre usuarios (migración legacy)** (`userctx.py`, `scrapers_db.py`): la causa raíz del problema que originó toda esta tanda. `set_user_context` copiaba `/data/gastos.db` raíz + `rules.yaml`/`match_rules.yaml`/`user_config.json` al **primer usuario que logueaba**, guardado solo por un sentinel best-effort. Resultado: quien entraba primero (o cualquier usuario nuevo si el sentinel fallaba al escribirse) **heredaba TODA la data legacy de otro** — gastos, cuotas, cuentas, credenciales.

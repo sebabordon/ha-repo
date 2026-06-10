@@ -31,8 +31,22 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_DATA_DIR     = os.environ.get("DATA_DIR", "/data")
-_SESSIONS_DIR = os.path.join(_DATA_DIR, "sessions")
+_DATA_DIR = os.environ.get("DATA_DIR", "/data")
+
+
+def _sessions_dir() -> str:
+    """
+    Dir de sesiones de browser del scraper, **por usuario** — resuelto en runtime
+    desde el ContextVar de userctx.  Antes era la constante global
+    `/data/sessions`, lo que hacía que dos usuarios con el mismo banco
+    compartieran/pisaran las cookies de sesión bancaria (fuga entre usuarios).
+    """
+    try:
+        from userctx import get_data_dir
+        base = get_data_dir()
+    except Exception:
+        base = _DATA_DIR
+    return os.path.join(base, "sessions")
 
 # Binarios del sistema (seteados como ENV en el Dockerfile)
 _CHROMIUM_BIN    = os.environ.get("CHROMIUM_BIN",    "/usr/bin/chromium-browser")
@@ -109,11 +123,11 @@ class BaseScraper(ABC):
     save_session:        bool = True
 
     def __init__(self):
-        os.makedirs(_SESSIONS_DIR, exist_ok=True)
+        os.makedirs(_sessions_dir(), exist_ok=True)
 
     @property
     def session_path(self) -> str:
-        return os.path.join(_SESSIONS_DIR, f"{self.fuente}.json")
+        return os.path.join(_sessions_dir(), f"{self.fuente}.json")
 
     def _has_session(self) -> bool:
         if not os.path.exists(self.session_path):
