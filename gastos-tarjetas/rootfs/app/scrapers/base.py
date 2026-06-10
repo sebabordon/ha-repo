@@ -462,6 +462,29 @@ class BaseScraper(ABC):
         )
 
     @staticmethod
+    def wait_visible(driver, css_selector: str, timeout: int = 15):
+        """
+        Espera y devuelve el PRIMER elemento visible+habilitado que matchea el
+        selector. A diferencia de wait_for (que usa presence y devuelve el primer
+        match del DOM), evita devolver duplicados OCULTOS — ej. cuando coexisten
+        un form legacy y uno de SPA con el mismo campo — que al interactuar dan
+        'element not interactable'. Lanza TimeoutException si ninguno es visible.
+        """
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+
+        def first_visible(d):
+            for el in d.find_elements(By.CSS_SELECTOR, css_selector):
+                try:
+                    if el.is_displayed() and el.is_enabled():
+                        return el
+                except Exception:
+                    pass
+            return False
+
+        return WebDriverWait(driver, timeout).until(first_visible)
+
+    @staticmethod
     def wait_for_any(driver, selectors: list[str], timeout: int = 15):
         """
         Espera a que aparezca CUALQUIERA de los selectores CSS dados.

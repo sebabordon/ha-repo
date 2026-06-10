@@ -89,6 +89,62 @@ class AmexScraper(BaseScraper):
 
     # ── Login ─────────────────────────────────────────────────────────────────
 
+    # ── Helpers robustos de interacción ───────────────────────────────────────
+
+    @staticmethod
+    def _find_visible(driver, css_selector: str):
+        """Devuelve el primer elemento visible+habilitado que matchea, o None."""
+        from selenium.webdriver.common.by import By
+        for el in driver.find_elements(By.CSS_SELECTOR, css_selector):
+            try:
+                if el.is_displayed() and el.is_enabled():
+                    return el
+            except Exception:
+                pass
+        return None
+
+    @staticmethod
+    def _type_into(driver, el, value: str) -> None:
+        """
+        Escribe en un input con scroll-into-view previo y fallback JS si Selenium
+        lo reporta no interactuable (setea value + dispara input/change para que
+        un SPA registre el cambio).
+        """
+        from selenium.common.exceptions import (
+            ElementNotInteractableException,
+            InvalidElementStateException,
+        )
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        except Exception:
+            pass
+        try:
+            el.clear()
+            el.send_keys(value)
+        except (ElementNotInteractableException, InvalidElementStateException):
+            driver.execute_script(
+                "arguments[0].value=arguments[1];"
+                "arguments[0].dispatchEvent(new Event('input',{bubbles:true}));"
+                "arguments[0].dispatchEvent(new Event('change',{bubbles:true}));",
+                el, value,
+            )
+
+    @staticmethod
+    def _click_el(driver, el) -> None:
+        """Click con scroll-into-view previo y fallback a click vía JS."""
+        from selenium.common.exceptions import (
+            ElementNotInteractableException,
+            ElementClickInterceptedException,
+        )
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        except Exception:
+            pass
+        try:
+            el.click()
+        except (ElementNotInteractableException, ElementClickInterceptedException):
+            driver.execute_script("arguments[0].click();", el)
+
     def do_login(self, driver, config: dict) -> None:
         """
         Login en la SPA React de AMEX AR.
@@ -101,56 +157,56 @@ class AmexScraper(BaseScraper):
         driver.get(_LOGIN_URL)
 
         # ── Usuario ───────────────────────────────────────────────────────────
+        # Se usa wait_visible (no wait_for) porque la página puede tener el campo
+        # duplicado entre el form legacy y el SPA; el oculto da 'not interactable'.
         logger.info("[amex] do_login: esperando campo de usuario…")
-        user_el = self.wait_for(
+        user_el = self.wait_visible(
             driver,
             "input#eliloUserID, input[name='eliloUserID'], "
             "input[type='email'][autocomplete='username']",
             timeout=20,
         )
         logger.info("[amex] do_login: campo usuario encontrado, ingresando datos")
-        user_el.clear()
-        user_el.send_keys(config["usuario"])
+        self._type_into(driver, user_el, config["usuario"])
         time.sleep(0.5)
 
         # ── Botón «Continuar» (si el flow separa usuario y contraseña) ────────
-        pwd_visible = self.find(
+        pwd_visible = self._find_visible(
             driver,
             "input#eliloPassword, input[name='eliloPassword'], "
             "input[type='password']",
         )
         logger.info("[amex] do_login: contraseña visible en pantalla inicial = %s", pwd_visible is not None)
         if not pwd_visible:
-            cont_btn = self.find(
+            cont_btn = self._find_visible(
                 driver,
                 "button#loginSubmit, button[type='submit']",
             )
             if cont_btn:
                 logger.info("[amex] do_login: haciendo click en Continuar (flow 2 pantallas)")
-                cont_btn.click()
+                self._click_el(driver, cont_btn)
                 time.sleep(2)
 
         # ── Contraseña ────────────────────────────────────────────────────────
         logger.info("[amex] do_login: esperando campo de contraseña…")
-        pass_el = self.wait_for(
+        pass_el = self.wait_visible(
             driver,
             "input#eliloPassword, input[name='eliloPassword'], "
             "input[type='password']",
             timeout=15,
         )
         logger.info("[amex] do_login: campo contraseña encontrado, ingresando")
-        pass_el.clear()
-        pass_el.send_keys(config["password"])
+        self._type_into(driver, pass_el, config["password"])
         time.sleep(0.5)
 
         # ── Submit ────────────────────────────────────────────────────────────
-        submit = self.wait_for(
+        submit = self.wait_visible(
             driver,
             "button#loginSubmit, button[type='submit'], input[type='submit']",
             timeout=10,
         )
         logger.info("[amex] do_login: haciendo click en Submit, esperando portal…")
-        submit.click()
+        self._click_el(driver, submit)
 
         # ── Esperar portal post-login ─────────────────────────────────────────
         # Puede llegar al portal legacy (JSP) o al dashboard moderno (React)
