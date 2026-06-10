@@ -3370,9 +3370,10 @@ async function loadSaldos() {
   _cuentasData = _widgetCuentas;
   _populateFuenteSelects();
   renderSaldos(_widgetCuentas.filter(c => c.activa));
-  // Ya tenemos los nombres custom de las cuentas → re-render de vencimientos
-  // para que los chips muestren el nombre editado, no el label fijo de la fuente.
-  if (_vencData.length) renderVencimientos(_vencData);
+  // Ya tenemos las cuentas-tarjeta (con su consumo y nombre custom) → render del
+  // widget de tarjetas. Se llama siempre, aunque no haya vencimientos PDF: cada
+  // tarjeta muestra su consumo scrappeado del período abierto.
+  renderVencimientos(_vencData);
 }
 
 function _saldoChipMonto(saldo, moneda) {
@@ -3563,7 +3564,7 @@ async function loadVencimientos() {
 
 function renderVencimientos(items) {
   const widget = document.getElementById("vencimientos-widget");
-  if (!items.length) { widget.style.display = "none"; return; }
+  items = items || [];
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -3583,10 +3584,8 @@ function renderVencimientos(items) {
   const _showRg    = getUiPref("venc_show_rg5617");
   const _showPdf   = getUiPref("venc_show_pdf_ref");
 
-  widget.style.display = "grid";
-
-  const pendientes = [];
-  const pagadas    = [];
+  // Info de vencimiento por fuente (se cruza después con las cuentas-tarjeta).
+  const vencByFuente = {};
 
   deduped.forEach(v => {
     const vencDate = new Date(v.fecha_venc + "T00:00:00");
@@ -3692,35 +3691,75 @@ function renderVencimientos(items) {
       ${proxHtml}
     </div>`;
 
-    // Pagada (✓ verde/amarillo) → chip tenue al final; pendiente → chip prominente.
+    // Pagada (✓ verde/amarillo): se usa para el badge del chip.
     const pagada    = !!(v.pago_confirmado || v.pago_probable);
     const chipMonto = arsSum > 0 ? `$ ${_fmtNum(arsSum)}`
                     : usdSum > 0 ? `U$S ${_fmtNum2(usdSum)}` : "";
-    (pagada ? pagadas : pendientes).push({ fuente: v.fuente, label: escHtml(label), cls, diasShort, chipMonto, fullCard });
+    vencByFuente[v.fuente] = { label, cls, diasTxt, diasShort, pagada, chipMonto, fullCard };
   });
 
-  // Chip + detalle (la card completa) que se expande al tocar.
-  // Borde izquierdo = estado del vencimiento; borde derecho = estado del último scrape.
-  const chipHtml = (e, paid) => {
-    const cuenta    = _cuentaByFuente(e.fuente);
+  // ── Render: una tarjeta por cuenta CC, mostrando SIEMPRE el consumo en vivo ──
+  // (suma de egresos del período abierto scrappeada, guardada en cuentas.saldo/
+  // saldo_usd). El detalle del último resumen PDF (fecha de cierre/vencimiento)
+  // sigue apareciendo al tocar, cuando existe.
+  const tarjetas = (_widgetCuentas || []).filter(c => c.cuenta_tipo === "credit_card");
+  const order    = tarjetas.map(c => c.fuente);
+  // Fallback: fuentes con vencimiento que no tengan cuenta-tarjeta cacheada.
+  deduped.forEach(v => { if (!order.includes(v.fuente)) order.push(v.fuente); });
+
+  if (!order.length) { widget.style.display = "none"; return; }
+  widget.style.display = "grid";
+
+  widget.innerHTML = order.map(fuente => {
+    const cuenta = _cuentaByFuente(fuente);
+    const v      = vencByFuente[fuente];
+    const nombre = cuenta ? cuenta.nombre : (v ? v.label : fuente);
+    const ars    = cuenta ? (cuenta.saldo     || 0) : 0;
+    const usd    = cuenta ? (cuenta.saldo_usd || 0) : 0;
+
+    // Monto principal = consumo scrappeado del período abierto.
+    let montoHtml;
+    if (ars > 0 || usd > 0) {
+      const parts = [_saldoChipMonto(ars, "ARS")];
+      if (usd > 0) parts.push(_saldoChipMonto(usd, "USD"));
+      montoHtml = parts.join(" · ");
+    } else if (v && v.chipMonto) {
+      // Sin consumo scrappeado todavía → caer al total del resumen PDF (tenue).
+      montoHtml = `<span class="venc-chip-pdf">${v.chipMonto}</span>`;
+    } else {
+      montoHtml = `<span class="venc-chip-empty">—</span>`;
+    }
+
+    // Badge de estado del vencimiento (si hay resumen importado).
+    let badge = "";
+    if (v && v.pagada) {
+      badge = `<span class="venc-chip-badge paid">✓ pagada</span>`;
+    } else if (v && v.diasShort) {
+      badge = `<span class="venc-chip-badge ${v.cls}" title="${escHtml(v.diasTxt)}">${v.diasShort}</span>`;
+    }
+
     const scrape    = _scraperStatusColor(cuenta);
     const scrapeCls = scrape ? ` scrape-${scrape}` : "";
-    const scrapeTtl = scrape ? ` — ${_scraperStatusTitle(cuenta)}` : "";
+    const stateCls  = v ? (v.pagada ? "paid" : v.cls) : "";
+    const detail    = v ? v.fullCard
+      : `<div class="venc-card"><div class="venc-fuente">${escHtml(nombre)}</div>
+           <div class="venc-dias">Sin resumen PDF importado todavía.</div></div>`;
+    const ttl = `Consumo scrappeado del período abierto`
+      + (scrape ? ` · ${_scraperStatusTitle(cuenta)}` : "")
+      + ` — tap para ver el resumen`;
+
     return `
     <div class="venc-chipwrap">
-      <button class="venc-chip ${paid ? "paid" : e.cls}${scrapeCls}" onclick="toggleVencDetail('${e.fuente}')"
-              title="Tap para ver el detalle${escHtml(scrapeTtl)}">
-        ${paid ? `✓ ${e.label}`
-               : `💳 ${e.label}${e.chipMonto ? ` · ${e.chipMonto}` : ""}${e.diasShort ? ` · ${e.diasShort}` : ""}`}
+      <button class="venc-chip ${stateCls}${scrapeCls}" onclick="toggleVencDetail('${fuente}')"
+              title="${escHtml(ttl)}">
+        <span class="venc-chip-head">
+          <span class="venc-chip-name">💳 ${escHtml(nombre)}</span>${badge}
+        </span>
+        <span class="venc-chip-monto">${montoHtml}</span>
       </button>
-      <div class="venc-detail" id="venc-detail-${e.fuente}" style="display:none">${e.fullCard}</div>
+      <div class="venc-detail" id="venc-detail-${fuente}" style="display:none">${detail}</div>
     </div>`;
-  };
-
-  let html = pendientes.map(e => chipHtml(e, false)).join("");
-  if (!pendientes.length && pagadas.length) html += `<span class="venc-aldia">💳 Tarjetas al día</span>`;
-  html += pagadas.map(e => chipHtml(e, true)).join("");
-  widget.innerHTML = html;
+  }).join("");
 }
 
 function toggleVencDetail(fuente) {

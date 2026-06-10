@@ -2160,6 +2160,40 @@ def upsert_cuenta_saldo(fuente: str, saldo: float, moneda: str = "ARS", fecha: s
         )
 
 
+def set_tarjeta_consumo(fuente: str, ars: float, usd: float, fecha: str = None) -> None:
+    """Guarda el consumo del período abierto de una tarjeta de crédito.
+
+    Para las cuentas `cuenta_tipo='credit_card'` reutilizamos las columnas
+    `saldo`/`saldo_usd` como "consumo acumulado scrappeado del período en curso"
+    (suma de egresos del último snapshot del scraper). A diferencia de
+    `upsert_cuenta_saldo`/`adjust_cuenta_saldo`, NO exige `auto_saldo=1`: las
+    tarjetas vienen con `auto_saldo=0` y aún así queremos pisar su consumo.
+    El guard por `cuenta_tipo='credit_card'` evita tocar cuentas bancarias.
+    """
+    from datetime import date
+    fecha = fecha or str(date.today())
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE cuentas SET saldo=?, saldo_usd=?, fecha_actualizacion=? "
+            "WHERE fuente=? AND cuenta_tipo='credit_card'",
+            (round(ars, 2), round(usd, 2), fecha, fuente),
+        )
+
+
+def get_credit_card_fuentes() -> set:
+    """Devuelve el conjunto de `fuente` cuyo `cuenta_tipo='credit_card'`.
+
+    Incluye tanto las canónicas (_CC_FUENTES) como cualquier fuente custom que
+    el usuario haya marcado como tarjeta. El scheduler lo usa para decidir si a
+    una fuente emitida le aplica el cálculo de consumo (en vez del delta de saldo).
+    """
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT fuente FROM cuentas WHERE cuenta_tipo='credit_card'"
+        ).fetchall()
+    return {r["fuente"] for r in rows}
+
+
 def update_cuenta(fuente: str, saldo: float, saldo_usd: float, moneda: str,
                   activa: int, auto_saldo: int, cuenta_tipo: str = "bank"):
     if cuenta_tipo not in ("bank", "credit_card"):

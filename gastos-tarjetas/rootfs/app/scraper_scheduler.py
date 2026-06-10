@@ -141,6 +141,33 @@ def _apply_saldo_delta(
     if delta:
         adjust_fn(fuente, delta, moneda)
 
+
+def _apply_tarjeta_consumo(
+    fuente: str,
+    movimientos: list,
+    log_lines: list,
+    set_fn,
+) -> None:
+    """
+    Calcula el consumo del período abierto de una tarjeta de crédito sumando los
+    EGRESOS (monto > 0) del snapshot completo que trae el scraper —no sólo los
+    insertados nuevos—, separados por moneda, y lo guarda vía set_fn.
+
+    Los scrapers de tarjetas (galicia/bbva_tarjetas/amex) devuelven en cada run
+    el período vigente completo, así que `result.movimientos` ya ES el total del
+    período. Los pagos/créditos vienen con monto < 0 y quedan excluidos por el
+    filtro monto > 0.
+    """
+    movs = [m for m in movimientos if m.fuente == fuente]
+    ars  = round(sum(m.monto for m in movs if m.moneda == "ARS" and m.monto > 0), 2)
+    usd  = round(sum(m.monto for m in movs if m.moneda == "USD" and m.monto > 0), 2)
+    set_fn(fuente, ars, usd)
+    log_lines.append(
+        f"Consumo tarjeta {fuente}: ARS ${ars:,.2f} · USD ${usd:,.2f} "
+        f"({len(movs)} mov. del período abierto)"
+    )
+
+
 _SCRAPER_CLASSES = {
     "amex":            "scrapers.amex:AmexScraper",
     "bbva":            "scrapers.bbva:BbvaScraper",
@@ -226,7 +253,8 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
     """
     from conciliacion import run_conciliation
     from scrapers_db import insert_movimientos_raw, auto_import_unmatched
-    from db import adjust_cuenta_saldo, get_cuenta_saldo
+    from db import (adjust_cuenta_saldo, get_cuenta_saldo,
+                    set_tarjeta_consumo, get_credit_card_fuentes)
 
     # Setear contexto de usuario para que DB y archivos apunten al dir correcto
     from userctx import _user_data_dir
@@ -332,8 +360,15 @@ async def _run_instance_job(instance_id: int, data_dir: str) -> None:
                   monto=float(d["monto"]), moneda=d.get("moneda", "ARS"))
             for d in inserted_dicts
         ]
+        _cc_fuentes = get_credit_card_fuentes()
         for fuente in emitted_fuentes:
-            if fuente not in result.saldos:
+            if fuente in _cc_fuentes:
+                # Tarjeta: el consumo del período abierto es la suma del snapshot
+                # completo del scraper (result.movimientos), no el delta nuevo.
+                _apply_tarjeta_consumo(
+                    fuente, result.movimientos, result.log_lines, set_tarjeta_consumo,
+                )
+            elif fuente not in result.saldos:
                 for moneda in ("ARS", "USD"):
                     _apply_saldo_delta(
                         fuente, moneda, inserted_movs,
@@ -524,7 +559,8 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
         get_instance, get_cuentas_for_instance, update_instance_status,
     )
     from userctx import _user_data_dir, get_data_dir
-    from db import adjust_cuenta_saldo, get_cuenta_saldo
+    from db import (adjust_cuenta_saldo, get_cuenta_saldo,
+                    set_tarjeta_consumo, get_credit_card_fuentes)
 
     effective_dir = data_dir or get_data_dir()
     token = _user_data_dir.set(effective_dir)
@@ -601,8 +637,13 @@ async def run_instance_now(instance_id: int, data_dir: str | None = None) -> dic
                   monto=float(d["monto"]), moneda=d.get("moneda", "ARS"))
             for d in inserted_dicts
         ]
+        _cc_fuentes = get_credit_card_fuentes()
         for fuente in emitted_fuentes:
-            if fuente not in result.saldos:
+            if fuente in _cc_fuentes:
+                _apply_tarjeta_consumo(
+                    fuente, result.movimientos, result.log_lines, set_tarjeta_consumo,
+                )
+            elif fuente not in result.saldos:
                 for moneda in ("ARS", "USD"):
                     _apply_saldo_delta(
                         fuente, moneda, inserted_movs,

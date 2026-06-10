@@ -1224,6 +1224,33 @@ tbody tr:hover { background: #fafbff; }
 .venc-chip.scrape-err  { border-right: 5px solid #dc2626; }
 .venc-detail { margin-top: .45rem; }
 
+/* Chip de tarjeta en formato card: nombre arriba + consumo en vivo prominente,
+   igual altura visual que los saldo-chip de cuentas. El borde izquierdo sigue
+   indicando el estado del vencimiento y el derecho el del último scrape. */
+.venc-chip { display: flex; flex-direction: column; gap: .3rem; padding: .55rem .8rem; }
+.venc-chip-head {
+  display: flex; align-items: center; justify-content: space-between; gap: .4rem;
+}
+.venc-chip-name {
+  font-size: .75rem; font-weight: 600; color: #888;
+  text-transform: uppercase; letter-spacing: .03em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.venc-chip-monto {
+  font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: #1a1a2e;
+}
+.venc-chip-monto .ars-val { color: var(--color-ars); }
+.venc-chip-monto .usd-val { color: var(--color-usd); }
+.venc-chip-pdf   { color: #9ca3af; font-weight: 600; }
+.venc-chip-empty { color: #cbd5e1; font-weight: 600; }
+.venc-chip-badge { font-size: .7rem; font-weight: 700; white-space: nowrap; }
+.venc-chip-badge.urgente { color: #dc2626; }
+.venc-chip-badge.pronto  { color: #d97706; }
+.venc-chip-badge.ok      { color: var(--color-ars); }
+.venc-chip-badge.vencido { color: #dc2626; }
+.venc-chip-badge.paid    { color: #16a34a; }
+
 /* ── Cuentas tab ─────────────────────────────────────────────────────────────*/
 
 .cuenta-card {
