@@ -1,8 +1,8 @@
-name: "Gastos"
+name: "Finance Me"
 description: "Parsea y categoriza gastos de AMEX, Mastercard, Visa y MercadoLibre Argentina"
-version: "0.8.46"
+version: "0.8.47"
 slug: "gastos_tarjetas"
-url: "https://github.com/sebabordon/ha-repo/tree/main/gastos-tarjetas"
+url: "https://github.com/sebabordon/ha-repo/tree/main/finance-me"
 stage: stable
 init: false
 arch:

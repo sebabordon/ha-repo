@@ -1,0 +1,25 @@
+{
+  "appId": "ar.com.sbsoft.financeme",
+  "appName": "Finance Me",
+  "webDir": "www",
+  "server": {
+    "url": "https://finance-me.TU-DOMINIO.com",
+    "cleartext": false,
+    "iosScheme": "https"
+  },
+  "ios": {
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#16213e",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#16213e"
+    }
+  }
+}

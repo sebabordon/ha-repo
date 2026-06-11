@@ -50,7 +50,7 @@ def _load_session_secret() -> str:
     return secret
 
 
-app = FastAPI(title="Gastos", docs_url=None, redoc_url=None)
+app = FastAPI(title="Finance Me", docs_url=None, redoc_url=None)
 
 
 @app.on_event("startup")
@@ -150,9 +150,9 @@ async def serve_manifest(request: Request):
             pass
 
     manifest = {
-        "name":             "Gastos",
-        "short_name":       "Gastos",
-        "description":      "Gestor de gastos de tarjetas",
+        "name":             "Finance Me",
+        "short_name":       "Finance Me",
+        "description":      "Finance Me — gestor de gastos de tarjetas",
         "start_url":        "/",
         "display":          "standalone",
         "background_color": "#16213e",
@@ -198,7 +198,7 @@ async def serve_quick(request: Request, fuente: str = "", label: str = ""):
         html = f.read()
     html = html.replace("<title>Gasto Rápido</title>", f"<title>{title_html}</title>")
     html = html.replace(
-        'content="Gastos"',
+        'content="Finance Me"',
         f'content="{title_html}"',
         1,  # solo el primer apple-mobile-web-app-title
     )

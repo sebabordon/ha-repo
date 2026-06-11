@@ -1,0 +1,21 @@
+{
+  "name": "finance-me-mobile",
+  "version": "0.8.47",
+  "description": "Contenedor nativo iOS (Capacitor) para la PWA Finance Me",
+  "private": true,
+  "scripts": {
+    "sync": "cap sync ios",
+    "ios:add": "cap add ios",
+    "ios:open": "cap open ios",
+    "ios:run": "cap run ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/ios": "^6.1.0",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.0"
+  }
+}

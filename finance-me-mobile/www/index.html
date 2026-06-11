@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Finance Me</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0; height: 100%;
+      background: #16213e; color: #e8eaf0;
+      font-family: -apple-system, system-ui, sans-serif;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: env(safe-area-inset-top) 24px env(safe-area-inset-bottom);
+    }
+    h1 { font-size: 1.6rem; margin: 0 0 .5rem; }
+    p { opacity: .7; max-width: 28ch; line-height: 1.5; }
+    .spinner {
+      width: 38px; height: 38px; margin-bottom: 22px;
+      border: 3px solid rgba(255,255,255,.2);
+      border-top-color: #6c8cff; border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <!--
+    Esta pantalla SOLO se ve si Capacitor no puede cargar `server.url`
+    (sin red, o el backend caído). Cuando hay conexión, el WebView carga
+    directamente la PWA remota definida en capacitor.config.json.
+  -->
+  <div class="spinner"></div>
+  <h1>Finance Me</h1>
+  <p>No se pudo conectar con el servidor. Verificá tu conexión e intentá de nuevo.</p>
+</body>
+</html>

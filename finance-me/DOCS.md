@@ -1,4 +1,4 @@
-# Gastos — Documentación
+# Finance Me — Documentación
 
 Add-on para Home Assistant que parsea extractos bancarios argentinos (PDF/XLSX),
 categoriza automáticamente los movimientos y lleva el saldo de tus cuentas.

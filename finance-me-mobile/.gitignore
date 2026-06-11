@@ -1,0 +1,17 @@
+# Dependencias
+node_modules/
+
+# Proyecto iOS generado por Capacitor (se regenera con `npx cap add ios`)
+ios/App/Pods/
+ios/App/App/public/
+ios/App/build/
+ios/DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Builds / firmas — NUNCA commitear secretos de firma
+*.ipa
+*.mobileprovision
+*.p12
+*.p8
+ExportOptions.plist

@@ -1,5 +1,5 @@
-/* Gastos — service worker (minimal, cache-first for statics) */
-const CACHE = "gastos-v0.2.32";
+/* Finance Me — service worker (minimal, cache-first for statics) */
+const CACHE = "finance-me-v0.2.33";
 const PRECACHE = ["/", "/static/app.js", "/static/style.css"];
 
 self.addEventListener("install", e => {
