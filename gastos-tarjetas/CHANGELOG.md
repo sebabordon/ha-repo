@@ -1,3 +1,7 @@
+## 0.8.53
+
+- **Push: el "sub" de VAPID se deriva de `allowed_domain`** (`routes/push.py`). Antes era `mailto:admin@localhost`, que Apple/Safari puede rechazar al validar el JWT de VAPID (rompería el push en iOS). Ahora por defecto es `mailto:admin@<allowed_domain>` (override por env `VAPID_SUB`).
+
 ## 0.8.52
 
 - **Notificaciones Web Push (VAPID)** — feature "a" (`routes/push.py`, `db.py`, `main.py`, `requirements.txt`, `static/sw.js`, `static/index.html`, `static/app.js`). Push real sin app nativa, para iPhone (PWA agregada a inicio), Safari (Mac) y Edge/Chrome (PC):

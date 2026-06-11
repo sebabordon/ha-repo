@@ -24,8 +24,19 @@ router = APIRouter()
 
 _DATA_DIR   = os.environ.get("DATA_DIR", "/data")
 _VAPID_FILE = os.path.join(_DATA_DIR, "vapid.json")
-# Claim "sub" de VAPID: contacto del emisor (mailto: o https:). Configurable.
-_VAPID_SUB  = os.environ.get("VAPID_SUB", "mailto:admin@localhost")
+# Claim "sub" de VAPID: contacto del emisor (mailto: o https:). Apple/Safari es
+# estricto y rechaza valores tipo "localhost", así que se deriva del
+# allowed_domain (ya configurable) → mailto:admin@<dominio>. Override por env.
+def _default_vapid_sub() -> str:
+    try:
+        from config import ALLOWED_DOMAIN
+        if ALLOWED_DOMAIN:
+            return f"mailto:admin@{ALLOWED_DOMAIN}"
+    except Exception:
+        pass
+    return "mailto:admin@example.com"
+
+_VAPID_SUB = os.environ.get("VAPID_SUB") or _default_vapid_sub()
 
 
 # ── Claves VAPID ──────────────────────────────────────────────────────────────
