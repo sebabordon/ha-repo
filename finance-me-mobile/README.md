@@ -1,7 +1,7 @@
 # Finance Me — App iOS (Capacitor)
 
 Contenedor nativo **iOS** que envuelve la PWA de Finance Me (el add-on de Home
-Assistant que está en [`../finance-me`](../finance-me)) en un `WKWebView`, para
+Assistant que está en [`../gastos-tarjetas`](../gastos-tarjetas)) en un `WKWebView`, para
 poder distribuirla por la **App Store**.
 
 > **Arquitectura.** Finance Me es una app *server-driven*: el backend FastAPI
@@ -63,7 +63,7 @@ npx @capacitor/assets generate --ios   # busca assets/icon.png (1024×1024) y as
 ```
 
 Podés partir del ícono existente del add-on:
-[`../finance-me/icon.png`](../finance-me/icon.png).
+[`../gastos-tarjetas/icon.png`](../gastos-tarjetas/icon.png).
 
 ## 4. Abrir y correr en Xcode
 
