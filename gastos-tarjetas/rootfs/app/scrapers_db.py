@@ -86,12 +86,14 @@ def _find_db_path() -> str:
     except Exception:
         pass
 
-    logger.error(
-        "[scrapers_db] _find_db_path() llamado SIN contexto de usuario — "
-        "usando /data/gastos.db raíz (no se elige la DB de otro usuario). "
-        "Esto es un bug del llamador: debería setear el contexto antes."
+    # Antes se caía al /data/gastos.db raíz y se logueaba — pero eso creaba un
+    # DB huérfano que acumulaba escrituras sin dueño. Ahora se falla fuerte: el
+    # bug del llamador (no setear contexto) sale a la luz en vez de corromper.
+    raise RuntimeError(
+        "[scrapers_db] _find_db_path() llamado SIN contexto de usuario. "
+        "El llamador debe setear el contexto (userctx.set_user_context) antes "
+        "de acceder a la DB. Se evita escribir al /data/gastos.db raíz huérfano."
     )
-    return os.path.join(_DATA_DIR, "gastos.db")
 
 
 def _ensure_scraper_tables(conn: sqlite3.Connection) -> None:

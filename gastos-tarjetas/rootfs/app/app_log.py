@@ -66,6 +66,12 @@ def write_log(level: str, source: str, message: str) -> None:
     """
     global _prune_counter
     try:
+        # Sin contexto de usuario, get_db_path() apunta al /data/gastos.db raíz
+        # huérfano. Los logs globales/de arranque/scheduler sin dueño NO deben
+        # escribirse ahí (igual salen al log del contenedor por stdout).
+        from userctx import _user_data_dir
+        if _user_data_dir.get() is None:
+            return
         from db import _conn
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         msg = str(message)[:2000]
@@ -99,6 +105,9 @@ def write_scraper_run_log(source: str, log_lines: list[str]) -> None:
         return
     global _prune_counter
     try:
+        from userctx import _user_data_dir
+        if _user_data_dir.get() is None:
+            return  # sin contexto: no escribir al /data/gastos.db raíz huérfano
         from db import _conn
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         src = (source or "scraper")[:80]

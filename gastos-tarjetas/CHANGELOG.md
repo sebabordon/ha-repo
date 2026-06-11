@@ -1,3 +1,10 @@
+## 0.8.51
+
+- **Fin de los `/data/gastos.db` huérfanos: logs sin contexto ya no ensucian el root** (`app_log.py`, `scrapers_db.py`). Diagnóstico: el `/data/gastos.db` raíz tenía 0 gastos pero se actualizaba solo — eran logs sin dueño. El `DBLogHandler` está enganchado al root logger y dispara en cada `logger.*`; muchos (arranque, scheduler, tareas de fondo) corren **sin contexto de usuario**, y `get_db_path()` sin contexto apunta al `/data/gastos.db` raíz. Dos cambios:
+  - `app_log.write_log` / `write_scraper_run_log`: si no hay contexto de usuario (`userctx._user_data_dir` es None), **no escriben en DB** (la línea igual sale al log del contenedor por stdout). Corta la fuente del huérfano.
+  - `scrapers_db._find_db_path`: el fallback dejó de devolver el root en silencio y ahora **lanza `RuntimeError`** (fail loud). Si un llamador accede a la DB sin setear contexto, salta como bug en vez de crear/corromper un huérfano. Prerequisito para que la conciliación de vencimientos (próxima feature) no pueda escribir sin dueño.
+- Nota operativa: la data real vive en `/data/{email}/gastos.db` (intacta). El `/data/gastos.db` raíz, `gastos.db.old` y el `rules.yaml` legacy eran descartables y se borraron manualmente.
+
 ## 0.8.50
 
 - **Fix: la sesión se caía sola ("refresh me devuelve a login")** (`auth.py`). Dos causas, ambas evidentes en el log (sesión válida recién logueada y muerta minutos después, con 200/401 intercalados):
