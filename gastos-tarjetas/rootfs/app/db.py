@@ -188,6 +188,19 @@ def init_db():
             )
         """)
 
+        # Suscripciones de Web Push (VAPID) de este usuario. endpoint único:
+        # un re-subscribe del mismo navegador hace UPSERT (ver routes/push.py).
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                endpoint   TEXT UNIQUE NOT NULL,
+                p256dh     TEXT NOT NULL,
+                auth       TEXT NOT NULL,
+                ua         TEXT,
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now'))
+            )
+        """)
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS gastos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

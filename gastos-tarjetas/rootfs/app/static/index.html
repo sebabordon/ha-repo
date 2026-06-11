@@ -511,6 +511,7 @@
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
         <button class="cfg-tab" data-cfgtab="procesamiento">Procesamiento</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
+        <button class="cfg-tab" data-cfgtab="avisos">🔔 Avisos</button>
         <button class="cfg-tab" data-cfgtab="datos">Datos</button>
         <button class="cfg-tab" data-cfgtab="log">📋 Log</button>
       </div>
@@ -1125,6 +1126,22 @@
           </select>
           <button id="btn-delete-all" class="btn btn-danger">🗑 Borrar</button>
           <span class="danger-hint">Eliminá por fuente o por importación individual. Útil para reimportar un resumen sin perder el resto.</span>
+        </div>
+      </div>
+
+      <!-- ── Sub-tab: Avisos (Web Push) ──────────────────────────────── -->
+      <div id="cfg-tab-avisos" class="cfg-tab-content">
+        <h2>Notificaciones</h2>
+        <p class="rules-hint">
+          Recibí avisos push (vencimientos, etc.) en <strong>este dispositivo</strong>.
+          En iPhone tenés que tener la app <strong>agregada a la pantalla de inicio</strong>
+          para que funcione; en Safari (Mac) y Edge/Chrome (PC) anda directo.
+        </p>
+        <p class="rules-hint">Estado: <span id="push-status-val">—</span></p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button id="btn-push-enable" class="btn btn-primary">Activar notificaciones</button>
+          <button id="btn-push-test" class="btn">Probar</button>
+          <button id="btn-push-disable" class="btn">Desactivar</button>
         </div>
       </div>
 

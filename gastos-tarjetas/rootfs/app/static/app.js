@@ -691,6 +691,84 @@ if (!window.INGRESS_PREFIX && "serviceWorker" in navigator) {
   });
 }
 
+// ── Web Push (notificaciones) ────────────────────────────────────────────────
+const _pushSupported = () =>
+  "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+function _urlB64ToUint8Array(base64) {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function refreshPushState() {
+  const val = document.getElementById("push-status-val");
+  if (!val) return;
+  if (!_pushSupported()) { val.textContent = "no soportado en este navegador"; return; }
+  if (Notification.permission === "denied") { val.textContent = "permiso bloqueado por el navegador"; return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    val.textContent = sub ? "activadas en este dispositivo ✓" : "desactivadas";
+  } catch (_) { val.textContent = "desactivadas"; }
+}
+
+async function enablePush() {
+  if (!_pushSupported()) return showToast("Este navegador no soporta notificaciones", "err");
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") return showToast("Permiso de notificaciones denegado", "err");
+    const reg = await navigator.serviceWorker.ready;
+    const { public_key } = await (await fetch(`${BASE}/api/push/public-key`)).json();
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _urlB64ToUint8Array(public_key),
+    });
+    const r = await fetch(`${BASE}/api/push/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sub),
+    });
+    if (!r.ok) throw new Error("subscribe falló");
+    showToast("Notificaciones activadas");
+  } catch (e) {
+    console.warn("enablePush:", e);
+    showToast("No se pudieron activar las notificaciones", "err");
+  }
+  refreshPushState();
+}
+
+async function disablePush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await fetch(`${BASE}/api/push/unsubscribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      });
+      await sub.unsubscribe();
+    }
+    showToast("Notificaciones desactivadas");
+  } catch (e) { console.warn("disablePush:", e); }
+  refreshPushState();
+}
+
+async function testPush() {
+  try {
+    const r = await fetch(`${BASE}/api/push/test`, { method: "POST" });
+    showToast(r.ok ? "Push de prueba enviado" : "No hay suscripción activa en este dispositivo",
+              r.ok ? "ok" : "err");
+  } catch (_) { showToast("No se pudo enviar el push de prueba", "err"); }
+}
+
+document.getElementById("btn-push-enable")?.addEventListener("click", enablePush);
+document.getElementById("btn-push-disable")?.addEventListener("click", disablePush);
+document.getElementById("btn-push-test")?.addEventListener("click", testPush);
+document.querySelector('.cfg-tab[data-cfgtab="avisos"]')?.addEventListener("click", refreshPushState);
+
 // ── User info ─────────────────────────────────────────────────────────────────
 fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {
   if (u.email) document.getElementById("user-email").textContent = u.email;

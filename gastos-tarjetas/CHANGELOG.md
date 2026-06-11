@@ -1,3 +1,12 @@
+## 0.8.52
+
+- **Notificaciones Web Push (VAPID)** — feature "a" (`routes/push.py`, `db.py`, `main.py`, `requirements.txt`, `static/sw.js`, `static/index.html`, `static/app.js`). Push real sin app nativa, para iPhone (PWA agregada a inicio), Safari (Mac) y Edge/Chrome (PC):
+  - Claves VAPID generadas con `cryptography` y persistidas atómicamente en `/data/vapid.json` (global). La pública se expone como `applicationServerKey`; la privada firma cada push vía `pywebpush`.
+  - Tabla `push_subscriptions` per-usuario (en `gastos.db`); `endpoint` único con UPSERT. Las suscripciones muertas (404/410) se borran solas al enviar.
+  - Endpoints `/api/push/public-key`, `/subscribe`, `/unsubscribe`, `/test`. El envío corre en threadpool con las subs leídas en contexto (no depende del ContextVar dentro del thread).
+  - `sw.js`: handlers `push` (muestra la notificación) y `notificationclick` (enfoca/abre la app). Nuevo sub-tab **Config → 🔔 Avisos** con Activar / Probar / Desactivar.
+  - Validado localmente: generación VAPID (punto P-256 de 65 bytes → applicationServerKey de 87 chars), `Vapid01.from_pem` carga el PEM, y `webpush()` cifra+firma OK (llega al POST).
+
 ## 0.8.51
 
 - **Fin de los `/data/gastos.db` huérfanos: logs sin contexto ya no ensucian el root** (`app_log.py`, `scrapers_db.py`). Diagnóstico: el `/data/gastos.db` raíz tenía 0 gastos pero se actualizaba solo — eran logs sin dueño. El `DBLogHandler` está enganchado al root logger y dispara en cada `logger.*`; muchos (arranque, scheduler, tareas de fondo) corren **sin contexto de usuario**, y `get_db_path()` sin contexto apunta al `/data/gastos.db` raíz. Dos cambios:
