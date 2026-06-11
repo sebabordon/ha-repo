@@ -3826,9 +3826,25 @@ function renderPresupuesto() {
   const budgetMap = {};
   _presupItems.forEach(it => { budgetMap[it.categoria] = it.monto_mensual; });
 
-  const rawRows = vsActual.length ? vsActual : _presupItems.map(it => ({
+  const rawRows = vsActual.length ? vsActual.slice() : _presupItems.map(it => ({
     categoria: it.categoria, presupuesto: it.monto_mensual, gastado: 0, diferencia: it.monto_mensual, pct: null,
+    parent: _catParentOf[it.categoria] || null, tiene_hijos: (_catHierarchy[it.categoria] || []).length > 0,
   }));
+
+  // Merge: categorías agregadas al presupuesto que todavía no tienen gasto (no
+  // están en vs_actual) deben aparecer igual, anidadas bajo su padre si son
+  // subcategoría. Sin esto, agregar una categoría/subcategoría sin gasto no se ve.
+  const _present = new Set(rawRows.map(r => r.categoria));
+  _presupItems.forEach(it => {
+    if (_present.has(it.categoria)) return;
+    rawRows.push({
+      categoria: it.categoria, presupuesto: it.monto_mensual, gastado: 0,
+      diferencia: it.monto_mensual, pct: null,
+      parent: _catParentOf[it.categoria] || null,
+      tiene_hijos: (_catHierarchy[it.categoria] || []).length > 0,
+    });
+    _present.add(it.categoria);
+  });
 
   // Build tree: group children under their parents
   const byParent = {};
@@ -3985,7 +4001,10 @@ function updatePresupItem(categoria, rawValue) {
   const val = parseFloat(rawValue.replace(/\./g,"").replace(",",".")) || 0;
   const existing = _presupItems.find(it => it.categoria === categoria);
   if (existing) existing.monto_mensual = val;
-  else _presupItems.push({categoria, monto_mensual: val, moneda: "ARS"});
+  // Sólo agregar al presupuesto si el usuario escribió un monto > 0. Las
+  // categorías que se muestran por tener gastos (input en 0, sin tocar) NO se
+  // persisten al presupuesto. Las agregadas con el "+" entran vía addPresupRow.
+  else if (val > 0) _presupItems.push({categoria, monto_mensual: val, moneda: "ARS"});
 }
 
 function removePresupItem(categoria) {
@@ -4013,7 +4032,10 @@ async function savePresupuesto() {
   document.querySelectorAll(".presup-input").forEach(inp => {
     updatePresupItem(inp.dataset.cat, inp.value);
   });
-  const items = _presupItems.filter(it => it.monto_mensual > 0);
+  // Persistir TODO lo que está en el presupuesto, incluidas las categorías
+  // agregadas con el "+" que todavía no tienen monto (monto 0 = trackeada).
+  // updatePresupItem ya evita meter ceros de categorías no trackeadas.
+  const items = _presupItems;
   const res = await fetch(`${BASE}/api/presupuesto`, {
     method: "PUT",
     headers: {"Content-Type":"application/json"},
@@ -4036,9 +4058,28 @@ document.getElementById("presup-table-wrap").addEventListener("keydown", e => {
 });
 
 document.getElementById("btn-add-presup-row").addEventListener("click", () => {
-  showPrompt("Nueva categoría de presupuesto:", "ej: Supermercado", name => {
-    if (!_presupItems.find(it => it.categoria === name))
-      _presupItems.push({categoria: name, monto_mensual: 0, moneda: "ARS"});
+  // Solo categorías/subcategorías EXISTENTES (no texto libre), excluyendo las
+  // que ya están en la tabla (con gasto o ya agregadas al presupuesto).
+  const shown = new Set([
+    ..._presupVsActual.map(r => r.categoria),
+    ..._presupItems.map(it => it.categoria),
+  ]);
+  const opts = [];
+  const roots = _catList.filter(c => !_catParentOf[c]).sort((a, b) => a.localeCompare(b, "es"));
+  roots.forEach(root => {
+    if (!shown.has(root)) opts.push({ value: root, label: root });
+    (_catHierarchy[root] || []).slice().sort((a, b) => a.localeCompare(b, "es")).forEach(child => {
+      if (!shown.has(child)) opts.push({ value: child, label: `${root} › ${child}` });
+    });
+  });
+  // Categorías que no cuelgan de ninguna raíz conocida (por las dudas).
+  _catList.forEach(c => {
+    if (!shown.has(c) && !opts.some(o => o.value === c)) opts.push({ value: c, label: c });
+  });
+  if (!opts.length) { showToast("Todas las categorías ya están en el presupuesto.", "ok"); return; }
+  showSelectPrompt("Agregar al presupuesto:", opts, name => {
+    if (name && !_presupItems.find(it => it.categoria === name))
+      _presupItems.push({ categoria: name, monto_mensual: 0, moneda: "ARS" });
     renderPresupuesto();
     _scheduleSavePresup();
   });

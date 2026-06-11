@@ -2477,7 +2477,10 @@ def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
         descendants = _get_all_descendants(cat, children_map)
         g = round(sum(actual.get(c, 0.0) for c in [cat] + descendants), 2)
         b = budget.get(cat, 0.0)
-        if g == 0 and b == 0:
+        # Mostrar la categoría si tiene gasto, monto presupuestado, o fue agregada
+        # explícitamente al presupuesto (existe en la tabla `presupuestos`, aunque
+        # con monto 0 — categoría "trackeada" sin gasto todavía).
+        if g == 0 and b == 0 and cat not in budget:
             continue
         result.append({
             "categoria":   cat,
