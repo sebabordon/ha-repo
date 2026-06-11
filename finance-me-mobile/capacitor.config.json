@@ -3,7 +3,7 @@
   "appName": "Finance Me",
   "webDir": "www",
   "server": {
-    "url": "https://finance-me.TU-DOMINIO.com",
+    "url": "https://money.sbsoft.com.ar",
     "cleartext": false,
     "iosScheme": "https"
   },
