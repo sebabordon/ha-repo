@@ -1,3 +1,7 @@
+## 0.8.54
+
+- **Push debugging: el toast de "Activar" muestra el error real** (`static/app.js`) y bump de caché del SW a `v0.2.35` (`static/sw.js`). Diagnóstico del log: `subscribe` y `test` devuelven 200 (el server manda el push OK), pero en el dispositivo no se mostraba → el **service worker viejo (sin handler `push`) seguía activo**. En Edge, `pushManager.subscribe()` fallaba sin POST y el toast genérico no decía por qué; ahora muestra `name: message`. El bump de caché fuerza el ciclo de actualización del SW para que active el que tiene el handler `push`.
+
 ## 0.8.53
 
 - **Push: el "sub" de VAPID se deriva de `allowed_domain`** (`routes/push.py`). Antes era `mailto:admin@localhost`, que Apple/Safari puede rechazar al validar el JWT de VAPID (rompería el push en iOS). Ahora por defecto es `mailto:admin@<allowed_domain>` (override por env `VAPID_SUB`).

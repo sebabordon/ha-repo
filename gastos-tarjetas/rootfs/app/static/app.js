@@ -734,7 +734,8 @@ async function enablePush() {
     showToast("Notificaciones activadas");
   } catch (e) {
     console.warn("enablePush:", e);
-    showToast("No se pudieron activar las notificaciones", "err");
+    const detail = e && (e.message || e.name) ? `${e.name || ""}: ${e.message || e}` : String(e);
+    showToast("No se pudieron activar: " + detail, "err", 7000);
   }
   refreshPushState();
 }
