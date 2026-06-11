@@ -1,3 +1,10 @@
+## 0.8.55
+
+- **Aviso de vencimientos de tarjeta por push (feature b1)** (`vencimiento_notifier.py` nuevo, `scraper_scheduler.py`, `db.py`, `user_config.py`, `routes/config_route.py`, `static/index.html`, `static/app.js`, `static/sw.js`). Manda un Web Push N días antes de cada vencimiento de tarjeta **impago**, reusando lo que ya existía: `list_vencimientos()` (sabe la fecha y si está pagado vía `pago_confirmado`/`pago_probable`) y `send_push()` (feature "a").
+  - Config en **Config → 🔔 Avisos** (todo en UI, `user_config`): `venc_notif_activo` (opt-in, apagado por defecto), `venc_notif_dias_antes` (umbrales de antelación, default `[3,1]`), `venc_notif_hora` (hora local ART, default 9). Endpoints `GET/PUT /api/config/venc-notif`. Botón **"Probar aviso ahora"** (`POST /config/venc-notif/test`) que dispara el notifier al instante ignorando hora/opt-in/dedup, para verificar sin esperar.
+  - Notifier: job **horario** del scheduler (`run_for_all_users`, corre a :05) que itera usuarios; cada uno recibe sólo a su hora elegida. Por cada tarjeta impaga cuyos días hasta el vto caen en un umbral → push *"💳 AMEX vence en 3 días — $X"*. Hora ART por offset fijo UTC-3 (sin depender de tzdata).
+  - Dedup: tabla `venc_notificaciones` (clave `fuente|fecha_venc|umbral`) → no repite el mismo aviso. El job se agrega SIEMPRE (antes el scheduler hacía `return` temprano si no había scrapers).
+
 ## 0.8.54
 
 - **Push debugging: el toast de "Activar" muestra el error real** (`static/app.js`) y bump de caché del SW a `v0.2.35` (`static/sw.js`). Diagnóstico del log: `subscribe` y `test` devuelven 200 (el server manda el push OK), pero en el dispositivo no se mostraba → el **service worker viejo (sin handler `push`) seguía activo**. En Edge, `pushManager.subscribe()` fallaba sin POST y el toast genérico no decía por qué; ahora muestra `name: message`. El bump de caché fuerza el ciclo de actualización del SW para que active el que tiene el handler `push`.

@@ -519,15 +519,31 @@ def start_scheduler() -> None:
                 schedule_str, os.path.basename(data_dir),
             )
 
+    # Notifier de vencimientos (feature b1): job horario, independiente de los
+    # scrapers. Corre cada hora a :05; cada usuario decide su hora vía config y la
+    # dedup evita repetir. Se agrega SIEMPRE (aunque no haya scrapers).
+    try:
+        from vencimiento_notifier import run_for_all_users
+        _scheduler.add_job(
+            run_for_all_users,
+            trigger=CronTrigger(minute=5),
+            id="venc_notifier",
+            name="Notifier de vencimientos",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        logger.info("[scheduler] Notifier de vencimientos programado (horario, :05).")
+    except Exception as exc:
+        logger.warning("[scheduler] No pude programar el notifier de vencimientos: %s", exc)
+
     if jobs_added == 0:
         logger.info(
-            "[scheduler] No hay instancias de scraper configuradas. "
-            "Configuralas en Config → Scrapers (Cuentas en v0.4.1+)."
+            "[scheduler] Sin instancias de scraper configuradas — sólo corre el "
+            "notifier de vencimientos. Configurá scrapers en Config → Scrapers."
         )
-        return
 
     _scheduler.start()
-    logger.info("[scheduler] Iniciado con %d jobs.", jobs_added)
+    logger.info("[scheduler] Iniciado con %d jobs de scraper + notifier de vencimientos.", jobs_added)
 
 
 def stop_scheduler() -> None:

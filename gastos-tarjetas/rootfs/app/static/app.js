@@ -768,7 +768,59 @@ async function testPush() {
 document.getElementById("btn-push-enable")?.addEventListener("click", enablePush);
 document.getElementById("btn-push-disable")?.addEventListener("click", disablePush);
 document.getElementById("btn-push-test")?.addEventListener("click", testPush);
-document.querySelector('.cfg-tab[data-cfgtab="avisos"]')?.addEventListener("click", refreshPushState);
+
+// ── Config: aviso de vencimientos de tarjeta ─────────────────────────────────
+async function loadVencNotifConfig() {
+  try {
+    const r = await fetch(`${BASE}/api/config/venc-notif`);
+    if (!r.ok) return;
+    const c = await r.json();
+    const a = document.getElementById("venc-notif-activo");
+    const d = document.getElementById("venc-notif-dias");
+    const h = document.getElementById("venc-notif-hora");
+    if (a) a.checked = !!c.venc_notif_activo;
+    if (d) d.value = (c.venc_notif_dias_antes || []).join(",");
+    if (h) h.value = (c.venc_notif_hora ?? 9);
+  } catch (_) {}
+}
+
+async function saveVencNotifConfig() {
+  const dias = (document.getElementById("venc-notif-dias")?.value || "")
+    .split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+  const body = {
+    venc_notif_activo:     document.getElementById("venc-notif-activo")?.checked || false,
+    venc_notif_dias_antes: dias,
+    venc_notif_hora:       parseInt(document.getElementById("venc-notif-hora")?.value, 10),
+  };
+  try {
+    const r = await fetch(`${BASE}/api/config/venc-notif`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    showToast(r.ok ? "Aviso de vencimientos guardado" : "Error al guardar", r.ok ? "ok" : "err");
+    if (r.ok) loadVencNotifConfig();
+  } catch (_) { showToast("Error al guardar", "err"); }
+}
+
+async function testVencNotif() {
+  try {
+    const r = await fetch(`${BASE}/api/config/venc-notif/test`, { method: "POST" });
+    if (!r.ok) return showToast("No se pudo probar", "err");
+    const { sent } = await r.json();
+    showToast(sent > 0
+      ? `Enviados ${sent} aviso(s) de vencimiento`
+      : "No hay vencimientos impagos en la ventana (o sin suscripción)",
+      sent > 0 ? "ok" : "err", 6000);
+  } catch (_) { showToast("No se pudo probar", "err"); }
+}
+
+document.getElementById("btn-save-venc-notif")?.addEventListener("click", saveVencNotifConfig);
+document.getElementById("btn-test-venc-notif")?.addEventListener("click", testVencNotif);
+document.querySelector('.cfg-tab[data-cfgtab="avisos"]')?.addEventListener("click", () => {
+  refreshPushState();
+  loadVencNotifConfig();
+});
 
 // ── User info ─────────────────────────────────────────────────────────────────
 fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {

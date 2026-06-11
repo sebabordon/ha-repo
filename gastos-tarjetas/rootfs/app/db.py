@@ -201,6 +201,16 @@ def init_db():
             )
         """)
 
+        # Dedup del notifier de vencimientos: una fila por (fuente|fecha_venc|umbral)
+        # ya avisado, para no repetir el mismo push cada hora/día. Ver
+        # vencimiento_notifier.py.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS venc_notificaciones (
+                clave       TEXT PRIMARY KEY,
+                notified_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now'))
+            )
+        """)
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS gastos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -989,6 +999,22 @@ def list_importaciones() -> list[dict]:
             "FROM importaciones ORDER BY id DESC"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def venc_notif_already_sent(clave: str) -> bool:
+    """True si ya se mandó el push de vencimiento para esta clave (fuente|fecha|umbral)."""
+    with _conn() as conn:
+        return conn.execute(
+            "SELECT 1 FROM venc_notificaciones WHERE clave = ?", (clave,)
+        ).fetchone() is not None
+
+
+def venc_notif_mark_sent(clave: str) -> None:
+    """Marca una clave como ya notificada (idempotente)."""
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO venc_notificaciones (clave) VALUES (?)", (clave,)
+        )
 
 
 def list_vencimientos() -> list[dict]:

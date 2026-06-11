@@ -1143,6 +1143,31 @@
           <button id="btn-push-test" class="btn">Probar</button>
           <button id="btn-push-disable" class="btn">Desactivar</button>
         </div>
+
+        <hr style="margin:1.4rem 0;border:none;border-top:1px solid #eee">
+        <h2>Vencimientos de tarjeta</h2>
+        <p class="rules-hint">
+          Te aviso por push antes de que venza cada tarjeta <strong>impaga</strong>
+          (usa el detector de pagos que ya tenés en Procesamiento → Vencimientos).
+          Requiere tener las notificaciones activadas arriba.
+        </p>
+        <label style="display:block;margin:.4rem 0">
+          <input type="checkbox" id="venc-notif-activo"> Avisarme de vencimientos de tarjeta
+        </label>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-top:.4rem">
+          <label>Días de antelación (coma-separado)<br>
+            <input id="venc-notif-dias" type="text" placeholder="3,1" style="width:110px">
+          </label>
+          <label>Hora del aviso (0–23)<br>
+            <input id="venc-notif-hora" type="number" min="0" max="23" style="width:80px">
+          </label>
+          <button id="btn-save-venc-notif" class="btn btn-primary">Guardar</button>
+          <button id="btn-test-venc-notif" class="btn">Probar aviso ahora</button>
+        </div>
+        <p class="rules-hint" style="margin-top:.5rem">
+          Ej: <code>3,1</code> = aviso 3 días antes y 1 día antes. Poné <code>0</code>
+          para incluir el día del vencimiento.
+        </p>
       </div>
 
       <!-- ── Sub-tab: Log unificado ──────────────────────────────────── -->

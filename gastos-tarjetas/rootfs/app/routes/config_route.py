@@ -256,6 +256,51 @@ def put_venc_match_config(body: dict, request: Request):
     return {"ok": True}
 
 
+@router.get("/config/venc-notif")
+def get_venc_notif_config(request: Request):
+    require_auth(request)
+    cfg = read_user_config()
+    return {
+        "venc_notif_activo":     bool(cfg.get("venc_notif_activo", False)),
+        "venc_notif_dias_antes": list(cfg.get("venc_notif_dias_antes", [3, 1])),
+        "venc_notif_hora":       int(cfg.get("venc_notif_hora", 9) or 9),
+    }
+
+
+@router.put("/config/venc-notif")
+def put_venc_notif_config(body: dict, request: Request):
+    require_auth(request)
+    cfg = read_user_config()
+    if "venc_notif_activo" in body:
+        cfg["venc_notif_activo"] = bool(body["venc_notif_activo"])
+    if "venc_notif_dias_antes" in body:
+        dias = []
+        for x in (body["venc_notif_dias_antes"] or []):
+            try:
+                n = int(x)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= n <= 60:
+                dias.append(n)
+        cfg["venc_notif_dias_antes"] = sorted(set(dias), reverse=True) or [3, 1]
+    if "venc_notif_hora" in body:
+        try:
+            cfg["venc_notif_hora"] = max(0, min(23, int(body["venc_notif_hora"])))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "venc_notif_hora inválido (0..23)")
+    write_user_config(cfg)
+    return {"ok": True}
+
+
+@router.post("/config/venc-notif/test")
+def test_venc_notif(request: Request):
+    """Dispara el notifier de vencimientos AHORA (ignora hora/opt-in/dedup)."""
+    require_auth(request)
+    from vencimiento_notifier import notify_current_user
+    sent = notify_current_user(force=True)
+    return {"sent": sent}
+
+
 # ── Categorización por IA (prompt + catálogo de categorías) ──────────────────
 
 @router.get("/config/categorizacion")

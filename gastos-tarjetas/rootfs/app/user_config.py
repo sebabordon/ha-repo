@@ -48,6 +48,13 @@ _DEFAULT_CONFIG: dict = {
     # pago a veces queda categorizado como transferencia en vez de Pago de
     # Tarjeta; agregá esas categorías acá desde la UI si querés que cuenten.
     "venc_pago_match_categorias": ["Pago de Tarjeta"],
+    # Aviso push de vencimientos de tarjeta (feature b1). Opt-in: apagado hasta
+    # que el usuario lo prenda. `dias_antes` son los umbrales de antelación (manda
+    # un push cuando faltan exactamente N días para un vencimiento IMPAGO); `hora`
+    # es la hora local (ART) en que se manda. La dedup vive en venc_notificaciones.
+    "venc_notif_activo": False,
+    "venc_notif_dias_antes": [3, 1],
+    "venc_notif_hora": 9,
     # Patrones (substring, case-insensitive) que identifican un crédito de tarjeta
     # como PAGO / acreditación / percepción / ajuste — es decir, algo que NO es un
     # gasto del período. Se aplican SOLO a movimientos con monto < 0: si la
