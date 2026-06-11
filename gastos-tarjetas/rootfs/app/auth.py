@@ -14,7 +14,26 @@ ADMIN_EMAIL         = f"admin@{ALLOWED_DOMAIN}"
 
 # Máximo de sesiones activas (tokens) por usuario. Cada login agrega una; el
 # logout la quita. Limita el crecimiento si las cookies expiran sin logout.
-_MAX_TOKENS_PER_USER = 10
+# IMPORTANTE: al superar el tope se expulsa el token MÁS VIEJO aunque siga
+# activo → esa sesión se desloguea. Por eso el valor debe holgar varios
+# dispositivos × varias re-logueadas; 10 era muy bajo (iPhone PWA + desktop +
+# re-logins dejaban afuera sesiones vivas).
+_MAX_TOKENS_PER_USER = 50
+
+
+def _atomic_write_json(path: str, obj) -> None:
+    """Escribe JSON de forma atómica (tmp + os.replace).
+
+    Evita que un lector concurrente —o un reinicio del add-on a mitad de
+    escritura— vea el archivo truncado (que `json.load` interpretaría como
+    corrupto y, en el caso de session_tokens.json, desloguearía a todos).
+    `os.replace` es atómico dentro del mismo filesystem.
+    """
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(obj, f, indent=2)
+    os.replace(tmp, path)
 
 
 # ── Settings (runtime overrides stored in /data/settings.json) ────────────────
@@ -28,9 +47,7 @@ def _load_settings() -> dict:
 
 
 def _save_settings(s: dict):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(SETTINGS_FILE, "w") as f:
-        json.dump(s, f, indent=2)
+    _atomic_write_json(SETTINGS_FILE, s)
 
 
 def get_registration_enabled() -> bool:
@@ -64,9 +81,7 @@ def _load_session_tokens() -> dict:
 
 
 def _save_session_tokens(d: dict):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(SESSION_TOKENS_FILE, "w") as f:
-        json.dump(d, f, indent=2)
+    _atomic_write_json(SESSION_TOKENS_FILE, d)
 
 
 def issue_session_token(email: str) -> str:
@@ -126,9 +141,7 @@ def _load_users() -> dict:
 
 
 def _save_users(users: dict):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(USERS_FILE, "w") as f:
-        json.dump(users, f, indent=2)
+    _atomic_write_json(USERS_FILE, users)
 
 
 def _hash(password: str, salt: str) -> str:

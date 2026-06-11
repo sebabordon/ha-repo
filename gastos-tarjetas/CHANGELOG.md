@@ -1,3 +1,9 @@
+## 0.8.50
+
+- **Fix: la sesión se caía sola ("refresh me devuelve a login")** (`auth.py`). Dos causas, ambas evidentes en el log (sesión válida recién logueada y muerta minutos después, con 200/401 intercalados):
+  - `_MAX_TOKENS_PER_USER` era **10**: al pasar de 10 tokens activos por usuario se expulsaba el **más viejo aunque siguiera activo**. Con iPhone PWA + desktop + la tanda de re-logins de un debugging, se echaban sesiones vivas → logout en el próximo request. Subido a **50** (holgura para varios dispositivos × varias re-logueadas).
+  - `session_tokens.json` (y `users.json`, `settings.json`) se escribían **no atómicamente** (truncar + reescribir). Un reinicio del add-on a mitad de escritura dejaba el archivo truncado → `JSONDecodeError` → `_load_session_tokens` devolvía `{}` → **todas** las sesiones inválidas. Ahora se escribe vía `_atomic_write_json` (tmp + `os.replace`, atómico en el mismo filesystem).
+
 ## 0.8.49
 
 - **Backup/restore COMPLETO desde el panel Admin** (`routes/admin.py`). Nueva sección "Copia de seguridad completa" (solo admin) con dos acciones:
