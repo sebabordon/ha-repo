@@ -3845,6 +3845,18 @@ function renderPresupuesto() {
     });
     _present.add(it.categoria);
   });
+  // Asegurar la fila del padre de toda subcategoría mostrada, para que anide
+  // (aunque el padre no tenga gasto ni presupuesto propio).
+  rawRows.slice().forEach(r => {
+    const par = r.parent;
+    if (par && !_present.has(par)) {
+      rawRows.push({
+        categoria: par, presupuesto: 0, gastado: 0, diferencia: 0, pct: null,
+        parent: _catParentOf[par] || null, tiene_hijos: true,
+      });
+      _present.add(par);
+    }
+  });
 
   // Build tree: group children under their parents
   const byParent = {};

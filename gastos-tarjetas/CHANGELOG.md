@@ -1,3 +1,7 @@
+## 0.8.46
+
+- **Presupuesto: el padre de una subcategoría presupuestada ahora siempre se muestra (para anidar)** (`db.py`, `static/app.js`). Si presupuestabas una subcategoría cuyo padre no tenía gasto ni presupuesto propio, la subcategoría se mostraba plana (el padre no tenía fila). Ahora `stats_presupuesto_vs_actual` conserva la categoría si ella **o cualquier descendiente** está en la tabla `presupuestos` (`budget_in_subtree`), así el padre siempre aparece como fila contenedora. El frontend además agrega la fila del padre en el merge para feedback instantáneo antes del reload.
+
 ## 0.8.45
 
 - **Presupuesto: agregar categorías/subcategorías ahora usa un selector de existentes y permite presupuestar aunque no tengan gasto** (`static/app.js`, `db.py`). Dos bugs:
