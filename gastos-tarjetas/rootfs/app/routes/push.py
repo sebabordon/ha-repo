@@ -120,6 +120,14 @@ def _remove_subscription(endpoint: str) -> None:
         conn.execute("DELETE FROM push_subscriptions WHERE endpoint=?", (endpoint,))
 
 
+def _clear_subscriptions() -> int:
+    """Borra TODAS las suscripciones del usuario en contexto. Devuelve cuántas."""
+    from db import _conn
+    with _conn() as conn:
+        cur = conn.execute("DELETE FROM push_subscriptions")
+        return cur.rowcount if (cur.rowcount or 0) > 0 else 0
+
+
 # ── Envío ─────────────────────────────────────────────────────────────────────
 
 def send_push(subscriptions: list[dict], title: str, body: str, url: str = "/") -> tuple[int, list[str]]:
@@ -182,6 +190,13 @@ async def push_unsubscribe(request: Request):
     if endpoint:
         _remove_subscription(endpoint)
     return {"ok": True}
+
+
+@router.post("/push/clear")
+async def push_clear(request: Request):
+    """Borra todas las suscripciones del usuario (para limpiar duplicadas)."""
+    require_auth(request)
+    return {"ok": True, "cleared": _clear_subscriptions()}
 
 
 @router.post("/push/test")

@@ -1,3 +1,7 @@
+## 0.8.58
+
+- **Botón "Resetear duplicadas" para limpiar suscripciones push** (`routes/push.py`, `static/index.html`, `static/app.js`, `static/sw.js`). Si "Probar" mandaba notificaciones **duplicadas** era porque quedaban suscripciones huérfanas en la DB de antes del fix 0.8.56 (endpoints viejos aún vivos que el 410 no llegó a limpiar), y el envío hace fan-out a todas. Nuevo `POST /api/push/clear` borra TODAS las suscripciones del usuario; el botón además desuscribe el navegador local y vuelve a activar este dispositivo → queda una sola suscripción limpia. En los otros dispositivos hay que tocar "Activar" de nuevo. Bump caché SW `v0.2.39`.
+
 ## 0.8.57
 
 - **Pagos / vencimientos manuales (feature b2)** (`db.py`, `routes/pagos.py` nuevo, `main.py`, `vencimiento_notifier.py`, `static/index.html`, `static/app.js`, `static/sw.js`). Para "idem para pagos": servicios, alquiler, expensas, etc. que no se scrapean.

@@ -765,9 +765,28 @@ async function testPush() {
   } catch (_) { showToast("No se pudo enviar el push de prueba", "err"); }
 }
 
+async function resetPush() {
+  if (!confirm("Borra TODAS tus suscripciones (todos los dispositivos) y reactiva ESTE. En los demás vas a tener que tocar Activar de nuevo. ¿Seguir?"))
+    return;
+  try {
+    // Sacar la suscripción local del navegador antes de limpiar el server.
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+    await fetch(`${BASE}/api/push/clear`, { method: "POST" });
+    showToast("Suscripciones reseteadas, reactivando este dispositivo…");
+    await enablePush();   // crea UNA limpia para este device
+  } catch (e) {
+    console.warn("resetPush:", e);
+    showToast("No se pudo resetear", "err");
+  }
+  refreshPushState();
+}
+
 document.getElementById("btn-push-enable")?.addEventListener("click", enablePush);
 document.getElementById("btn-push-disable")?.addEventListener("click", disablePush);
 document.getElementById("btn-push-test")?.addEventListener("click", testPush);
+document.getElementById("btn-push-reset")?.addEventListener("click", resetPush);
 
 // ── Config: aviso de vencimientos de tarjeta ─────────────────────────────────
 async function loadVencNotifConfig() {
