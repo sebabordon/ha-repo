@@ -2446,6 +2446,11 @@ tbody tr:hover { background: #fafbff; }
 
 .cq-pagos-man { border-left: 2px solid #e5e7eb; }
 
+/* ── PWA / Pantalla de inicio — columnas ────────────────────────────────── */
+.pwa-cols { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; margin-top: .75rem; }
+.pwa-col  { flex: 1; min-width: 220px; }
+.pwa-col-title { font-weight: 600; font-size: .95rem; margin: 0 0 .4rem; }
+
 /* ── Pagos/Vencimientos manuales — form ──────────────────────────────────── */
 .pago-form {
   display: flex;

@@ -1,3 +1,8 @@
+## 0.8.69
+
+- **PWA / Pantalla de inicio en 3 columnas** (`static/index.html`, `static/style.css`): las secciones "Íconos por fuente", "Accesos rápidos" e "Instalar en iOS" se agrupan al final del sub-tab Interfaz en un layout flex de columnas (`.pwa-cols` / `.pwa-col`). En pantallas pequeñas se apilan; en desktop aparecen lado a lado.
+- **Pagos manuales mensuales en tabla por mes** (`routes/cuotas.py`): los pagos con `recurrencia=mensual` ahora se expanden por todas las ocurrencias futuras hasta `fecha_fin` (o hasta un horizonte de 24 meses si no tiene fecha fin). Antes sólo aparecía el próximo mes.
+
 ## 0.8.68
 
 - **Íconos levemente más grandes que el texto** (`static/style.css`): `.tab-icon { font-size: 1.15em; line-height: 1 }` compensa el achicamiento del selector de fuente y evita que el emoji infle el line-height del contenedor.

@@ -172,25 +172,42 @@ def get_cuotas(
 
     cuotas.sort(key=lambda x: -x['total_adeudado'])
 
-    # Agrego pagos manuales pendientes al desglose por mes
-    for pago in list_pagos(estado='pendiente'):
-        fv = pago.get('fecha_vencimiento') or ''
-        if len(fv) < 7 or pago.get('monto') is None:
-            continue
-        mes = fv[:7]
-        if mes not in por_mes:
-            por_mes[mes] = {
-                'mes': mes, 'total_ars': 0.0, 'total_usd': 0.0,
+    # Agrego pagos manuales pendientes al desglose por mes.
+    # Para pagos mensuales, expando todas las ocurrencias futuras hasta fecha_fin
+    # (o hasta un horizonte de 24 meses si no hay fecha_fin).
+    def _add_pago_mes(mes_key: str, amt: float, moneda: str) -> None:
+        if mes_key not in por_mes:
+            por_mes[mes_key] = {
+                'mes': mes_key, 'total_ars': 0.0, 'total_usd': 0.0,
                 'ars_por_fuente': {}, 'usd_por_fuente': {},
             }
-        pm  = por_mes[mes]
-        amt = float(pago['monto'] or 0)
-        if pago.get('moneda') == 'USD':
+        pm = por_mes[mes_key]
+        if moneda == 'USD':
             pm['total_usd'] += amt
             pm['usd_por_fuente']['pagos_man'] = pm['usd_por_fuente'].get('pagos_man', 0.0) + amt
         else:
             pm['total_ars'] += amt
             pm['ars_por_fuente']['pagos_man'] = pm['ars_por_fuente'].get('pagos_man', 0.0) + amt
+
+    horizon = _add_months(date.today().year, date.today().month, 24)
+
+    for pago in list_pagos(estado='pendiente'):
+        fv = pago.get('fecha_vencimiento') or ''
+        if len(fv) < 7 or pago.get('monto') is None:
+            continue
+        amt    = float(pago['monto'] or 0)
+        moneda = pago.get('moneda') or 'ARS'
+        if pago.get('recurrencia') == 'mensual':
+            ff     = pago.get('fecha_fin') or ''
+            end    = ff[:7] if (ff and len(ff) >= 7) else horizon
+            end    = min(end, horizon)
+            mes    = fv[:7]
+            while mes <= end:
+                _add_pago_mes(mes, amt, moneda)
+                y, m0 = int(mes[:4]), int(mes[5:7])
+                mes = _add_months(y, m0, 1)
+        else:
+            _add_pago_mes(fv[:7], amt, moneda)
 
     por_mes_list = sorted(por_mes.values(), key=lambda x: x['mes'])
 

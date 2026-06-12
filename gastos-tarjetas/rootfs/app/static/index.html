@@ -658,21 +658,6 @@
       <!-- ── Sub-tab: Interfaz ─────────────────────────────────────── -->
       <div id="cfg-tab-ui" class="cfg-tab-content">
 
-        <!-- ── PWA Shortcuts ── -->
-        <div class="ui-pref-section">Accesos rápidos</div>
-        <p class="rules-hint" style="margin:.4rem 0 .75rem">
-          Definí qué cuentas querés tener como accesos rápidos. Cada una abre un formulario
-          de carga de gastos. En <strong>Android + Chrome</strong> aparecen al mantener
-          presionado el ícono; en <strong>iOS</strong> usá la sección "Instalar en iOS"
-          de abajo para agregar cada uno al inicio.
-        </p>
-        <div id="pwa-shortcuts-list" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem"></div>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
-          <button class="btn" onclick="addPwaShortcut()">➕ Agregar</button>
-          <button class="btn btn-primary" onclick="savePwaShortcuts()">💾 Guardar</button>
-        </div>
-        <div id="pwa-ios-guide"></div>
-
         <p class="rules-hint" style="margin-bottom:1rem">Personalizá los colores usados en los widgets. Los cambios se guardan en este navegador.</p>
         <div class="ui-colors-grid">
           <div class="ui-color-row">
@@ -918,17 +903,32 @@
           para incluir el día del vencimiento.
         </p>
 
-        <h3 style="margin-top:2rem">Íconos PWA por fuente</h3>
-        <p class="hint" style="margin-bottom:1rem">
-          Color de fondo y siglas de los íconos de acceso directo (formularios
-          rápidos en la pantalla de inicio). Hasta 2 líneas de texto por ícono.
-        </p>
-        <div id="iconos-list"></div>
-        <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center">
-          <button class="btn" onclick="addIconRow()">+ Fuente</button>
-          <button class="btn btn-primary" onclick="saveIconosConfig()">💾 Guardar</button>
-          <button class="btn" onclick="loadIconosConfig()">Restablecer</button>
-          <span id="iconos-save-msg" style="color:#16a34a;font-size:.85em"></span>
+        <!-- ── PWA / Pantalla de inicio ── -->
+        <div class="ui-pref-section" style="margin-top:1.5rem">PWA / Pantalla de inicio</div>
+        <div class="pwa-cols">
+          <div class="pwa-col">
+            <h4 class="pwa-col-title">Íconos por fuente</h4>
+            <p class="hint" style="margin-bottom:.75rem">Color de fondo y siglas de los íconos de acceso directo. Hasta 2 líneas por ícono.</p>
+            <div id="iconos-list"></div>
+            <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+              <button class="btn" onclick="addIconRow()">+ Fuente</button>
+              <button class="btn btn-primary" onclick="saveIconosConfig()">💾 Guardar</button>
+              <button class="btn" onclick="loadIconosConfig()">Restablecer</button>
+              <span id="iconos-save-msg" style="color:#16a34a;font-size:.85em"></span>
+            </div>
+          </div>
+          <div class="pwa-col">
+            <h4 class="pwa-col-title">Accesos rápidos</h4>
+            <p class="rules-hint" style="margin-bottom:.75rem">Cada acceso abre un formulario de carga de gastos. En <strong>Android + Chrome</strong> aparecen al mantener presionado el ícono.</p>
+            <div id="pwa-shortcuts-list" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem"></div>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+              <button class="btn" onclick="addPwaShortcut()">➕ Agregar</button>
+              <button class="btn btn-primary" onclick="savePwaShortcuts()">💾 Guardar</button>
+            </div>
+          </div>
+          <div class="pwa-col">
+            <div id="pwa-ios-guide"></div>
+          </div>
         </div>
       </div>
 
