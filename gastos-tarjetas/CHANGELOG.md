@@ -1,3 +1,10 @@
+## 0.8.68
+
+- **Íconos levemente más grandes que el texto** (`static/style.css`): `.tab-icon { font-size: 1.15em; line-height: 1 }` compensa el achicamiento del selector de fuente y evita que el emoji infle el line-height del contenedor.
+- **Tabs altura consistente entre Edge y Safari** (`static/style.css`): `.tab`, `.cfg-tab` y `.gtab` pasan a `display: inline-flex; align-items: center`. Los emojis en inline-block inflaban el line-height de forma distinta en cada browser; con flex la altura la determina sólo el padding.
+- **Lápiz renderiza como emoji en Mac/PC** (`static/app.js`): `✏` (U+270F) tenía texto simple → ahora `✏️` (U+270F + U+FE0F, variation selector) fuerza renderizado emoji en todos los sistemas.
+- **Tilde verde para "Marcar pagado"** (`static/app.js`, `static/style.css`): ícono cambiado a `✔` (U+2714, heavy check mark); clase `btn-pagado` pone el ícono verde (#16a34a) y ligeramente más grande.
+
 ## 0.8.67
 
 - **Íconos en todos los botones de acción** (`static/index.html`, `static/app.js`): 💾 Guardar · ❌ Cancelar · ➕ Agregar · ▶ Probar · ✓ Aplicar · 👁/🚫 Widget · 🔍 Ver gastos (presupuesto) · 💾 en el botón inline de edición de descripción. El ❌ reemplaza al ✕ anterior como par natural de ✅.

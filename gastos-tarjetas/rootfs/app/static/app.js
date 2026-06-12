@@ -961,10 +961,10 @@ async function loadPagos() {
     const tdA = document.createElement("td");
     tdA.style.cssText = "display:flex;align-items:center;gap:.3rem;white-space:nowrap";
     if (p.estado !== "pagado") {
-      tdA.appendChild(mkAction("✓", "Pagado", "", () => markPagoPaid(p.id), "Marcar pagado"));
+      tdA.appendChild(mkAction("✔", "Pagado", "btn-pagado", () => markPagoPaid(p.id), "Marcar pagado"));
       if (p.recurrencia === "mensual")
         tdA.appendChild(mkAction("⏹", "Finalizar", "", () => finalizarPago(p.id, p.descripcion), "Finalizar serie"));
-      tdA.appendChild(mkAction("✏", "Editar", "", () => editPago(p), "Editar"));
+      tdA.appendChild(mkAction("✏️", "Editar", "", () => editPago(p), "Editar"));
     }
     tdA.appendChild(mkAction("🗑", "Borrar", "btn-danger", () => deletePago(p.id, p.descripcion), "Borrar"));
     tr.appendChild(tdA);
