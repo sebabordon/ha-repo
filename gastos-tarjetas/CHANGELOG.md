@@ -1,3 +1,7 @@
+## 0.8.72
+
+- **Chart Presupuesto vs real: doble altura en mobile** (`static/app.js`): `aspectRatio: 1` en pantallas ≤ 600px (cuadrado) vs `2` en desktop. Con el ancho típico de un teléfono (~390px) el gráfico pasa de ~195px a ~390px de alto.
+
 ## 0.8.71
 
 - **Presupuesto: categorías padre con hijos = suma automática** (`db.py`, `static/app.js`, `static/style.css`): si una categoría tiene subcategorías, su presupuesto se deriva siempre de la suma de los hijos (antes solo cuando el padre tenía 0). El campo pasa a ser read-only con badge "Σ hijos"; el botón ✕ desaparece de las filas padre-con-hijos. Al guardar, las filas padre se excluyen de la tabla `presupuestos` (los hijos son la fuente de verdad). Categorías padre SIN hijos mantienen input editable normal. El cálculo del backend usa pases iterativos para árboles de más de 2 niveles.

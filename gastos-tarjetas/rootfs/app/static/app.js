@@ -7213,6 +7213,7 @@ function _drawBudgetChart() {
     options: {
       responsive: true,
       maintainAspectRatio: true,
+      aspectRatio: window.innerWidth <= 600 ? 1 : 2,
       plugins: {
         legend: { position: "top" },
         tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${_fmtNum(c.raw)}` } },
