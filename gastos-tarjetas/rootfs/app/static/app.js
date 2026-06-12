@@ -149,7 +149,7 @@ function showConfirm(msg, onConfirm) {
   const el = document.getElementById("toast");
   el.innerHTML = `<span class="toast-msg">${escHtml(msg)}</span>
     <button class="btn btn-sm btn-danger" id="t-ok">Confirmar</button>
-    <button class="btn btn-sm" onclick="document.getElementById('toast').classList.remove('show')">Cancelar</button>`;
+    <button class="btn btn-sm" onclick="document.getElementById('toast').classList.remove('show')">❌ Cancelar</button>`;
   el.className = "toast toast-warn show";
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove("show"), 8000);
@@ -902,7 +902,7 @@ function resetPagoForm() {
   const f = _pagoForm();
   f.desc.value = ""; f.monto.value = ""; f.fecha.value = ""; f.fin.value = "";
   f.recur.value = "unico"; f.moneda.value = "ARS";
-  document.getElementById("btn-add-pago").textContent = "+ Agregar";
+  document.getElementById("btn-add-pago").textContent = "➕ Agregar";
   document.getElementById("btn-cancel-pago").style.display = "none";
 }
 
@@ -915,7 +915,7 @@ function editPago(p) {
   f.fecha.value  = String(p.fecha_vencimiento || "").slice(0, 10);
   f.recur.value  = p.recurrencia === "mensual" ? "mensual" : "unico";
   f.fin.value    = String(p.fecha_fin || "").slice(0, 10);
-  document.getElementById("btn-add-pago").textContent = "Guardar";
+  document.getElementById("btn-add-pago").textContent = "💾 Guardar";
   document.getElementById("btn-cancel-pago").style.display = "";
   f.desc.focus();
 }
@@ -2474,7 +2474,7 @@ function _editDescripcion(cell, gastoId) {
 
   const saveBtn   = document.createElement("button");
   saveBtn.className   = "btn btn-sm btn-action";
-  saveBtn.textContent = "✓";
+  saveBtn.textContent = "💾";
 
   const cancelBtn = document.createElement("button");
   cancelBtn.className   = "btn btn-sm btn-action";
@@ -3387,7 +3387,7 @@ function renderRules() {
           <input type="checkbox" class="rule-solo-egresos-chk" data-i="${i}" ${rule.solo_egresos ? "checked" : ""}> Solo egresos
         </label>
         ${_buildFuentesPickerHtml(i, rule.fuentes || [])}
-        <button type="button" class="btn btn-sm" onclick="openRulePreview(${i})">Probar</button>
+        <button type="button" class="btn btn-sm" onclick="openRulePreview(${i})">▶ Probar</button>
         <button type="button" class="btn btn-danger btn-sm" onclick="removeRule(${i})">✕</button>
       </div>
       <div class="rule-tags" id="tags-${i}">${tagsHtml}</div>
@@ -3668,7 +3668,7 @@ function renderMatchRules() {
       <div class="match-rule-header">
         <input class="match-nombre" data-i="${i}" value="${escHtml(r.nombre)}" placeholder="Nombre de la regla">
         <div style="display:flex;gap:.4rem;align-items:center">
-          <button class="btn btn-sm" onclick="applyOneMatchRule(${i})">Aplicar</button>
+          <button class="btn btn-sm" onclick="applyOneMatchRule(${i})">✓ Aplicar</button>
           <button class="btn btn-danger btn-sm" onclick="removeMatchRule(${i})">✕</button>
         </div>
       </div>
@@ -4310,7 +4310,7 @@ function renderPresupuesto() {
             </td>
             <td style="white-space:nowrap">
               ${r.gastado ? `<button class="btn btn-sm presup-jump-btn" title="Ver gastos de esta categoría en la tab Gastos"
-                      data-presup-jump="${escHtml(r.categoria)}">↗</button>` : ""}
+                      data-presup-jump="${escHtml(r.categoria)}">🔍</button>` : ""}
               <button class="btn btn-sm btn-danger"
                       onclick="removePresupItem('${escHtml(r.categoria)}')">✕</button>
             </td>
@@ -4818,8 +4818,8 @@ function _renderCuentaCard(c, idx = 0) {
 
   // "activa" controls visibility in the saldos widget at the top
   const widgetBtn = c.activa
-    ? `<button class="btn btn-sm" title="Ocultar del widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',0)">Widget ✓</button>`
-    : `<button class="btn btn-sm" title="Mostrar en el widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',1)">Widget ✗</button>`;
+    ? `<button class="btn btn-sm" title="Ocultar del widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',0)">👁 Widget</button>`
+    : `<button class="btn btn-sm" title="Mostrar en el widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',1)">🚫 Widget</button>`;
 
   const cuentaTipo = c.cuenta_tipo || "bank";
   const tipoSel = `<select class="moneda-sel" title="Tipo de cuenta (afecta matching de transferencias y pagos)"
@@ -4843,7 +4843,7 @@ function _renderCuentaCard(c, idx = 0) {
       <input id="ce-inp-usd-${c.fuente}" type="text" inputmode="decimal" value="${_fmtNum2(c.saldo_usd||0)}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
-      <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">Cancelar</button>
+      <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">❌ Cancelar</button>
     </div>`;
   } else {
     const curVal = isUsd ? (c.saldo_usd||0) : (c.saldo||0);
@@ -4852,7 +4852,7 @@ function _renderCuentaCard(c, idx = 0) {
       <input id="ce-inp-${c.fuente}" type="text" inputmode="decimal" value="${_fmtNum2(curVal)}" style="width:110px"
              onkeydown="if(event.key==='Enter')saveCuentaSaldo('${c.fuente}')">
       <button class="btn btn-sm btn-primary" onclick="saveCuentaSaldo('${c.fuente}')">✓</button>
-      <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">Cancelar</button>
+      <button class="btn btn-sm" onclick="toggleCuentaEdit('${c.fuente}')">❌ Cancelar</button>
     </div>`;
   }
 
@@ -5184,7 +5184,7 @@ function _rcnBuildModal(data) {
       <p class="modal-hint">${summary.total_pdf} registros en el archivo.</p>
       ${sHigh}${sLow}${sNew}${sImported}${sOrphans}
       <div class="modal-footer">
-        <button class="btn" onclick="closeRcnModal()">Cancelar</button>
+        <button class="btn" onclick="closeRcnModal()">❌ Cancelar</button>
         <button class="btn btn-primary" onclick="confirmRcnImport()">Confirmar e importar →</button>
       </div>
     </div>`;
@@ -5393,7 +5393,7 @@ function _renderInstanceFullPanel(c, inst) {
       ${headerRow}
       <div class="scraper-fields">${fieldsHtml}</div>
       <div class="scraper-actions">
-        <button class="btn btn-primary btn-sm" onclick="saveCuentaInstance('${c.fuente}', ${inst.id})">Guardar</button>
+        <button class="btn btn-primary btn-sm" onclick="saveCuentaInstance('${c.fuente}', ${inst.id})">💾 Guardar</button>
         <button class="btn btn-sm" onclick="runCuentaInstance('${c.fuente}', ${inst.id})" id="btn-cuenta-run-${c.fuente}">▶ Ejecutar ahora</button>
         <button class="btn btn-sm" onclick="importUnmatchedInst('${inst.banco}', ${inst.id})"
                 id="btn-import-inst-${inst.id}"
@@ -5869,7 +5869,7 @@ function openCreateCuentaModal() {
         </span>
       </div>
       <div class="modal-footer">
-        <button class="btn" onclick="closeCreateCuentaModal()">Cancelar</button>
+        <button class="btn" onclick="closeCreateCuentaModal()">❌ Cancelar</button>
         <button class="btn btn-primary" onclick="submitCreateCuenta()">Crear cuenta</button>
       </div>
     </div>`;
@@ -6261,7 +6261,7 @@ function renderUserRules() {
           ${userOpts}
         </select>
         ${_buildFuentesPickerHtml(i, rule.fuentes || []).replace(/class="fuentes-picker"/g, 'class="fuentes-picker user-fuentes-picker"')}
-        <button type="button" class="btn btn-sm" onclick="openUserRulePreview(${i})">Probar</button>
+        <button type="button" class="btn btn-sm" onclick="openUserRulePreview(${i})">▶ Probar</button>
         <button type="button" class="btn btn-danger btn-sm" onclick="removeUserRule(${i})">✕</button>
       </div>
       <div class="rule-tags" id="user-tags-${i}">${tagsHtml}</div>
@@ -6580,7 +6580,7 @@ function _buildScraperCard(banco, data) {
       ${totpHtml}
       <div class="scraper-actions">
         <button class="btn btn-primary btn-sm" onclick="saveScraperConfig('${banco}')">
-          Guardar
+          💾 Guardar
         </button>
         <button class="btn btn-sm" onclick="runScraperNow('${banco}')" id="btn-run-${banco}">
           ▶ Ejecutar ahora
@@ -7393,7 +7393,7 @@ function renderCategoriasManaged() {
             <label style="font-size:.8rem;color:#666;display:inline-flex;align-items:center;gap:.3rem;cursor:pointer">
               <input type="checkbox" class="cat-solo-egresos" data-nombre="${escHtml(c.nombre)}"${rule.solo_egresos ? " checked" : ""}> Solo egresos
             </label>
-            <button class="btn btn-sm cat-preview-btn" data-nombre="${escHtml(c.nombre)}">Probar</button>
+            <button class="btn btn-sm cat-preview-btn" data-nombre="${escHtml(c.nombre)}">▶ Probar</button>
             <button class="btn btn-sm btn-danger" data-del="${c._i}" style="margin-left:auto">Borrar</button>
           </div>
         </td>

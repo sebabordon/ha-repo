@@ -202,8 +202,8 @@
           </details>
         </div>
         <div class="modal-footer" style="margin-top:1rem">
-          <button class="btn" onclick="closeChartModal()">Cancelar</button>
-          <button class="btn btn-primary" onclick="saveChartModal()">Guardar</button>
+          <button class="btn" onclick="closeChartModal()">❌ Cancelar</button>
+          <button class="btn btn-primary" onclick="saveChartModal()">💾 Guardar</button>
         </div>
       </div>
     </div>
@@ -245,7 +245,7 @@
               <option value="ARS">ARS</option>
               <option value="USD">USD</option>
             </select>
-            <button id="btn-save-new-mov" class="btn btn-sm btn-primary">Guardar</button>
+            <button id="btn-save-new-mov" class="btn btn-sm btn-primary">💾 Guardar</button>
           </div>
         </div>
 
@@ -466,8 +466,8 @@
           <input id="pago-fin" type="date">
         </label>
         <div class="pago-field pago-field-btns">
-          <button id="btn-add-pago" class="btn btn-primary">+ Agregar</button>
-          <button id="btn-cancel-pago" class="btn" style="display:none">Cancelar</button>
+          <button id="btn-add-pago" class="btn btn-primary">➕ Agregar</button>
+          <button id="btn-cancel-pago" class="btn" style="display:none">❌ Cancelar</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -582,7 +582,7 @@
           <button id="btn-apply-rules-cat" class="btn">Reaplicar</button>
           <button id="btn-export-rules-cat" class="btn">⬇ Exportar</button>
           <label class="btn" style="cursor:pointer">⬆ Importar<input type="file" id="inp-import-rules-cat" accept=".yaml,.yml" style="display:none"></label>
-          <button id="btn-save-categorias" class="btn btn-primary">Guardar</button>
+          <button id="btn-save-categorias" class="btn btn-primary">💾 Guardar</button>
         </div>
         <p class="rules-hint">
           Asigná un <strong>padre</strong> a cada categoría para construir la jerarquía.
@@ -668,8 +668,8 @@
         </p>
         <div id="pwa-shortcuts-list" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem"></div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
-          <button class="btn" onclick="addPwaShortcut()">+ Agregar</button>
-          <button class="btn btn-primary" onclick="savePwaShortcuts()">Guardar</button>
+          <button class="btn" onclick="addPwaShortcut()">➕ Agregar</button>
+          <button class="btn btn-primary" onclick="savePwaShortcuts()">💾 Guardar</button>
         </div>
         <div id="pwa-ios-guide"></div>
 
@@ -863,7 +863,7 @@
           </div>
 
         <div class="ui-colors-actions">
-          <button class="btn btn-primary" onclick="saveUiSettings()">Guardar</button>
+          <button class="btn btn-primary" onclick="saveUiSettings()">💾 Guardar</button>
           <button class="btn" onclick="resetUiSettings()">Restablecer</button>
         </div>
         <div class="ui-preview">
@@ -887,7 +887,7 @@
         <p class="rules-hint">Estado: <span id="push-status-val">—</span></p>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button id="btn-push-enable" class="btn btn-primary">Activar notificaciones</button>
-          <button id="btn-push-test" class="btn">Probar</button>
+          <button id="btn-push-test" class="btn">▶ Probar</button>
           <button id="btn-push-disable" class="btn">Desactivar</button>
           <button id="btn-push-reset" class="btn" title="Borra todas tus suscripciones y reactiva este dispositivo (arregla notificaciones duplicadas)">Resetear duplicadas</button>
         </div>
@@ -910,8 +910,8 @@
           <label>Hora del aviso (0–23)<br>
             <input id="venc-notif-hora" type="number" min="0" max="23" style="width:80px">
           </label>
-          <button id="btn-save-venc-notif" class="btn btn-primary">Guardar</button>
-          <button id="btn-test-venc-notif" class="btn">Probar aviso ahora</button>
+          <button id="btn-save-venc-notif" class="btn btn-primary">💾 Guardar</button>
+          <button id="btn-test-venc-notif" class="btn">▶ Probar aviso ahora</button>
         </div>
         <p class="rules-hint" style="margin-top:.5rem">
           Ej: <code>3,1</code> = aviso 3 días antes y 1 día antes. Poné <code>0</code>
@@ -926,7 +926,7 @@
         <div id="iconos-list"></div>
         <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center">
           <button class="btn" onclick="addIconRow()">+ Fuente</button>
-          <button class="btn btn-primary" onclick="saveIconosConfig()">Guardar</button>
+          <button class="btn btn-primary" onclick="saveIconosConfig()">💾 Guardar</button>
           <button class="btn" onclick="loadIconosConfig()">Restablecer</button>
           <span id="iconos-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
@@ -966,7 +966,7 @@
           </div>
         </div>
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
-          <button class="btn btn-primary" onclick="saveCategorizacionConfig()">Guardar</button>
+          <button class="btn btn-primary" onclick="saveCategorizacionConfig()">💾 Guardar</button>
           <button class="btn" onclick="loadCategorizacionConfig()">Restablecer</button>
           <span id="cat-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
@@ -981,7 +981,7 @@
           <textarea id="especiales-builtin" rows="5" style="width:100%;font-family:monospace;font-size:0.85em"></textarea>
         </div>
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
-          <button class="btn btn-primary" onclick="saveEspecialesConfig()">Guardar</button>
+          <button class="btn btn-primary" onclick="saveEspecialesConfig()">💾 Guardar</button>
           <button class="btn" onclick="loadEspecialesConfig()">Restablecer</button>
           <span id="especiales-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
@@ -1035,7 +1035,7 @@
         </div>
 
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
-          <button class="btn btn-primary" onclick="saveDedupConfig()">Guardar</button>
+          <button class="btn btn-primary" onclick="saveDedupConfig()">💾 Guardar</button>
           <button class="btn" onclick="loadDedupConfig()">Restablecer</button>
           <span id="dedup-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
@@ -1090,7 +1090,7 @@
         </div>
 
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
-          <button class="btn btn-primary" onclick="savePeriodoConfig()">Guardar</button>
+          <button class="btn btn-primary" onclick="savePeriodoConfig()">💾 Guardar</button>
           <button class="btn" onclick="loadPeriodoConfig()">Restablecer</button>
           <span id="periodo-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
@@ -1162,7 +1162,7 @@
         </div>
 
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
-          <button class="btn btn-primary" onclick="saveVencMatchConfig()">Guardar</button>
+          <button class="btn btn-primary" onclick="saveVencMatchConfig()">💾 Guardar</button>
           <button class="btn" onclick="loadVencMatchConfig()">Restablecer</button>
           <span id="venc-match-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
