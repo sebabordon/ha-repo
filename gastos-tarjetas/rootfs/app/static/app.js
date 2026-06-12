@@ -55,12 +55,37 @@ function applyUiPrefs() {
   _applyBudChartMode(getUiPref("bud_chart_mode"));
   // Tab icon mode
   _applyTabIconMode(getUiPref("tab_icon_mode"));
+  // Top charts order
+  _applyTopChartsOrder();
 }
 
 function _applyTabIconMode(mode) {
   document.body.classList.remove("tab-mode-icons", "tab-mode-text");
   if (mode === "icons") document.body.classList.add("tab-mode-icons");
   if (mode === "text")  document.body.classList.add("tab-mode-text");
+}
+
+function _applyTopChartsOrder() {
+  const swapped = localStorage.getItem("top_charts_swapped") === "1";
+  const bud     = document.getElementById("bud-chart-card");
+  const monthly = document.getElementById("home-chart-card");
+  if (!bud || !monthly) return;
+  bud.style.order     = swapped ? 1 : 0;
+  monthly.style.order = swapped ? 0 : 1;
+  const budUp    = document.getElementById("bud-ctrl-up");
+  const budDn    = document.getElementById("bud-ctrl-dn");
+  const monthUp  = document.getElementById("monthly-ctrl-up");
+  const monthDn  = document.getElementById("monthly-ctrl-dn");
+  if (budUp)   budUp.disabled   = !swapped;
+  if (budDn)   budDn.disabled   =  swapped;
+  if (monthUp) monthUp.disabled =  swapped;
+  if (monthDn) monthDn.disabled = !swapped;
+}
+
+function _swapTopCharts() {
+  const swapped = localStorage.getItem("top_charts_swapped") === "1";
+  localStorage.setItem("top_charts_swapped", swapped ? "0" : "1");
+  _applyTopChartsOrder();
 }
 
 const _CHART_MODE_CYCLE  = ["normal", "compact", "hidden"];
@@ -911,7 +936,13 @@ async function loadPagos() {
   const mkBtn = (txt, cls, fn) => {
     const b = document.createElement("button");
     b.className = "btn btn-sm" + (cls ? " " + cls : "");
-    b.textContent = txt; b.style.marginLeft = ".3rem"; b.onclick = fn;
+    b.textContent = txt; b.onclick = fn;
+    return b;
+  };
+  const mkIcon = (txt, cls, fn, title) => {
+    const b = document.createElement("button");
+    b.className = "btn btn-sm btn-action" + (cls ? " " + cls : "");
+    b.textContent = txt; b.title = title || ""; b.onclick = fn;
     return b;
   };
   for (const p of pagos) {
@@ -931,13 +962,14 @@ async function loadPagos() {
       const td = document.createElement("td"); td.textContent = txt; tr.appendChild(td);
     }
     const tdA = document.createElement("td");
+    tdA.style.cssText = "display:flex;align-items:center;gap:.3rem;white-space:nowrap";
     if (p.estado !== "pagado") {
       tdA.appendChild(mkBtn("✓ Pagado", "", () => markPagoPaid(p.id)));
       if (p.recurrencia === "mensual")
         tdA.appendChild(mkBtn("■ Finalizar", "", () => finalizarPago(p.id, p.descripcion)));
-      tdA.appendChild(mkBtn("✏", "", () => editPago(p)));
+      tdA.appendChild(mkIcon("✏", "", () => editPago(p), "Editar"));
     }
-    tdA.appendChild(mkBtn("✕", "btn-danger", () => deletePago(p.id, p.descripcion)));
+    tdA.appendChild(mkIcon("✕", "btn-danger", () => deletePago(p.id, p.descripcion), "Eliminar"));
     tr.appendChild(tdA);
     tb.appendChild(tr);
   }
@@ -7340,7 +7372,7 @@ function renderCategoriasManaged() {
       <td data-lbl="Especial" style="text-align:center"><input type="checkbox" class="cat-especial-chk" data-i="${c._i}"${c.especial ? " checked" : ""}></td>
       <td style="white-space:nowrap">
         ${(!c._new && !c._indent) ? `<button class="btn btn-sm cat-addsub-btn" data-parent="${escHtml(c.nombre)}" title="Agregar subcategoría">+</button>` : ""}
-        <button class="btn btn-sm btn-danger" data-del="${c._i}">✕</button>
+        ${c._new ? `<button class="btn btn-sm btn-danger" data-del="${c._i}">✕</button>` : ""}
       </td>
     </tr>`);
 
@@ -7365,6 +7397,7 @@ function renderCategoriasManaged() {
               <input type="checkbox" class="cat-solo-egresos" data-nombre="${escHtml(c.nombre)}"${rule.solo_egresos ? " checked" : ""}> Solo egresos
             </label>
             <button class="btn btn-sm cat-preview-btn" data-nombre="${escHtml(c.nombre)}">Probar</button>
+            <button class="btn btn-sm btn-danger" data-del="${c._i}" style="margin-left:auto">Borrar</button>
           </div>
         </td>
       </tr>`);

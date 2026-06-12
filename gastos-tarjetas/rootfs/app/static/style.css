@@ -210,7 +210,20 @@ body.tab-mode-icons .tab-text  { display: none; }
 body.tab-mode-text  .tab-icon  { display: none; }
 
 /* ── UI color settings (Interfaz sub-tab) ───────────────────────────────────*/
-.ui-colors-grid { display: flex; flex-direction: column; gap: .75rem; max-width: 560px; }
+.ui-colors-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .75rem;
+}
+@media (min-width: 700px) {
+  .ui-colors-grid { grid-template-columns: 1fr 1fr; }
+}
+.ui-colors-grid-section-hdr {
+  grid-column: 1 / -1;
+  font-weight: 600; font-size: .82rem; color: #374151; text-transform: uppercase;
+  letter-spacing: .04em; padding: .4rem 0 .1rem;
+  border-top: 1px solid #e5e7eb; margin-top: .25rem;
+}
 .ui-color-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 1rem;
@@ -1619,7 +1632,6 @@ tbody tr:hover { background: #fafbff; }
   .cfg-tab  { white-space: nowrap; padding: .38rem .75rem; font-size: .8rem; }
   .cfg-tab-content { padding: .9rem .75rem; }
   .ui-color-row { flex-direction: column; align-items: flex-start; gap: .4rem; }
-  .ui-colors-grid { max-width: 100%; }
   .scraper-card { padding: .8rem 1rem; }
   .scraper-fields { grid-template-columns: 1fr; }
 }

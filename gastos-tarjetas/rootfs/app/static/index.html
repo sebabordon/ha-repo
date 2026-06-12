@@ -56,34 +56,41 @@
     <!-- ── Tab: Gráficos ──────────────────────────────────────────────── -->
     <section id="tab-graficos" class="tab-content active">
 
-      <!-- Budget vs actual chart -->
-      <div class="chart-card" id="bud-chart-card" style="margin:-0.25rem -0.25rem 1.25rem">
-        <div class="chart-title">
-          Presupuesto vs real
-          <div style="display:flex;align-items:center;gap:.5rem;margin-left:auto">
-            <select id="bud-mes" style="font-size:.8rem;padding:.15rem .4rem;border:1px solid #ccc;border-radius:4px;color:#555">
-              <option value="">— mes —</option>
-            </select>
-            <button class="chart-toggle-btn" id="bud-chart-toggle" onclick="toggleBudChartMode()" title="Alternar tamaño del gráfico"></button>
+      <!-- Budget + Monthly fixed charts (reordenables) -->
+      <div id="top-charts-wrap" style="display:flex;flex-direction:column;gap:1.25rem;margin-bottom:1.25rem">
+        <div class="chart-card" id="bud-chart-card">
+          <div class="chart-title">
+            Presupuesto vs real
+            <div style="display:flex;align-items:center;gap:.25rem;margin-left:auto">
+              <button class="chart-ctrl-btn" id="bud-ctrl-up" onclick="_swapTopCharts()" title="Mover arriba" disabled>←</button>
+              <button class="chart-ctrl-btn" id="bud-ctrl-dn" onclick="_swapTopCharts()" title="Mover abajo">→</button>
+              <select id="bud-mes" style="font-size:.8rem;padding:.15rem .4rem;border:1px solid #ccc;border-radius:4px;color:#555;margin-left:.25rem">
+                <option value="">— mes —</option>
+              </select>
+              <button class="chart-toggle-btn" id="bud-chart-toggle" onclick="toggleBudChartMode()" title="Alternar tamaño del gráfico"></button>
+            </div>
+          </div>
+          <div class="cat-slicer" id="bud-cat-slicer" style="margin-bottom:.65rem">
+            <span class="cat-label">Categorías:</span>
+            <div id="bud-cat-chips"></div>
+          </div>
+          <canvas id="budget-chart"></canvas>
+          <div id="bud-chart-empty" style="display:none;text-align:center;padding:1.5rem 0;color:#aaa;font-size:.88rem">
+            No hay presupuesto ni gastos registrados para este mes.
           </div>
         </div>
-        <div class="cat-slicer" id="bud-cat-slicer" style="margin-bottom:.65rem">
-          <span class="cat-label">Categorías:</span>
-          <div id="bud-cat-chips"></div>
-        </div>
-        <canvas id="budget-chart"></canvas>
-        <div id="bud-chart-empty" style="display:none;text-align:center;padding:1.5rem 0;color:#aaa;font-size:.88rem">
-          No hay presupuesto ni gastos registrados para este mes.
-        </div>
-      </div>
 
-      <!-- Monthly overview chart -->
-      <div class="chart-card" id="home-chart-card">
-        <div class="chart-title">
-          Movimientos ARS — mes a mes
-          <button class="chart-toggle-btn" id="home-chart-toggle" onclick="toggleChartMode()" title="Alternar tamaño del gráfico"></button>
+        <div class="chart-card" id="home-chart-card">
+          <div class="chart-title">
+            Movimientos ARS — mes a mes
+            <div style="display:flex;align-items:center;gap:.25rem;margin-left:auto">
+              <button class="chart-ctrl-btn" id="monthly-ctrl-up" onclick="_swapTopCharts()" title="Mover arriba">←</button>
+              <button class="chart-ctrl-btn" id="monthly-ctrl-dn" onclick="_swapTopCharts()" title="Mover abajo" disabled>→</button>
+              <button class="chart-toggle-btn" id="home-chart-toggle" onclick="toggleChartMode()" title="Alternar tamaño del gráfico" style="margin-left:.25rem"></button>
+            </div>
+          </div>
+          <canvas id="monthly-chart"></canvas>
         </div>
-        <canvas id="monthly-chart"></canvas>
       </div>
 
       <div class="chart-filters">
@@ -425,7 +432,7 @@
       <!-- ── Pagos / vencimientos manuales (b2) ──────────────────────── -->
       <div class="rules-header">
         <h2>💰 Pagos / vencimientos manuales</h2>
-        <button id="btn-reload-pagos" class="btn btn-sm" title="Recargar">↺</button>
+        <button id="btn-reload-pagos" class="btn" title="Recargar">↺</button>
       </div>
       <p class="rules-hint">
         Servicios, alquiler, expensas… cosas que no se scrapean. Te aviso por push
@@ -441,7 +448,7 @@
         <label>Recurrencia<br><select id="pago-recur"><option value="unico">Único</option><option value="mensual">Mensual</option></select></label>
         <label>Hasta (si es mensual)<br><input id="pago-fin" type="date"></label>
         <button id="btn-add-pago" class="btn btn-primary">+ Agregar</button>
-        <button id="btn-cancel-pago" class="btn btn-sm" style="display:none">Cancelar</button>
+        <button id="btn-cancel-pago" class="btn" style="display:none">Cancelar</button>
       </div>
       <div class="table-wrap">
         <table id="pagos-table">
@@ -551,10 +558,10 @@
           <h2>Categorías</h2>
           <button id="btn-add-categoria" class="btn">+ Nueva</button>
           <button id="btn-reload-categorias" class="btn" title="Recargar">↺</button>
-          <button id="btn-toggle-all-keywords" class="btn btn-sm">Ver keywords</button>
+          <button id="btn-toggle-all-keywords" class="btn">Ver keywords</button>
           <button id="btn-apply-rules-cat" class="btn">Reaplicar</button>
-          <button id="btn-export-rules-cat" class="btn btn-sm">⬇ Exportar</button>
-          <label class="btn btn-sm" style="cursor:pointer">⬆ Importar<input type="file" id="inp-import-rules-cat" accept=".yaml,.yml" style="display:none"></label>
+          <button id="btn-export-rules-cat" class="btn">⬇ Exportar</button>
+          <label class="btn" style="cursor:pointer">⬆ Importar<input type="file" id="inp-import-rules-cat" accept=".yaml,.yml" style="display:none"></label>
           <button id="btn-save-categorias" class="btn btn-primary">Guardar</button>
         </div>
         <p class="rules-hint">
@@ -631,14 +638,6 @@
       <!-- ── Sub-tab: Interfaz ─────────────────────────────────────── -->
       <div id="cfg-tab-ui" class="cfg-tab-content">
 
-        <!-- ── Opciones de importación ── -->
-        <div class="ui-pref-section">Importación</div>
-        <label class="import-opt-row" style="margin:.4rem 0 1rem;display:flex;align-items:center;gap:.5rem;font-size:.9rem"
-               title="Las devoluciones de percepción RG 5617 (DEV PERCEPCION / CR.RG) se importan por defecto para mostrar el gasto real. El widget de vencimientos las excluye del total a pagar ya que el banco las descuenta automáticamente. Desmarcá si no querés verlas en la lista de gastos.">
-          <input type="checkbox" id="chk-include-rg5617" checked>
-          Incluir devoluciones RG 5617 (DEV PERCEPCION / CR.RG)
-        </label>
-
         <!-- ── PWA Shortcuts ── -->
         <div class="ui-pref-section">Accesos rápidos</div>
         <p class="rules-hint" style="margin:.4rem 0 .75rem">
@@ -649,8 +648,8 @@
         </p>
         <div id="pwa-shortcuts-list" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.75rem"></div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
-          <button class="btn btn-sm" onclick="addPwaShortcut()">+ Agregar</button>
-          <button class="btn btn-primary btn-sm" onclick="savePwaShortcuts()">Guardar</button>
+          <button class="btn" onclick="addPwaShortcut()">+ Agregar</button>
+          <button class="btn btn-primary" onclick="savePwaShortcuts()">Guardar</button>
         </div>
         <div id="pwa-ios-guide"></div>
 
@@ -696,8 +695,6 @@
               <input type="text"  id="ui-hex-tog" class="ui-hex-input" maxlength="7" placeholder="#d97706" oninput="syncColorPicker('tog')">
             </div>
           </div>
-        </div>
-          <!-- ── Acento ── -->
           <div class="ui-color-row">
             <div class="ui-color-label">
               <span class="ui-color-name">Color de acento</span>
@@ -708,9 +705,7 @@
               <input type="text"  id="ui-hex-accent" class="ui-hex-input" maxlength="7" placeholder="#16213e" oninput="syncColorPicker('accent')">
             </div>
           </div>
-
-          <!-- ── Categorías ── -->
-          <div class="ui-pref-section">Categorías</div>
+          <div class="ui-colors-grid-section-hdr">Categorías</div>
           <div class="ui-color-row">
             <div class="ui-color-label">
               <span class="ui-color-name">Color categoría padre</span>
@@ -731,6 +726,7 @@
               <input type="text"  id="ui-hex-cat_child" class="ui-hex-input" maxlength="7" placeholder="#4b5563" oninput="syncColorPicker('cat_child')">
             </div>
           </div>
+        </div>
 
           <!-- ── Preferencias generales ── -->
           <div class="ui-pref-section">Preferencias</div>
@@ -847,8 +843,8 @@
           </div>
 
         <div class="ui-colors-actions">
-          <button class="btn btn-primary btn-sm" onclick="saveUiSettings()">Guardar</button>
-          <button class="btn btn-sm" onclick="resetUiSettings()">Restablecer</button>
+          <button class="btn btn-primary" onclick="saveUiSettings()">Guardar</button>
+          <button class="btn" onclick="resetUiSettings()">Restablecer</button>
         </div>
         <div class="ui-preview">
           <div class="ui-preview-title">Vista previa de colores</div>
@@ -909,9 +905,9 @@
         </p>
         <div id="iconos-list"></div>
         <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center">
-          <button class="btn btn-sm" onclick="addIconRow()">+ Fuente</button>
-          <button class="btn btn-primary btn-sm" onclick="saveIconosConfig()">Guardar</button>
-          <button class="btn btn-sm" onclick="loadIconosConfig()">Restablecer</button>
+          <button class="btn" onclick="addIconRow()">+ Fuente</button>
+          <button class="btn btn-primary" onclick="saveIconosConfig()">Guardar</button>
+          <button class="btn" onclick="loadIconosConfig()">Restablecer</button>
           <span id="iconos-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
       </div>
@@ -979,6 +975,11 @@
             Importación — dedup
           </div>
           <div class="cfg-section-body" id="cfg-body-proc-importacion" style="display:none">
+        <label class="import-opt-row" style="margin:.4rem 0 1.25rem;display:flex;align-items:center;gap:.5rem;font-size:.9rem"
+               title="Las devoluciones de percepción RG 5617 (DEV PERCEPCION / CR.RG) se importan por defecto para mostrar el gasto real. El widget de vencimientos las excluye del total a pagar ya que el banco las descuenta automáticamente. Desmarcá si no querés verlas en la lista de gastos.">
+          <input type="checkbox" id="chk-include-rg5617" checked>
+          Incluir devoluciones RG 5617 (DEV PERCEPCION / CR.RG)
+        </label>
         <h2>Importación — Reglas de dedup</h2>
         <p class="hint" style="margin-bottom:1rem">
           Cuando un movimiento llega con una descripción genérica/temporal y ya existe

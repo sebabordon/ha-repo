@@ -1,3 +1,14 @@
+## 0.8.64
+
+- **A1 — Botones del header Config/Categorías al alto correcto** (`static/index.html`): removido `btn-sm` de "Ver keywords", "⬇ Exportar" e "⬆ Importar" para que coincidan con "Guardar".
+- **A2 — Botón Borrar de categorías movido al detalle** (`static/app.js`): el ✕ de cada fila desaparece; queda sólo el "+" para sub-categorías. Al expandir la categoría aparece "Borrar" al lado de "Probar". Las categorías nuevas (no guardadas) siguen teniendo ✕ en la fila.
+- **Gráficos fijos con ← → para reordenar** (`static/index.html`, `static/app.js`): los charts "Presupuesto vs real" y "Movimientos ARS" ahora tienen botones de reorden iguales a los del grid. El orden se persiste en localStorage.
+- **Pagos/Cuotas: botones del formulario alineados** (`static/index.html`): "Cancelar" y "Recargar" pasan de `btn-sm` a `btn` para igualar a "+ Agregar".
+- **Pagos/Cuotas: botones de fila consistentes** (`static/app.js`): celda de acciones usa flex con gap uniforme; ✏ y ✕ usan `btn-action` (ícono cuadrado) mientras "✓ Pagado" y "■ Finalizar" son `btn-sm` estándar.
+- **RG 5617 movido a Procesamiento → Importación** (`static/index.html`): el checkbox "Incluir devoluciones RG 5617" ahora vive al inicio del acordeón Importación en Procesamiento.
+- **Botones de sección en Interfaz al alto correcto** (`static/index.html`): Save/Reset general, PWA e Íconos quitan `btn-sm`.
+- **Colores en grid 2 columnas** (`static/index.html`, `static/style.css`): las 7 filas de color se consolidan en un único `ui-colors-grid` con layout 1-col en móvil y 2-col en pantallas ≥ 700 px. Sección "Categorías" se separa con un encabezado interno que ocupa todo el ancho.
+
 ## 0.8.63
 
 - **Columna "💰 Pagos" en tabla por mes** (`routes/cuotas.py`, `static/app.js`, `static/style.css`). El desglose mensual de Pagos/Cuotas ahora incluye una columna extra con el total de pagos manuales pendientes (servicios, alquiler, etc.) agrupados por mes de vencimiento. Se muestra separada visualmente (borde izquierdo) a la derecha de las fuentes de tarjeta y antes del Total ARS. El total de la fila incluye cuotas + pagos manuales.
