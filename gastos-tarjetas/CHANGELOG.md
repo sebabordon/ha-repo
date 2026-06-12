@@ -1,3 +1,7 @@
+## 0.8.56
+
+- **Fix: el logout dejaba suscripciones push huérfanas → avisos duplicados** (`static/app.js`, `static/sw.js`). El handler de logout desregistra el service worker (para aislar caché entre usuarios), lo que destruye la suscripción push del navegador **sin avisarle al server** → quedaba huérfana en `push_subscriptions` y, al re-loguear y re-activar, se creaba otra con endpoint nuevo (de ahí "2 notificaciones desde la Mac"). Ahora el logout hace `POST /api/push/unsubscribe` de la suscripción actual **antes** de matar el SW (aún logueado, con `keepalive`). Las huérfanas previas se autolimpian: devuelven 410 en el próximo envío y `send_push` las borra. Bump caché SW `v0.2.37`.
+
 ## 0.8.55
 
 - **Aviso de vencimientos de tarjeta por push (feature b1)** (`vencimiento_notifier.py` nuevo, `scraper_scheduler.py`, `db.py`, `user_config.py`, `routes/config_route.py`, `static/index.html`, `static/app.js`, `static/sw.js`). Manda un Web Push N días antes de cada vencimiento de tarjeta **impago**, reusando lo que ya existía: `list_vencimientos()` (sabe la fecha y si está pagado vía `pago_confirmado`/`pago_probable`) y `send_push()` (feature "a").

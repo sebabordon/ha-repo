@@ -847,6 +847,22 @@ if (_logoutLink) {
         await Promise.all(keys.map(k => caches.delete(k)));
       }
       if (navigator.serviceWorker) {
+        // Antes de matar el SW (que destruye la suscripción push del navegador),
+        // avisar al server para que borre ESTA suscripción. Si no, queda huérfana
+        // en la DB del usuario y los próximos avisos se duplican (al re-loguear y
+        // re-activar se crea otra con endpoint nuevo). Corre aún logueado.
+        try {
+          const reg = await navigator.serviceWorker.getRegistration();
+          const sub = reg && await reg.pushManager.getSubscription();
+          if (sub) {
+            await fetch(`${BASE}/api/push/unsubscribe`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ endpoint: sub.endpoint }),
+              keepalive: true,
+            });
+          }
+        } catch (_) {}
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map(r => r.unregister()));
       }
