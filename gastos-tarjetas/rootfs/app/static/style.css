@@ -1502,6 +1502,13 @@ tbody tr:hover { background: #fafbff; }
 .presup-diff-pos { color: #16a34a; font-variant-numeric: tabular-nums; }
 .presup-diff-neg { color: #dc2626; font-variant-numeric: tabular-nums; }
 
+/* Parent budget: auto-derived from children — read-only display */
+.presup-auto-val  { font-variant-numeric: tabular-nums; color: #374151; }
+.presup-auto-badge {
+  font-size: .7em; color: #94a3b8; margin-left: .35rem;
+  text-transform: uppercase; letter-spacing: .04em; vertical-align: middle;
+}
+
 .presup-summary {
   display: flex;
   gap: 1.25rem;

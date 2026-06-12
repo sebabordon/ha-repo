@@ -4290,14 +4290,16 @@ function renderPresupuesto() {
             ? "style=\"padding-left:1.4rem;color:var(--color-cat-child);font-size:.9em\""
             : (r.tiene_hijos ? "style=\"font-weight:600;color:var(--color-cat-parent)\"" : "");
           const prefix  = r._indent ? "└ " : "";
-          return `<tr${r._indent ? " class=\"presup-child-row\"" : ""}>
-            <td ${nameCss}>${prefix}${escHtml(r.categoria)}</td>
-            <td>
-              <input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
+          // Parent WITH children: budget is auto-derived — show read-only
+          const budgetCell = r.tiene_hijos
+            ? `<span class="presup-auto-val">${budget > 0 ? _fmtNum2(budget) : "—"}</span><span class="presup-auto-badge">Σ hijos</span>`
+            : `<input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
                      value="${_fmtNum2(budget)}"
                      onfocus="this.select()"
-                     onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />
-            </td>
+                     onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />`;
+          return `<tr${r._indent ? " class=\"presup-child-row\"" : ""}>
+            <td ${nameCss}>${prefix}${escHtml(r.categoria)}</td>
+            <td>${budgetCell}</td>
             <td style="font-variant-numeric:tabular-nums">${_fmtNum2(r.gastado)}</td>
             <td class="${budget > 0 ? diffCls : ""}">
               ${budget > 0 ? (r.diferencia >= 0 ? "+" : "") + _fmtNum2(r.diferencia) : "—"}
@@ -4311,8 +4313,8 @@ function renderPresupuesto() {
             <td style="white-space:nowrap">
               ${r.gastado ? `<button class="btn btn-sm presup-jump-btn" title="Ver gastos de esta categoría en la tab Gastos"
                       data-presup-jump="${escHtml(r.categoria)}">🔍</button>` : ""}
-              <button class="btn btn-sm btn-danger"
-                      onclick="removePresupItem('${escHtml(r.categoria)}')">✕</button>
+              ${!r.tiene_hijos ? `<button class="btn btn-sm btn-danger"
+                      onclick="removePresupItem('${escHtml(r.categoria)}')">✕</button>` : ""}
             </td>
           </tr>`;
         }).join("")}
@@ -4370,6 +4372,7 @@ function jumpToGastosFromPresup(categoria) {
 }
 
 function updatePresupItem(categoria, rawValue) {
+  if ((_catHierarchy[categoria] || []).length > 0) return; // parent with children — auto-derived
   const val = parseFloat(rawValue.replace(/\./g,"").replace(",",".")) || 0;
   const existing = _presupItems.find(it => it.categoria === categoria);
   if (existing) existing.monto_mensual = val;
@@ -4404,10 +4407,9 @@ async function savePresupuesto() {
   document.querySelectorAll(".presup-input").forEach(inp => {
     updatePresupItem(inp.dataset.cat, inp.value);
   });
-  // Persistir TODO lo que está en el presupuesto, incluidas las categorías
-  // agregadas con el "+" que todavía no tienen monto (monto 0 = trackeada).
-  // updatePresupItem ya evita meter ceros de categorías no trackeadas.
-  const items = _presupItems;
+  // Persistir sólo categorías sin hijos: las que tienen hijos derivan su
+  // presupuesto automáticamente de los hijos y no se almacenan en la tabla.
+  const items = _presupItems.filter(it => !(_catHierarchy[it.categoria] || []).length);
   const res = await fetch(`${BASE}/api/presupuesto`, {
     method: "PUT",
     headers: {"Content-Type":"application/json"},

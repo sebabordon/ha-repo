@@ -2644,19 +2644,27 @@ def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
             "tiene_hijos": bool(children_map.get(cat)),
         })
 
-    # Derive parent budget = sum of children's budgets when no explicit budget is set
+    # Derive parent budget = sum of children's budgets (always, ignoring any
+    # individually stored budget on the parent). Iterate until stable so that
+    # deep trees (grandparent → parent → child) converge correctly.
     result_by_cat = {r["categoria"]: r for r in result}
-    for r in result:
-        if r.get("tiene_hijos") and r["presupuesto"] == 0:
-            children_sum = sum(
+    for _ in range(8):
+        changed = False
+        for r in result:
+            if not r.get("tiene_hijos"):
+                continue
+            children_sum = round(sum(
                 result_by_cat[child]["presupuesto"]
                 for child in children_map.get(r["categoria"], [])
                 if child in result_by_cat
-            )
-            if children_sum > 0:
+            ), 2)
+            if r["presupuesto"] != children_sum:
                 r["presupuesto"] = children_sum
                 r["diferencia"]  = round(children_sum - r["gastado"], 2)
-                r["pct"]         = round(r["gastado"] / children_sum * 100, 1)
+                r["pct"]         = round(r["gastado"] / children_sum * 100, 1) if children_sum > 0 else None
+                changed = True
+        if not changed:
+            break
 
     # Order: top-level items (gastado DESC) each followed by their children
     top_level = [r for r in result if not r.get("parent")]
