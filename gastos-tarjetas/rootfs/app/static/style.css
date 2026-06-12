@@ -2423,6 +2423,8 @@ tbody tr:hover { background: #fafbff; }
 .cq-past td { color: #94a3b8; }
 .cq-past .monto { color: #94a3b8 !important; }
 
+.cq-pagos-man { border-left: 2px solid #e5e7eb; }
+
 .cq-progress { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tw-card-row { background: #f0f9ff; }
 .tw-card-row:hover { background: #e0f2fe; }

@@ -7593,14 +7593,16 @@ function _renderCuotas(data) {
   // ── Tabla por mes ─────────────────────────────────────────────────────────
   const porMesEl = document.getElementById("cuotas-por-mes");
   if (data.por_mes && data.por_mes.length) {
-    // Recopilar todas las fuentes ARS que aparecen
-    const fuentes = [...new Set(
+    const allFuenteKeys = [...new Set(
       data.por_mes.flatMap(m => Object.keys(m.ars_por_fuente || {}))
-    )].sort();
-    const hasUsd = data.por_mes.some(m => m.total_usd > 0);
+    )];
+    const fuentes   = allFuenteKeys.filter(f => f !== "pagos_man").sort();
+    const hasPagMan = allFuenteKeys.includes("pagos_man");
+    const hasUsd    = data.por_mes.some(m => m.total_usd > 0);
 
     let th = `<tr><th>Mes</th>`;
-    fuentes.forEach(f => { th += `<th>${f.replace("_", " ")}</th>`; });
+    fuentes.forEach(f => { th += `<th>${f.replace(/_/g, " ")}</th>`; });
+    if (hasPagMan) th += `<th style="border-left:2px solid #e5e7eb">💰 Pagos</th>`;
     th += `<th>Total ARS</th>`;
     if (hasUsd) th += `<th>Total USD</th>`;
     th += `</tr>`;
@@ -7615,6 +7617,10 @@ function _renderCuotas(data) {
         const v = (pm.ars_por_fuente || {})[f] || 0;
         rows += `<td class="monto">${v ? _fmtNum2(v) : "—"}</td>`;
       });
+      if (hasPagMan) {
+        const v = (pm.ars_por_fuente || {}).pagos_man || 0;
+        rows += `<td class="monto cq-pagos-man">${v ? _fmtNum2(v) : "—"}</td>`;
+      }
       rows += `<td class="monto">${pm.total_ars ? _fmtNum2(pm.total_ars) : "—"}</td>`;
       if (hasUsd) rows += `<td class="monto usd">${pm.total_usd ? _fmtNum2(pm.total_usd) : "—"}</td>`;
       rows += `</tr>`;

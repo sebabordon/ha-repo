@@ -1,3 +1,7 @@
+## 0.8.63
+
+- **Columna "💰 Pagos" en tabla por mes** (`routes/cuotas.py`, `static/app.js`, `static/style.css`). El desglose mensual de Pagos/Cuotas ahora incluye una columna extra con el total de pagos manuales pendientes (servicios, alquiler, etc.) agrupados por mes de vencimiento. Se muestra separada visualmente (borde izquierdo) a la derecha de las fuentes de tarjeta y antes del Total ARS. El total de la fila incluye cuotas + pagos manuales.
+
 ## 0.8.62
 
 - **Íconos en todos los tabs y cfg-tabs** (`static/index.html`). Se agregó icono 📊 al tab Gráficos (que lo tenía faltando) y se completaron los iconos en todos los sub-tabs de Config: 🏷️ Categorías, 👥 Personas, 💳 Cuentas, ⚙️ Procesamiento, 🎨 Interfaz, 💾 Datos, 📋 Log. Los labels usan `<span class="tab-icon">` + `<span class="tab-text">` para soporte del nuevo toggle.

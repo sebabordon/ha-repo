@@ -19,7 +19,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, Request
 
 from auth import require_auth
-from db import list_gastos
+from db import list_gastos, list_pagos
 
 router = APIRouter()
 
@@ -171,6 +171,26 @@ def get_cuotas(
         })
 
     cuotas.sort(key=lambda x: -x['total_adeudado'])
+
+    # Agrego pagos manuales pendientes al desglose por mes
+    for pago in list_pagos(estado='pendiente'):
+        fv = pago.get('fecha_vencimiento') or ''
+        if len(fv) < 7 or pago.get('monto') is None:
+            continue
+        mes = fv[:7]
+        if mes not in por_mes:
+            por_mes[mes] = {
+                'mes': mes, 'total_ars': 0.0, 'total_usd': 0.0,
+                'ars_por_fuente': {}, 'usd_por_fuente': {},
+            }
+        pm  = por_mes[mes]
+        amt = float(pago['monto'] or 0)
+        if pago.get('moneda') == 'USD':
+            pm['total_usd'] += amt
+            pm['usd_por_fuente']['pagos_man'] = pm['usd_por_fuente'].get('pagos_man', 0.0) + amt
+        else:
+            pm['total_ars'] += amt
+            pm['ars_por_fuente']['pagos_man'] = pm['ars_por_fuente'].get('pagos_man', 0.0) + amt
 
     por_mes_list = sorted(por_mes.values(), key=lambda x: x['mes'])
 
