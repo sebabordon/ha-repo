@@ -47,9 +47,9 @@
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="graficos">Gráficos</button>
-      <button class="tab" data-tab="gastos">Gastos</button>
-      <button class="tab" data-tab="cuotas">Cuotas</button>
-      <button class="tab" data-tab="presupuesto">Presupuesto</button>
+      <button class="tab" data-tab="gastos">🧾 Gastos</button>
+      <button class="tab" data-tab="cuotas">📅 Pagos/Cuotas</button>
+      <button class="tab" data-tab="presupuesto">🎯 Presupuesto</button>
       <button class="tab" data-tab="config">⚙ Config</button>
     </div>
 
@@ -439,7 +439,9 @@
         <label>Moneda<br><select id="pago-moneda"><option>ARS</option><option>USD</option></select></label>
         <label>Vence<br><input id="pago-fecha" type="date"></label>
         <label>Recurrencia<br><select id="pago-recur"><option value="unico">Único</option><option value="mensual">Mensual</option></select></label>
+        <label>Hasta (si es mensual)<br><input id="pago-fin" type="date"></label>
         <button id="btn-add-pago" class="btn btn-primary">+ Agregar</button>
+        <button id="btn-cancel-pago" class="btn btn-sm" style="display:none">Cancelar</button>
       </div>
       <div class="table-wrap">
         <table id="pagos-table">
@@ -538,8 +540,8 @@
         <button class="cfg-tab" data-cfgtab="personas">Personas</button>
         <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
         <button class="cfg-tab" data-cfgtab="procesamiento">Procesamiento</button>
-        <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
         <button class="cfg-tab" data-cfgtab="avisos">🔔 Avisos</button>
+        <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
         <button class="cfg-tab" data-cfgtab="datos">Datos</button>
         <button class="cfg-tab" data-cfgtab="log">📋 Log</button>
       </div>

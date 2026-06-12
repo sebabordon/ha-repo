@@ -1,3 +1,10 @@
+## 0.8.61
+
+- **Pagos manuales: fecha de fin, edición y "Finalizar"** (`db.py`, `routes/pagos.py`, `static/index.html`, `static/app.js`). Nueva columna `pagos.fecha_fin` (con migración PRAGMA+ALTER): tope de la recurrencia mensual — al marcar pagado, si la próxima cuota caería después de `fecha_fin` no se regenera. Botón **✏ Editar** (carga la fila en el form, que pasa a "Guardar") y botón **■ Finalizar** (en mensuales: marca pagado sin regenerar, cierra la serie) → `POST /api/pagos/{id}/finalizar`. El form suma el campo "Hasta (si es mensual)".
+- **Tab "Cuotas" → "📅 Pagos/Cuotas"** y los pagos manuales viven arriba de las cuotas de tarjeta en ese tab (`static/index.html`).
+- **Íconos en los tabs principales**: 🧾 Gastos, 📅 Pagos/Cuotas, 🎯 Presupuesto, ⚙ Config (`static/index.html`).
+- **Reordenado Config**: el sub-tab 🔔 Avisos pasó antes de Interfaz, para que el final quede Interfaz · Datos · Log (`static/index.html`).
+
 ## 0.8.60
 
 - **"Probar aviso ahora" ahora es tolerante con los umbrales** (`vencimiento_notifier.py`, `static/app.js`). El test daba "no hay vencimientos en la ventana" cuando el item no caía justo en un día de umbral (ej. pago a 2 días con umbrales `[3,1]`). En producción el aviso sigue siendo **match exacto** de días (3 y 1 días antes), pero en modo `force` (el botón "Probar") ahora manda para **cualquier** tarjeta impaga o pago pendiente próximo (≤60 días, no vencido), así el test siempre demuestra. Mensaje del toast actualizado.

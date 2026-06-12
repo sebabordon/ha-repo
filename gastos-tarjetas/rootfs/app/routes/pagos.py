@@ -42,7 +42,9 @@ def post_pago(body: dict, request: Request):
         raise HTTPException(400, "monto inválido")
     moneda = "USD" if str(body.get("moneda", "ARS")).upper() == "USD" else "ARS"
     recur  = "mensual" if body.get("recurrencia") == "mensual" else "unico"
-    pid = add_pago(desc, monto, moneda, fecha, recur, str(body.get("categoria", "")).strip())
+    fin    = _valid_fecha(body["fecha_fin"]) if body.get("fecha_fin") else ""
+    pid = add_pago(desc, monto, moneda, fecha, recur,
+                   str(body.get("categoria", "")).strip(), fin)
     return {"id": pid}
 
 
@@ -69,6 +71,8 @@ def put_pago(pago_id: int, body: dict, request: Request):
         fields["recurrencia"] = "mensual" if body["recurrencia"] == "mensual" else "unico"
     if "categoria" in body:
         fields["categoria"] = str(body["categoria"]).strip()
+    if "fecha_fin" in body:
+        fields["fecha_fin"] = _valid_fecha(body["fecha_fin"]) if body["fecha_fin"] else None
     if "estado" in body and body["estado"] in ("pendiente", "pagado"):
         fields["estado"] = body["estado"]
     update_pago(pago_id, fields)
@@ -79,8 +83,17 @@ def put_pago(pago_id: int, body: dict, request: Request):
 def pagar_pago(pago_id: int, request: Request):
     require_auth(request)
     from db import mark_pago_pagado
-    nuevo = mark_pago_pagado(pago_id)
+    nuevo = mark_pago_pagado(pago_id, regenerate=True)
     return {"ok": True, "siguiente": nuevo}
+
+
+@router.post("/pagos/{pago_id}/finalizar")
+def finalizar_pago(pago_id: int, request: Request):
+    """Cierra la serie (marca pagado sin regenerar el mes siguiente)."""
+    require_auth(request)
+    from db import mark_pago_pagado
+    mark_pago_pagado(pago_id, regenerate=False)
+    return {"ok": True}
 
 
 @router.delete("/pagos/{pago_id}")

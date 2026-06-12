@@ -842,10 +842,46 @@ document.querySelector('.cfg-tab[data-cfgtab="avisos"]')?.addEventListener("clic
 });
 
 // ── Pagos / vencimientos manuales (b2) ───────────────────────────────────────
+let _editingPagoId = null;
+
 function _fmtPagoMonto(p) {
   if (p.monto == null || p.monto === "") return "";
   const sym = p.moneda === "USD" ? "US$" : "$";
   return `${sym} ${Number(p.monto).toLocaleString("es-AR")}`;
+}
+
+function _pagoForm() {
+  return {
+    desc:   document.getElementById("pago-desc"),
+    monto:  document.getElementById("pago-monto"),
+    moneda: document.getElementById("pago-moneda"),
+    fecha:  document.getElementById("pago-fecha"),
+    recur:  document.getElementById("pago-recur"),
+    fin:    document.getElementById("pago-fin"),
+  };
+}
+
+function resetPagoForm() {
+  _editingPagoId = null;
+  const f = _pagoForm();
+  f.desc.value = ""; f.monto.value = ""; f.fecha.value = ""; f.fin.value = "";
+  f.recur.value = "unico"; f.moneda.value = "ARS";
+  document.getElementById("btn-add-pago").textContent = "+ Agregar";
+  document.getElementById("btn-cancel-pago").style.display = "none";
+}
+
+function editPago(p) {
+  _editingPagoId = p.id;
+  const f = _pagoForm();
+  f.desc.value   = p.descripcion || "";
+  f.monto.value  = p.monto != null ? p.monto : "";
+  f.moneda.value = p.moneda || "ARS";
+  f.fecha.value  = String(p.fecha_vencimiento || "").slice(0, 10);
+  f.recur.value  = p.recurrencia === "mensual" ? "mensual" : "unico";
+  f.fin.value    = String(p.fecha_fin || "").slice(0, 10);
+  document.getElementById("btn-add-pago").textContent = "Guardar";
+  document.getElementById("btn-cancel-pago").style.display = "";
+  f.desc.focus();
 }
 
 async function loadPagos() {
@@ -861,14 +897,23 @@ async function loadPagos() {
     td.colSpan = 6; td.className = "empty"; td.textContent = "Sin pagos cargados.";
     tr.appendChild(td); tb.appendChild(tr); return;
   }
+  const mkBtn = (txt, cls, fn) => {
+    const b = document.createElement("button");
+    b.className = "btn btn-sm" + (cls ? " " + cls : "");
+    b.textContent = txt; b.style.marginLeft = ".3rem"; b.onclick = fn;
+    return b;
+  };
   for (const p of pagos) {
     const tr = document.createElement("tr");
     if (p.estado === "pagado") tr.style.opacity = ".5";
+    let tipo = p.recurrencia === "mensual" ? "Mensual" : "Único";
+    if (p.recurrencia === "mensual" && p.fecha_fin)
+      tipo += ` (hasta ${String(p.fecha_fin).slice(0, 10)})`;
     const cells = [
-      p.fecha_vencimiento,
+      String(p.fecha_vencimiento || "").slice(0, 10),
       p.descripcion,
       _fmtPagoMonto(p),
-      p.recurrencia === "mensual" ? "Mensual" : "Único",
+      tipo,
       p.estado === "pagado" ? "Pagado" : "Pendiente",
     ];
     for (const txt of cells) {
@@ -876,43 +921,42 @@ async function loadPagos() {
     }
     const tdA = document.createElement("td");
     if (p.estado !== "pagado") {
-      const bP = document.createElement("button");
-      bP.className = "btn btn-sm"; bP.textContent = "✓ Pagado";
-      bP.onclick = () => markPagoPaid(p.id);
-      tdA.appendChild(bP);
+      tdA.appendChild(mkBtn("✓ Pagado", "", () => markPagoPaid(p.id)));
+      if (p.recurrencia === "mensual")
+        tdA.appendChild(mkBtn("■ Finalizar", "", () => finalizarPago(p.id, p.descripcion)));
+      tdA.appendChild(mkBtn("✏", "", () => editPago(p)));
     }
-    const bX = document.createElement("button");
-    bX.className = "btn btn-sm btn-danger"; bX.textContent = "✕";
-    bX.style.marginLeft = ".3rem";
-    bX.onclick = () => deletePago(p.id, p.descripcion);
-    tdA.appendChild(bX);
+    tdA.appendChild(mkBtn("✕", "btn-danger", () => deletePago(p.id, p.descripcion)));
     tr.appendChild(tdA);
     tb.appendChild(tr);
   }
 }
 
-async function addPago() {
-  const desc  = document.getElementById("pago-desc").value.trim();
-  const fecha = document.getElementById("pago-fecha").value;
+async function savePago() {
+  const f = _pagoForm();
+  const desc  = f.desc.value.trim();
+  const fecha = f.fecha.value;
   if (!desc || !fecha) return showToast("Completá descripción y fecha", "err");
   const body = {
     descripcion:       desc,
-    monto:             document.getElementById("pago-monto").value || null,
-    moneda:            document.getElementById("pago-moneda").value,
+    monto:             f.monto.value || null,
+    moneda:            f.moneda.value,
     fecha_vencimiento: fecha,
-    recurrencia:       document.getElementById("pago-recur").value,
+    recurrencia:       f.recur.value,
+    fecha_fin:         (f.recur.value === "mensual" ? f.fin.value : "") || "",
   };
+  const editing = _editingPagoId != null;
   try {
-    const r = await fetch(`${BASE}/api/pagos`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+    const r = await fetch(`${BASE}/api/pagos${editing ? "/" + _editingPagoId : ""}`, {
+      method: editing ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error();
-    showToast("Pago agregado");
-    document.getElementById("pago-desc").value = "";
-    document.getElementById("pago-monto").value = "";
+    showToast(editing ? "Pago actualizado" : "Pago agregado");
+    resetPagoForm();
     loadPagos();
-  } catch (_) { showToast("Error al agregar el pago", "err"); }
+  } catch (_) { showToast("Error al guardar el pago", "err"); }
 }
 
 async function markPagoPaid(id) {
@@ -927,16 +971,28 @@ async function markPagoPaid(id) {
   } catch (_) { showToast("Error", "err"); }
 }
 
+async function finalizarPago(id, desc) {
+  if (!confirm(`¿Finalizar la serie de "${desc}"? No se vuelve a generar.`)) return;
+  try {
+    const r = await fetch(`${BASE}/api/pagos/${id}/finalizar`, { method: "POST" });
+    if (!r.ok) throw new Error();
+    showToast("Serie finalizada"); loadPagos();
+  } catch (_) { showToast("Error", "err"); }
+}
+
 async function deletePago(id, desc) {
   if (!confirm(`¿Eliminar "${desc}"?`)) return;
   try {
     const r = await fetch(`${BASE}/api/pagos/${id}`, { method: "DELETE" });
     if (!r.ok) throw new Error();
-    showToast("Pago eliminado"); loadPagos();
+    showToast("Pago eliminado");
+    if (_editingPagoId === id) resetPagoForm();
+    loadPagos();
   } catch (_) { showToast("Error al eliminar", "err"); }
 }
 
-document.getElementById("btn-add-pago")?.addEventListener("click", addPago);
+document.getElementById("btn-add-pago")?.addEventListener("click", savePago);
+document.getElementById("btn-cancel-pago")?.addEventListener("click", resetPagoForm);
 document.getElementById("btn-reload-pagos")?.addEventListener("click", loadPagos);
 
 // ── User info ─────────────────────────────────────────────────────────────────

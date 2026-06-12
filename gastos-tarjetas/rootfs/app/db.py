@@ -224,12 +224,17 @@ def init_db():
                 recurrencia       TEXT NOT NULL DEFAULT 'unico',
                 estado            TEXT NOT NULL DEFAULT 'pendiente',
                 categoria         TEXT,
+                fecha_fin         TEXT,
                 created_at        TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now'))
             )
         """)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_pagos_estado ON pagos(estado, fecha_vencimiento)"
         )
+        # Migración: fecha_fin para pagos mensuales (tope de la recurrencia).
+        pcols = {r[1] for r in conn.execute("PRAGMA table_info(pagos)").fetchall()}
+        if "fecha_fin" not in pcols:
+            conn.execute("ALTER TABLE pagos ADD COLUMN fecha_fin TEXT")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS gastos (
@@ -1062,21 +1067,22 @@ def list_pagos(estado: str | None = None) -> list[dict]:
 
 
 def add_pago(descripcion: str, monto, moneda: str, fecha_vencimiento: str,
-             recurrencia: str = "unico", categoria: str = "") -> int:
+             recurrencia: str = "unico", categoria: str = "",
+             fecha_fin: str = "") -> int:
     with _conn() as conn:
         cur = conn.execute(
             "INSERT INTO pagos (descripcion, monto, moneda, fecha_vencimiento, "
-            "recurrencia, categoria) VALUES (?,?,?,?,?,?)",
+            "recurrencia, categoria, fecha_fin) VALUES (?,?,?,?,?,?,?)",
             (descripcion, monto, moneda or "ARS", fecha_vencimiento,
              recurrencia if recurrencia in ("unico", "mensual") else "unico",
-             categoria or None),
+             categoria or None, fecha_fin or None),
         )
         return cur.lastrowid
 
 
 def update_pago(pago_id: int, fields: dict) -> None:
     cols = {"descripcion", "monto", "moneda", "fecha_vencimiento",
-            "recurrencia", "estado", "categoria"}
+            "recurrencia", "estado", "categoria", "fecha_fin"}
     sets, params = [], []
     for k, v in fields.items():
         if k in cols:
@@ -1094,23 +1100,28 @@ def delete_pago(pago_id: int) -> None:
         conn.execute("DELETE FROM pagos WHERE id = ?", (pago_id,))
 
 
-def mark_pago_pagado(pago_id: int) -> dict | None:
+def mark_pago_pagado(pago_id: int, regenerate: bool = True) -> dict | None:
     """
-    Marca un pago como pagado. Si es 'mensual', genera la fila del mes siguiente
-    (pendiente) para no perder el ciclo. Devuelve el nuevo pago generado o None.
+    Marca un pago como pagado. Si es 'mensual', regenerate=True y todavía no se
+    pasó de fecha_fin, genera la fila del mes siguiente (pendiente). Con
+    regenerate=False ("Finalizar") cierra la serie sin generar la próxima.
+    Devuelve el nuevo pago generado o None.
     """
     with _conn() as conn:
         row = conn.execute("SELECT * FROM pagos WHERE id = ?", (pago_id,)).fetchone()
         if not row:
             return None
         conn.execute("UPDATE pagos SET estado = 'pagado' WHERE id = ?", (pago_id,))
-        if row["recurrencia"] == "mensual":
+        if regenerate and row["recurrencia"] == "mensual":
             nueva = _add_one_month(row["fecha_vencimiento"])
+            fin = row["fecha_fin"] if "fecha_fin" in row.keys() else None
+            if fin and str(nueva)[:10] > str(fin)[:10]:
+                return None  # la próxima caería después de fecha_fin → fin de serie
             cur = conn.execute(
                 "INSERT INTO pagos (descripcion, monto, moneda, fecha_vencimiento, "
-                "recurrencia, categoria) VALUES (?,?,?,?,?,?)",
+                "recurrencia, categoria, fecha_fin) VALUES (?,?,?,?,?,?,?)",
                 (row["descripcion"], row["monto"], row["moneda"], nueva,
-                 "mensual", row["categoria"]),
+                 "mensual", row["categoria"], fin),
             )
             return {"id": cur.lastrowid, "fecha_vencimiento": nueva}
     return None
