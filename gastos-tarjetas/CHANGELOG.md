@@ -1,3 +1,11 @@
+## 0.8.57
+
+- **Pagos / vencimientos manuales (feature b2)** (`db.py`, `routes/pagos.py` nuevo, `main.py`, `vencimiento_notifier.py`, `static/index.html`, `static/app.js`, `static/sw.js`). Para "idem para pagos": servicios, alquiler, expensas, etc. que no se scrapean.
+  - Tabla `pagos` (per-usuario): descripción, monto, moneda, fecha_vencimiento, recurrencia (`unico`/`mensual`), estado (`pendiente`/`pagado`), categoría. CRUD `db.py` (`list_pagos`, `add_pago`, `update_pago`, `delete_pago`, `mark_pago_pagado`). Al marcar pagado un **mensual**, se genera solo la fila del mes siguiente (`_add_one_month`, clampea el día al último del mes).
+  - Endpoints REST `GET/POST/PUT/DELETE /api/pagos` + `POST /api/pagos/{id}/pagar` (`routes/pagos.py`).
+  - UI: nuevo sub-tab **Config → 💰 Pagos** con alta, listado, marcar pagado y borrar (render con `createElement`+`.onclick`, sin JSON en atributos).
+  - El **notifier** (`vencimiento_notifier`) ahora además recorre los pagos `pendiente` y manda push con la misma antelación configurable (`💰 Alquiler vence en 3 días`). Dedup con clave `pago|id|fecha|umbral`. El botón "Probar aviso ahora" también los incluye.
+
 ## 0.8.56
 
 - **Fix: el logout dejaba suscripciones push huérfanas → avisos duplicados** (`static/app.js`, `static/sw.js`). El handler de logout desregistra el service worker (para aislar caché entre usuarios), lo que destruye la suscripción push del navegador **sin avisarle al server** → quedaba huérfana en `push_subscriptions` y, al re-loguear y re-activar, se creaba otra con endpoint nuevo (de ahí "2 notificaciones desde la Mac"). Ahora el logout hace `POST /api/push/unsubscribe` de la suscripción actual **antes** de matar el SW (aún logueado, con `keepalive`). Las huérfanas previas se autolimpian: devuelven 410 en el próximo envío y `send_push` las borra. Bump caché SW `v0.2.37`.

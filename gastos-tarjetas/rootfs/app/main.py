@@ -12,6 +12,7 @@ from routes import scraper_instances_routes
 from routes import categorias_route
 from routes import logs as logs_route
 from routes import push as push_route
+from routes import pagos as pagos_route
 from db import init_db
 from config import APP_VERSION
 from scraper_scheduler import start_scheduler
@@ -125,6 +126,7 @@ app.include_router(scraper_instances_routes.router, prefix="/api", tags=["scrape
 app.include_router(categorias_route.router, prefix="/api",   tags=["categorias"])
 app.include_router(logs_route.router,       prefix="/api",   tags=["logs"])
 app.include_router(push_route.router,        prefix="/api",   tags=["push"])
+app.include_router(pagos_route.router,       prefix="/api",   tags=["pagos"])
 app.include_router(admin.router,            prefix="/admin", tags=["admin"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

@@ -33,9 +33,10 @@ def _fuente_label(fuente: str) -> str:
     return _FUENTE_LABELS.get(fuente, (fuente or "Tarjeta").replace("_", " ").title())
 
 
-def _fmt_monto(monto) -> str:
+def _fmt_monto(monto, moneda: str = "ARS") -> str:
     try:
-        return "$ " + f"{float(monto):,.0f}".replace(",", ".")
+        sym = "US$ " if moneda == "USD" else "$ "
+        return sym + f"{float(monto):,.0f}".replace(",", ".")
     except (TypeError, ValueError):
         return ""
 
@@ -75,7 +76,8 @@ def notify_current_user(force: bool = False) -> int:
     if not subs:
         return 0  # sin dispositivos suscriptos, nada que mandar
 
-    from db import list_vencimientos, venc_notif_already_sent, venc_notif_mark_sent, _conn
+    from db import (list_vencimientos, list_pagos, venc_notif_already_sent,
+                    venc_notif_mark_sent, _conn)
 
     # Último resumen por fuente (mayor fecha_venc).
     latest: dict[str, dict] = {}
@@ -123,6 +125,39 @@ def notify_current_user(force: bool = False) -> int:
             sent += 1
             logger.info("[venc-notif] %s: push enviado (faltan %d días, %d subs)%s",
                         label, days, ok, " [test]" if force else "")
+
+    # Pagos / vencimientos MANUALES (feature b2): mismos umbrales de antelación.
+    for p in list_pagos(estado="pendiente"):
+        fv = p.get("fecha_vencimiento")
+        if not fv:
+            continue
+        try:
+            due = date.fromisoformat(str(fv)[:10])
+        except (TypeError, ValueError):
+            continue
+        days = (due - today).days
+        if days not in thresholds:
+            continue
+        clave = f"pago|{p['id']}|{fv}|{days}"
+        if not force and venc_notif_already_sent(clave):
+            continue
+        desc = (p.get("descripcion") or "Pago").strip()
+        if days <= 0:
+            title = f"💰 {desc} vence hoy"
+        elif days == 1:
+            title = f"💰 {desc} vence mañana"
+        else:
+            title = f"💰 {desc} vence en {days} días"
+        monto = p.get("monto")
+        body = (_fmt_monto(monto, p.get("moneda", "ARS")) if monto else "Pago pendiente")
+        ok, dead = send_push(subs, title, body, "/")
+        dead_all.extend(dead)
+        if ok:
+            if not force:
+                venc_notif_mark_sent(clave)
+            sent += 1
+            logger.info("[venc-notif] pago %r: push enviado (faltan %d días)%s",
+                        desc, days, " [test]" if force else "")
 
     # Limpiar suscripciones muertas detectadas durante el envío.
     if dead_all:

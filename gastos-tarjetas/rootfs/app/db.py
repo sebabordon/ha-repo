@@ -211,6 +211,26 @@ def init_db():
             )
         """)
 
+        # Pagos / vencimientos MANUALES (feature b2): servicios, alquiler, etc.
+        # que no se scrapean. Entran al mismo notifier de antelación. recurrencia
+        # 'mensual' regenera la fila del mes siguiente al marcarse pagado.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pagos (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                descripcion       TEXT NOT NULL,
+                monto             REAL,
+                moneda            TEXT NOT NULL DEFAULT 'ARS',
+                fecha_vencimiento TEXT NOT NULL,
+                recurrencia       TEXT NOT NULL DEFAULT 'unico',
+                estado            TEXT NOT NULL DEFAULT 'pendiente',
+                categoria         TEXT,
+                created_at        TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pagos_estado ON pagos(estado, fecha_vencimiento)"
+        )
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS gastos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1015,6 +1035,85 @@ def venc_notif_mark_sent(clave: str) -> None:
         conn.execute(
             "INSERT OR IGNORE INTO venc_notificaciones (clave) VALUES (?)", (clave,)
         )
+
+
+# ── Pagos / vencimientos manuales (feature b2) ────────────────────────────────
+
+def _add_one_month(iso_date: str) -> str:
+    """Suma un mes a 'YYYY-MM-DD', clampeando el día al último del mes destino."""
+    import calendar
+    from datetime import date
+    d = date.fromisoformat(str(iso_date)[:10])
+    y, m = (d.year + (d.month // 12)), (d.month % 12) + 1
+    last = calendar.monthrange(y, m)[1]
+    return date(y, m, min(d.day, last)).isoformat()
+
+
+def list_pagos(estado: str | None = None) -> list[dict]:
+    """Lista pagos manuales; si estado se pasa, filtra ('pendiente'/'pagado')."""
+    q = "SELECT * FROM pagos"
+    params: list = []
+    if estado:
+        q += " WHERE estado = ?"
+        params.append(estado)
+    q += " ORDER BY (estado='pagado'), fecha_vencimiento"
+    with _conn() as conn:
+        return [dict(r) for r in conn.execute(q, params).fetchall()]
+
+
+def add_pago(descripcion: str, monto, moneda: str, fecha_vencimiento: str,
+             recurrencia: str = "unico", categoria: str = "") -> int:
+    with _conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO pagos (descripcion, monto, moneda, fecha_vencimiento, "
+            "recurrencia, categoria) VALUES (?,?,?,?,?,?)",
+            (descripcion, monto, moneda or "ARS", fecha_vencimiento,
+             recurrencia if recurrencia in ("unico", "mensual") else "unico",
+             categoria or None),
+        )
+        return cur.lastrowid
+
+
+def update_pago(pago_id: int, fields: dict) -> None:
+    cols = {"descripcion", "monto", "moneda", "fecha_vencimiento",
+            "recurrencia", "estado", "categoria"}
+    sets, params = [], []
+    for k, v in fields.items():
+        if k in cols:
+            sets.append(f"{k} = ?")
+            params.append(v)
+    if not sets:
+        return
+    params.append(pago_id)
+    with _conn() as conn:
+        conn.execute(f"UPDATE pagos SET {', '.join(sets)} WHERE id = ?", params)
+
+
+def delete_pago(pago_id: int) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM pagos WHERE id = ?", (pago_id,))
+
+
+def mark_pago_pagado(pago_id: int) -> dict | None:
+    """
+    Marca un pago como pagado. Si es 'mensual', genera la fila del mes siguiente
+    (pendiente) para no perder el ciclo. Devuelve el nuevo pago generado o None.
+    """
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM pagos WHERE id = ?", (pago_id,)).fetchone()
+        if not row:
+            return None
+        conn.execute("UPDATE pagos SET estado = 'pagado' WHERE id = ?", (pago_id,))
+        if row["recurrencia"] == "mensual":
+            nueva = _add_one_month(row["fecha_vencimiento"])
+            cur = conn.execute(
+                "INSERT INTO pagos (descripcion, monto, moneda, fecha_vencimiento, "
+                "recurrencia, categoria) VALUES (?,?,?,?,?,?)",
+                (row["descripcion"], row["monto"], row["moneda"], nueva,
+                 "mensual", row["categoria"]),
+            )
+            return {"id": cur.lastrowid, "fecha_vencimiento": nueva}
+    return None
 
 
 def list_vencimientos() -> list[dict]:

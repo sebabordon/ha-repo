@@ -822,6 +822,105 @@ document.querySelector('.cfg-tab[data-cfgtab="avisos"]')?.addEventListener("clic
   loadVencNotifConfig();
 });
 
+// ── Pagos / vencimientos manuales (b2) ───────────────────────────────────────
+function _fmtPagoMonto(p) {
+  if (p.monto == null || p.monto === "") return "";
+  const sym = p.moneda === "USD" ? "US$" : "$";
+  return `${sym} ${Number(p.monto).toLocaleString("es-AR")}`;
+}
+
+async function loadPagos() {
+  const tb = document.getElementById("pagos-tbody");
+  if (!tb) return;
+  let pagos = [];
+  try { pagos = (await (await fetch(`${BASE}/api/pagos`)).json()).pagos || []; }
+  catch (_) {}
+  tb.replaceChildren();
+  if (!pagos.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6; td.className = "empty"; td.textContent = "Sin pagos cargados.";
+    tr.appendChild(td); tb.appendChild(tr); return;
+  }
+  for (const p of pagos) {
+    const tr = document.createElement("tr");
+    if (p.estado === "pagado") tr.style.opacity = ".5";
+    const cells = [
+      p.fecha_vencimiento,
+      p.descripcion,
+      _fmtPagoMonto(p),
+      p.recurrencia === "mensual" ? "Mensual" : "Único",
+      p.estado === "pagado" ? "Pagado" : "Pendiente",
+    ];
+    for (const txt of cells) {
+      const td = document.createElement("td"); td.textContent = txt; tr.appendChild(td);
+    }
+    const tdA = document.createElement("td");
+    if (p.estado !== "pagado") {
+      const bP = document.createElement("button");
+      bP.className = "btn btn-sm"; bP.textContent = "✓ Pagado";
+      bP.onclick = () => markPagoPaid(p.id);
+      tdA.appendChild(bP);
+    }
+    const bX = document.createElement("button");
+    bX.className = "btn btn-sm btn-danger"; bX.textContent = "✕";
+    bX.style.marginLeft = ".3rem";
+    bX.onclick = () => deletePago(p.id, p.descripcion);
+    tdA.appendChild(bX);
+    tr.appendChild(tdA);
+    tb.appendChild(tr);
+  }
+}
+
+async function addPago() {
+  const desc  = document.getElementById("pago-desc").value.trim();
+  const fecha = document.getElementById("pago-fecha").value;
+  if (!desc || !fecha) return showToast("Completá descripción y fecha", "err");
+  const body = {
+    descripcion:       desc,
+    monto:             document.getElementById("pago-monto").value || null,
+    moneda:            document.getElementById("pago-moneda").value,
+    fecha_vencimiento: fecha,
+    recurrencia:       document.getElementById("pago-recur").value,
+  };
+  try {
+    const r = await fetch(`${BASE}/api/pagos`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error();
+    showToast("Pago agregado");
+    document.getElementById("pago-desc").value = "";
+    document.getElementById("pago-monto").value = "";
+    loadPagos();
+  } catch (_) { showToast("Error al agregar el pago", "err"); }
+}
+
+async function markPagoPaid(id) {
+  try {
+    const r = await fetch(`${BASE}/api/pagos/${id}/pagar`, { method: "POST" });
+    if (!r.ok) throw new Error();
+    const { siguiente } = await r.json();
+    showToast(siguiente
+      ? `Pagado — próximo: ${siguiente.fecha_vencimiento}`
+      : "Marcado como pagado");
+    loadPagos();
+  } catch (_) { showToast("Error", "err"); }
+}
+
+async function deletePago(id, desc) {
+  if (!confirm(`¿Eliminar "${desc}"?`)) return;
+  try {
+    const r = await fetch(`${BASE}/api/pagos/${id}`, { method: "DELETE" });
+    if (!r.ok) throw new Error();
+    showToast("Pago eliminado"); loadPagos();
+  } catch (_) { showToast("Error al eliminar", "err"); }
+}
+
+document.getElementById("btn-add-pago")?.addEventListener("click", addPago);
+document.getElementById("btn-reload-pagos")?.addEventListener("click", loadPagos);
+document.querySelector('.cfg-tab[data-cfgtab="pagos"]')?.addEventListener("click", loadPagos);
+
 // ── User info ─────────────────────────────────────────────────────────────────
 fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {
   if (u.email) document.getElementById("user-email").textContent = u.email;
