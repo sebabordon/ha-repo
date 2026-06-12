@@ -2437,6 +2437,38 @@ tbody tr:hover { background: #fafbff; }
 
 .cq-pagos-man { border-left: 2px solid #e5e7eb; }
 
+/* ── Pagos/Vencimientos manuales — form ──────────────────────────────────── */
+.pago-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: .5rem .75rem;
+  margin-bottom: 1rem;
+}
+.pago-field {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  font-size: .85rem;
+  color: #374151;
+}
+.pago-field span { white-space: nowrap; font-weight: 500; }
+.pago-field input,
+.pago-field select {
+  height: 34px;
+  padding: .3rem .5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: .9rem;
+  box-sizing: border-box;
+}
+.pago-field-btns {
+  flex-direction: row;
+  align-items: center;
+  gap: .4rem;
+}
+.pago-field-btns .btn { height: 34px; }
+
 .cq-progress { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tw-card-row { background: #f0f9ff; }
 .tw-card-row:hover { background: #e0f2fe; }

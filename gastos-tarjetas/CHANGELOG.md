@@ -1,3 +1,7 @@
+## 0.8.65
+
+- **Formulario pagos/vencimientos manuales alineado** (`static/index.html`, `static/style.css`): reemplazado el patrón `<label>X<br><input>` por `.pago-form` / `.pago-field` con flex-column. Todos los controles (text, number, select, date) comparten altura fija de 34 px y se alinean por la base con `align-items: flex-end` en el contenedor.
+
 ## 0.8.64
 
 - **A1 — Botones del header Config/Categorías al alto correcto** (`static/index.html`): removido `btn-sm` de "Ver keywords", "⬇ Exportar" e "⬆ Importar" para que coincidan con "Guardar".
