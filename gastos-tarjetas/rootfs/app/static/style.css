@@ -213,8 +213,11 @@ body {
 body.tab-mode-icons .tab-text  { display: none; }
 body.tab-mode-text  .tab-icon  { display: none; }
 
-/* Emoji icons: slightly larger than text and constrain their line-height */
+/* Emoji icons: slightly larger than text; both spans must have line-height:1
+   so the FLEX ITEM heights are determined by font-size alone (not browser
+   defaults) — this is what makes tab heights equal in Edge, Safari, iOS. */
 .tab-icon { font-size: 1.15em; line-height: 1; }
+.tab-text  { line-height: 1; }
 
 /* ── UI color settings (Interfaz sub-tab) ───────────────────────────────────*/
 .ui-colors-grid {
@@ -357,7 +360,7 @@ body.tab-mode-text  .tab-icon  { display: none; }
 .btn.btn-danger { background: #fff0f0; color: #b91c1c; border-color: #fca5a5; }
 .btn.btn-danger:hover { background: #fee2e2; }
 .btn.btn-sm { padding: .25rem .6rem; font-size: .82rem; }
-.btn.btn-action { padding: .25rem 0; width: 26px; text-align: center; }
+.btn.btn-action { padding: 0; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; }
 .fecha-input {
   border: none; background: transparent; font-size: inherit;
   font-family: inherit; color: inherit; padding: 0; cursor: pointer;
@@ -2494,10 +2497,25 @@ tbody tr:hover { background: #fafbff; }
   padding: .3rem .55rem;
   font-size: .82rem;
   white-space: nowrap;
-  line-height: 1.2;
+  line-height: 1;
+}
+/* Fixed-width icon area so wide emojis (✏️, 🗑) don't make the button wider */
+.pago-action .tab-icon {
+  display: inline-block;
+  width: 1.1em;
+  text-align: center;
+  flex-shrink: 0;
+}
+/* Icon-only mode: true square buttons */
+body.tab-mode-icons .btn.pago-action {
+  padding: 0;
+  width: 34px;
+  height: 34px;
+  justify-content: center;
 }
 @media (pointer: coarse) {
   .btn.pago-action { min-height: 38px; }
+  body.tab-mode-icons .btn.pago-action { width: 44px; height: 44px; }
 }
 
 .cq-progress { font-variant-numeric: tabular-nums; white-space: nowrap; }

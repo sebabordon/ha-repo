@@ -1,3 +1,8 @@
+## 0.8.70
+
+- **Tabs altura igual en Edge/Safari/iOS** (`static/style.css`): `.tab-text { line-height: 1 }`. La causa raíz era que `.tab-text` usaba el line-height default del browser (~1.5 Edge, ~1.2 Safari), por lo que el span de texto determinaba la altura del botón de forma diferente en cada browser. Con `line-height: 1` en ambos spans (`.tab-icon` ya lo tenía), la altura = sólo el padding + font-size y es idéntica en todos.
+- **Botones de acción de pagos cuadrados y consistentes** (`static/style.css`): `.pago-action .tab-icon` tiene `width: 1.1em` fijo para que emojis anchos (✏️, 🗑) no cambien el ancho del botón. En modo "solo íconos" los botones son `34×34px` (escritorio) / `44×44px` (touch). `.btn-action` pasa a `display:inline-flex` con `width=height=26px` para ser verdaderamente cuadrado en todas las plataformas.
+
 ## 0.8.69
 
 - **PWA / Pantalla de inicio en 3 columnas** (`static/index.html`, `static/style.css`): las secciones "Íconos por fuente", "Accesos rápidos" e "Instalar en iOS" se agrupan al final del sub-tab Interfaz en un layout flex de columnas (`.pwa-cols` / `.pwa-col`). En pantallas pequeñas se apilan; en desktop aparecen lado a lado.
