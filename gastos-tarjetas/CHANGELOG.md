@@ -1,3 +1,7 @@
+## 0.8.66
+
+- **Botones de fila en pagos manuales unificados** (`static/app.js`, `static/style.css`): reemplazados `mkBtn`/`mkIcon` por un único `mkAction` que genera botones con `<span class="tab-icon">` + `<span class="tab-text">`, controlables por el toggle de modo de pestañas (íconos / íconos+texto / texto). Íconos actualizados: ✓ Pagado, ⏹ Finalizar, ✏ Editar, 🗑 Borrar. Clase `.btn.pago-action` con `inline-flex` asegura la misma altura en todos los navegadores (Safari, Edge, iOS); el `min-height: 38px` en touch aplica igual a todos los botones de la fila.
+
 ## 0.8.65
 
 - **Formulario pagos/vencimientos manuales alineado** (`static/index.html`, `static/style.css`): reemplazado el patrón `<label>X<br><input>` por `.pago-form` / `.pago-field` con flex-column. Todos los controles (text, number, select, date) comparten altura fija de 34 px y se alinean por la base con `align-items: flex-end` en el contenedor.

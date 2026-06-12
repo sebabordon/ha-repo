@@ -2469,6 +2469,20 @@ tbody tr:hover { background: #fafbff; }
 }
 .pago-field-btns .btn { height: 34px; }
 
+/* Pagos row — action buttons (icon+text, height-consistent across browsers) */
+.btn.pago-action {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  padding: .3rem .55rem;
+  font-size: .82rem;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+@media (pointer: coarse) {
+  .btn.pago-action { min-height: 38px; }
+}
+
 .cq-progress { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tw-card-row { background: #f0f9ff; }
 .tw-card-row:hover { background: #e0f2fe; }

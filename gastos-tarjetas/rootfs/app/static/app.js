@@ -933,16 +933,13 @@ async function loadPagos() {
     td.colSpan = 6; td.className = "empty"; td.textContent = "Sin pagos cargados.";
     tr.appendChild(td); tb.appendChild(tr); return;
   }
-  const mkBtn = (txt, cls, fn) => {
+  const mkAction = (icon, label, cls, fn, title) => {
     const b = document.createElement("button");
-    b.className = "btn btn-sm" + (cls ? " " + cls : "");
-    b.textContent = txt; b.onclick = fn;
-    return b;
-  };
-  const mkIcon = (txt, cls, fn, title) => {
-    const b = document.createElement("button");
-    b.className = "btn btn-sm btn-action" + (cls ? " " + cls : "");
-    b.textContent = txt; b.title = title || ""; b.onclick = fn;
+    b.className = "btn pago-action" + (cls ? " " + cls : "");
+    b.title = title || label; b.onclick = fn;
+    const si = document.createElement("span"); si.className = "tab-icon"; si.textContent = icon;
+    const st = document.createElement("span"); st.className = "tab-text"; st.textContent = " " + label;
+    b.appendChild(si); b.appendChild(st);
     return b;
   };
   for (const p of pagos) {
@@ -964,12 +961,12 @@ async function loadPagos() {
     const tdA = document.createElement("td");
     tdA.style.cssText = "display:flex;align-items:center;gap:.3rem;white-space:nowrap";
     if (p.estado !== "pagado") {
-      tdA.appendChild(mkBtn("✓ Pagado", "", () => markPagoPaid(p.id)));
+      tdA.appendChild(mkAction("✓", "Pagado", "", () => markPagoPaid(p.id), "Marcar pagado"));
       if (p.recurrencia === "mensual")
-        tdA.appendChild(mkBtn("■ Finalizar", "", () => finalizarPago(p.id, p.descripcion)));
-      tdA.appendChild(mkIcon("✏", "", () => editPago(p), "Editar"));
+        tdA.appendChild(mkAction("⏹", "Finalizar", "", () => finalizarPago(p.id, p.descripcion), "Finalizar serie"));
+      tdA.appendChild(mkAction("✏", "Editar", "", () => editPago(p), "Editar"));
     }
-    tdA.appendChild(mkIcon("✕", "btn-danger", () => deletePago(p.id, p.descripcion), "Eliminar"));
+    tdA.appendChild(mkAction("🗑", "Borrar", "btn-danger", () => deletePago(p.id, p.descripcion), "Borrar"));
     tr.appendChild(tdA);
     tb.appendChild(tr);
   }
