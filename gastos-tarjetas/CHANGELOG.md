@@ -1,3 +1,7 @@
+## 0.8.60
+
+- **"Probar aviso ahora" ahora es tolerante con los umbrales** (`vencimiento_notifier.py`, `static/app.js`). El test daba "no hay vencimientos en la ventana" cuando el item no caía justo en un día de umbral (ej. pago a 2 días con umbrales `[3,1]`). En producción el aviso sigue siendo **match exacto** de días (3 y 1 días antes), pero en modo `force` (el botón "Probar") ahora manda para **cualquier** tarjeta impaga o pago pendiente próximo (≤60 días, no vencido), así el test siempre demuestra. Mensaje del toast actualizado.
+
 ## 0.8.59
 
 - **Pagos manuales movidos al tab Cuotas + aviso aclarado** (`static/index.html`, `static/app.js`). Los pagos/vencimientos manuales (b2) pasaron del sub-tab Config → 💰 Pagos al **tab Cuotas** (arriba de las cuotas de tarjeta), que es el que muestra el futuro. Se eliminó el sub-tab de Config; `loadPagos()` ahora se dispara al entrar a Cuotas. Además se aclaró el texto en Config → 🔔 Avisos: el toggle de notificación **siempre cubrió tarjetas Y pagos manuales** (comparten la config `venc_notif_*`), pero decía solo "tarjeta" → ahora dice "vencimientos de tarjeta y pagos" para que se entienda que un solo aviso cubre ambos.

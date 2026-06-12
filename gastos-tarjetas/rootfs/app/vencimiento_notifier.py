@@ -100,7 +100,10 @@ def notify_current_user(force: bool = False) -> int:
         except (TypeError, ValueError):
             continue
         days = (due - today).days
-        if days not in thresholds:
+        # Producción: match EXACTO de umbrales. "Probar" (force): cualquier
+        # item próximo no vencido (≤60 días) para que el test siempre demuestre.
+        in_window = (0 <= days <= 60) if force else (days in thresholds)
+        if not in_window:
             continue
         clave = f"{f}|{v['fecha_venc']}|{days}"
         if not force and venc_notif_already_sent(clave):
@@ -136,7 +139,10 @@ def notify_current_user(force: bool = False) -> int:
         except (TypeError, ValueError):
             continue
         days = (due - today).days
-        if days not in thresholds:
+        # Producción: match EXACTO de umbrales. "Probar" (force): cualquier
+        # item próximo no vencido (≤60 días) para que el test siempre demuestre.
+        in_window = (0 <= days <= 60) if force else (days in thresholds)
+        if not in_window:
             continue
         clave = f"pago|{p['id']}|{fv}|{days}"
         if not force and venc_notif_already_sent(clave):

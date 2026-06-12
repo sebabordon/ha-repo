@@ -1,5 +1,5 @@
 /* Finance Me — service worker (minimal, cache-first for statics) */
-const CACHE = "finance-me-v0.2.40";
+const CACHE = "finance-me-v0.2.41";
 const PRECACHE = ["/", "/static/app.js", "/static/style.css"];
 
 self.addEventListener("install", e => {

@@ -828,8 +828,8 @@ async function testVencNotif() {
     if (!r.ok) return showToast("No se pudo probar", "err");
     const { sent } = await r.json();
     showToast(sent > 0
-      ? `Enviados ${sent} aviso(s) de vencimiento`
-      : "No hay vencimientos impagos en la ventana (o sin suscripción)",
+      ? `Enviados ${sent} aviso(s) de prueba`
+      : "No hay tarjetas impagas ni pagos pendientes próximos (o no hay suscripción activa)",
       sent > 0 ? "ok" : "err", 6000);
   } catch (_) { showToast("No se pudo probar", "err"); }
 }
