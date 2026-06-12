@@ -422,6 +422,34 @@
     <!-- ── Tab: Cuotas ───────────────────────────────────────────────────── -->
     <section id="tab-cuotas" class="tab-content">
 
+      <!-- ── Pagos / vencimientos manuales (b2) ──────────────────────── -->
+      <div class="rules-header">
+        <h2>💰 Pagos / vencimientos manuales</h2>
+        <button id="btn-reload-pagos" class="btn btn-sm" title="Recargar">↺</button>
+      </div>
+      <p class="rules-hint">
+        Servicios, alquiler, expensas… cosas que no se scrapean. Te aviso por push
+        con la antelación que configures en <strong>Config → 🔔 Avisos</strong> (el
+        mismo aviso cubre tarjetas y estos pagos). Los <strong>mensuales</strong>
+        se regeneran solos al marcarse pagados.
+      </p>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem">
+        <label>Descripción<br><input id="pago-desc" type="text" placeholder="Alquiler" style="width:160px"></label>
+        <label>Monto<br><input id="pago-monto" type="number" step="0.01" style="width:110px"></label>
+        <label>Moneda<br><select id="pago-moneda"><option>ARS</option><option>USD</option></select></label>
+        <label>Vence<br><input id="pago-fecha" type="date"></label>
+        <label>Recurrencia<br><select id="pago-recur"><option value="unico">Único</option><option value="mensual">Mensual</option></select></label>
+        <button id="btn-add-pago" class="btn btn-primary">+ Agregar</button>
+      </div>
+      <div class="table-wrap">
+        <table id="pagos-table">
+          <thead><tr><th>Vence</th><th>Descripción</th><th>Monto</th><th>Tipo</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="pagos-tbody"></tbody>
+        </table>
+      </div>
+
+      <hr style="margin:1.6rem 0;border:none;border-top:1px solid #eee">
+
       <div class="filter-bar">
         <div id="cuotas-summary"></div>
         <button id="btn-cq-load" class="btn btn-sm">↺</button>
@@ -512,7 +540,6 @@
         <button class="cfg-tab" data-cfgtab="procesamiento">Procesamiento</button>
         <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
         <button class="cfg-tab" data-cfgtab="avisos">🔔 Avisos</button>
-        <button class="cfg-tab" data-cfgtab="pagos">💰 Pagos</button>
         <button class="cfg-tab" data-cfgtab="datos">Datos</button>
         <button class="cfg-tab" data-cfgtab="log">📋 Log</button>
       </div>
@@ -1147,14 +1174,15 @@
         </div>
 
         <hr style="margin:1.4rem 0;border:none;border-top:1px solid #eee">
-        <h2>Vencimientos de tarjeta</h2>
+        <h2>Vencimientos y pagos</h2>
         <p class="rules-hint">
-          Te aviso por push antes de que venza cada tarjeta <strong>impaga</strong>
-          (usa el detector de pagos que ya tenés en Procesamiento → Vencimientos).
-          Requiere tener las notificaciones activadas arriba.
+          Te aviso por push antes de que venza cada <strong>tarjeta impaga</strong>
+          (usa el detector de pagos de Procesamiento → Vencimientos) <strong>y</strong>
+          cada <strong>pago manual</strong> pendiente (los que cargás en Cuotas →
+          💰 Pagos). Un solo aviso cubre ambos. Requiere las notificaciones activadas arriba.
         </p>
         <label style="display:block;margin:.4rem 0">
-          <input type="checkbox" id="venc-notif-activo"> Avisarme de vencimientos de tarjeta
+          <input type="checkbox" id="venc-notif-activo"> Avisarme de vencimientos de tarjeta y pagos
         </label>
         <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-top:.4rem">
           <label>Días de antelación (coma-separado)<br>
@@ -1170,31 +1198,6 @@
           Ej: <code>3,1</code> = aviso 3 días antes y 1 día antes. Poné <code>0</code>
           para incluir el día del vencimiento.
         </p>
-      </div>
-
-      <!-- ── Sub-tab: Pagos / vencimientos manuales ──────────────────── -->
-      <div id="cfg-tab-pagos" class="cfg-tab-content">
-        <div class="rules-header">
-          <h2>Pagos / vencimientos manuales</h2>
-          <button id="btn-reload-pagos" class="btn btn-sm" title="Recargar">↺</button>
-        </div>
-        <p class="rules-hint">
-          Servicios, alquiler, expensas… cosas que no se scrapean. Te aviso por push
-          con la misma antelación configurada en <strong>🔔 Avisos</strong>. Los
-          <strong>mensuales</strong> se regeneran solos al marcarse pagados.
-        </p>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem">
-          <label>Descripción<br><input id="pago-desc" type="text" placeholder="Alquiler" style="width:160px"></label>
-          <label>Monto<br><input id="pago-monto" type="number" step="0.01" style="width:110px"></label>
-          <label>Moneda<br><select id="pago-moneda"><option>ARS</option><option>USD</option></select></label>
-          <label>Vence<br><input id="pago-fecha" type="date"></label>
-          <label>Recurrencia<br><select id="pago-recur"><option value="unico">Único</option><option value="mensual">Mensual</option></select></label>
-          <button id="btn-add-pago" class="btn btn-primary">+ Agregar</button>
-        </div>
-        <table id="pagos-table">
-          <thead><tr><th>Vence</th><th>Descripción</th><th>Monto</th><th>Tipo</th><th>Estado</th><th></th></tr></thead>
-          <tbody id="pagos-tbody"></tbody>
-        </table>
       </div>
 
       <!-- ── Sub-tab: Log unificado ──────────────────────────────────── -->

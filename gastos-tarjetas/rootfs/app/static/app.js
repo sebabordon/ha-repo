@@ -177,7 +177,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     tab.classList.add("active");
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); _monthlyChart?.resize(); }
-    if (tab.dataset.tab === "cuotas")      { loadCuotas(); }
+    if (tab.dataset.tab === "cuotas")      { loadCuotas(); loadPagos(); }
     if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
     if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); loadPeriodoConfig(); loadVencMatchConfig(); loadCategorizacionConfig(); loadEspecialesConfig(); loadIconosConfig(); }
   });
@@ -938,7 +938,6 @@ async function deletePago(id, desc) {
 
 document.getElementById("btn-add-pago")?.addEventListener("click", addPago);
 document.getElementById("btn-reload-pagos")?.addEventListener("click", loadPagos);
-document.querySelector('.cfg-tab[data-cfgtab="pagos"]')?.addEventListener("click", loadPagos);
 
 // ── User info ─────────────────────────────────────────────────────────────────
 fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {

@@ -1,3 +1,7 @@
+## 0.8.59
+
+- **Pagos manuales movidos al tab Cuotas + aviso aclarado** (`static/index.html`, `static/app.js`). Los pagos/vencimientos manuales (b2) pasaron del sub-tab Config → 💰 Pagos al **tab Cuotas** (arriba de las cuotas de tarjeta), que es el que muestra el futuro. Se eliminó el sub-tab de Config; `loadPagos()` ahora se dispara al entrar a Cuotas. Además se aclaró el texto en Config → 🔔 Avisos: el toggle de notificación **siempre cubrió tarjetas Y pagos manuales** (comparten la config `venc_notif_*`), pero decía solo "tarjeta" → ahora dice "vencimientos de tarjeta y pagos" para que se entienda que un solo aviso cubre ambos.
+
 ## 0.8.58
 
 - **Botón "Resetear duplicadas" para limpiar suscripciones push** (`routes/push.py`, `static/index.html`, `static/app.js`, `static/sw.js`). Si "Probar" mandaba notificaciones **duplicadas** era porque quedaban suscripciones huérfanas en la DB de antes del fix 0.8.56 (endpoints viejos aún vivos que el 410 no llegó a limpiar), y el envío hace fan-out a todas. Nuevo `POST /api/push/clear` borra TODAS las suscripciones del usuario; el botón además desuscribe el navegador local y vuelve a activar este dispositivo → queda una sola suscripción limpia. En los otros dispositivos hay que tocar "Activar" de nuevo. Bump caché SW `v0.2.39`.
