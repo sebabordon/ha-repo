@@ -205,6 +205,10 @@ body {
 .cfg-tab-content          { display: none; padding: 1.25rem 1.5rem; }
 .cfg-tab-content.active   { display: block; }
 
+/* ── Tab icon display modes ─────────────────────────────────────── */
+body.tab-mode-icons .tab-text  { display: none; }
+body.tab-mode-text  .tab-icon  { display: none; }
+
 /* ── UI color settings (Interfaz sub-tab) ───────────────────────────────────*/
 .ui-colors-grid { display: flex; flex-direction: column; gap: .75rem; max-width: 560px; }
 .ui-color-row {

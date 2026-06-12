@@ -46,11 +46,11 @@
 
     <!-- Tabs -->
     <div class="tabs">
-      <button class="tab active" data-tab="graficos">Gráficos</button>
-      <button class="tab" data-tab="gastos">🧾 Gastos</button>
-      <button class="tab" data-tab="cuotas">📅 Pagos/Cuotas</button>
-      <button class="tab" data-tab="presupuesto">🎯 Presupuesto</button>
-      <button class="tab" data-tab="config">⚙ Config</button>
+      <button class="tab active" data-tab="graficos"><span class="tab-icon">📊</span><span class="tab-text"> Gráficos</span></button>
+      <button class="tab" data-tab="gastos"><span class="tab-icon">🧾</span><span class="tab-text"> Gastos</span></button>
+      <button class="tab" data-tab="cuotas"><span class="tab-icon">📅</span><span class="tab-text"> Pagos/Cuotas</span></button>
+      <button class="tab" data-tab="presupuesto"><span class="tab-icon">🎯</span><span class="tab-text"> Presupuesto</span></button>
+      <button class="tab" data-tab="config"><span class="tab-icon">⚙</span><span class="tab-text"> Config</span></button>
     </div>
 
     <!-- ── Tab: Gráficos ──────────────────────────────────────────────── -->
@@ -536,14 +536,13 @@
 
       <!-- Config sub-tab bar -->
       <div class="cfg-tabs">
-        <button class="cfg-tab active" data-cfgtab="categorias">Categorías</button>
-        <button class="cfg-tab" data-cfgtab="personas">Personas</button>
-        <button class="cfg-tab" data-cfgtab="cuentas">Cuentas</button>
-        <button class="cfg-tab" data-cfgtab="procesamiento">Procesamiento</button>
-        <button class="cfg-tab" data-cfgtab="avisos">🔔 Avisos</button>
-        <button class="cfg-tab" data-cfgtab="ui">Interfaz</button>
-        <button class="cfg-tab" data-cfgtab="datos">Datos</button>
-        <button class="cfg-tab" data-cfgtab="log">📋 Log</button>
+        <button class="cfg-tab active" data-cfgtab="categorias"><span class="tab-icon">🏷️</span><span class="tab-text"> Categorías</span></button>
+        <button class="cfg-tab" data-cfgtab="personas"><span class="tab-icon">👥</span><span class="tab-text"> Personas</span></button>
+        <button class="cfg-tab" data-cfgtab="cuentas"><span class="tab-icon">💳</span><span class="tab-text"> Cuentas</span></button>
+        <button class="cfg-tab" data-cfgtab="procesamiento"><span class="tab-icon">⚙️</span><span class="tab-text"> Procesamiento</span></button>
+        <button class="cfg-tab" data-cfgtab="ui"><span class="tab-icon">🎨</span><span class="tab-text"> Interfaz</span></button>
+        <button class="cfg-tab" data-cfgtab="datos"><span class="tab-icon">💾</span><span class="tab-text"> Datos</span></button>
+        <button class="cfg-tab" data-cfgtab="log"><span class="tab-icon">📋</span><span class="tab-text"> Log</span></button>
       </div>
 
       <!-- ── Sub-tab: Categorías ────────────────────────────────────── -->
@@ -789,6 +788,20 @@
             </div>
           </div>
 
+          <div class="ui-pref-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Pestañas</span>
+              <span class="ui-color-desc">qué mostrar en los botones de navegación</span>
+            </div>
+            <div class="ui-pref-controls">
+              <select id="ui-tab-icon-mode">
+                <option value="icons_text">Íconos + texto</option>
+                <option value="icons">Solo íconos</option>
+                <option value="text">Solo texto</option>
+              </select>
+            </div>
+          </div>
+
           <!-- ── Widget de vencimientos ── -->
           <div class="ui-pref-section">Widget de vencimientos</div>
 
@@ -847,6 +860,47 @@
             <span class="ui-prev-accent">Acento</span>
           </div>
         </div>
+
+        <!-- ── Notificaciones (ex subtab Avisos) ── -->
+        <div class="ui-pref-section" style="margin-top:1.5rem">Notificaciones</div>
+        <p class="rules-hint">
+          Recibí avisos push (vencimientos, etc.) en <strong>este dispositivo</strong>.
+          En iPhone tenés que tener la app <strong>agregada a la pantalla de inicio</strong>
+          para que funcione; en Safari (Mac) y Edge/Chrome (PC) anda directo.
+        </p>
+        <p class="rules-hint">Estado: <span id="push-status-val">—</span></p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <button id="btn-push-enable" class="btn btn-primary">Activar notificaciones</button>
+          <button id="btn-push-test" class="btn">Probar</button>
+          <button id="btn-push-disable" class="btn">Desactivar</button>
+          <button id="btn-push-reset" class="btn" title="Borra todas tus suscripciones y reactiva este dispositivo (arregla notificaciones duplicadas)">Resetear duplicadas</button>
+        </div>
+
+        <hr style="margin:1.4rem 0;border:none;border-top:1px solid #eee">
+        <h2>Vencimientos y pagos</h2>
+        <p class="rules-hint">
+          Te aviso por push antes de que venza cada <strong>tarjeta impaga</strong>
+          (usa el detector de pagos de Procesamiento → Vencimientos) <strong>y</strong>
+          cada <strong>pago manual</strong> pendiente (los que cargás en Cuotas →
+          💰 Pagos). Un solo aviso cubre ambos. Requiere las notificaciones activadas arriba.
+        </p>
+        <label style="display:block;margin:.4rem 0">
+          <input type="checkbox" id="venc-notif-activo"> Avisarme de vencimientos de tarjeta y pagos
+        </label>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-top:.4rem">
+          <label>Días de antelación (coma-separado)<br>
+            <input id="venc-notif-dias" type="text" placeholder="3,1" style="width:110px">
+          </label>
+          <label>Hora del aviso (0–23)<br>
+            <input id="venc-notif-hora" type="number" min="0" max="23" style="width:80px">
+          </label>
+          <button id="btn-save-venc-notif" class="btn btn-primary">Guardar</button>
+          <button id="btn-test-venc-notif" class="btn">Probar aviso ahora</button>
+        </div>
+        <p class="rules-hint" style="margin-top:.5rem">
+          Ej: <code>3,1</code> = aviso 3 días antes y 1 día antes. Poné <code>0</code>
+          para incluir el día del vencimiento.
+        </p>
 
         <h3 style="margin-top:2rem">Íconos PWA por fuente</h3>
         <p class="hint" style="margin-bottom:1rem">
@@ -1160,48 +1214,6 @@
       </div>
 
       <!-- ── Sub-tab: Avisos (Web Push) ──────────────────────────────── -->
-      <div id="cfg-tab-avisos" class="cfg-tab-content">
-        <h2>Notificaciones</h2>
-        <p class="rules-hint">
-          Recibí avisos push (vencimientos, etc.) en <strong>este dispositivo</strong>.
-          En iPhone tenés que tener la app <strong>agregada a la pantalla de inicio</strong>
-          para que funcione; en Safari (Mac) y Edge/Chrome (PC) anda directo.
-        </p>
-        <p class="rules-hint">Estado: <span id="push-status-val">—</span></p>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-          <button id="btn-push-enable" class="btn btn-primary">Activar notificaciones</button>
-          <button id="btn-push-test" class="btn">Probar</button>
-          <button id="btn-push-disable" class="btn">Desactivar</button>
-          <button id="btn-push-reset" class="btn" title="Borra todas tus suscripciones y reactiva este dispositivo (arregla notificaciones duplicadas)">Resetear duplicadas</button>
-        </div>
-
-        <hr style="margin:1.4rem 0;border:none;border-top:1px solid #eee">
-        <h2>Vencimientos y pagos</h2>
-        <p class="rules-hint">
-          Te aviso por push antes de que venza cada <strong>tarjeta impaga</strong>
-          (usa el detector de pagos de Procesamiento → Vencimientos) <strong>y</strong>
-          cada <strong>pago manual</strong> pendiente (los que cargás en Cuotas →
-          💰 Pagos). Un solo aviso cubre ambos. Requiere las notificaciones activadas arriba.
-        </p>
-        <label style="display:block;margin:.4rem 0">
-          <input type="checkbox" id="venc-notif-activo"> Avisarme de vencimientos de tarjeta y pagos
-        </label>
-        <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-top:.4rem">
-          <label>Días de antelación (coma-separado)<br>
-            <input id="venc-notif-dias" type="text" placeholder="3,1" style="width:110px">
-          </label>
-          <label>Hora del aviso (0–23)<br>
-            <input id="venc-notif-hora" type="number" min="0" max="23" style="width:80px">
-          </label>
-          <button id="btn-save-venc-notif" class="btn btn-primary">Guardar</button>
-          <button id="btn-test-venc-notif" class="btn">Probar aviso ahora</button>
-        </div>
-        <p class="rules-hint" style="margin-top:.5rem">
-          Ej: <code>3,1</code> = aviso 3 días antes y 1 día antes. Poné <code>0</code>
-          para incluir el día del vencimiento.
-        </p>
-      </div>
-
       <!-- ── Sub-tab: Log unificado ──────────────────────────────────── -->
       <div id="cfg-tab-log" class="cfg-tab-content">
         <h2>Log unificado</h2>

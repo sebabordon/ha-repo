@@ -1,3 +1,9 @@
+## 0.8.62
+
+- **Íconos en todos los tabs y cfg-tabs** (`static/index.html`). Se agregó icono 📊 al tab Gráficos (que lo tenía faltando) y se completaron los iconos en todos los sub-tabs de Config: 🏷️ Categorías, 👥 Personas, 💳 Cuentas, ⚙️ Procesamiento, 🎨 Interfaz, 💾 Datos, 📋 Log. Los labels usan `<span class="tab-icon">` + `<span class="tab-text">` para soporte del nuevo toggle.
+- **Toggle de modo pestañas** (`static/index.html`, `static/app.js`, `static/style.css`). Nueva preferencia "Pestañas" en Config → Interfaz → Preferencias: "Íconos + texto" (por defecto), "Solo íconos" o "Solo texto". Se aplica a todos los tabs principales y sub-tabs de Config. Guardado en `localStorage` como `tab_icon_mode`.
+- **Avisos movido a Interfaz** (`static/index.html`, `static/app.js`). El sub-tab Avisos fue eliminado; su contenido (notificaciones push + configuración de vencimientos) vive ahora dentro de Config → 🎨 Interfaz bajo la sección "Notificaciones".
+
 ## 0.8.61
 
 - **Pagos manuales: fecha de fin, edición y "Finalizar"** (`db.py`, `routes/pagos.py`, `static/index.html`, `static/app.js`). Nueva columna `pagos.fecha_fin` (con migración PRAGMA+ALTER): tope de la recurrencia mensual — al marcar pagado, si la próxima cuota caería después de `fecha_fin` no se regenera. Botón **✏ Editar** (carga la fila en el form, que pasa a "Guardar") y botón **■ Finalizar** (en mensuales: marca pagado sin regenerar, cierra la serie) → `POST /api/pagos/{id}/finalizar`. El form suma el campo "Hasta (si es mensual)".

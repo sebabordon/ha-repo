@@ -20,6 +20,7 @@ const UI_PREF_DEFAULTS = {
   venc_show_pdf_ref:  true,
   chart_home_mode:    "normal",   // "normal" | "compact" | "hidden"
   bud_chart_mode:     "normal",   // "normal" | "compact" | "hidden"
+  tab_icon_mode:      "icons_text", // "icons_text" | "icons" | "text"
 };
 
 function getUiPref(key) {
@@ -52,6 +53,14 @@ function applyUiPrefs() {
   // Home chart size
   _applyChartMode(getUiPref("chart_home_mode"));
   _applyBudChartMode(getUiPref("bud_chart_mode"));
+  // Tab icon mode
+  _applyTabIconMode(getUiPref("tab_icon_mode"));
+}
+
+function _applyTabIconMode(mode) {
+  document.body.classList.remove("tab-mode-icons", "tab-mode-text");
+  if (mode === "icons") document.body.classList.add("tab-mode-icons");
+  if (mode === "text")  document.body.classList.add("tab-mode-text");
 }
 
 const _CHART_MODE_CYCLE  = ["normal", "compact", "hidden"];
@@ -593,6 +602,7 @@ function renderUiSettings() {
   setChk("ui-venc-show-rg5617",   p.venc_show_rg5617);
   setChk("ui-venc-show-pdf-ref",  p.venc_show_pdf_ref);
   setVal("ui-chart-home-mode",    p.chart_home_mode);
+  setVal("ui-tab-icon-mode",      p.tab_icon_mode);
   _updateUiPreview();
 }
 
@@ -642,6 +652,7 @@ function _getUiPrefInputs() {
     venc_show_rg5617:   chk("ui-venc-show-rg5617",   true),
     venc_show_pdf_ref:  chk("ui-venc-show-pdf-ref",  true),
     chart_home_mode:    sel("ui-chart-home-mode",    UI_PREF_DEFAULTS.chart_home_mode),
+    tab_icon_mode:      sel("ui-tab-icon-mode",      UI_PREF_DEFAULTS.tab_icon_mode),
   };
 }
 
@@ -836,7 +847,7 @@ async function testVencNotif() {
 
 document.getElementById("btn-save-venc-notif")?.addEventListener("click", saveVencNotifConfig);
 document.getElementById("btn-test-venc-notif")?.addEventListener("click", testVencNotif);
-document.querySelector('.cfg-tab[data-cfgtab="avisos"]')?.addEventListener("click", () => {
+document.querySelector('.cfg-tab[data-cfgtab="ui"]')?.addEventListener("click", () => {
   refreshPushState();
   loadVencNotifConfig();
 });
