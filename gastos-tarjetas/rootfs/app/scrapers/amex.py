@@ -693,13 +693,18 @@ class AmexScraper(BaseScraper):
                 driver.execute_script("arguments[0].click();", first_btn)
             else:
                 log_fn("  [amex-pdf] panel ya expandido — esperando links…")
-            # Esperar a que los links aparezcan en el DOM (ya sea tras click o en carga inicial)
+            # Esperar a que los links aparezcan en el DOM (ya sea tras click o en carga inicial).
+            # Usamos JS puro en lugar de un selector CSS porque en este SPA el atributo href
+            # puede estar seteado como propiedad y el selector CSS [href*=...] no siempre lo detecta.
             try:
-                WebDriverWait(driver, 15).until(
-                    EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, 'a[href*="/servicing/v1/documents/statements/"]')
-                    )
-                )
+                WebDriverWait(driver, 15).until(lambda d: d.execute_script("""
+                    var all = document.querySelectorAll('a[href]');
+                    for (var i = 0; i < all.length; i++) {
+                        var h = all[i].getAttribute('href') || all[i].href || '';
+                        if (h.indexOf('/servicing/v1/documents/statements/') >= 0) return true;
+                    }
+                    return false;
+                """))
             except Exception:
                 pass  # el diagnóstico más abajo mostrará qué hay en el DOM
             time.sleep(0.5)
@@ -707,8 +712,10 @@ class AmexScraper(BaseScraper):
             log_fn(f"  [amex-pdf] aviso expandiendo panel: {exc}")
 
         # Extraer links de descarga del DOM renderizado.
-        # La página repite el mismo link en varios contenedores; se desduplicamos por URL.
+        # La página repite el mismo link en varios contenedores; se deduplican por URL.
         # La fecha se parsea desde el title: "Estados de Cuenta en PDF. - 26 de may de 2026"
+        # Nota: se itera sobre todos los <a href> y se filtra por indexOf en JS porque el
+        # selector CSS [href*=...] no matchea correctamente en esta SPA de React.
         links = driver.execute_script("""
         (function() {
             var MONTHS = {
@@ -724,13 +731,16 @@ class AmexScraper(BaseScraper):
             }
             var seen = {};
             var out = [];
-            var anchors = document.querySelectorAll('a[href*="/servicing/v1/documents/statements/"]');
-            anchors.forEach(function(a) {
-                var url = a.href || '';
-                if (seen[url]) return;
+            var all = document.querySelectorAll('a[href]');
+            for (var i = 0; i < all.length; i++) {
+                var a = all[i];
+                var attr = a.getAttribute('href') || a.href || '';
+                if (attr.indexOf('/servicing/v1/documents/statements/') < 0) continue;
+                var url = a.href || attr;
+                if (seen[url]) continue;
                 seen[url] = true;
                 out.push({url: url, date: titleToDate(a.title), title: a.title || ''});
-            });
+            }
             return out;
         })();
         """) or []

@@ -1,3 +1,7 @@
+## 0.8.87
+
+- **AMEX: usar indexOf en JS en lugar de selector CSS para links de resúmenes** (`scrapers/amex.py`): el diagnóstico de 0.8.86 confirmó que los links de `/servicing/v1/documents/statements/` están en el DOM (74 `<a href>` presentes, 5 con esa ruta), pero el selector CSS `a[href*="..."]` devuelve 0 resultados en esta SPA de React. La extracción ahora itera todos los `<a href>` con `document.querySelectorAll('a[href]')` y filtra por `.indexOf()` en JS, el mismo método que funciona en el diagnóstico. El `WebDriverWait` también fue actualizado para usar el mismo enfoque JS en lugar de un CSS selector.
+
 ## 0.8.86
 
 - **AMEX: esperar links aunque el panel ya esté expandido** (`scrapers/amex.py`): cuando `aria-expanded="true"` en la carga inicial el scraper saltaba directo a buscar links sin esperar que el contenido cargase. Ahora siempre aplica un `WebDriverWait(15s)` post-panel (tanto si se clickeó como si ya estaba abierto). Además, cuando no se encuentran links el log ahora muestra hasta 5 hrefs candidatos con "document"/"statement"/"servicing" en su URL para poder diagnosticar el formato real que usa la página.
