@@ -1,3 +1,7 @@
+## 0.8.94
+
+- **Diagnóstico: extractos BBVA vacíos** (`scrapers/bbva_tarjetas.py`): cuando la API `POST /extractos/extractos` devuelve HTTP 200 pero lista vacía, el log ahora muestra el `statusCode` interno del JSON y los primeros 500 caracteres del body para identificar si es un error de sesión, CSRF o estructura inesperada.
+
 ## 0.8.93
 
 - **Fix: ContextVar de usuario no se propagaba al thread del scraper** (`scrapers/base.py`): `BaseScraper.run()` usa `loop.run_in_executor()` para correr el scraper Selenium en un thread pool, pero el ContextVar `_user_data_dir` (que apunta a la DB del usuario activo) no se propagaba al hilo — causaba `RuntimeError: _find_db_path() SIN contexto de usuario` en `consolidate_scraper_duplicates` y potencialmente escribía gastos en la DB global `/data/gastos.db` en lugar de la del usuario. Corregido con `ctx = contextvars.copy_context(); loop.run_in_executor(None, ctx.run, self._run_sync, config)`.
