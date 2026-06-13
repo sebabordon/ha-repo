@@ -1,3 +1,7 @@
+## 0.8.95
+
+- **Fix: extractos BBVA — statusCode 500 "Esta transacción no puede ser realizada"** (`scrapers/bbva_tarjetas.py`): BBVA bloquea `POST /extractos/extractos` si el browser no está en la sección "Resúmenes" del SPA Angular. El fix navega a `#/private/summaries`, espera 4 s para que Angular inicialice el módulo, hace el gate-check `GET /viewerAdobePdf/verificacion` (que Angular ejecuta automáticamente), y recién entonces llama al endpoint de extractos — replicando el flujo real del browser confirmado en el HAR.
+
 ## 0.8.94
 
 - **Diagnóstico: extractos BBVA vacíos** (`scrapers/bbva_tarjetas.py`): cuando la API `POST /extractos/extractos` devuelve HTTP 200 pero lista vacía, el log ahora muestra el `statusCode` interno del JSON y los primeros 500 caracteres del body para identificar si es un error de sesión, CSRF o estructura inesperada.

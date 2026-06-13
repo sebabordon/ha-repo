@@ -380,13 +380,35 @@ class BbvaTarjetasScraper(BbvaScraper):
     _EP_EXTRACTOS = "/cliente/extractos/extractos"
     _EP_GETPDF    = "/cliente/extractos/getPdf"
 
+    _EP_VIEWER_PDF   = "/seguridad/viewerAdobePdf/verificacion"
+    _SUMMARIES_URL   = "https://online.bbva.com.ar/fnetcore/#/private/summaries"
+
     def _fetch_extractos(self, driver, log_fn) -> list[dict]:
         """
         POST /extractos/extractos {"fecha":"YYYY"} → lista de resúmenes.
         Devuelve la lista de extractos (cada uno con 'reporte', 'fechaCierre', 'detalle').
+
+        BBVA bloquea este endpoint (statusCode=500) si el SPA Angular no fue
+        navegado a la sección "Resúmenes" primero.  El flujo que BBVA espera:
+          1. driver.get(#/private/summaries) — el Angular router inicializa el módulo
+          2. GET /seguridad/viewerAdobePdf/verificacion — gate check del módulo
+          3. POST /extractos/extractos — ahora acepta la request
         """
         from datetime import datetime
         year = str(datetime.now().year)
+
+        # Paso 1: navegar al estado Angular "Resúmenes" para inicializar el módulo
+        log_fn("  [extractos] navegando a sección Resúmenes del SPA…")
+        try:
+            driver.get(self._SUMMARIES_URL)
+            time.sleep(4)   # Angular necesita inicializar el módulo de resúmenes
+        except Exception as exc:
+            log_fn(f"  [extractos] aviso navegando: {exc}")
+
+        # Paso 2: gate check que el Angular app hace automáticamente al cargar
+        self._api_request(driver, self._EP_VIEWER_PDF)
+
+        # Paso 3: obtener lista de resúmenes
         resp = self._api_request(
             driver, self._EP_EXTRACTOS, method="POST", json_body={"fecha": year}
         )
