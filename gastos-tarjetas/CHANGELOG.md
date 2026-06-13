@@ -1,3 +1,7 @@
+## 0.9.3
+
+- **Título dinámico en el chart Presupuesto vs real** (`static/index.html`, `static/app.js`): el título ahora muestra los totales del mes seleccionado en el combo box, ej. "Presupuesto (1.2M) vs Real (980K)". Se calcula sumando las categorías top-level del mes (sin doble conteo) y se actualiza al cambiar el mes. El texto se envolvió en `<span id="bud-chart-title-text">` y se actualiza desde `loadBudgetChart` vía el nuevo helper `_updateBudChartTitle`; formato compacto K/M con `_fmtCompactKM`. Si no hay datos vuelve a "Presupuesto vs real".
+
 ## 0.9.2
 
 - **Borrado individual de gastos: hard delete genuino** (`db.py`, `static/app.js`): se revierte el marcado `estado='ignored'` introducido en 0.9.1 (era sobre-ingeniería). `delete_gasto_any` vuelve a borrar el gasto y su `movimientos_raw` vinculado. El delete está pensado para duplicados o registros mal importados: en un duplicado hay 2 filas raw y al borrar una sobrevive la otra (el dedup saltea el movimiento → no vuelve); si es un movimiento real único y el scraper lo re-trae, se re-importa, lo cual es correcto porque el gasto existe. No toca la tabla `importaciones`, así que el flujo de resúmenes PDF (fuente de verdad) queda intacto. Mensaje del confirm actualizado.

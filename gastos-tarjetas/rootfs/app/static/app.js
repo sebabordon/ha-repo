@@ -7128,7 +7128,27 @@ async function loadBudgetChart() {
   _budgetSelectedCat = null;
 
   _renderBudCatChips();
+  _updateBudChartTitle();
   _drawBudgetChart();
+}
+
+// Formato compacto para el título: K/M sin decimales innecesarios.
+function _fmtCompactKM(v) {
+  const n = Math.abs(+v || 0);
+  if (n >= 1e6) return (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1e3) return Math.round(v / 1e3) + "K";
+  return String(Math.round(v || 0));
+}
+
+// Título del chart: "Presupuesto (xxK) vs Real (xxK)" con los totales del mes
+// seleccionado en el combo (suma de categorías top-level, sin doble conteo).
+function _updateBudChartTitle() {
+  const el = document.getElementById("bud-chart-title-text");
+  if (!el) return;
+  if (!_budgetData.length) { el.textContent = "Presupuesto vs real"; return; }
+  const totalPresup = _budgetData.reduce((s, d) => s + (d.presupuesto || 0), 0);
+  const totalReal   = _budgetData.reduce((s, d) => s + (d.gastado    || 0), 0);
+  el.textContent = `Presupuesto (${_fmtCompactKM(totalPresup)}) vs Real (${_fmtCompactKM(totalReal)})`;
 }
 
 function _renderBudCatChips() {
