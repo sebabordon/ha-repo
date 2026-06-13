@@ -1,3 +1,7 @@
+## 0.8.81
+
+- **AMEX: click en acordeón antes de extraer links PDF** (`scrapers/amex.py`): el panel de resúmenes en `/statements` carga el contenido de forma lazy — los links PDF no están en el DOM hasta que se clickea el botón del acordeón. El scraper ahora espera que aparezca `button[id^="header-"]` (hasta 30s), y si `aria-expanded="false"` lo clickea antes de buscar los links. Si el panel ya estaba expandido (p.ej. sesión reciente), lo detecta por `aria-expanded="true"` y no lo clickea.
+
 ## 0.8.80
 
 - **AMEX: espera inteligente para links PDF en /statements** (`scrapers/amex.py`): reemplaza el `time.sleep(10)` fijo por un `WebDriverWait(30)` que espera a que aparezca el primer `<a href*="/servicing/v1/documents/statements/">` en el DOM. Si el wait expira, intenta extraer links de todos modos. Cuando no hay links, loguea la cantidad de `<a href>` en la página y si el texto "Estado" está presente.

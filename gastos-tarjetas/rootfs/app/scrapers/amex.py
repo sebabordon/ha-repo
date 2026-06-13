@@ -671,20 +671,37 @@ class AmexScraper(BaseScraper):
             log_fn(f"  [amex-pdf] error navegando a /statements: {exc}")
             return
 
-        # Esperar a que el SPA renderice los links PDF (hasta 30s)
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+
+        # Esperar a que el SPA renderice los botones del acordeón (hasta 30s)
         try:
-            from selenium.webdriver.common.by import By
-            from selenium.webdriver.support.ui import WebDriverWait
-            from selenium.webdriver.support import expected_conditions as EC
             WebDriverWait(driver, 30).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, 'a[href*="/servicing/v1/documents/statements/"]')
-                )
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'button[id^="header-"]'))
             )
-            time.sleep(1)  # pequeña pausa para que cargue la lista completa
+            time.sleep(1)
         except Exception:
-            # Si el wait falla, intentamos igual (a veces los links ya están)
-            log_fn(f"  [amex-pdf] wait timeout — intentando extraer links de todos modos (URL={driver.current_url[:80]})")
+            log_fn(f"  [amex-pdf] timeout esperando panel de resúmenes (URL={driver.current_url[:80]})")
+            return
+
+        # Expandir el primer panel si está colapsado (carga lazy de los links)
+        try:
+            first_btn = driver.find_element(By.CSS_SELECTOR, 'button[id^="header-"]')
+            if first_btn.get_attribute("aria-expanded") == "false":
+                log_fn("  [amex-pdf] expandiendo panel de resúmenes…")
+                driver.execute_script("arguments[0].click();", first_btn)
+                # Esperar a que los links aparezcan en el DOM tras el click
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, 'a[href*="/servicing/v1/documents/statements/"]')
+                    )
+                )
+                time.sleep(0.5)
+            else:
+                log_fn("  [amex-pdf] panel ya expandido")
+        except Exception as exc:
+            log_fn(f"  [amex-pdf] aviso expandiendo panel: {exc}")
 
         # Extraer links de descarga del DOM renderizado.
         # La página repite el mismo link en varios contenedores; se desduplicamos por URL.
