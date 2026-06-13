@@ -729,7 +729,8 @@ class AmexScraper(BaseScraper):
             function titleToDate(title) {
                 var m = /(\\d+) de (\\w+) de (\\d{4})/.exec(title || '');
                 if (!m) return '';
-                var mon = MONTHS[m[2].toLowerCase()];
+                // Normalizar a 3 letras: AMEX usa "sept" además de "sep", etc.
+                var mon = MONTHS[m[2].toLowerCase().slice(0, 3)];
                 if (!mon) return '';
                 return m[3] + '-' + mon + '-' + ('0' + m[1]).slice(-2);
             }
@@ -799,15 +800,22 @@ class AmexScraper(BaseScraper):
             if not url:
                 continue
 
-            # Filtrar por ventana cuando hay fecha parseable
+            # Filtrar por ventana. Si no hay fecha parseable, NO lo importamos: no
+            # podemos ubicarlo en la ventana y arriesgaríamos traer un resumen viejo
+            # (ej. título "30 de sept de 2025" que no se pudo parsear).
+            d = None
             if date:
                 try:
-                    if _date.fromisoformat(date) < cutoff:
-                        continue
+                    d = _date.fromisoformat(date)
                 except ValueError:
-                    pass
+                    d = None
+            if d is None:
+                log_fn(f"  [amex-pdf] salteado (sin fecha parseable): {link.get('title', '')[:50]}")
+                continue
+            if d < cutoff:
+                continue
 
-            filename = f"AMEX_{date}_auto.pdf" if date else f"AMEX_auto_{url[-20:]}.pdf"
+            filename = f"AMEX_{date}_auto.pdf"
             if importacion_exists("amex", filename):
                 log_fn(f"  [amex-pdf] al día ({date or link.get('title', '')})")
                 continue

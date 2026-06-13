@@ -1,3 +1,7 @@
+## 0.9.4
+
+- **AMEX backfill: fix resumen fuera de ventana por mes "sept"** (`scrapers/amex.py`): el título de los links de resumen usa "sept" (además de "sep"), pero `titleToDate` solo mapeaba "sep" → la fecha quedaba vacía → el filtro de ventana (que solo aplicaba con fecha) no lo excluía y se importaba un resumen viejo (ej. cierre 30/09/2025 al pedir 5 meses), arrastrando consumos de agosto. Fix: el lookup de mes normaliza a 3 letras (`slice(0,3)`), así "sept"→"sep". Además, salvaguarda: si un link no tiene fecha parseable se saltea (con log) en vez de importarse, para no traer resúmenes que no se pueden ubicar en la ventana.
+
 ## 0.9.3
 
 - **Título dinámico en el chart Presupuesto vs real** (`static/index.html`, `static/app.js`): el título ahora muestra los totales del mes seleccionado en el combo box, ej. "Presupuesto (1.2M) vs Real (980K)". Se calcula sumando las categorías top-level del mes (sin doble conteo) y se actualiza al cambiar el mes. El texto se envolvió en `<span id="bud-chart-title-text">` y se actualiza desde `loadBudgetChart` vía el nuevo helper `_updateBudChartTitle`; formato compacto K/M con `_fmtCompactKM`. Si no hay datos vuelve a "Presupuesto vs real".
