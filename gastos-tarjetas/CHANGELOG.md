@@ -1,3 +1,7 @@
+## 0.8.76
+
+- **BBVA Tarjetas: evitar reimportar resúmenes subidos manualmente** (`scrapers/bbva_tarjetas.py`, `db.py`): antes de descargar un resumen, el scraper ahora verifica si ya existe una importación para el mismo `(fuente, mes_resumen)` derivado de la `fechaCierre` del extracto. Si el usuario ya subió el PDF manualmente ese mes (con cualquier nombre de archivo), el scraper no vuelve a importarlo. Además registra el `reporte` ID en `importaciones` para que la siguiente ejecución entre por el chequeo rápido por nombre de archivo.
+
 ## 0.8.75
 
 - **BBVA Tarjetas: auto-descarga de resúmenes PDF** (`scrapers/bbva_tarjetas.py`, `scraper_credentials.py`): nueva opción "Descargar resúmenes PDF automáticamente" en la config del scraper. Cuando está activa, en cada run el scraper llama a `POST /extractos/extractos` para listar los resúmenes disponibles, detecta si el más reciente de VISA o Mastercard ya fue importado (por `reporte` ID único), y si no, lo descarga via `POST /extractos/getPdf` (respuesta binaria convertida a base64 en el browser) y lo procesa con el parser de PDF correspondiente (`bbva_visa`/`bbva_mc`). La importación aplica categorización por reglas (igual que el upload manual) y llama a `consolidate_scraper_duplicates` para limpiar duplicados del scraper de consumos.

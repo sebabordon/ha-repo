@@ -1027,6 +1027,16 @@ def importacion_exists(fuente: str, archivo: str) -> bool:
     return row is not None
 
 
+def importacion_exists_mes(fuente: str, mes_resumen: str) -> bool:
+    """True si ya existe una importación para esta fuente y mes (YYYY-MM)."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM importaciones WHERE fuente=? AND mes_resumen=? LIMIT 1",
+            (fuente, mes_resumen),
+        ).fetchone()
+    return row is not None
+
+
 def list_importaciones() -> list[dict]:
     with _conn() as conn:
         rows = conn.execute(
