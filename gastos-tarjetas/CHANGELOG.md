@@ -1,3 +1,7 @@
+## 0.8.73
+
+- **MercadoPago: evitar múltiples reportes por día** (`scrapers/mercadopago.py`): el scraper generaba un nuevo settlement report en cada ejecución, causando que MP enviara múltiples notificaciones por email cuando el scraper corría varias veces en el mismo día. Ahora `_download_latest_settlement` devuelve también la fecha del reporte más reciente, y `_fetch_settlement_report` solo solicita un nuevo reporte si no existe uno del día de hoy (hora ART).
+
 ## 0.8.72
 
 - **Chart Presupuesto vs real: doble altura en mobile** (`static/app.js`): `aspectRatio: 1` en pantallas ≤ 600px (cuadrado) vs `2` en desktop. Con el ancho típico de un teléfono (~390px) el gráfico pasa de ~195px a ~390px de alto.

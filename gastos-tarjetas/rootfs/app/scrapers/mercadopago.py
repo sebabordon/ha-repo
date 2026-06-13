@@ -604,12 +604,12 @@ class MercadoPagoScraper(BaseScraper):
 
         Estrategia "generar hoy, usar mañana":
           1. GET /list → descargar el reporte más reciente disponible (0 s de espera).
-          2. POST para solicitar un reporte nuevo de los últimos 10 días (sin esperar).
-             Estará disponible en la próxima ejecución.
+          2. POST para solicitar un reporte nuevo de los últimos 10 días, pero solo si
+             el reporte más reciente NO es de hoy (evita generar múltiples reportes —
+             y múltiples notificaciones por mail — cuando el scraper corre varias veces
+             el mismo día).
 
-        Ambos pasos corren siempre: el paso 1 usa lo que hay ahora; el paso 2 asegura
-        que la próxima ejecución tenga un reporte actualizado. El dedup por existing_ids
-        maneja cualquier solapamiento entre reportes consecutivos.
+        El dedup por existing_ids maneja cualquier solapamiento entre reportes consecutivos.
         Si el token no tiene permiso (401/403) se loguea y se devuelve lista vacía.
         """
         _URL = f"{_BASE}/v1/account/settlement_report"
@@ -618,15 +618,19 @@ class MercadoPagoScraper(BaseScraper):
         await self._ensure_settlement_config(client, _URL, log_fn)
 
         # ── Paso 1: usar el reporte existente más reciente ────────────────────
-        csv_text: Optional[str] = await self._download_latest_settlement(
+        csv_text, latest_date = await self._download_latest_settlement(
             client, _URL, log_fn
         )
         result = []
         if csv_text is not None:
             result = self._parse_settlement_csv(csv_text, existing_ids, log_fn, debug)
 
-        # ── Paso 2: solicitar reporte nuevo (sin esperar — disponible mañana) ─
-        await self._request_settlement_report(client, _URL, log_fn)
+        # ── Paso 2: solicitar reporte nuevo solo si no hay uno de hoy ────────
+        today_art = datetime.now(_ART).date()
+        if latest_date is None or latest_date < today_art:
+            await self._request_settlement_report(client, _URL, log_fn)
+        else:
+            log_fn("Settlement report: ya existe uno de hoy, no se solicita nuevo")
 
         return result
 
@@ -699,29 +703,43 @@ class MercadoPagoScraper(BaseScraper):
         client: httpx.AsyncClient,
         base_url: str,
         log_fn,
-    ) -> Optional[str]:
+    ) -> tuple[Optional[str], Optional[date]]:
         """
         Consulta la lista de reportes y descarga el más reciente si existe.
-        Devuelve el texto del CSV o None si la lista está vacía o falla.
+        Devuelve (csv_text, date_created_art) o (None, None) si la lista está vacía/falla.
+        date_created_art es la fecha local ART del reporte más reciente, usada para
+        decidir si hay que generar uno nuevo.
         """
         try:
             list_resp = await client.get(f"{base_url}/list")
             if list_resp.status_code != 200:
-                return None
+                return None, None
             reports = [
                 r for r in (list_resp.json() or [])
                 if str(r.get("file_name") or "").strip()
             ]
             if not reports:
-                return None
+                return None, None
             # Ordenar por date_created descendente y tomar el más reciente
             reports.sort(key=lambda r: r.get("date_created") or "", reverse=True)
-            rpt_file = str(reports[0]["file_name"]).strip()
+            latest   = reports[0]
+            rpt_file = str(latest["file_name"]).strip()
+
+            # Extraer fecha local ART del reporte más reciente
+            rpt_date: Optional[date] = None
+            raw_date = (latest.get("date_created") or "")[:10]
+            if len(raw_date) == 10:
+                try:
+                    rpt_date = date.fromisoformat(raw_date)
+                except ValueError:
+                    pass
+
             log_fn(f"Settlement report: usando existente {rpt_file}")
-            return await self._download_settlement_file(client, base_url, rpt_file, log_fn)
+            csv_text = await self._download_settlement_file(client, base_url, rpt_file, log_fn)
+            return csv_text, rpt_date
         except Exception as exc:
             log_fn(f"Settlement report: error consultando lista — {exc}")
-            return None
+            return None, None
 
     async def _download_settlement_file(
         self,
