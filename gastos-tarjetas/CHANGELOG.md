@@ -1,3 +1,8 @@
+## 0.8.93
+
+- **Fix: ContextVar de usuario no se propagaba al thread del scraper** (`scrapers/base.py`): `BaseScraper.run()` usa `loop.run_in_executor()` para correr el scraper Selenium en un thread pool, pero el ContextVar `_user_data_dir` (que apunta a la DB del usuario activo) no se propagaba al hilo — causaba `RuntimeError: _find_db_path() SIN contexto de usuario` en `consolidate_scraper_duplicates` y potencialmente escribía gastos en la DB global `/data/gastos.db` en lugar de la del usuario. Corregido con `ctx = contextvars.copy_context(); loop.run_in_executor(None, ctx.run, self._run_sync, config)`.
+- **Fix: logging diagnóstico de pág1 eliminado** (`scrapers/amex.py`): se quita el log temporal `pág1={...}` agregado en 0.8.90 para depurar el parser de PDF AMEX, que ya no es necesario.
+
 ## 0.8.92
 
 - **Fix: `categorize_by_rules` no devuelve tupla** (`scrapers/amex.py`, `scrapers/bbva_tarjetas.py`): ambos scrapers desempaquetaban `cat, fuente_cat = categorize_by_rules(...)` pero la función devuelve `Optional[str]`, no una tupla — causaba `TypeError: cannot unpack non-iterable NoneType object` al importar el primer PDF con 0 reglas que matcheen. Corregido a `cat = categorize_by_rules(...); fuente_cat = "regla" if cat else None`.

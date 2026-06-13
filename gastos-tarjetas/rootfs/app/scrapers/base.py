@@ -19,6 +19,7 @@ la interfaz async del scheduler sin bloquear el event loop de FastAPI.
 """
 
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -307,7 +308,8 @@ class BaseScraper(ABC):
         upsert_scraper_status(self.fuente, estado="running", ultimo_run=now_iso)
 
         loop   = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, self._run_sync, config)
+        ctx    = contextvars.copy_context()
+        result = await loop.run_in_executor(None, ctx.run, self._run_sync, config)
 
         last_log = "\n".join(result.log_lines) if result.log_lines else None
 
