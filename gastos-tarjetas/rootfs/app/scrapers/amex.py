@@ -38,8 +38,6 @@ _ACCOUNT_SUMMARY = (
 )
 
 _STATEMENTS_PAGE = "https://global.americanexpress.com/statements"
-_EP_DOC_INFO     = "/servicing/v1/documents/info/statements"
-_EP_DOC_DL       = "/servicing/v1/documents/statements"
 
 _STATEMENT_URL = (
     "https://global.americanexpress.com/myca/intl/estatement/canlac/"
@@ -655,151 +653,89 @@ class AmexScraper(BaseScraper):
     # ── Auto-descarga de resúmenes PDF ────────────────────────────────────────
 
     def _scrape_resumenes(self, driver, config: dict, log_fn) -> None:
-        """Descarga e importa el resumen PDF más reciente de AMEX."""
+        """
+        Descarga e importa el resumen PDF más reciente de AMEX.
+
+        Estrategia: navegar a /statements (One App SPA), esperar que renderice,
+        y extraer los links de descarga directamente del DOM. Las URLs están en
+        <a href="/servicing/v1/documents/statements/{TOKEN}?account_key=...">
+        sin necesidad de llamadas a API ni tokens adicionales.
+        """
         from db import importacion_exists
 
-        log_fn("Buscando resumen PDF AMEX…")
+        log_fn("Buscando resúmenes PDF AMEX…")
 
-        # Navegar a la página de resúmenes (One App SPA redirige con account_key)
         try:
             driver.get(_STATEMENTS_PAGE)
-            time.sleep(8)  # One App SPA necesita tiempo para bootstrapear y llamar las APIs
+            time.sleep(10)  # One App SPA necesita tiempo para renderizar
         except Exception as exc:
             log_fn(f"  [amex-pdf] error navegando a /statements: {exc}")
             return
 
-        # Leer account_key y account_token del estado del browser
-        session_info = driver.execute_script("""
+        # Extraer links de descarga del DOM renderizado.
+        # La página repite el mismo link en varios contenedores; se desduplicamos por URL.
+        # La fecha se parsea desde el title: "Estados de Cuenta en PDF. - 26 de may de 2026"
+        links = driver.execute_script("""
         (function() {
-            var params = new URLSearchParams(window.location.search);
-            var account_key = params.get('account_key');
-            var account_token = null;
-            // Cookie (non-HttpOnly)
-            var ck = document.cookie.split(';');
-            for (var i = 0; i < ck.length; i++) {
-                var p = ck[i].trim();
-                if (p.startsWith('account_token=')) {
-                    account_token = p.slice('account_token='.length);
-                    break;
-                }
+            var MONTHS = {
+                'ene':'01','feb':'02','mar':'03','abr':'04','may':'05','jun':'06',
+                'jul':'07','ago':'08','sep':'09','oct':'10','nov':'11','dic':'12'
+            };
+            function titleToDate(title) {
+                var m = /(\\d+) de (\\w+) de (\\d{4})/.exec(title || '');
+                if (!m) return '';
+                var mon = MONTHS[m[2].toLowerCase()];
+                if (!mon) return '';
+                return m[3] + '-' + mon + '-' + ('0' + m[1]).slice(-2);
             }
-            // localStorage
-            if (!account_token) {
-                try { account_token = localStorage.getItem('account_token'); } catch(e) {}
-            }
-            // sessionStorage
-            if (!account_token) {
-                try { account_token = sessionStorage.getItem('account_token'); } catch(e) {}
-            }
-            return {href: window.location.href, account_key: account_key, account_token: account_token};
+            var seen = {};
+            var out = [];
+            var anchors = document.querySelectorAll('a[href*="/servicing/v1/documents/statements/"]');
+            anchors.forEach(function(a) {
+                var url = a.href || '';
+                if (seen[url]) return;
+                seen[url] = true;
+                out.push({url: url, date: titleToDate(a.title), title: a.title || ''});
+            });
+            return out;
         })();
-        """) or {}
+        """) or []
 
-        account_key   = session_info.get("account_key")
-        account_token = session_info.get("account_token")
-        href          = session_info.get("href", "")
-        log_fn(f"  [amex-pdf] URL={href[:80]}")
-        log_fn(f"  [amex-pdf] account_key={'ok' if account_key else 'no encontrado'}, "
-               f"account_token={'ok' if account_token else 'no encontrado'}")
-
-        # Obtener lista de resúmenes
-        statements = self._fetch_amex_statements(driver, account_token, log_fn)
-        if not statements:
+        if not links:
+            log_fn(f"  [amex-pdf] sin links de resúmenes en la página (URL={driver.current_url[:80]})")
             return
 
-        log_fn(f"  [amex-pdf] {len(statements)} resúmenes disponibles")
+        log_fn(f"  [amex-pdf] {len(links)} resúmenes encontrados en la página")
 
-        for stmt in statements:
-            stmt_id   = (stmt.get("statementId") or stmt.get("id") or
-                         stmt.get("documentId") or "").strip()
-            stmt_date = (stmt.get("statementEndDate") or stmt.get("endDate") or
-                         stmt.get("date") or "").strip()
-            if not stmt_id:
+        for link in links:
+            url  = link.get("url", "")
+            date = link.get("date", "")   # "YYYY-MM-DD"
+            if not url:
                 continue
 
-            filename = f"AMEX_{stmt_date}_{stmt_id[:16]}_auto.pdf"
+            filename = f"AMEX_{date}_auto.pdf" if date else f"AMEX_auto_{url[-20:]}.pdf"
             if importacion_exists("amex", filename):
-                log_fn(f"  [amex-pdf] al día ({stmt_date})")
-                break  # los resúmenes vienen del más reciente al más antiguo
+                log_fn(f"  [amex-pdf] al día ({date or link.get('title', '')})")
+                break
 
-            log_fn(f"  [amex-pdf] descargando {stmt_date} (id={stmt_id[:16]})…")
-            pdf_bytes = self._fetch_amex_pdf(driver, account_key, stmt_id,
-                                             account_token, stmt, log_fn)
+            log_fn(f"  [amex-pdf] descargando {date or link.get('title', '')}…")
+            pdf_bytes = self._fetch_amex_pdf(driver, url, log_fn)
             if pdf_bytes:
                 count = self._import_resumen_amex(pdf_bytes, filename, log_fn)
                 log_fn(f"  [amex-pdf] {filename}: {count} gastos importados")
             break  # máximo un resumen por run
 
-    def _fetch_amex_statements(self, driver, account_token: Optional[str], log_fn) -> list:
-        """GET /servicing/v1/documents/info/statements → lista de resúmenes."""
-        js = """
-        var account_token = arguments[0];
-        var cb = arguments[arguments.length - 1];
-        var headers = {
-            'accept': 'application/json',
-            'content-type': 'application/json',
-            'client_id': 'OneAmex'
-        };
-        if (account_token) headers['account_token'] = account_token;
-        fetch('/servicing/v1/documents/info/statements', {
-            method: 'GET',
-            headers: headers,
-            credentials: 'include'
-        })
-        .then(function(r) {
-            return r.json().then(function(d) { cb({status: r.status, data: d}); });
-        })
-        .catch(function(e) { cb({status: 0, error: String(e)}); });
+    def _fetch_amex_pdf(self, driver, url: str, log_fn) -> Optional[bytes]:
         """
-        try:
-            driver.set_script_timeout(30)
-            result = driver.execute_async_script(js, account_token) or {}
-        except Exception as exc:
-            log_fn(f"  [amex-pdf] error obteniendo lista de resúmenes: {exc}")
-            return []
-
-        if result.get("error") or result.get("status") != 200:
-            log_fn(f"  [amex-pdf] HTTP {result.get('status')} — {str(result.get('error',''))[:100]}")
-            return []
-
-        data = result.get("data") or {}
-        # La respuesta puede ser lista directa o tener una clave contenedora
-        if isinstance(data, list):
-            return data
-        for key in ("statementList", "statements", "documents", "data"):
-            v = data.get(key)
-            if isinstance(v, list):
-                return v
-        log_fn(f"  [amex-pdf] estructura desconocida: {str(data)[:200]}")
-        return []
-
-    def _fetch_amex_pdf(
-        self,
-        driver,
-        account_key: Optional[str],
-        stmt_id: str,
-        account_token: Optional[str],
-        stmt_meta: dict,
-        log_fn,
-    ) -> Optional[bytes]:
-        """Descarga el PDF de un resumen AMEX como bytes."""
+        Descarga el PDF de un resumen usando la URL completa del link del DOM.
+        El browser ya tiene la sesión activa; credentials:'include' envía las cookies.
+        """
         import base64 as _b64
 
-        # Construir URL de descarga; también intentar si el objeto stmt incluye una
-        dl_url = stmt_meta.get("downloadUrl") or stmt_meta.get("pdfUrl") or stmt_meta.get("url") or ""
-        if not dl_url:
-            params = f"?statementId={stmt_id}"
-            if account_key:
-                params += f"&account_key={account_key}"
-            dl_url = _EP_DOC_DL + params
-
         js = """
-        var dl_url       = arguments[0];
-        var account_token = arguments[1];
-        var cb = arguments[arguments.length - 1];
-        var headers = {};
-        if (account_token) headers['account_token'] = account_token;
-        fetch(dl_url, {method: 'GET', headers: headers, credentials: 'include'})
+        var url = arguments[0];
+        var cb  = arguments[arguments.length - 1];
+        fetch(url, {method: 'GET', credentials: 'include'})
         .then(function(r) {
             return r.arrayBuffer().then(function(buf) {
                 if (!buf || buf.byteLength === 0) {
@@ -818,7 +754,7 @@ class AmexScraper(BaseScraper):
         """
         try:
             driver.set_script_timeout(60)
-            result = driver.execute_async_script(js, dl_url, account_token) or {}
+            result = driver.execute_async_script(js, url) or {}
         except Exception as exc:
             log_fn(f"  [amex-pdf] error descargando PDF: {exc}")
             return None
