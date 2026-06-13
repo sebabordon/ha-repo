@@ -39,6 +39,13 @@ BANKS: dict[str, dict] = {
                 "required": False,
                 "hint":     "Si está activo, en cada run el scraper navega a la sección Resúmenes de AMEX, descarga el PDF más reciente y lo importa directo a Gastos (equivalente a subirlo manualmente).",
             },
+            {
+                "key":      "statements_account_key",
+                "label":    "Account Key (Resúmenes PDF)",
+                "type":     "text",
+                "required": False,
+                "hint":     "Filtra la página de Resúmenes para mostrar solo los de la tarjeta principal. Sin este campo el portal muestra los resúmenes de la tarjeta adicional. Obtenerlo: en el HAR del portal de AMEX buscar la petición a /statements y copiar el parámetro account_key de la URL (ej. 00B5C8FF8254B6D66D600ACC4A35D20E).",
+            },
         ],
     },
     "bbva": {

@@ -1,3 +1,7 @@
+## 0.8.91
+
+- **AMEX: campo `Account Key` en config del scraper para filtrar resúmenes por tarjeta** (`scraper_credentials.py`, `scrapers/amex.py`): sin `account_key` el portal `/statements` muestra los resúmenes de la tarjeta adicional (Platinum Credit Card, 31004) en lugar de la principal. Ahora hay un campo opcional "Account Key (Resúmenes PDF)" en la config del scraper AMEX; si está configurado, el scraper navega a `/statements?account_key=VALOR` mostrando solo los resúmenes de esa tarjeta. El valor se obtiene del HAR del portal AMEX (parámetro `account_key` en la URL de la petición a `/statements`).
+
 ## 0.8.90
 
 - **AMEX: loguear primeros 300 chars de pág1 del PDF descargado** (`scrapers/amex.py`): diagnóstico para entender qué documento real devuelve la API de resúmenes antes de seguir asumiendo causas.

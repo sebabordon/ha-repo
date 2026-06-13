@@ -665,8 +665,14 @@ class AmexScraper(BaseScraper):
 
         log_fn("Buscando resúmenes PDF AMEX…")
 
+        account_key = (config.get("statements_account_key") or "").strip()
+        statements_url = (
+            f"{_STATEMENTS_PAGE}?account_key={account_key}"
+            if account_key
+            else _STATEMENTS_PAGE
+        )
         try:
-            driver.get(_STATEMENTS_PAGE)
+            driver.get(statements_url)
         except Exception as exc:
             log_fn(f"  [amex-pdf] error navegando a /statements: {exc}")
             return
