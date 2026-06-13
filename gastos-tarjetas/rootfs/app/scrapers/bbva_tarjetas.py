@@ -614,7 +614,7 @@ class BbvaTarjetasScraper(BbvaScraper):
         count = insert_gastos(records, import_info=import_info)
         log_fn(f"  [import] {filename}: {count} gastos insertados (mes={mes_resumen})")
 
-        _RESUMEN_PARSERS = frozenset({"amex", "bbva_mc", "bbva_visa"})
+        _RESUMEN_PARSERS = frozenset({"amex", "bbva_mc", "bbva_visa", "bbva_cuenta"})
         if parser_key in _RESUMEN_PARSERS:
             deduped = consolidate_scraper_duplicates(fuente_target, records)
             if deduped:
@@ -630,9 +630,9 @@ class BbvaTarjetasScraper(BbvaScraper):
         log_fn,
     ) -> None:
         """
-        Revisa si hay resúmenes VISA/MC nuevos y los importa.
-        Por cada tipo de tarjeta (VISA, MC) importa como máximo el resumen
-        más reciente que aún no esté en importaciones.
+        Revisa si hay resúmenes VISA/MC/Cuenta nuevos y los importa.
+        Por cada producto importa como máximo el resumen más reciente que
+        aún no esté en importaciones.
         """
         from db import importacion_exists
 
@@ -656,6 +656,9 @@ class BbvaTarjetasScraper(BbvaScraper):
             elif "MASTERCARD" in detalle:
                 product_key = "MC"
                 parser_key  = "bbva_mc"
+            elif "CAJA DE AHORROS" in detalle and "PESOS" in detalle and "EUROS" not in detalle:
+                product_key = "CUENTA_ARS"
+                parser_key  = "bbva_cuenta"
             else:
                 continue
 
@@ -681,7 +684,7 @@ class BbvaTarjetasScraper(BbvaScraper):
             self._import_resumen(pdf_bytes, filename, parser_key, fuente_target, config, log_fn)
             done.add(product_key)
 
-            if len(done) == 2:
+            if len(done) == 3:
                 break
 
     # ── Parseo de transacciones ───────────────────────────────────────────────

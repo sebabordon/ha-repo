@@ -1,3 +1,7 @@
+## 0.8.96
+
+- **Feature: auto-importar resumen PDF de Caja de Ahorro Pesos BBVA** (`scrapers/bbva_tarjetas.py`): `_scrape_resumenes` ahora detecta también el extracto "CAJA DE AHORROS PESOS" en la lista de la API y lo importa con `parser_key=bbva_cuenta` / `fuente_target=bbva_cuenta`. Agrega `bbva_cuenta` a `_RESUMEN_PARSERS` para que `consolidate_scraper_duplicates` elimine los duplicados del scraper al importar el PDF. Actualiza el early-exit a `len(done)==3` (VISA+MC+CUENTA_ARS).
+
 ## 0.8.95
 
 - **Fix: extractos BBVA — statusCode 500 "Esta transacción no puede ser realizada"** (`scrapers/bbva_tarjetas.py`): BBVA bloquea `POST /extractos/extractos` si el browser no está en la sección "Resúmenes" del SPA Angular. El fix navega a `#/private/summaries`, espera 4 s para que Angular inicialice el módulo, hace el gate-check `GET /viewerAdobePdf/verificacion` (que Angular ejecuta automáticamente), y recién entonces llama al endpoint de extractos — replicando el flujo real del browser confirmado en el HAR.
