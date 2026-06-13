@@ -414,6 +414,10 @@ def insert_movimientos_raw(
     _eff_descs, _eff_prefixes = _load_dedup_config()
 
     inserted = 0
+    # IDs de movimientos_raw ya usados como match en este run.
+    # Evita que N transacciones idénticas (mismo día, monto, descripción sin
+    # timestamp) collapsen todas al mismo registro vía fallback_descriptor.
+    _used_raw_ids: set[int] = set()
     with _conn() as conn:
         for m in movimientos:
             fuente = m["fuente"]
@@ -570,13 +574,19 @@ def insert_movimientos_raw(
                 # Fallback descriptor solo cuando no hay UID único del scraper.
                 # Si hay scraper_uid y no se encontró, es un movimiento nuevo aunque
                 # coincida en fecha+monto+desc con otro (ej. dos SUBE el mismo día).
+                # Excluir IDs ya usados en este run: permite que N transacciones
+                # idénticas (mismo día/monto/desc, sin timestamp) generen N filas
+                # distintas en vez de colapsar todas al mismo registro.
+                _excl = list(_used_raw_ids)
+                _excl_sql = f" AND id NOT IN ({','.join('?' * len(_excl))})" if _excl else ""
                 existing = conn.execute(
-                    """SELECT id FROM movimientos_raw
+                    f"""SELECT id FROM movimientos_raw
                        WHERE fuente = ? AND fecha = ? AND moneda = ?
                          AND CAST(monto AS REAL) = CAST(? AS REAL)
                          AND descripcion = ?
+                         {_excl_sql}
                        LIMIT 1""",
-                    (fuente, fecha, moneda, monto, desc),
+                    (fuente, fecha, moneda, monto, desc, *_excl),
                 ).fetchone()
                 if existing:
                     existing_check_name = "fallback_descriptor"
@@ -737,6 +747,8 @@ def insert_movimientos_raw(
                         _backfill_cardholder(conn, existing_id, new_ch, fuente)
                     except Exception:
                         pass
+                if existing_id is not None:
+                    _used_raw_ids.add(existing_id)
                 if _log_fn:
                     check_name = existing_check_name or "unknown"
                     _log_fn(
@@ -744,7 +756,7 @@ def insert_movimientos_raw(
                     )
                 continue   # ya estaba — skipear
 
-            conn.execute(
+            cur = conn.execute(
                 """INSERT INTO movimientos_raw
                    (fuente, tarjeta, fecha, fecha_proceso, descripcion, monto, moneda,
                     scraped_at, estado, raw_data)
@@ -761,6 +773,7 @@ def insert_movimientos_raw(
                     json.dumps(raw) if raw else None,
                 ),
             )
+            _used_raw_ids.add(cur.lastrowid)
             inserted += 1
             if _log_fn:
                 _log_fn(

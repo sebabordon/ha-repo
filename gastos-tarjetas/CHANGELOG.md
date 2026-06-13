@@ -1,3 +1,7 @@
+## 0.8.83
+
+- **Scraper: dedup correcto para N transacciones idénticas el mismo día** (`scrapers_db.py`): el `fallback_descriptor` en `insert_movimientos_raw` hacía `LIMIT 1` sin discriminar entre runs, por lo que 4 pagos idénticos (mismo día, monto y descripción, sin timestamp) colapsaban a un solo registro en `movimientos_raw` y se perdían las otras 3. Ahora se mantiene un set `_used_raw_ids` por run: cada ID ya matcheado o recién insertado se excluye del `fallback_descriptor` en las iteraciones siguientes, lo que permite insertar N filas distintas para N transacciones idénticas.
+
 ## 0.8.82
 
 - **BBVA: log de resúmenes encontrados por la API** (`scrapers/bbva_tarjetas.py`): `_fetch_extractos` ahora lista cada resumen disponible (producto, fechaCierre, reporte ID) antes de decidir si se baja o no. Antes solo decía `"N disponibles"` sin detalles, lo que no permitía distinguir entre "API devolvió vacío" (período aún abierto) y "encontró pero ya importados". Si la API devuelve 0, ahora dice explícitamente "la API no devolvió resúmenes para YYYY (período aún abierto o sin resúmenes emitidos)".
