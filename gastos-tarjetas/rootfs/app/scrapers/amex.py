@@ -876,6 +876,14 @@ class AmexScraper(BaseScraper):
             return 0
 
         try:
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as _pdf:
+                _p1 = _pdf.pages[0].extract_text() or "" if _pdf.pages else ""
+            log_fn(f"  [amex-pdf] {filename}: {len(pdf_bytes)} bytes, pág1={_p1[:300]!r}")
+        except Exception as _e:
+            log_fn(f"  [amex-pdf] {filename}: {len(pdf_bytes)} bytes (no se pudo leer pág1: {_e})")
+
+        try:
             gastos = PARSERS["amex"].parse(io.BytesIO(pdf_bytes), filename)
         except Exception as exc:
             log_fn(f"  [amex-pdf] error parseando {filename}: {exc}")

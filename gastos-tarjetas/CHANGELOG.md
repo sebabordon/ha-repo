@@ -1,3 +1,7 @@
+## 0.8.90
+
+- **AMEX: loguear primeros 300 chars de pág1 del PDF descargado** (`scrapers/amex.py`): diagnóstico para entender qué documento real devuelve la API de resúmenes antes de seguir asumiendo causas.
+
 ## 0.8.89
 
 - **AMEX: reintentar hasta 3 PDFs si el primero tiene 0 transacciones** (`scrapers/amex.py`): el portal mezcla resúmenes de la Platinum Card y la Platinum Credit Card; el primero en el DOM puede ser el de la tarjeta con saldo cero. Ahora itera hasta 3 links recientes (deteniéndose en el primero con `count > 0`).
