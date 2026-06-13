@@ -1,3 +1,8 @@
+## 0.9.6
+
+- **Autocomplete de categorías: no se cierra al usar su scrollbar** (`static/app.js`): el dropdown (`.cat-ac`) tiene scroll propio (max-height 220px); al arrastrar su barra el `mousedown` caía sobre el contenedor, el input perdía foco y el `blur` lo cerraba. Ahora un `mousedown` sobre el contenedor (no sobre un item) hace `preventDefault` para no soltar el foco, así se puede scrollear la lista sin que desaparezca.
+- **Autocomplete de categorías: buscar por el nombre del parent** (`static/app.js`): al tipear el nombre de una categoría padre (ej. "transporte") ahora aparecen también sus subcategorías, aunque no coincidan literalmente con el texto. El filtro mantiene un ítem si su propio nombre matchea O si el nombre de su parent matchea (y conserva el parent de los hijos para que el árbol siga legible). Útil para elegir una subcategoría sin recordar su nombre exacto.
+
 ## 0.9.5
 
 - **AMEX backfill: expandir todos los paneles del acordeón dentro de la ventana** (`scrapers/amex.py`): los resúmenes están agrupados en acordeones por período (ej. "2026" y un panel colapsado "mar.-dic. 2025"). El código solo expandía el primer panel, así que un backfill largo nunca llegaba a los resúmenes de años anteriores. Ahora se recorren todos los botones `header-YYYY-...`, se expanden los colapsados cuyo año alcance la ventana (`_resumenes_cutoff`), y tras cada expansión se extraen y acumulan los links (dedup por URL) — robusto ante acordeones que colapsan el panel anterior al abrir otro. Paneles de años fuera de la ventana no se expanden (eficiencia).

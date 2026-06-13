@@ -2244,10 +2244,18 @@ function _setupCatAC(input, origCat, saveBtn = null, gastoId = null) {
     if (!q) {
       matches = tree;
     } else {
-      // Keep items that match, plus the parent of any matching child so the
-      // tree structure stays readable while filtering.
+      // Coincide si el nombre matchea, O si el nombre del parent matchea: así al
+      // tipear el parent (ej. "transporte") aparecen sus subcategorías aunque no
+      // recuerdes el nombre exacto. Además se conserva el parent de cualquier hijo
+      // mantenido para que el árbol siga legible.
       const keep = new Set();
-      tree.forEach(t => { if (t.name.toLowerCase().includes(q)) keep.add(t.name); });
+      tree.forEach(t => {
+        const par = _catParentOf[t.name];
+        if (t.name.toLowerCase().includes(q) ||
+            (par && par.toLowerCase().includes(q))) {
+          keep.add(t.name);
+        }
+      });
       tree.forEach(t => {
         if (t.depth === 1 && keep.has(t.name)) {
           const par = _catParentOf[t.name];
@@ -2273,6 +2281,12 @@ function _setupCatAC(input, origCat, saveBtn = null, gastoId = null) {
     acEl.style.minWidth = Math.max(rect.width, 220) + "px";
     document.body.appendChild(acEl);
     acIdx = -1;
+
+    // Clic en la scrollbar/borde del dropdown (target === contenedor, no un item):
+    // evitar que el input pierda foco, si no el blur lo cierra al arrastrar la barra.
+    acEl.addEventListener("mousedown", e => {
+      if (e.target === acEl) e.preventDefault();
+    });
 
     acEl.querySelectorAll(".cat-ac-item").forEach(item => {
       item.addEventListener("mousedown", e => {
