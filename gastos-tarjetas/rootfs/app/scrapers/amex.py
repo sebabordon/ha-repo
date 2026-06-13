@@ -780,23 +780,33 @@ class AmexScraper(BaseScraper):
 
         log_fn(f"  [amex-pdf] {len(links)} resúmenes encontrados en la página")
 
+        # Iterar los links más recientes hasta encontrar uno con transacciones.
+        # El portal puede mostrar primero el resumen de una tarjeta con saldo cero
+        # (ej. Platinum Credit Card con 0 cargos), así que intentamos hasta 3.
+        MAX_ATTEMPTS = 3
+        attempts = 0
         for link in links:
             url  = link.get("url", "")
             date = link.get("date", "")   # "YYYY-MM-DD"
             if not url:
                 continue
+            if attempts >= MAX_ATTEMPTS:
+                break
 
             filename = f"AMEX_{date}_auto.pdf" if date else f"AMEX_auto_{url[-20:]}.pdf"
             if importacion_exists("amex", filename):
                 log_fn(f"  [amex-pdf] al día ({date or link.get('title', '')})")
                 break
 
+            attempts += 1
             log_fn(f"  [amex-pdf] descargando {date or link.get('title', '')}…")
             pdf_bytes = self._fetch_amex_pdf(driver, url, log_fn)
-            if pdf_bytes:
-                count = self._import_resumen_amex(pdf_bytes, filename, log_fn)
-                log_fn(f"  [amex-pdf] {filename}: {count} gastos importados")
-            break  # máximo un resumen por run
+            if not pdf_bytes:
+                break  # error de descarga, no seguir intentando
+            count = self._import_resumen_amex(pdf_bytes, filename, log_fn)
+            log_fn(f"  [amex-pdf] {filename}: {count} gastos importados")
+            if count > 0:
+                break  # importado con éxito, no descargar más
 
     def _fetch_amex_pdf(self, driver, url: str, log_fn) -> Optional[bytes]:
         """

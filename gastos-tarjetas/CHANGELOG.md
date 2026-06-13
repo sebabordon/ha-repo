@@ -1,3 +1,7 @@
+## 0.8.89
+
+- **AMEX: reintentar hasta 3 PDFs si el primero tiene 0 transacciones** (`scrapers/amex.py`): el portal mezcla resúmenes de la Platinum Card y la Platinum Credit Card; el primero en el DOM puede ser el de la tarjeta con saldo cero. Ahora itera hasta 3 links recientes (deteniéndose en el primero con `count > 0`).
+
 ## 0.8.88
 
 - **AMEX: fix return en IIFE de extracción de links + timeout 45s** (`scrapers/amex.py`): dos bugs en la extracción de links PDF. (1) La función JS de extracción usaba `(function() { ... })()` sin un `return` al nivel del script — Selenium's `execute_script` solo devuelve un valor cuando hay un `return` top-level; el IIFE sin `return` externo siempre devolvía `None` → `[]`. Corregido a `return (function() { ... })()`. (2) El `WebDriverWait` para esperar los links usaba 15s, pero el log confirmó que los links aparecen ~15–16s después de la navegación (la SPA los carga async); el timeout se amplió a 45s.
