@@ -693,11 +693,9 @@ class AmexScraper(BaseScraper):
                 driver.execute_script("arguments[0].click();", first_btn)
             else:
                 log_fn("  [amex-pdf] panel ya expandido — esperando links…")
-            # Esperar a que los links aparezcan en el DOM (ya sea tras click o en carga inicial).
-            # Usamos JS puro en lugar de un selector CSS porque en este SPA el atributo href
-            # puede estar seteado como propiedad y el selector CSS [href*=...] no siempre lo detecta.
+            # Esperar a que los links aparezcan en el DOM (hasta 45s — la SPA los carga async).
             try:
-                WebDriverWait(driver, 15).until(lambda d: d.execute_script("""
+                WebDriverWait(driver, 45).until(lambda d: d.execute_script("""
                     var all = document.querySelectorAll('a[href]');
                     for (var i = 0; i < all.length; i++) {
                         var h = all[i].getAttribute('href') || all[i].href || '';
@@ -717,7 +715,7 @@ class AmexScraper(BaseScraper):
         # Nota: se itera sobre todos los <a href> y se filtra por indexOf en JS porque el
         # selector CSS [href*=...] no matchea correctamente en esta SPA de React.
         links = driver.execute_script("""
-        (function() {
+        return (function() {
             var MONTHS = {
                 'ene':'01','feb':'02','mar':'03','abr':'04','may':'05','jun':'06',
                 'jul':'07','ago':'08','sep':'09','oct':'10','nov':'11','dic':'12'

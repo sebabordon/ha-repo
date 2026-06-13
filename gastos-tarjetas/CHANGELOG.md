@@ -1,3 +1,7 @@
+## 0.8.88
+
+- **AMEX: fix return en IIFE de extracción de links + timeout 45s** (`scrapers/amex.py`): dos bugs en la extracción de links PDF. (1) La función JS de extracción usaba `(function() { ... })()` sin un `return` al nivel del script — Selenium's `execute_script` solo devuelve un valor cuando hay un `return` top-level; el IIFE sin `return` externo siempre devolvía `None` → `[]`. Corregido a `return (function() { ... })()`. (2) El `WebDriverWait` para esperar los links usaba 15s, pero el log confirmó que los links aparecen ~15–16s después de la navegación (la SPA los carga async); el timeout se amplió a 45s.
+
 ## 0.8.87
 
 - **AMEX: usar indexOf en JS en lugar de selector CSS para links de resúmenes** (`scrapers/amex.py`): el diagnóstico de 0.8.86 confirmó que los links de `/servicing/v1/documents/statements/` están en el DOM (74 `<a href>` presentes, 5 con esa ruta), pero el selector CSS `a[href*="..."]` devuelve 0 resultados en esta SPA de React. La extracción ahora itera todos los `<a href>` con `document.querySelectorAll('a[href]')` y filtra por `.indexOf()` en JS, el mismo método que funciona en el diagnóstico. El `WebDriverWait` también fue actualizado para usar el mismo enfoque JS en lugar de un CSS selector.
