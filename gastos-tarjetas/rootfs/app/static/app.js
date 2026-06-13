@@ -5798,7 +5798,7 @@ async function deleteMovimiento(fuente, id) {
 }
 
 async function deleteGasto(id) {
-  showConfirm("¿Eliminar este gasto? No se volverá a importar por el scraper. Si aparece en un resumen PDF, se sumará desde ahí (el PDF es la fuente de verdad).", async () => {
+  showConfirm("¿Eliminar este gasto? Se elimina junto con su movimiento. Si es un duplicado no vuelve; si es un movimiento real, el scraper podría re-importarlo en la próxima corrida.", async () => {
     const res = await fetch(`${BASE}/api/gastos/${id}`, {method:"DELETE"});
     if (res.ok) { loadGastos(); loadSaldos(); }
     else showToast("No se pudo eliminar el gasto.", "err");

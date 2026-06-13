@@ -1,3 +1,7 @@
+## 0.9.2
+
+- **Borrado individual de gastos: hard delete genuino** (`db.py`, `static/app.js`): se revierte el marcado `estado='ignored'` introducido en 0.9.1 (era sobre-ingeniería). `delete_gasto_any` vuelve a borrar el gasto y su `movimientos_raw` vinculado. El delete está pensado para duplicados o registros mal importados: en un duplicado hay 2 filas raw y al borrar una sobrevive la otra (el dedup saltea el movimiento → no vuelve); si es un movimiento real único y el scraper lo re-trae, se re-importa, lo cual es correcto porque el gasto existe. No toca la tabla `importaciones`, así que el flujo de resúmenes PDF (fuente de verdad) queda intacto. Mensaje del confirm actualizado.
+
 ## 0.9.1
 
 - **Borrado individual no resucita por re-import** (`db.py`, `static/app.js`): `delete_gasto_any` hacía hard-delete del `movimientos_raw` vinculado, pero como el dedup de `insert_movimientos_raw` busca por monto+fecha sin filtrar estado, al borrar la fila el scraper la re-insertaba en la corrida siguiente (el movimiento sigue en la ventana) y el duplicado resucitaba. Ahora el raw NO se borra: se marca `estado='ignored'` y se le suelta el `gasto_id`. El dedup lo encuentra y lo saltea (no re-importa), `auto_import_unmatched` solo toma 'unmatched' (no lo importa) y la conciliación solo mira 'imported' (no lo toca). Clave: si el movimiento aparece en un resumen PDF, se importa igual como gasto nuevo, respetando que el PDF es la fuente de verdad. Mensaje del confirm actualizado.
