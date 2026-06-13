@@ -1,3 +1,7 @@
+## 0.8.80
+
+- **AMEX: espera inteligente para links PDF en /statements** (`scrapers/amex.py`): reemplaza el `time.sleep(10)` fijo por un `WebDriverWait(30)` que espera a que aparezca el primer `<a href*="/servicing/v1/documents/statements/">` en el DOM. Si el wait expira, intenta extraer links de todos modos. Cuando no hay links, loguea la cantidad de `<a href>` en la página y si el texto "Estado" está presente.
+
 ## 0.8.79
 
 - **AMEX: descarga de resúmenes PDF vía DOM** (`scrapers/amex.py`): reescritura de la estrategia de `_scrape_resumenes`. La versión 0.8.78 intentaba llamar a `GET /servicing/v1/documents/info/statements` con un `account_token` de sesión que no está accesible desde el browser context de Selenium. La nueva estrategia navega a `/statements` (One App React SPA), espera 10s a que renderice, y extrae los links de descarga directamente del DOM con `document.querySelectorAll('a[href*="/servicing/v1/documents/statements/"]')`. Las URLs ya incluyen el token preautenticado (`?account_key=...&client_id=OneAmex`); se descargan con `fetch(..., {credentials:'include'})`. La fecha del resumen se parsea desde el atributo `title` en español (`"26 de may de 2026" → "2026-05-26"`). Se eliminó `_fetch_amex_statements` y las constantes `_EP_DOC_INFO`/`_EP_DOC_DL` ya no son necesarias.

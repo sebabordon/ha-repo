@@ -667,10 +667,24 @@ class AmexScraper(BaseScraper):
 
         try:
             driver.get(_STATEMENTS_PAGE)
-            time.sleep(10)  # One App SPA necesita tiempo para renderizar
         except Exception as exc:
             log_fn(f"  [amex-pdf] error navegando a /statements: {exc}")
             return
+
+        # Esperar a que el SPA renderice los links PDF (hasta 30s)
+        try:
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, 'a[href*="/servicing/v1/documents/statements/"]')
+                )
+            )
+            time.sleep(1)  # pequeña pausa para que cargue la lista completa
+        except Exception:
+            # Si el wait falla, intentamos igual (a veces los links ya están)
+            log_fn(f"  [amex-pdf] wait timeout — intentando extraer links de todos modos (URL={driver.current_url[:80]})")
 
         # Extraer links de descarga del DOM renderizado.
         # La página repite el mismo link en varios contenedores; se desduplicamos por URL.
@@ -702,7 +716,23 @@ class AmexScraper(BaseScraper):
         """) or []
 
         if not links:
-            log_fn(f"  [amex-pdf] sin links de resúmenes en la página (URL={driver.current_url[:80]})")
+            # Diagnóstico: contar cuántos <a> hay en total y si la página tiene contenido
+            try:
+                diag = driver.execute_script("""
+                return {
+                    total_a: document.querySelectorAll('a[href]').length,
+                    has_stmts: document.body.innerText.indexOf('Estado') >= 0,
+                    url: location.href
+                };
+                """) or {}
+                log_fn(
+                    f"  [amex-pdf] sin links de resúmenes — "
+                    f"<a href> en página: {diag.get('total_a',0)}, "
+                    f"texto 'Estado' presente: {diag.get('has_stmts')}, "
+                    f"URL: {str(diag.get('url',''))[:80]}"
+                )
+            except Exception:
+                log_fn(f"  [amex-pdf] sin links de resúmenes en la página (URL={driver.current_url[:80]})")
             return
 
         log_fn(f"  [amex-pdf] {len(links)} resúmenes encontrados en la página")
