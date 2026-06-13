@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "mcp__Home_Assistant__ha_get_addon"
+      "mcp__Home_Assistant__ha_get_addon",
+      "Bash(python3 *)",
+      "Bash(python3 -m *)",
+      "Bash(sqlite3 *)"
     ]
   }
 }
