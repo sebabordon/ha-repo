@@ -394,7 +394,12 @@ class BbvaTarjetasScraper(BbvaScraper):
             log_fn(f"  [extractos] HTTP {resp['status']} — {resp['body'][:200]}")
             return []
         extractos = ((resp["json"].get("result") or {}).get("extractos") or [])
-        log_fn(f"  [extractos] {len(extractos)} disponibles (año {year})")
+        if extractos:
+            log_fn(f"  [extractos] {len(extractos)} resúmenes en la API (año {year}):")
+            for ex in extractos:
+                log_fn(f"    • {ex.get('detalle','?')} — cierre {ex.get('fechaCierre','?')} (reporte={ex.get('reporte','?')})")
+        else:
+            log_fn(f"  [extractos] la API no devolvió resúmenes para {year} (período aún abierto o sin resúmenes emitidos)")
         return extractos
 
     def _fetch_pdf_bytes(self, driver, reporte: str, log_fn) -> Optional[bytes]:

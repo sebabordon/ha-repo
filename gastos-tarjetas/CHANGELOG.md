@@ -1,3 +1,7 @@
+## 0.8.82
+
+- **BBVA: log de resúmenes encontrados por la API** (`scrapers/bbva_tarjetas.py`): `_fetch_extractos` ahora lista cada resumen disponible (producto, fechaCierre, reporte ID) antes de decidir si se baja o no. Antes solo decía `"N disponibles"` sin detalles, lo que no permitía distinguir entre "API devolvió vacío" (período aún abierto) y "encontró pero ya importados". Si la API devuelve 0, ahora dice explícitamente "la API no devolvió resúmenes para YYYY (período aún abierto o sin resúmenes emitidos)".
+
 ## 0.8.81
 
 - **AMEX: click en acordeón antes de extraer links PDF** (`scrapers/amex.py`): el panel de resúmenes en `/statements` carga el contenido de forma lazy — los links PDF no están en el DOM hasta que se clickea el botón del acordeón. El scraper ahora espera que aparezca `button[id^="header-"]` (hasta 30s), y si `aria-expanded="false"` lo clickea antes de buscar los links. Si el panel ya estaba expandido (p.ej. sesión reciente), lo detecta por `aria-expanded="true"` y no lo clickea.
