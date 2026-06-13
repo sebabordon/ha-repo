@@ -1,3 +1,7 @@
+## 0.8.74
+
+- **MercadoPago: collector_id en descripción de transferencias salientes** (`scrapers/mercadopago.py`): las transferencias a otras cuentas MP ahora incluyen el ID del destinatario en la descripción, por ejemplo `"Transferencia [id:123456789]"` o `"Transferencia: nota [id:123456789]"`. Permite crear reglas de categorización por destinatario.
+
 ## 0.8.73
 
 - **MercadoPago: evitar múltiples reportes por día** (`scrapers/mercadopago.py`): el scraper generaba un nuevo settlement report en cada ejecución, causando que MP enviara múltiples notificaciones por email cuando el scraper corría varias veces en el mismo día. Ahora `_download_latest_settlement` devuelve también la fecha del reporte más reciente, y `_fetch_settlement_report` solo solicita un nuevo reporte si no existe uno del día de hoy (hora ART).

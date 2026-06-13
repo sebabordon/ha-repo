@@ -500,7 +500,9 @@ class MercadoPagoScraper(BaseScraper):
             if sign == -1:
                 sender = _payer_name()
                 return f"{sender} — {label}" if sender else label
-            return label
+            collector_id = p.get("collector_id") or ""
+            suffix = f" [id:{collector_id}]" if collector_id else ""
+            return f"{label}{suffix}"
 
         # ── Regla 3: pago regular con billetera → reason directo ───────────────
         if pay_type == "account_money" and op_type == "regular_payment":
