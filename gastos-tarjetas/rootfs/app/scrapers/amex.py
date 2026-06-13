@@ -923,7 +923,8 @@ class AmexScraper(BaseScraper):
 
         records = []
         for g in gastos:
-            cat, fuente_cat = categorize_by_rules(g.descripcion, monto=float(g.monto), fuente=fuente_target)
+            cat = categorize_by_rules(g.descripcion, monto=float(g.monto), fuente=fuente_target)
+            fuente_cat = "regla" if cat else None
             d = g.model_dump()
             d["categoria"]        = cat
             d["categoria_fuente"] = fuente_cat

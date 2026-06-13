@@ -547,7 +547,8 @@ class BbvaTarjetasScraper(BbvaScraper):
         records = []
         for g in gastos:
             eff_monto = -float(g.monto) if (needs_flip and g.monto != 0) else float(g.monto)
-            cat, fuente_cat = categorize_by_rules(g.descripcion, monto=eff_monto, fuente=fuente_target)
+            cat = categorize_by_rules(g.descripcion, monto=eff_monto, fuente=fuente_target)
+            fuente_cat = "regla" if cat else None
             d = g.model_dump()
             d["categoria"]       = cat
             d["categoria_fuente"] = fuente_cat

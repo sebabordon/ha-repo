@@ -1,3 +1,7 @@
+## 0.8.92
+
+- **Fix: `categorize_by_rules` no devuelve tupla** (`scrapers/amex.py`, `scrapers/bbva_tarjetas.py`): ambos scrapers desempaquetaban `cat, fuente_cat = categorize_by_rules(...)` pero la función devuelve `Optional[str]`, no una tupla — causaba `TypeError: cannot unpack non-iterable NoneType object` al importar el primer PDF con 0 reglas que matcheen. Corregido a `cat = categorize_by_rules(...); fuente_cat = "regla" if cat else None`.
+
 ## 0.8.91
 
 - **AMEX: campo `Account Key` en config del scraper para filtrar resúmenes por tarjeta** (`scraper_credentials.py`, `scrapers/amex.py`): sin `account_key` el portal `/statements` muestra los resúmenes de la tarjeta adicional (Platinum Credit Card, 31004) en lugar de la principal. Ahora hay un campo opcional "Account Key (Resúmenes PDF)" en la config del scraper AMEX; si está configurado, el scraper navega a `/statements?account_key=VALOR` mostrando solo los resúmenes de esa tarjeta. El valor se obtiene del HAR del portal AMEX (parámetro `account_key` en la URL de la petición a `/statements`).
