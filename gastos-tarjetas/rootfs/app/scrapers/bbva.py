@@ -1210,21 +1210,10 @@ class BbvaScraper(BaseScraper):
 
         Se importan resúmenes con fechaCierre >= cutoff. `years` cubre el cruce de
         año (ej. en enero con meses=3 hay que consultar también el año anterior).
-        Default 1 mes; se clampa a 1..24.
         """
         from datetime import date
-        try:
-            meses = int(str(config.get("resumenes_meses") or "1").strip())
-        except (TypeError, ValueError):
-            meses = 1
-        meses = max(1, min(meses, 24))
-        today = date.today()
-        m, y = today.month - meses, today.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        cutoff = date(y, m, 1)
-        years  = list(range(cutoff.year, today.year + 1))
+        cutoff = BaseScraper._resumenes_cutoff(config)
+        years  = list(range(cutoff.year, date.today().year + 1))
         return cutoff, years
 
     @staticmethod

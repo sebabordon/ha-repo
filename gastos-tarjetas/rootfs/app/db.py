@@ -1421,10 +1421,15 @@ def delete_gasto_any(gasto_id: int) -> bool:
     """
     Borra cualquier gasto individual, sin importar el origen (manual, scraper, PDF).
 
-    Si el gasto tiene movimientos_raw vinculados (m.gasto_id), se eliminan también
-    (hard delete), igual que `delete_movimiento_raw`: así el scraper no lo vuelve a
-    importar en la próxima corrida. Pensado para quitar duplicados puntuales desde
-    la tab de Gastos sin recurrir a un borrado total de la cuenta.
+    Si el gasto tiene movimientos_raw vinculados (m.gasto_id), NO se borran: se
+    marcan estado='ignored' y se les suelta el gasto_id. Esto evita que el scraper
+    los re-importe en la próxima corrida (el dedup de insert_movimientos_raw los
+    encuentra y los saltea; auto_import_unmatched solo toma 'unmatched'), pero deja
+    intacto el flujo de resúmenes PDF: si el PDF (la verdad) trae ese movimiento, se
+    importa igual como gasto nuevo porque el raw ignorado ya no tiene gasto vinculado.
+
+    Pensado para quitar duplicados puntuales desde la tab de Gastos de forma que el
+    borrado sea permanente y respete que las importaciones PDF son la fuente de verdad.
 
     Devuelve True si borró el gasto, False si no existía.
     """
@@ -1433,9 +1438,12 @@ def delete_gasto_any(gasto_id: int) -> bool:
         if not row:
             return False
         try:
-            conn.execute("DELETE FROM movimientos_raw WHERE gasto_id=?", (gasto_id,))
+            conn.execute(
+                "UPDATE movimientos_raw SET estado='ignored', gasto_id=NULL WHERE gasto_id=?",
+                (gasto_id,),
+            )
         except sqlite3.OperationalError:
-            pass  # tabla movimientos_raw inexistente (sin scrapers) — nada que limpiar
+            pass  # tabla movimientos_raw inexistente (sin scrapers) — nada que marcar
         conn.execute("DELETE FROM gastos WHERE id=?", (gasto_id,))
     return True
 

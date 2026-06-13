@@ -46,6 +46,14 @@ BANKS: dict[str, dict] = {
                 "required": False,
                 "hint":     "Filtra la página de Resúmenes para mostrar solo los de la tarjeta principal. Sin este campo el portal muestra los resúmenes de la tarjeta adicional. Obtenerlo: en el HAR del portal de AMEX buscar la petición a /statements y copiar el parámetro account_key de la URL (ej. 00B5C8FF8254B6D66D600ACC4A35D20E).",
             },
+            {
+                "key":         "resumenes_meses",
+                "label":       "Meses de resúmenes a importar",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "1",
+                "hint":        "Cuántos meses hacia atrás bajar resúmenes PDF cuando 'Descargar resúmenes' está activo. 1 = solo el último (default). 3 = los de los últimos 3 meses. Los ya importados se saltean. Útil para backfill.",
+            },
         ],
     },
     "bbva": {

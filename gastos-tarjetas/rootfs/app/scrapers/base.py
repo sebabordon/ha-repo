@@ -448,6 +448,27 @@ class BaseScraper(ABC):
             return cuentas[0].get("fuente") or default_fuente
         return default_fuente
 
+    @staticmethod
+    def _resumenes_cutoff(config: dict):
+        """
+        Fecha de corte (date) para el backfill de resúmenes PDF, según el config
+        'resumenes_meses' (default 1, clamp 1..24). Se importan los resúmenes con
+        fecha de cierre >= cutoff. El cutoff es el día 1 del mes N meses atrás, para
+        abarcar el mes completo del límite.
+        """
+        from datetime import date
+        try:
+            meses = int(str(config.get("resumenes_meses") or "1").strip())
+        except (TypeError, ValueError):
+            meses = 1
+        meses = max(1, min(meses, 24))
+        today = date.today()
+        m, y = today.month - meses, today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        return date(y, m, 1)
+
     # ── Métodos abstractos ────────────────────────────────────────────────────
 
     @abstractmethod
