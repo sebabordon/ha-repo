@@ -1,3 +1,7 @@
+## 0.8.86
+
+- **AMEX: esperar links aunque el panel ya esté expandido** (`scrapers/amex.py`): cuando `aria-expanded="true"` en la carga inicial el scraper saltaba directo a buscar links sin esperar que el contenido cargase. Ahora siempre aplica un `WebDriverWait(15s)` post-panel (tanto si se clickeó como si ya estaba abierto). Además, cuando no se encuentran links el log ahora muestra hasta 5 hrefs candidatos con "document"/"statement"/"servicing" en su URL para poder diagnosticar el formato real que usa la página.
+
 ## 0.8.85
 
 - **Conciliación: no reutilizar gastos ya importados** (`conciliacion.py`): `_conciliar_uno` excluye de sus candidatos los gastos que ya están vinculados a otro movimiento_raw con `estado='imported'` (misma fuente). Esto evita que 3 raws idénticos se "matcheen" todos al mismo gasto ya existente (quedando `matched` y nunca creando gastos nuevos). Ahora quedan `unmatched` → `auto_import_unmatched` crea los 3 gastos faltantes → total 4 gastos para 4 pagos idénticos.

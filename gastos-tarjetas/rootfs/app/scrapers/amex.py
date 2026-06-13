@@ -691,15 +691,18 @@ class AmexScraper(BaseScraper):
             if first_btn.get_attribute("aria-expanded") == "false":
                 log_fn("  [amex-pdf] expandiendo panel de resúmenes…")
                 driver.execute_script("arguments[0].click();", first_btn)
-                # Esperar a que los links aparezcan en el DOM tras el click
+            else:
+                log_fn("  [amex-pdf] panel ya expandido — esperando links…")
+            # Esperar a que los links aparezcan en el DOM (ya sea tras click o en carga inicial)
+            try:
                 WebDriverWait(driver, 15).until(
                     EC.presence_of_element_located(
                         (By.CSS_SELECTOR, 'a[href*="/servicing/v1/documents/statements/"]')
                     )
                 )
-                time.sleep(0.5)
-            else:
-                log_fn("  [amex-pdf] panel ya expandido")
+            except Exception:
+                pass  # el diagnóstico más abajo mostrará qué hay en el DOM
+            time.sleep(0.5)
         except Exception as exc:
             log_fn(f"  [amex-pdf] aviso expandiendo panel: {exc}")
 
@@ -733,11 +736,22 @@ class AmexScraper(BaseScraper):
         """) or []
 
         if not links:
-            # Diagnóstico: contar cuántos <a> hay en total y si la página tiene contenido
+            # Diagnóstico: mostrar qué hrefs existen para entender el formato real
             try:
                 diag = driver.execute_script("""
+                var all = document.querySelectorAll('a[href]');
+                var sample = [];
+                for (var i = 0; i < all.length; i++) {
+                    var h = all[i].getAttribute('href') || '';
+                    if (h.indexOf('document') >= 0 || h.indexOf('statement') >= 0
+                            || h.indexOf('pdf') >= 0 || h.indexOf('servicing') >= 0) {
+                        sample.push(h.substring(0, 100));
+                        if (sample.length >= 5) break;
+                    }
+                }
                 return {
-                    total_a: document.querySelectorAll('a[href]').length,
+                    total_a: all.length,
+                    sample: sample,
                     has_stmts: document.body.innerText.indexOf('Estado') >= 0,
                     url: location.href
                 };
@@ -748,6 +762,10 @@ class AmexScraper(BaseScraper):
                     f"texto 'Estado' presente: {diag.get('has_stmts')}, "
                     f"URL: {str(diag.get('url',''))[:80]}"
                 )
+                for h in (diag.get("sample") or []):
+                    log_fn(f"  [amex-pdf]   href candidato: {h}")
+                if not (diag.get("sample")):
+                    log_fn("  [amex-pdf]   (ningún href con 'document'/'statement'/'pdf'/'servicing')")
             except Exception:
                 log_fn(f"  [amex-pdf] sin links de resúmenes en la página (URL={driver.current_url[:80]})")
             return
