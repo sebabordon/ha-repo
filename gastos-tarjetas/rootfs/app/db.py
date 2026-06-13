@@ -1017,6 +1017,16 @@ def insert_gastos(gastos: list[dict], import_info: dict = None) -> int:
         return count
 
 
+def importacion_exists(fuente: str, archivo: str) -> bool:
+    """True si ya existe una importación de este archivo para esta fuente."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM importaciones WHERE fuente=? AND archivo=? LIMIT 1",
+            (fuente, archivo),
+        ).fetchone()
+    return row is not None
+
+
 def list_importaciones() -> list[dict]:
     with _conn() as conn:
         rows = conn.execute(

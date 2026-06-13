@@ -94,6 +94,13 @@ BANKS: dict[str, dict] = {
                 "placeholder": "Titular",
                 "hint":        "Nombre que verán los gastos importados (ej. Titular, Sebastián).",
             },
+            {
+                "key":      "auto_resumenes",
+                "label":    "Descargar resúmenes PDF automáticamente",
+                "type":     "checkbox",
+                "required": False,
+                "hint":     "Si está activo, en cada run el scraper descarga el resumen PDF más reciente de VISA y Mastercard y lo importa directo a Gastos (equivalente a subirlo manualmente).",
+            },
         ],
     },
     "galicia": {

@@ -8,7 +8,7 @@ from auth import require_auth
 
 logger = logging.getLogger(__name__)
 from categorizer import categorize
-from db import insert_gastos, upsert_cuenta_saldo, _CC_FUENTES
+from db import insert_gastos, upsert_cuenta_saldo, _CC_FUENTES, importacion_exists
 from parsers import PARSERS
 from user_config import read_user_config
 
@@ -38,6 +38,15 @@ async def upload_file(
 
     # Si no se pasa target_fuente, gastos van con la misma fuente del parser
     effective_fuente = (target_fuente or fuente).strip()
+
+    filename_key = file.filename or effective_fuente
+    if importacion_exists(effective_fuente, filename_key):
+        return {
+            "importados": 0,
+            "total_parseados": 0,
+            "ya_importado": True,
+            "mensaje": f"Este archivo ya fue importado anteriormente: {filename_key}",
+        }
 
     content = await file.read()
 

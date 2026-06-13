@@ -1,3 +1,8 @@
+## 0.8.75
+
+- **BBVA Tarjetas: auto-descarga de resúmenes PDF** (`scrapers/bbva_tarjetas.py`, `scraper_credentials.py`): nueva opción "Descargar resúmenes PDF automáticamente" en la config del scraper. Cuando está activa, en cada run el scraper llama a `POST /extractos/extractos` para listar los resúmenes disponibles, detecta si el más reciente de VISA o Mastercard ya fue importado (por `reporte` ID único), y si no, lo descarga via `POST /extractos/getPdf` (respuesta binaria convertida a base64 en el browser) y lo procesa con el parser de PDF correspondiente (`bbva_visa`/`bbva_mc`). La importación aplica categorización por reglas (igual que el upload manual) y llama a `consolidate_scraper_duplicates` para limpiar duplicados del scraper de consumos.
+- **Upload: protección contra PDF duplicado** (`routes/upload.py`, `db.py`): antes de parsear un archivo, se verifica si `importaciones` ya tiene una entrada con el mismo `(fuente, archivo)`. Si existe, retorna `ya_importado: true` sin insertar nada, evitando duplicar gastos al subir el mismo resumen dos veces por error.
+
 ## 0.8.74
 
 - **MercadoPago: collector_id en descripción de transferencias salientes** (`scrapers/mercadopago.py`): las transferencias a otras cuentas MP ahora incluyen el ID del destinatario en la descripción, por ejemplo `"Transferencia [id:123456789]"` o `"Transferencia: nota [id:123456789]"`. Permite crear reglas de categorización por destinatario.
