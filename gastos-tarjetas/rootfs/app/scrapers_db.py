@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 _DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
+# Paths de DBs ya inicializadas en este proceso — evita correr _ensure_scraper_tables
+# (que hace writes) en cada apertura de conexión.
+_initialized_dbs: set[str] = set()
+
 # Fallback hardcoded — usado cuando las tablas multi-instancia (v0.4.0) todavía
 # no existen (DB recién creada antes del primer run de migraciones).  Después
 # de la migración, fuentes_for_banco() resuelve por query a `cuentas` /
@@ -153,10 +157,14 @@ def _ensure_scraper_tables(conn: sqlite3.Connection) -> None:
 @contextmanager
 def _conn():
     path = _find_db_path()
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=10000")
     try:
-        _ensure_scraper_tables(conn)
+        if path not in _initialized_dbs:
+            _ensure_scraper_tables(conn)
+            _initialized_dbs.add(path)
         yield conn
         conn.commit()
     finally:

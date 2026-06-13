@@ -1,3 +1,7 @@
+## 0.8.98
+
+- **Fix: database is locked bajo carga concurrente** (`scrapers_db.py`): `_conn()` abría SQLite sin timeout ni WAL, y corría `_ensure_scraper_tables` (con 5 writes) en cada apertura de conexión. Con múltiples requests paralelos del UI se producía contención total. Corrección: `timeout=30`, `PRAGMA journal_mode=WAL`, `PRAGMA busy_timeout=10000`, y `_ensure_scraper_tables` se corre solo una vez por DB-path por proceso (guard `_initialized_dbs`), igual que `db.py`.
+
 ## 0.8.97
 
 - **Refactor: resúmenes PDF Caja de Ahorro se mueven al scraper `bbva`** (`scrapers/bbva.py`, `scrapers/bbva_tarjetas.py`, `scraper_credentials.py`): la lógica de descarga e importación de PDFs de la Caja de Ahorro Pesos pertenece al scraper de cuenta (`bbva`), no al de tarjetas. Los métodos `_fetch_extractos`, `_fetch_pdf_bytes`, `_import_resumen` y las 4 constantes de endpoint se mueven a `BbvaScraper` (clase base), de donde los heredan ambos scrapers. Se agrega `_scrape_resumenes_cuenta` a `BbvaScraper`, que filtra la lista de extractos para "CAJA DE AHORROS PESOS" y llama a `_import_resumen` con `parser_key=bbva_cuenta`. Se agrega el checkbox `auto_resumenes` al scraper `bbva` en `scraper_credentials.py`. En `bbva_tarjetas.py` se revierte el soporte de `CUENTA_ARS` en `_scrape_resumenes` (que quedó erróneamente en 0.8.96) y se restaura `len(done)==2`.
