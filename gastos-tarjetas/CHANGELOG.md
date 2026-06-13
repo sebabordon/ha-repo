@@ -1,3 +1,7 @@
+## 0.8.97
+
+- **Refactor: resúmenes PDF Caja de Ahorro se mueven al scraper `bbva`** (`scrapers/bbva.py`, `scrapers/bbva_tarjetas.py`, `scraper_credentials.py`): la lógica de descarga e importación de PDFs de la Caja de Ahorro Pesos pertenece al scraper de cuenta (`bbva`), no al de tarjetas. Los métodos `_fetch_extractos`, `_fetch_pdf_bytes`, `_import_resumen` y las 4 constantes de endpoint se mueven a `BbvaScraper` (clase base), de donde los heredan ambos scrapers. Se agrega `_scrape_resumenes_cuenta` a `BbvaScraper`, que filtra la lista de extractos para "CAJA DE AHORROS PESOS" y llama a `_import_resumen` con `parser_key=bbva_cuenta`. Se agrega el checkbox `auto_resumenes` al scraper `bbva` en `scraper_credentials.py`. En `bbva_tarjetas.py` se revierte el soporte de `CUENTA_ARS` en `_scrape_resumenes` (que quedó erróneamente en 0.8.96) y se restaura `len(done)==2`.
+
 ## 0.8.96
 
 - **Feature: auto-importar resumen PDF de Caja de Ahorro Pesos BBVA** (`scrapers/bbva_tarjetas.py`): `_scrape_resumenes` ahora detecta también el extracto "CAJA DE AHORROS PESOS" en la lista de la API y lo importa con `parser_key=bbva_cuenta` / `fuente_target=bbva_cuenta`. Agrega `bbva_cuenta` a `_RESUMEN_PARSERS` para que `consolidate_scraper_duplicates` elimine los duplicados del scraper al importar el PDF. Actualiza el early-exit a `len(done)==3` (VISA+MC+CUENTA_ARS).

@@ -89,6 +89,13 @@ BANKS: dict[str, dict] = {
                 "default":  True,
                 "hint":     "Activado (default): BBVA filtra los movimientos server-side, más eficiente pero devuelve saldo=0 por movimiento. Desactivado: fechas vacías en el request, BBVA devuelve el saldo corriente real por movimiento (útil para dedup preciso), el filtrado por rango se hace client-side.",
             },
+            {
+                "key":      "auto_resumenes",
+                "label":    "Descargar resúmenes PDF automáticamente",
+                "type":     "checkbox",
+                "required": False,
+                "hint":     "Si está activo, en cada run el scraper descarga el resumen PDF más reciente de la Caja de Ahorro Pesos y lo importa directo a Gastos (equivalente a subirlo manualmente).",
+            },
         ],
     },
     "bbva_tarjetas": {

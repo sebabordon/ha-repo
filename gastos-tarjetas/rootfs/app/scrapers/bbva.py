@@ -633,6 +633,13 @@ class BbvaScraper(BaseScraper):
             _log(f"  → {len(movs)} movimientos importados de {alias} (fuente={fuente_target})")
             movimientos.extend(movs)
 
+        if config.get("auto_resumenes"):
+            try:
+                self._scrape_resumenes_cuenta(driver, config, _log)
+            except Exception as exc:
+                _log(f"✗ Error descargando resúmenes de cuenta: {exc}")
+                logger.exception("[bbva] _scrape_resumenes_cuenta")
+
         return ScraperResult(
             fuente      = "bbva",
             movimientos = movimientos,
@@ -1188,3 +1195,277 @@ class BbvaScraper(BaseScraper):
             ))
 
         return result
+
+    # ── Auto-descarga de resúmenes PDF (Caja de Ahorro) ──────────────────────
+
+    _EP_EXTRACTOS  = "/cliente/extractos/extractos"
+    _EP_GETPDF     = "/cliente/extractos/getPdf"
+    _EP_VIEWER_PDF = "/seguridad/viewerAdobePdf/verificacion"
+    _SUMMARIES_URL = "https://online.bbva.com.ar/fnetcore/#/private/summaries"
+
+    def _fetch_extractos(self, driver, log_fn) -> list[dict]:
+        """
+        POST /extractos/extractos {"fecha":"YYYY"} → lista de resúmenes.
+        Devuelve la lista de extractos (cada uno con 'reporte', 'fechaCierre', 'detalle').
+
+        BBVA bloquea este endpoint (statusCode=500) si el SPA Angular no fue
+        navegado a la sección "Resúmenes" primero.  El flujo que BBVA espera:
+          1. driver.get(#/private/summaries) — el Angular router inicializa el módulo
+          2. GET /seguridad/viewerAdobePdf/verificacion — gate check del módulo
+          3. POST /extractos/extractos — ahora acepta la request
+        """
+        from datetime import datetime
+        year = str(datetime.now().year)
+
+        log_fn("  [extractos] navegando a sección Resúmenes del SPA…")
+        try:
+            driver.get(self._SUMMARIES_URL)
+            time.sleep(4)
+        except Exception as exc:
+            log_fn(f"  [extractos] aviso navegando: {exc}")
+
+        self._api_request(driver, self._EP_VIEWER_PDF)
+
+        resp = self._api_request(
+            driver, self._EP_EXTRACTOS, method="POST", json_body={"fecha": year}
+        )
+        if resp["status"] != 200 or not resp["json"]:
+            log_fn(f"  [extractos] HTTP {resp['status']} — {resp['body'][:200]}")
+            return []
+        sc = str(resp["json"].get("statusCode") or "")
+        extractos = ((resp["json"].get("result") or {}).get("extractos") or [])
+        if extractos:
+            log_fn(f"  [extractos] {len(extractos)} resúmenes en la API (año {year}):")
+            for ex in extractos:
+                log_fn(f"    • {ex.get('detalle','?')} — cierre {ex.get('fechaCierre','?')} (reporte={ex.get('reporte','?')})")
+        else:
+            log_fn(f"  [extractos] lista vacía (statusCode={sc}) — body: {resp['body'][:500]}")
+        return extractos
+
+    def _fetch_pdf_bytes(self, driver, reporte: str, log_fn) -> Optional[bytes]:
+        """
+        POST /extractos/getPdf {"reporte":"..."} → bytes del PDF.
+        Usa fetch() + arrayBuffer() dentro del browser y transfiere como base64.
+        """
+        import base64 as _b64
+        ts  = str(int(time.time() * 1000))
+        url = f"{_API_BASE}{self._EP_GETPDF}?ts={ts}&reporte={reporte}"
+
+        js = """
+        var url     = arguments[0];
+        var reporte = arguments[1];
+        var cb      = arguments[arguments.length - 1];
+
+        var xsrf = null;
+        try {
+            document.cookie.split(';').forEach(function(c) {
+                var p = c.trim();
+                if (p.startsWith('XSRF-TOKEN='))
+                    xsrf = decodeURIComponent(p.substring(11));
+            });
+        } catch(e) {}
+
+        var opts = {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json;charset=UTF-8', 'Accept': 'application/pdf, */*'},
+            credentials: 'include',
+            body: JSON.stringify({reporte: reporte})
+        };
+        if (xsrf) opts.headers['X-XSRF-TOKEN'] = xsrf;
+
+        fetch(url, opts)
+            .then(function(r) {
+                return r.arrayBuffer().then(function(buf) {
+                    if (!buf || buf.byteLength === 0) {
+                        cb({status: r.status, base64: '', error: 'empty'});
+                        return;
+                    }
+                    var bytes = new Uint8Array(buf);
+                    var str = '';
+                    var CHUNK = 8192;
+                    for (var i = 0; i < bytes.length; i += CHUNK) {
+                        str += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+                    }
+                    cb({status: r.status, base64: btoa(str)});
+                });
+            })
+            .catch(function(e) { cb({status: 0, base64: '', error: String(e)}); });
+        """
+        try:
+            driver.set_script_timeout(60)
+            result = driver.execute_async_script(js, url, reporte) or {}
+        except Exception as exc:
+            log_fn(f"  [getPdf] error ejecutando fetch: {exc}")
+            return None
+
+        if result.get("error") or result.get("status") != 200:
+            log_fn(f"  [getPdf] HTTP {result.get('status')} error={result.get('error','')}")
+            return None
+
+        b64 = result.get("base64") or ""
+        if not b64:
+            log_fn("  [getPdf] respuesta vacía")
+            return None
+        try:
+            pdf_bytes = _b64.b64decode(b64)
+        except Exception as exc:
+            log_fn(f"  [getPdf] error decodificando base64: {exc}")
+            return None
+        if not pdf_bytes.startswith(b"%PDF"):
+            log_fn(f"  [getPdf] respuesta no es PDF: {pdf_bytes[:20]!r}")
+            return None
+        return pdf_bytes
+
+    def _import_resumen(
+        self,
+        pdf_bytes: bytes,
+        filename: str,
+        parser_key: str,
+        fuente_target: str,
+        config: dict,
+        log_fn,
+    ) -> int:
+        """
+        Parsea un PDF de resumen e importa los gastos al DB.
+        Devuelve el número de gastos insertados.
+        """
+        import io
+        from collections import Counter
+        from db import insert_gastos, _CC_FUENTES, importacion_exists
+        from parsers import PARSERS
+        from categorizer import categorize_by_rules
+        from user_config import read_user_config
+        from scrapers_db import consolidate_scraper_duplicates
+
+        if parser_key not in PARSERS:
+            log_fn(f"  [import] parser desconocido: {parser_key}")
+            return 0
+        if importacion_exists(fuente_target, filename):
+            log_fn(f"  [import] {filename} ya importado")
+            return 0
+
+        try:
+            gastos = PARSERS[parser_key].parse(io.BytesIO(pdf_bytes), filename)
+        except Exception as exc:
+            log_fn(f"  [import] error parseando {filename}: {exc}")
+            return 0
+
+        if not gastos:
+            log_fn(f"  [import] {filename}: sin movimientos")
+            return 0
+
+        log_fn(f"  [import] {filename}: {len(gastos)} movimientos parseados")
+
+        _fechas_tmp = [str(g.fecha)[:7] for g in gastos]
+        mes_resumen_check = Counter(_fechas_tmp).most_common(1)[0][0] if _fechas_tmp else None
+        if mes_resumen_check:
+            from db import importacion_exists_mes, _conn as _db_conn
+            if importacion_exists_mes(fuente_target, mes_resumen_check):
+                log_fn(f"  [import] {filename}: mes {mes_resumen_check} ya importado manualmente — registrando stub y saliendo")
+                with _db_conn() as _c:
+                    _c.execute(
+                        "INSERT INTO importaciones (fuente, archivo, mes_resumen, cantidad) VALUES (?,?,?,0)",
+                        (fuente_target, filename, mes_resumen_check),
+                    )
+                return 0
+
+        user_cfg        = read_user_config()
+        usuario_default = user_cfg["fuente_usuario"].get(parser_key)
+        reglas_usuario  = user_cfg.get("reglas_usuario", [])
+        _usuarios       = user_cfg.get("usuarios", ["Titular", "Adicional"])
+        _persona_map    = {}
+        if len(_usuarios) > 0: _persona_map["Titular"]  = _usuarios[0]
+        if len(_usuarios) > 1: _persona_map["Adicional"] = _usuarios[1]
+
+        needs_flip = parser_key not in _CC_FUENTES
+
+        records = []
+        for g in gastos:
+            eff_monto = -float(g.monto) if (needs_flip and g.monto != 0) else float(g.monto)
+            cat = categorize_by_rules(g.descripcion, monto=eff_monto, fuente=fuente_target)
+            fuente_cat = "regla" if cat else None
+            d = g.model_dump()
+            d["categoria"]        = cat
+            d["categoria_fuente"] = fuente_cat
+            d["fuente"]           = fuente_target
+            if needs_flip and d["monto"] != 0:
+                d["monto"] = -float(d["monto"])
+            if g.usuario is not None:
+                d["usuario"] = _persona_map.get(g.usuario, g.usuario)
+            else:
+                assigned = None
+                if reglas_usuario:
+                    desc_upper = g.descripcion.upper()
+                    for rule in reglas_usuario:
+                        palabras = rule.get("palabras", [])
+                        if palabras and any(p.upper() in desc_upper for p in palabras):
+                            assigned = rule.get("usuario") or None
+                            break
+                d["usuario"] = assigned if assigned else usuario_default
+            records.append(d)
+
+        fechas      = [str(r.get("fecha", ""))[:7] for r in records if r.get("fecha")]
+        mes_resumen = Counter(fechas).most_common(1)[0][0] if fechas else None
+
+        fecha_venc     = getattr(PARSERS[parser_key], "fecha_vencimiento", None)
+        stmt_ars       = getattr(PARSERS[parser_key], "stmt_total_ars",    None)
+        stmt_usd       = getattr(PARSERS[parser_key], "stmt_total_usd",    None)
+        proximo_cierre = getattr(PARSERS[parser_key], "proximo_cierre",    None)
+        proximo_venc   = getattr(PARSERS[parser_key], "proximo_venc",      None)
+
+        import_info = {
+            "fuente":         fuente_target,
+            "archivo":        filename,
+            "mes_resumen":    mes_resumen,
+            "fecha_venc":     str(fecha_venc)     if fecha_venc     else None,
+            "total_ars":      float(stmt_ars)      if stmt_ars       else None,
+            "total_usd":      float(stmt_usd)      if stmt_usd       else None,
+            "proximo_cierre": str(proximo_cierre)  if proximo_cierre else None,
+            "proximo_venc":   str(proximo_venc)    if proximo_venc   else None,
+        }
+        count = insert_gastos(records, import_info=import_info)
+        log_fn(f"  [import] {filename}: {count} gastos insertados (mes={mes_resumen})")
+
+        _RESUMEN_PARSERS = frozenset({"amex", "bbva_mc", "bbva_visa", "bbva_cuenta"})
+        if parser_key in _RESUMEN_PARSERS:
+            deduped = consolidate_scraper_duplicates(fuente_target, records)
+            if deduped:
+                log_fn(f"  [import] {filename}: {deduped} duplicado(s) de scraper consolidados")
+
+        return count
+
+    def _scrape_resumenes_cuenta(self, driver, config: dict, log_fn) -> None:
+        """
+        Descarga e importa el resumen PDF más reciente de la Caja de Ahorro Pesos.
+        Llamado desde scrape() cuando auto_resumenes está activo.
+        """
+        from db import importacion_exists
+
+        log_fn("Buscando resúmenes PDF de Caja de Ahorro…")
+        extractos = self._fetch_extractos(driver, log_fn)
+        if not extractos:
+            return
+
+        for ex in extractos:
+            detalle = (ex.get("detalle") or "").upper()
+            reporte = (ex.get("reporte") or "").strip()
+            if not reporte:
+                continue
+            if not ("CAJA DE AHORROS" in detalle and "PESOS" in detalle and "EUROS" not in detalle):
+                continue
+
+            fuente_target = "bbva_cuenta"
+            filename      = f"BBVA_CUENTA_ARS_{reporte}_auto.pdf"
+
+            if importacion_exists(fuente_target, filename):
+                log_fn(f"  [cuenta] al día ({ex.get('fechaCierre')})")
+                return
+
+            log_fn(f"  [cuenta] descargando resumen {ex.get('fechaCierre')} (reporte={reporte})…")
+            pdf_bytes = self._fetch_pdf_bytes(driver, reporte, log_fn)
+            if not pdf_bytes:
+                return
+
+            log_fn(f"  [cuenta] PDF descargado ({len(pdf_bytes):,} bytes), importando…")
+            self._import_resumen(pdf_bytes, filename, "bbva_cuenta", fuente_target, config, log_fn)
+            return  # solo el más reciente
