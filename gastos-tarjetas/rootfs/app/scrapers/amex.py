@@ -24,6 +24,7 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
+from typing import Optional
 
 from .base import BaseScraper, MovimientoRaw, ScraperResult
 
@@ -35,6 +36,10 @@ _ACCOUNT_SUMMARY = (
     "https://global.americanexpress.com/myca/intl/acctsumm/canlac/"
     "accountSummary.do?request_type=&Face=es_AR"
 )
+
+_STATEMENTS_PAGE = "https://global.americanexpress.com/statements"
+_EP_DOC_INFO     = "/servicing/v1/documents/info/statements"
+_EP_DOC_DL       = "/servicing/v1/documents/statements"
 
 _STATEMENT_URL = (
     "https://global.americanexpress.com/myca/intl/estatement/canlac/"
@@ -243,6 +248,13 @@ class AmexScraper(BaseScraper):
                 msg = f"Error scrapeando '{producto['nombre']}': {exc}"
                 logger.error("[amex] %s", msg, exc_info=True)
                 log_lines.append(f"✗ {msg}")
+
+        if config.get("auto_resumenes"):
+            try:
+                self._scrape_resumenes(driver, config, log_lines.append)
+            except Exception as exc:
+                logger.error("[amex] _scrape_resumenes: %s", exc, exc_info=True)
+                log_lines.append(f"✗ Error descargando resúmenes: {exc}")
 
         saldos: dict = {}
         if saldo_ars_total or saldo_usd_total:
@@ -639,6 +651,286 @@ class AmexScraper(BaseScraper):
         except Exception as exc:
             logger.warning("[amex] Error parseando fila: %s", exc)
             return None
+
+    # ── Auto-descarga de resúmenes PDF ────────────────────────────────────────
+
+    def _scrape_resumenes(self, driver, config: dict, log_fn) -> None:
+        """Descarga e importa el resumen PDF más reciente de AMEX."""
+        from db import importacion_exists
+
+        log_fn("Buscando resumen PDF AMEX…")
+
+        # Navegar a la página de resúmenes (One App SPA redirige con account_key)
+        try:
+            driver.get(_STATEMENTS_PAGE)
+            time.sleep(8)  # One App SPA necesita tiempo para bootstrapear y llamar las APIs
+        except Exception as exc:
+            log_fn(f"  [amex-pdf] error navegando a /statements: {exc}")
+            return
+
+        # Leer account_key y account_token del estado del browser
+        session_info = driver.execute_script("""
+        (function() {
+            var params = new URLSearchParams(window.location.search);
+            var account_key = params.get('account_key');
+            var account_token = null;
+            // Cookie (non-HttpOnly)
+            var ck = document.cookie.split(';');
+            for (var i = 0; i < ck.length; i++) {
+                var p = ck[i].trim();
+                if (p.startsWith('account_token=')) {
+                    account_token = p.slice('account_token='.length);
+                    break;
+                }
+            }
+            // localStorage
+            if (!account_token) {
+                try { account_token = localStorage.getItem('account_token'); } catch(e) {}
+            }
+            // sessionStorage
+            if (!account_token) {
+                try { account_token = sessionStorage.getItem('account_token'); } catch(e) {}
+            }
+            return {href: window.location.href, account_key: account_key, account_token: account_token};
+        })();
+        """) or {}
+
+        account_key   = session_info.get("account_key")
+        account_token = session_info.get("account_token")
+        href          = session_info.get("href", "")
+        log_fn(f"  [amex-pdf] URL={href[:80]}")
+        log_fn(f"  [amex-pdf] account_key={'ok' if account_key else 'no encontrado'}, "
+               f"account_token={'ok' if account_token else 'no encontrado'}")
+
+        # Obtener lista de resúmenes
+        statements = self._fetch_amex_statements(driver, account_token, log_fn)
+        if not statements:
+            return
+
+        log_fn(f"  [amex-pdf] {len(statements)} resúmenes disponibles")
+
+        for stmt in statements:
+            stmt_id   = (stmt.get("statementId") or stmt.get("id") or
+                         stmt.get("documentId") or "").strip()
+            stmt_date = (stmt.get("statementEndDate") or stmt.get("endDate") or
+                         stmt.get("date") or "").strip()
+            if not stmt_id:
+                continue
+
+            filename = f"AMEX_{stmt_date}_{stmt_id[:16]}_auto.pdf"
+            if importacion_exists("amex", filename):
+                log_fn(f"  [amex-pdf] al día ({stmt_date})")
+                break  # los resúmenes vienen del más reciente al más antiguo
+
+            log_fn(f"  [amex-pdf] descargando {stmt_date} (id={stmt_id[:16]})…")
+            pdf_bytes = self._fetch_amex_pdf(driver, account_key, stmt_id,
+                                             account_token, stmt, log_fn)
+            if pdf_bytes:
+                count = self._import_resumen_amex(pdf_bytes, filename, log_fn)
+                log_fn(f"  [amex-pdf] {filename}: {count} gastos importados")
+            break  # máximo un resumen por run
+
+    def _fetch_amex_statements(self, driver, account_token: Optional[str], log_fn) -> list:
+        """GET /servicing/v1/documents/info/statements → lista de resúmenes."""
+        js = """
+        var account_token = arguments[0];
+        var cb = arguments[arguments.length - 1];
+        var headers = {
+            'accept': 'application/json',
+            'content-type': 'application/json',
+            'client_id': 'OneAmex'
+        };
+        if (account_token) headers['account_token'] = account_token;
+        fetch('/servicing/v1/documents/info/statements', {
+            method: 'GET',
+            headers: headers,
+            credentials: 'include'
+        })
+        .then(function(r) {
+            return r.json().then(function(d) { cb({status: r.status, data: d}); });
+        })
+        .catch(function(e) { cb({status: 0, error: String(e)}); });
+        """
+        try:
+            driver.set_script_timeout(30)
+            result = driver.execute_async_script(js, account_token) or {}
+        except Exception as exc:
+            log_fn(f"  [amex-pdf] error obteniendo lista de resúmenes: {exc}")
+            return []
+
+        if result.get("error") or result.get("status") != 200:
+            log_fn(f"  [amex-pdf] HTTP {result.get('status')} — {str(result.get('error',''))[:100]}")
+            return []
+
+        data = result.get("data") or {}
+        # La respuesta puede ser lista directa o tener una clave contenedora
+        if isinstance(data, list):
+            return data
+        for key in ("statementList", "statements", "documents", "data"):
+            v = data.get(key)
+            if isinstance(v, list):
+                return v
+        log_fn(f"  [amex-pdf] estructura desconocida: {str(data)[:200]}")
+        return []
+
+    def _fetch_amex_pdf(
+        self,
+        driver,
+        account_key: Optional[str],
+        stmt_id: str,
+        account_token: Optional[str],
+        stmt_meta: dict,
+        log_fn,
+    ) -> Optional[bytes]:
+        """Descarga el PDF de un resumen AMEX como bytes."""
+        import base64 as _b64
+
+        # Construir URL de descarga; también intentar si el objeto stmt incluye una
+        dl_url = stmt_meta.get("downloadUrl") or stmt_meta.get("pdfUrl") or stmt_meta.get("url") or ""
+        if not dl_url:
+            params = f"?statementId={stmt_id}"
+            if account_key:
+                params += f"&account_key={account_key}"
+            dl_url = _EP_DOC_DL + params
+
+        js = """
+        var dl_url       = arguments[0];
+        var account_token = arguments[1];
+        var cb = arguments[arguments.length - 1];
+        var headers = {};
+        if (account_token) headers['account_token'] = account_token;
+        fetch(dl_url, {method: 'GET', headers: headers, credentials: 'include'})
+        .then(function(r) {
+            return r.arrayBuffer().then(function(buf) {
+                if (!buf || buf.byteLength === 0) {
+                    cb({status: r.status, base64: '', error: 'empty'});
+                    return;
+                }
+                var bytes = new Uint8Array(buf);
+                var str = '';
+                var CHUNK = 8192;
+                for (var i = 0; i < bytes.length; i += CHUNK)
+                    str += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+                cb({status: r.status, base64: btoa(str)});
+            });
+        })
+        .catch(function(e) { cb({status: 0, base64: '', error: String(e)}); });
+        """
+        try:
+            driver.set_script_timeout(60)
+            result = driver.execute_async_script(js, dl_url, account_token) or {}
+        except Exception as exc:
+            log_fn(f"  [amex-pdf] error descargando PDF: {exc}")
+            return None
+
+        if result.get("error") or result.get("status") not in (200, 201):
+            log_fn(f"  [amex-pdf] PDF HTTP {result.get('status')} — {str(result.get('error',''))[:100]}")
+            return None
+
+        b64 = result.get("base64") or ""
+        if not b64:
+            log_fn("  [amex-pdf] respuesta PDF vacía")
+            return None
+        try:
+            pdf_bytes = _b64.b64decode(b64)
+        except Exception as exc:
+            log_fn(f"  [amex-pdf] error decodificando base64: {exc}")
+            return None
+        if not pdf_bytes.startswith(b"%PDF"):
+            log_fn(f"  [amex-pdf] respuesta no es PDF: {pdf_bytes[:20]!r}")
+            return None
+        return pdf_bytes
+
+    def _import_resumen_amex(self, pdf_bytes: bytes, filename: str, log_fn) -> int:
+        """Parsea un PDF de resumen AMEX e importa los gastos al DB."""
+        import io
+        from collections import Counter
+        from db import insert_gastos, importacion_exists, importacion_exists_mes, _conn as _db_conn
+        from parsers import PARSERS
+        from categorizer import categorize_by_rules
+        from user_config import read_user_config
+        from scrapers_db import consolidate_scraper_duplicates
+
+        fuente_target = "amex"
+        if importacion_exists(fuente_target, filename):
+            log_fn(f"  [amex-pdf] {filename} ya importado")
+            return 0
+
+        try:
+            gastos = PARSERS["amex"].parse(io.BytesIO(pdf_bytes), filename)
+        except Exception as exc:
+            log_fn(f"  [amex-pdf] error parseando {filename}: {exc}")
+            return 0
+
+        if not gastos:
+            log_fn(f"  [amex-pdf] {filename}: sin movimientos")
+            return 0
+
+        log_fn(f"  [amex-pdf] {filename}: {len(gastos)} movimientos parseados")
+
+        # Chequear si este mes ya fue importado manualmente con otro nombre de archivo
+        _fechas_tmp = [str(g.fecha)[:7] for g in gastos]
+        mes_resumen_check = Counter(_fechas_tmp).most_common(1)[0][0] if _fechas_tmp else None
+        if mes_resumen_check and importacion_exists_mes(fuente_target, mes_resumen_check):
+            log_fn(f"  [amex-pdf] {filename}: mes {mes_resumen_check} ya importado — stub registrado")
+            with _db_conn() as _c:
+                _c.execute(
+                    "INSERT INTO importaciones (fuente, archivo, mes_resumen, cantidad) VALUES (?,?,?,0)",
+                    (fuente_target, filename, mes_resumen_check),
+                )
+            return 0
+
+        user_cfg        = read_user_config()
+        usuario_default = user_cfg["fuente_usuario"].get("amex")
+        reglas_usuario  = user_cfg.get("reglas_usuario", [])
+        _usuarios       = user_cfg.get("usuarios", ["Titular", "Adicional"])
+        _persona_map    = {}
+        if len(_usuarios) > 0: _persona_map["Titular"]  = _usuarios[0]
+        if len(_usuarios) > 1: _persona_map["Adicional"] = _usuarios[1]
+
+        records = []
+        for g in gastos:
+            cat, fuente_cat = categorize_by_rules(g.descripcion, monto=float(g.monto), fuente=fuente_target)
+            d = g.model_dump()
+            d["categoria"]        = cat
+            d["categoria_fuente"] = fuente_cat
+            d["fuente"]           = fuente_target
+            if g.usuario is not None:
+                d["usuario"] = _persona_map.get(g.usuario, g.usuario)
+            else:
+                assigned = None
+                if reglas_usuario:
+                    desc_upper = g.descripcion.upper()
+                    for rule in reglas_usuario:
+                        palabras = rule.get("palabras", [])
+                        if palabras and any(p.upper() in desc_upper for p in palabras):
+                            assigned = rule.get("usuario") or None
+                            break
+                d["usuario"] = assigned if assigned else usuario_default
+            records.append(d)
+
+        fechas      = [str(r.get("fecha", ""))[:7] for r in records if r.get("fecha")]
+        mes_resumen = Counter(fechas).most_common(1)[0][0] if fechas else None
+
+        parser      = PARSERS["amex"]
+        import_info = {
+            "fuente":         fuente_target,
+            "archivo":        filename,
+            "mes_resumen":    mes_resumen,
+            "fecha_venc":     str(getattr(parser, "fecha_vencimiento", None) or "") or None,
+            "total_ars":      float(getattr(parser, "stmt_total_ars", None) or 0) or None,
+            "total_usd":      float(getattr(parser, "stmt_total_usd", None) or 0) or None,
+            "proximo_cierre": str(getattr(parser, "proximo_cierre", None) or "") or None,
+            "proximo_venc":   str(getattr(parser, "proximo_venc",   None) or "") or None,
+        }
+        count = insert_gastos(records, import_info=import_info)
+        log_fn(f"  [amex-pdf] {filename}: {count} gastos insertados (mes={mes_resumen})")
+
+        deduped = consolidate_scraper_duplicates(fuente_target, records)
+        if deduped:
+            log_fn(f"  [amex-pdf] {filename}: {deduped} duplicado(s) de scraper consolidados")
+
+        return count
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

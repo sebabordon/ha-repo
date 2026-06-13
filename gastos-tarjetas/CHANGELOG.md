@@ -1,3 +1,7 @@
+## 0.8.78
+
+- **AMEX: auto-descarga de resúmenes PDF** (`scrapers/amex.py`, `scraper_credentials.py`): nueva opción "Descargar resúmenes PDF automáticamente" en la config del scraper AMEX. Cuando está activa, en cada run el scraper navega a la sección Resúmenes del portal moderno de AMEX, obtiene la lista de resúmenes vía `GET /servicing/v1/documents/info/statements` y descarga el más reciente como PDF binario (igual técnica que BBVA: `arrayBuffer()` + `btoa()` en el browser). Antes de importar, verifica por nombre de archivo (`importacion_exists`) y por mes (`importacion_exists_mes`) para no duplicar resúmenes ya subidos manualmente. La importación aplica categorización por reglas y llama a `consolidate_scraper_duplicates`.
+
 ## 0.8.77
 
 - **BBVA Tarjetas: corrección detección de resúmenes ya importados manualmente** (`scrapers/bbva_tarjetas.py`, `db.py`): la lógica de v0.8.76 derivaba el `mes_resumen` a partir de `fechaCierre` del extracto, lo cual era incorrecto para Mastercard (cierra el 21, así que las transacciones son en su mayoría del mes anterior). Ahora el chequeo de mes se hace *después* de parsear el PDF, usando el mes más frecuente entre las fechas reales de las transacciones, igual que hace `upload.py`. El scraper sólo registra el stub en `importaciones` y retorna 0 si ese `(fuente, mes_resumen)` ya existe.

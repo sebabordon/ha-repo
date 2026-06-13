@@ -32,6 +32,13 @@ BANKS: dict[str, dict] = {
         "campos": [
             {"key": "usuario",  "label": "Usuario (email)",  "type": "text",     "required": True},
             {"key": "password", "label": "Contraseña",       "type": "password", "required": True},
+            {
+                "key":      "auto_resumenes",
+                "label":    "Descargar resúmenes PDF automáticamente",
+                "type":     "checkbox",
+                "required": False,
+                "hint":     "Si está activo, en cada run el scraper navega a la sección Resúmenes de AMEX, descarga el PDF más reciente y lo importa directo a Gastos (equivalente a subirlo manualmente).",
+            },
         ],
     },
     "bbva": {
