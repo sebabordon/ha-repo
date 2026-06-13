@@ -1,3 +1,7 @@
+## 0.9.7
+
+- **Refresco unificado del frontend tras cambios de datos** (`static/app.js`): varios handlers refrescaban solo una parte de la UI, dejando la grilla de Gastos, los gráficos de la solapa Gráficos (donut + presupuesto vs real) o el autocomplete de categorías desactualizados hasta cambiar de solapa o recargar. Se agrega un helper `refreshAfterDataChange()` que recarga todo el set relevante (gastos, gráfico mensual, gráficos por categoría, presupuesto vs real, saldos, jerarquía+categorías, importaciones, vencimientos, cuentas) y se cablea en todos los puntos de mutación: corrida de scraper (antes solo refrescaba cuentas+saldos → ahora también gastos y gráficos), import de PDF y borrado masivo (faltaban los gráficos de la solapa), guardar categorías en Config (antes no refrescaba `_catList`/jerarquía → la categoría nueva no aparecía en la grilla ni se podía asignar), alta de movimiento manual, borrado individual, aplicar reglas, marcar/desmarcar transferencias y toggle de especiales. La edición de una sola celda (`saveCategoria`) refresca solo los gráficos (no `loadGastos`) para no perder ediciones en curso de otras filas.
+
 ## 0.9.6
 
 - **Autocomplete de categorías: no se cierra al usar su scrollbar** (`static/app.js`): el dropdown (`.cat-ac`) tiene scroll propio (max-height 220px); al arrastrar su barra el `mousedown` caía sobre el contenedor, el input perdía foco y el `blur` lo cerraba. Ahora un `mousedown` sobre el contenedor (no sobre un item) hace `preventDefault` para no soltar el foco, así se puede scrollear la lista sin que desaparezca.

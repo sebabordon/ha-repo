@@ -514,7 +514,7 @@ async function saveEspecialesConfig() {
     });
     if (r.ok) {
       if (msgEl) { msgEl.style.color = "#16a34a"; msgEl.textContent = "Guardado ✓"; setTimeout(() => { msgEl.textContent = ""; }, 2500); }
-      loadGastos(); loadMonthlyChart();   // los totales/gráficos cambian al excluir distinto
+      refreshAfterDataChange();   // los totales/gráficos cambian al excluir distinto
     }
   } catch (e) { console.warn("saveEspecialesConfig:", e); }
 }
@@ -2112,6 +2112,26 @@ function sortGastos(col) {
   _renderGastos();
 }
 
+// Refresco unificado tras un cambio de datos amplio (importación, corrida de
+// scraper, ABM de categorías, alta/baja de movimientos, aplicar reglas, marcar
+// transferencias). Cada load* es un fetch independiente; llamarlos todos juntos
+// evita el clásico "me olvidé de refrescar X". loadHierarchy va antes de
+// loadCategorias porque este último usa la jerarquía (_catHierarchy).
+// OJO: no usar en la edición de UNA celda de la grilla (saveCategoria / fecha /
+// usuario): loadGastos re-renderiza la tabla y perdería ediciones en curso de
+// otras filas. Para esos casos refrescar solo los gráficos.
+function refreshAfterDataChange() {
+  loadGastos();
+  loadMonthlyChart();
+  loadCharts();
+  loadBudgetChart();
+  loadSaldos();
+  loadHierarchy().then(loadCategorias);
+  loadImportaciones();
+  loadVencimientos?.();
+  loadCuentas();
+}
+
 async function loadGastos() {
   const res  = await fetch(`${BASE}/api/gastos?${_gastosParams()}`);
   _gastosData = await res.json();
@@ -2401,7 +2421,8 @@ async function saveCategoria(id, btn) {
   if (res.ok) {
     input.classList.remove("dirty"); btn.classList.remove("btn-dirty");
     input.title = input.value.trim() ? "Fuente: manual" : "";
-    loadMonthlyChart();
+    // Solo gráficos: NO loadGastos (perdería ediciones en curso de otras filas).
+    loadMonthlyChart(); loadCharts(); loadBudgetChart();
     const data = await res.json();
     if (data.sugerencia_keyword && data.categoria) {
       const kw      = data.sugerencia_keyword.split(/\s+/).slice(0, 3).join(" ").toLowerCase();
@@ -2602,7 +2623,7 @@ document.getElementById("btn-save-new-mov").addEventListener("click", async () =
     document.getElementById("nm-monto").value = "";
     document.getElementById("nm-cat").value   = "";
     showToast("Movimiento guardado.", "ok");
-    loadGastos(); loadSaldos(); loadMonthlyChart();
+    refreshAfterDataChange();
   } else {
     showToast("Error al guardar.", "err");
   }
@@ -2985,7 +3006,7 @@ async function twMarkSingle() {
   if (!res.ok) { showToast("Error al marcar", "err"); return; }
   showToast("Marcado como transferencia (suelto)", "ok");
   await loadTransferWorkspace();
-  loadGastos(); loadMonthlyChart();
+  refreshAfterDataChange();
 }
 
 function twRemoveFromQueue(idx) {
@@ -3061,7 +3082,7 @@ async function twConfirm() {
   }
   showToast(`✓ ${total} movimientos marcados`, "ok");
   await loadTransferWorkspace();
-  loadGastos(); loadMonthlyChart();
+  refreshAfterDataChange();
 }
 
 async function twUnmark(ids) {
@@ -3082,7 +3103,7 @@ async function twUnmark(ids) {
   } else {
     showToast("Desmarcado", "ok");
   }
-  loadGastos(); loadMonthlyChart();
+  refreshAfterDataChange();
 }
 
 function renderTwExisting() {
@@ -3307,7 +3328,7 @@ document.getElementById("btn-delete-all").addEventListener("click", () => {
       showToast(`✓ ${data.eliminados} movimientos eliminados`, "ok");
       // Reset select to placeholder so it can't be accidentally re-fired
       document.getElementById("delete-target").value = "";
-      loadGastos(); loadMonthlyChart(); loadCategorias(); loadImportaciones(); loadVencimientos();
+      refreshAfterDataChange();
     } else { showToast("Error al borrar", "err", 0); }
   });
 });
@@ -5041,7 +5062,7 @@ async function _doActualUpload(fuente, file, msgEl) {
       msgEl.textContent = `✓ ${data.importados} importados (${data.total_parseados} parseados)`;
       msgEl.className = "cp-msg ok";
     }
-    loadGastos(); loadMonthlyChart(); loadCategorias(); loadSaldos(); loadImportaciones(); loadVencimientos?.();
+    refreshAfterDataChange();
   } catch (e) {
     if (msgEl) { msgEl.textContent = "✗ " + e.message; msgEl.className = "cp-msg err"; }
   }
@@ -5547,8 +5568,7 @@ async function runCuentaInstance(fuente, instanceId) {
     showToast("✗ " + e.message, "err");
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "▶ Ejecutar ahora"; }
-    loadCuentas();
-    loadSaldos();
+    refreshAfterDataChange();
   }
 }
 
@@ -5814,7 +5834,7 @@ async function deleteMovimiento(fuente, id) {
 async function deleteGasto(id) {
   showConfirm("¿Eliminar este gasto? Se elimina junto con su movimiento. Si es un duplicado no vuelve; si es un movimiento real, el scraper podría re-importarlo en la próxima corrida.", async () => {
     const res = await fetch(`${BASE}/api/gastos/${id}`, {method:"DELETE"});
-    if (res.ok) { loadGastos(); loadSaldos(); }
+    if (res.ok) { refreshAfterDataChange(); }
     else showToast("No se pudo eliminar el gasto.", "err");
   });
 }
@@ -7560,6 +7580,7 @@ async function saveCategoriasManaged() {
   if (res.ok) {
     showToast("✓ Categorías guardadas", "ok", 2000);
     loadCategoriasManaged();
+    refreshAfterDataChange();   // refresca _catList/jerarquía y la grilla de Gastos
   } else {
     showToast("❌ Error al guardar categorías", "err", 0);
   }
@@ -7576,7 +7597,7 @@ document.getElementById("btn-apply-rules-cat").addEventListener("click", async (
     const data = await res.json();
     if (res.ok) {
       showToast(`✓ ${data.categorizados} movimientos categorizados`, "ok", 4000);
-      loadGastos(); loadCategorias();
+      refreshAfterDataChange();
     } else {
       showToast(`❌ Error al aplicar reglas: ${data.detail || res.status}`, "err", 0);
     }
