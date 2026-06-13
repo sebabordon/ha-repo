@@ -1203,10 +1203,45 @@ class BbvaScraper(BaseScraper):
     _EP_VIEWER_PDF = "/seguridad/viewerAdobePdf/verificacion"
     _SUMMARIES_URL = "https://online.bbva.com.ar/fnetcore/#/private/summaries"
 
-    def _fetch_extractos(self, driver, log_fn) -> list[dict]:
+    @staticmethod
+    def _resumenes_window(config: dict) -> tuple:
+        """
+        Devuelve (cutoff_date, [years]) según el config 'resumenes_meses'.
+
+        Se importan resúmenes con fechaCierre >= cutoff. `years` cubre el cruce de
+        año (ej. en enero con meses=3 hay que consultar también el año anterior).
+        Default 1 mes; se clampa a 1..24.
+        """
+        from datetime import date
+        try:
+            meses = int(str(config.get("resumenes_meses") or "1").strip())
+        except (TypeError, ValueError):
+            meses = 1
+        meses = max(1, min(meses, 24))
+        today = date.today()
+        m, y = today.month - meses, today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        cutoff = date(y, m, 1)
+        years  = list(range(cutoff.year, today.year + 1))
+        return cutoff, years
+
+    @staticmethod
+    def _parse_cierre(s):
+        """Parsea fechaCierre 'DD/MM/YYYY' a date; None si no parsea."""
+        from datetime import datetime
+        try:
+            return datetime.strptime(str(s).strip(), "%d/%m/%Y").date()
+        except Exception:
+            return None
+
+    def _fetch_extractos(self, driver, log_fn, years=None) -> list[dict]:
         """
         POST /extractos/extractos {"fecha":"YYYY"} → lista de resúmenes.
         Devuelve la lista de extractos (cada uno con 'reporte', 'fechaCierre', 'detalle').
+        Si `years` trae varios años, consulta cada uno y concatena (para backfill que
+        cruza el cambio de año). Default: solo el año actual.
 
         BBVA bloquea este endpoint (statusCode=500) si el SPA Angular no fue
         navegado a la sección "Resúmenes" primero.  El flujo que BBVA espera:
@@ -1215,7 +1250,10 @@ class BbvaScraper(BaseScraper):
           3. POST /extractos/extractos — ahora acepta la request
         """
         from datetime import datetime
-        year = str(datetime.now().year)
+        if years is None:
+            years = [str(datetime.now().year)]
+        else:
+            years = [str(y) for y in years]
 
         log_fn("  [extractos] navegando a sección Resúmenes del SPA…")
         try:
@@ -1226,21 +1264,24 @@ class BbvaScraper(BaseScraper):
 
         self._api_request(driver, self._EP_VIEWER_PDF)
 
-        resp = self._api_request(
-            driver, self._EP_EXTRACTOS, method="POST", json_body={"fecha": year}
-        )
-        if resp["status"] != 200 or not resp["json"]:
-            log_fn(f"  [extractos] HTTP {resp['status']} — {resp['body'][:200]}")
-            return []
-        sc = str(resp["json"].get("statusCode") or "")
-        extractos = ((resp["json"].get("result") or {}).get("extractos") or [])
-        if extractos:
-            log_fn(f"  [extractos] {len(extractos)} resúmenes en la API (año {year}):")
-            for ex in extractos:
-                log_fn(f"    • {ex.get('detalle','?')} — cierre {ex.get('fechaCierre','?')} (reporte={ex.get('reporte','?')})")
-        else:
-            log_fn(f"  [extractos] lista vacía (statusCode={sc}) — body: {resp['body'][:500]}")
-        return extractos
+        all_extractos: list[dict] = []
+        for year in years:
+            resp = self._api_request(
+                driver, self._EP_EXTRACTOS, method="POST", json_body={"fecha": year}
+            )
+            if resp["status"] != 200 or not resp["json"]:
+                log_fn(f"  [extractos] año {year}: HTTP {resp['status']} — {resp['body'][:200]}")
+                continue
+            sc = str(resp["json"].get("statusCode") or "")
+            extractos = ((resp["json"].get("result") or {}).get("extractos") or [])
+            if extractos:
+                log_fn(f"  [extractos] {len(extractos)} resúmenes en la API (año {year}):")
+                for ex in extractos:
+                    log_fn(f"    • {ex.get('detalle','?')} — cierre {ex.get('fechaCierre','?')} (reporte={ex.get('reporte','?')})")
+            else:
+                log_fn(f"  [extractos] año {year}: lista vacía (statusCode={sc}) — body: {resp['body'][:300]}")
+            all_extractos.extend(extractos)
+        return all_extractos
 
     def _fetch_pdf_bytes(self, driver, reporte: str, log_fn) -> Optional[bytes]:
         """
@@ -1436,16 +1477,22 @@ class BbvaScraper(BaseScraper):
 
     def _scrape_resumenes_cuenta(self, driver, config: dict, log_fn) -> None:
         """
-        Descarga e importa el resumen PDF más reciente de la Caja de Ahorro Pesos.
-        Llamado desde scrape() cuando auto_resumenes está activo.
+        Descarga e importa los resúmenes PDF de la Caja de Ahorro Pesos dentro de
+        la ventana configurada ('resumenes_meses', default 1 = solo el más reciente).
+        Los ya importados se saltean. Llamado desde scrape() cuando auto_resumenes
+        está activo.
         """
+        from datetime import date
         from db import importacion_exists
 
-        log_fn("Buscando resúmenes PDF de Caja de Ahorro…")
-        extractos = self._fetch_extractos(driver, log_fn)
+        cutoff, years = self._resumenes_window(config)
+        log_fn(f"Buscando resúmenes PDF de Caja de Ahorro (desde {cutoff.isoformat()})…")
+        extractos = self._fetch_extractos(driver, log_fn, years=years)
         if not extractos:
             return
 
+        # Filtrar a CAJA DE AHORROS PESOS dentro de la ventana, más reciente primero
+        candidatos = []
         for ex in extractos:
             detalle = (ex.get("detalle") or "").upper()
             reporte = (ex.get("reporte") or "").strip()
@@ -1453,19 +1500,30 @@ class BbvaScraper(BaseScraper):
                 continue
             if not ("CAJA DE AHORROS" in detalle and "PESOS" in detalle and "EUROS" not in detalle):
                 continue
+            cierre = self._parse_cierre(ex.get("fechaCierre"))
+            if cierre and cierre < cutoff:
+                continue
+            candidatos.append((cierre or date.min, ex))
+        candidatos.sort(key=lambda t: t[0], reverse=True)
 
-            fuente_target = "bbva_cuenta"
-            filename      = f"BBVA_CUENTA_ARS_{reporte}_auto.pdf"
+        fuente_target = "bbva_cuenta"
+        importados = 0
+        for _cierre, ex in candidatos:
+            reporte  = (ex.get("reporte") or "").strip()
+            filename = f"BBVA_CUENTA_ARS_{reporte}_auto.pdf"
 
             if importacion_exists(fuente_target, filename):
                 log_fn(f"  [cuenta] al día ({ex.get('fechaCierre')})")
-                return
+                continue
 
             log_fn(f"  [cuenta] descargando resumen {ex.get('fechaCierre')} (reporte={reporte})…")
             pdf_bytes = self._fetch_pdf_bytes(driver, reporte, log_fn)
             if not pdf_bytes:
-                return
+                continue
 
             log_fn(f"  [cuenta] PDF descargado ({len(pdf_bytes):,} bytes), importando…")
             self._import_resumen(pdf_bytes, filename, "bbva_cuenta", fuente_target, config, log_fn)
-            return  # solo el más reciente
+            importados += 1
+
+        if importados:
+            log_fn(f"  [cuenta] {importados} resumen(es) nuevos importados")

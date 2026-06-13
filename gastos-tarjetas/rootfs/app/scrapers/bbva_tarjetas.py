@@ -387,59 +387,60 @@ class BbvaTarjetasScraper(BbvaScraper):
         log_fn,
     ) -> None:
         """
-        Revisa si hay resúmenes VISA/MC/Cuenta nuevos y los importa.
-        Por cada producto importa como máximo el resumen más reciente que
-        aún no esté en importaciones.
+        Revisa si hay resúmenes VISA/MC nuevos y los importa, dentro de la ventana
+        configurada ('resumenes_meses', default 1 = solo el más reciente por tipo).
+        Los ya importados se saltean.
         """
+        from datetime import date
         from db import importacion_exists
 
-        log_fn("Buscando resúmenes PDF nuevos…")
-        extractos = self._fetch_extractos(driver, log_fn)
+        cutoff, years = self._resumenes_window(config)
+        log_fn(f"Buscando resúmenes PDF nuevos (desde {cutoff.isoformat()})…")
+        extractos = self._fetch_extractos(driver, log_fn, years=years)
         if not extractos:
             return
 
-        # "importado" per tipo para no procesar más de uno por run si hay varios nuevos
-        done: set[str] = set()
-
+        # Filtrar a VISA/MC dentro de la ventana, más reciente primero
+        candidatos = []
         for ex in extractos:
             detalle = (ex.get("detalle") or "").upper()
             reporte = (ex.get("reporte") or "").strip()
             if not reporte:
                 continue
-
             if "VISA" in detalle and "MASTERCARD" not in detalle:
-                product_key = "VISA"
-                parser_key  = "bbva_visa"
+                product_key, parser_key = "VISA", "bbva_visa"
             elif "MASTERCARD" in detalle:
-                product_key = "MC"
-                parser_key  = "bbva_mc"
+                product_key, parser_key = "MC", "bbva_mc"
             else:
                 continue
-
-            if product_key in done:
+            cierre = self._parse_cierre(ex.get("fechaCierre"))
+            if cierre and cierre < cutoff:
                 continue
+            candidatos.append((cierre or date.min, product_key, parser_key, ex))
+        candidatos.sort(key=lambda t: t[0], reverse=True)
 
+        importados = 0
+        for _cierre, product_key, parser_key, ex in candidatos:
+            reporte       = (ex.get("reporte") or "").strip()
             fuente_target = product_to_fuente.get(product_key, parser_key)
             filename      = f"BBVA_{product_key}_{reporte}_auto.pdf"
 
             # Chequeo rápido por reporte ID: ya fue auto-importado en un run anterior
             if importacion_exists(fuente_target, filename):
                 log_fn(f"  [{product_key}] al día ({ex.get('fechaCierre')})")
-                done.add(product_key)
                 continue
 
             log_fn(f"  [{product_key}] descargando resumen {ex.get('fechaCierre')} (reporte={reporte})…")
             pdf_bytes = self._fetch_pdf_bytes(driver, reporte, log_fn)
             if not pdf_bytes:
-                done.add(product_key)
                 continue
 
             log_fn(f"  [{product_key}] PDF descargado ({len(pdf_bytes):,} bytes), importando…")
             self._import_resumen(pdf_bytes, filename, parser_key, fuente_target, config, log_fn)
-            done.add(product_key)
+            importados += 1
 
-            if len(done) == 2:
-                break
+        if importados:
+            log_fn(f"  [tarjetas] {importados} resumen(es) nuevos importados")
 
     # ── Parseo de transacciones ───────────────────────────────────────────────
 
