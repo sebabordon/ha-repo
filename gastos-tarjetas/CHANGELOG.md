@@ -1,3 +1,7 @@
+## 0.8.77
+
+- **BBVA Tarjetas: corrección detección de resúmenes ya importados manualmente** (`scrapers/bbva_tarjetas.py`, `db.py`): la lógica de v0.8.76 derivaba el `mes_resumen` a partir de `fechaCierre` del extracto, lo cual era incorrecto para Mastercard (cierra el 21, así que las transacciones son en su mayoría del mes anterior). Ahora el chequeo de mes se hace *después* de parsear el PDF, usando el mes más frecuente entre las fechas reales de las transacciones, igual que hace `upload.py`. El scraper sólo registra el stub en `importaciones` y retorna 0 si ese `(fuente, mes_resumen)` ya existe.
+
 ## 0.8.76
 
 - **BBVA Tarjetas: evitar reimportar resúmenes subidos manualmente** (`scrapers/bbva_tarjetas.py`, `db.py`): antes de descargar un resumen, el scraper ahora verifica si ya existe una importación para el mismo `(fuente, mes_resumen)` derivado de la `fechaCierre` del extracto. Si el usuario ya subió el PDF manualmente ese mes (con cualquier nombre de archivo), el scraper no vuelve a importarlo. Además registra el `reporte` ID en `importaciones` para que la siguiente ejecución entre por el chequeo rápido por nombre de archivo.

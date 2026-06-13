@@ -514,6 +514,21 @@ class BbvaTarjetasScraper(BbvaScraper):
 
         log_fn(f"  [import] {filename}: {len(gastos)} movimientos parseados")
 
+        # Determinar mes_resumen real (desde las transacciones parseadas, no desde fechaCierre)
+        # y chequear si ya fue importado manualmente con otro nombre de archivo.
+        _fechas_tmp = [str(g.fecha)[:7] for g in gastos]
+        mes_resumen_check = Counter(_fechas_tmp).most_common(1)[0][0] if _fechas_tmp else None
+        if mes_resumen_check:
+            from db import importacion_exists_mes, _conn as _db_conn
+            if importacion_exists_mes(fuente_target, mes_resumen_check):
+                log_fn(f"  [import] {filename}: mes {mes_resumen_check} ya importado manualmente — registrando stub y saliendo")
+                with _db_conn() as _c:
+                    _c.execute(
+                        "INSERT INTO importaciones (fuente, archivo, mes_resumen, cantidad) VALUES (?,?,?,0)",
+                        (fuente_target, filename, mes_resumen_check),
+                    )
+                return 0
+
         user_cfg        = read_user_config()
         usuario_default = user_cfg["fuente_usuario"].get(parser_key)
         reglas_usuario  = user_cfg.get("reglas_usuario", [])
@@ -590,7 +605,7 @@ class BbvaTarjetasScraper(BbvaScraper):
         Por cada tipo de tarjeta (VISA, MC) importa como máximo el resumen
         más reciente que aún no esté en importaciones.
         """
-        from db import importacion_exists, importacion_exists_mes
+        from db import importacion_exists
 
         log_fn("Buscando resúmenes PDF nuevos…")
         extractos = self._fetch_extractos(driver, log_fn)
@@ -621,27 +636,9 @@ class BbvaTarjetasScraper(BbvaScraper):
             fuente_target = product_to_fuente.get(product_key, parser_key)
             filename      = f"BBVA_{product_key}_{reporte}_auto.pdf"
 
-            # Chequear por reporte ID exacto
+            # Chequeo rápido por reporte ID: ya fue auto-importado en un run anterior
             if importacion_exists(fuente_target, filename):
                 log_fn(f"  [{product_key}] al día ({ex.get('fechaCierre')})")
-                done.add(product_key)
-                continue
-
-            # Chequear por mes: evita re-importar si el usuario ya subió el mismo
-            # resumen manualmente (donde archivo = el nombre del PDF descargado,
-            # distinto al nombre auto generado aquí).
-            fecha_cierre = ex.get("fechaCierre") or ""
-            mes_match = re.match(r"(\d{2})/(\d{2})/(\d{4})", fecha_cierre)
-            mes_resumen = f"{mes_match.group(3)}-{mes_match.group(2)}" if mes_match else None
-            if mes_resumen and importacion_exists_mes(fuente_target, mes_resumen):
-                log_fn(f"  [{product_key}] ya importado manualmente (mes={mes_resumen}), registrando reporte")
-                # Registrar el reporte ID para que el próximo run entre por el check rápido (sin query adicional)
-                from db import _conn as _db_conn
-                with _db_conn() as _c:
-                    _c.execute(
-                        "INSERT INTO importaciones (fuente, archivo, mes_resumen, cantidad) VALUES (?,?,?,0)",
-                        (fuente_target, filename, mes_resumen),
-                    )
                 done.add(product_key)
                 continue
 
