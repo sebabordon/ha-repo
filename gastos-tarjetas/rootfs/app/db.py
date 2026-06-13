@@ -1417,6 +1417,29 @@ def delete_scraper_gastos_batch(ids: list[int]) -> int:
     return deleted
 
 
+def delete_gasto_any(gasto_id: int) -> bool:
+    """
+    Borra cualquier gasto individual, sin importar el origen (manual, scraper, PDF).
+
+    Si el gasto tiene movimientos_raw vinculados (m.gasto_id), se eliminan también
+    (hard delete), igual que `delete_movimiento_raw`: así el scraper no lo vuelve a
+    importar en la próxima corrida. Pensado para quitar duplicados puntuales desde
+    la tab de Gastos sin recurrir a un borrado total de la cuenta.
+
+    Devuelve True si borró el gasto, False si no existía.
+    """
+    with _conn() as conn:
+        row = conn.execute("SELECT id FROM gastos WHERE id=?", (gasto_id,)).fetchone()
+        if not row:
+            return False
+        try:
+            conn.execute("DELETE FROM movimientos_raw WHERE gasto_id=?", (gasto_id,))
+        except sqlite3.OperationalError:
+            pass  # tabla movimientos_raw inexistente (sin scrapers) — nada que limpiar
+        conn.execute("DELETE FROM gastos WHERE id=?", (gasto_id,))
+    return True
+
+
 def monthly_summary(excluir_especiales: bool = True) -> list[dict]:
     """
     Returns month-by-month ARS totals.

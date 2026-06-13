@@ -2201,7 +2201,7 @@ function _renderGastos() {
       </td>
       <td class="col-act" style="white-space:nowrap">
         <button class="btn btn-sm btn-action" onclick="saveCategoria(${g.id},this)">✓</button>
-        ${g.tipo==="manual"?`<button class="btn btn-sm btn-action btn-danger" title="Eliminar movimiento manual" onclick="deleteGasto(${g.id})">✕</button>`:`<button class="btn btn-sm btn-action" style="visibility:hidden">✕</button>`}
+        <button class="btn btn-sm btn-action" title="Eliminar este gasto" style="opacity:.28" onmouseover="this.style.opacity=1;this.style.color='#b91c1c'" onmouseout="this.style.opacity=.28;this.style.color=''" onclick="deleteGasto(${g.id})">✕</button>
       </td>`;
 
     const catInput   = tr.querySelector(".cat-input");
@@ -5798,10 +5798,10 @@ async function deleteMovimiento(fuente, id) {
 }
 
 async function deleteGasto(id) {
-  showConfirm("¿Eliminar este movimiento manual?", async () => {
+  showConfirm("¿Eliminar este gasto? Si vino de un scraper, también se quita su movimiento para que no se re-importe.", async () => {
     const res = await fetch(`${BASE}/api/gastos/${id}`, {method:"DELETE"});
     if (res.ok) { loadGastos(); loadSaldos(); }
-    else showToast("No se puede eliminar (solo manuales).", "err");
+    else showToast("No se pudo eliminar el gasto.", "err");
   });
 }
 

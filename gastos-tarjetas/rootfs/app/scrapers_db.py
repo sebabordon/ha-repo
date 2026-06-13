@@ -926,17 +926,29 @@ def delete_movimiento_raw(raw_id: int) -> dict:
 
 def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
     """
-    Elimina gastos scraper duplicados tras subir un PDF.
+    Concilia gastos del scraper contra los gastos recién insertados desde un PDF.
 
-    Cuando el scraper auto-importó transacciones de un período abierto y luego
-    se sube el PDF del mismo período (ya cerrado), existen duplicados en gastos:
-    uno con archivo_origen='scraper' y otro recién insertado desde el PDF.
+    El PDF (período cerrado) es la fuente autoritativa: para cada transacción del
+    PDF se busca el gasto-scraper equivalente y se consolidan en uno solo.
 
-    Este función hace que el PDF "gane":
-      - Elimina el gasto con archivo_origen='scraper'
-      - Actualiza el movimiento_raw asociado a estado='matched' apuntando al PDF
+    Matching: fuente + moneda + monto (±0.02) + fecha (±5 días). NO se exige
+    similitud de descripción — el PDF suele traer una descripción genérica
+    ("Transferencia inmediata") mientras el scraper trae la específica
+    ("OPERACION EN EFECTIVO TARJE ... AV. CORDOBA"), y antes el gate de 60% de
+    similitud rompía el match y dejaba ambos registros. La similitud se usa solo
+    como desempate cuando hay varios candidatos del mismo monto en la ventana, y
+    el número de cuota (N/M) como discriminador fuerte para tarjetas.
 
-    Matching: mismo fuente+moneda, monto ±0.02, fecha ±5 días, descripción >60% similar.
+    Resultado de cada match:
+      - Gana el gasto-PDF (queda como 'Conciliado').
+      - Se preserva la categoría del scraper (regla de herencia).
+      - Si la descripción del PDF es genérica y la del scraper es específica, se
+        copia la específica al gasto-PDF (la mejor descripción gana).
+      - Se borra el gasto-scraper y su movimiento_raw pasa a 'matched'.
+
+    Matching uno-a-uno: cada gasto-PDF y cada gasto-scraper se usan a lo sumo una
+    vez, para no colapsar N transacciones del mismo monto en una sola.
+
     Devuelve la cantidad de duplicados de scraper eliminados.
     """
     import difflib
@@ -948,7 +960,11 @@ def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
     if not pdf_records:
         return 0
 
+    _eff_descs, _eff_prefixes = _load_dedup_config()
+
     eliminated = 0
+    used_pdf_ids:     set[int] = set()
+    used_scraper_ids: set[int] = set()
 
     for rec in pdf_records:
         try:
@@ -964,21 +980,24 @@ def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
         cuota_pdf = _CUOTA_RE.search(desc_pdf)
 
         with _conn() as conn:
-            # El gasto PDF recién insertado (el más reciente que NO es del scraper)
-            pdf_gasto = conn.execute(
-                """SELECT id, categoria, categoria_fuente FROM gastos
+            # Gasto-PDF: el más reciente que NO es del scraper, que matchee y no
+            # haya sido usado ya por otra fila del PDF (one-to-one).
+            pdf_rows = conn.execute(
+                """SELECT id, categoria, categoria_fuente, descripcion FROM gastos
                    WHERE fuente=? AND moneda=?
                      AND ABS(CAST(monto AS REAL) - ?) < 0.02
                      AND fecha BETWEEN ? AND ?
                      AND (archivo_origen IS NULL OR archivo_origen != 'scraper')
-                   ORDER BY id DESC LIMIT 1""",
+                   ORDER BY id DESC""",
                 (fuente, moneda, monto, date_from, date_to),
-            ).fetchone()
+            ).fetchall()
+            pdf_gasto = next((r for r in pdf_rows if r["id"] not in used_pdf_ids), None)
             if not pdf_gasto:
                 continue
-            pdf_gasto_id       = pdf_gasto["id"]
-            pdf_cat            = pdf_gasto["categoria"]
-            pdf_cat_fuente     = pdf_gasto["categoria_fuente"]
+            pdf_gasto_id   = pdf_gasto["id"]
+            pdf_cat        = pdf_gasto["categoria"]
+            pdf_cat_fuente = pdf_gasto["categoria_fuente"]
+            pdf_desc_raw   = str(pdf_gasto["descripcion"] or "").strip()
 
             # Gastos con archivo_origen='scraper' que matcheen la misma transacción
             scraper_candidates = conn.execute(
@@ -995,51 +1014,76 @@ def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
                 (fuente, moneda, monto, date_from, date_to, pdf_gasto_id),
             ).fetchall()
 
+            # Elegir el mejor candidato: descartar cuota distinta y, entre los que
+            # quedan, el de mayor similitud de descripción (desempate, no gate).
+            best       = None
+            best_ratio = -1.0
             for sc in scraper_candidates:
-                desc_sc   = str(sc["descripcion"]).lower().strip()
-                cuota_sc  = _CUOTA_RE.search(desc_sc)
-
+                if sc["gasto_id"] in used_scraper_ids:
+                    continue
+                desc_sc  = str(sc["descripcion"]).lower().strip()
+                cuota_sc = _CUOTA_RE.search(desc_sc)
                 # Tie-breaker: si ambos tienen N/M y son distintos → no es el mismo gasto
                 if cuota_sc and cuota_pdf and cuota_sc.group(1) != cuota_pdf.group(1):
                     continue
-
                 ratio = difflib.SequenceMatcher(None, desc_sc, desc_pdf).ratio()
-                if ratio < 0.60:
-                    continue
+                if ratio > best_ratio:
+                    best, best_ratio = sc, ratio
+            if best is None:
+                continue
 
-                # Preservar categoría del gasto-scraper en el gasto-PDF si corresponde.
-                # Regla: la categoría 'manual' del scraper siempre gana sobre la del PDF
-                # (salvo que el PDF también sea 'manual'). Una categoría por 'regla'
-                # del scraper se copia solo si el PDF no tiene ninguna.
-                sc_cat        = sc["categoria"]
-                sc_cat_fuente = sc["categoria_fuente"]
-                if sc_cat:
-                    inherit = False
-                    if sc_cat_fuente == "manual" and pdf_cat_fuente != "manual":
-                        inherit = True
-                    elif sc_cat_fuente != "manual" and not pdf_cat:
-                        inherit = True
-                    if inherit:
-                        conn.execute(
-                            "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE id=?",
-                            (sc_cat, sc_cat_fuente, pdf_gasto_id),
-                        )
-                        logger.info(
-                            "[consolidate] %s: categoría '%s' (%s) copiada del scraper al PDF gasto id=%d",
-                            fuente, sc_cat, sc_cat_fuente, pdf_gasto_id,
-                        )
+            sc = best
+            used_pdf_ids.add(pdf_gasto_id)
+            used_scraper_ids.add(sc["gasto_id"])
 
-                # PDF gana: borrar gasto scraper, raw pasa a matched
-                conn.execute("DELETE FROM gastos WHERE id=?", (sc["gasto_id"],))
+            # Preservar categoría del gasto-scraper en el gasto-PDF si corresponde.
+            # Regla: la categoría 'manual' del scraper siempre gana sobre la del PDF
+            # (salvo que el PDF también sea 'manual'). Una categoría por 'regla'
+            # del scraper se copia solo si el PDF no tiene ninguna.
+            sc_cat        = sc["categoria"]
+            sc_cat_fuente = sc["categoria_fuente"]
+            if sc_cat:
+                inherit = False
+                if sc_cat_fuente == "manual" and pdf_cat_fuente != "manual":
+                    inherit = True
+                elif sc_cat_fuente != "manual" and not pdf_cat:
+                    inherit = True
+                if inherit:
+                    conn.execute(
+                        "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE id=?",
+                        (sc_cat, sc_cat_fuente, pdf_gasto_id),
+                    )
+                    logger.info(
+                        "[consolidate] %s: categoría '%s' (%s) copiada del scraper al PDF gasto id=%d",
+                        fuente, sc_cat, sc_cat_fuente, pdf_gasto_id,
+                    )
+
+            # La mejor descripción gana: si la del PDF es genérica/temporal y la del
+            # scraper es específica, se copia la del scraper al gasto-PDF.
+            sc_desc_raw = str(sc["descripcion"] or "").strip()
+            if (sc_desc_raw
+                    and _is_generic(pdf_desc_raw, _eff_descs, _eff_prefixes)
+                    and not _is_generic(sc_desc_raw, _eff_descs, _eff_prefixes)):
                 conn.execute(
-                    "UPDATE movimientos_raw SET estado='matched', gasto_id=? WHERE id=?",
-                    (pdf_gasto_id, sc["raw_id"]),
+                    "UPDATE gastos SET descripcion=? WHERE id=?",
+                    (sc_desc_raw, pdf_gasto_id),
                 )
-                eliminated += 1
                 logger.info(
-                    "[consolidate] %s: scraper gasto id=%d eliminado → raw id=%d matched con PDF gasto id=%d (score=%.2f)",
-                    fuente, sc["gasto_id"], sc["raw_id"], pdf_gasto_id, ratio,
+                    "[consolidate] %s: descripción '%s' copiada del scraper al PDF gasto id=%d",
+                    fuente, sc_desc_raw[:40], pdf_gasto_id,
                 )
+
+            # PDF gana: borrar gasto scraper, raw pasa a matched
+            conn.execute("DELETE FROM gastos WHERE id=?", (sc["gasto_id"],))
+            conn.execute(
+                "UPDATE movimientos_raw SET estado='matched', gasto_id=? WHERE id=?",
+                (pdf_gasto_id, sc["raw_id"]),
+            )
+            eliminated += 1
+            logger.info(
+                "[consolidate] %s: scraper gasto id=%d eliminado → raw id=%d matched con PDF gasto id=%d (ratio=%.2f)",
+                fuente, sc["gasto_id"], sc["raw_id"], pdf_gasto_id, best_ratio,
+            )
 
     return eliminated
 

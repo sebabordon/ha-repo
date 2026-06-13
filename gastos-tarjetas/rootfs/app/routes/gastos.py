@@ -15,6 +15,7 @@ from db import (list_gastos, list_categorias, monthly_summary, periodo_actual,
                 update_categoria, update_usuario, update_gasto_fecha,
                 update_descripcion_editada,
                 delete_all_gastos, get_gasto, delete_gasto_manual,
+                delete_gasto_any,
                 delete_scraper_gastos_batch,
                 list_importaciones, rename_categoria_in_gastos)
 
@@ -245,8 +246,8 @@ def delete_orphans(body: dict, request: Request):
 def delete_gasto(gasto_id: int, request: Request):
     require_auth(request)
     from fastapi import HTTPException
-    if not delete_gasto_manual(gasto_id):
-        raise HTTPException(403, "Solo se pueden eliminar movimientos de cuentas manuales")
+    if not delete_gasto_any(gasto_id):
+        raise HTTPException(404, "Gasto no encontrado")
     return {"ok": True}
 
 
