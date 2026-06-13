@@ -1,3 +1,7 @@
+## 0.8.85
+
+- **Conciliación: no reutilizar gastos ya importados** (`conciliacion.py`): `_conciliar_uno` excluye de sus candidatos los gastos que ya están vinculados a otro movimiento_raw con `estado='imported'` (misma fuente). Esto evita que 3 raws idénticos se "matcheen" todos al mismo gasto ya existente (quedando `matched` y nunca creando gastos nuevos). Ahora quedan `unmatched` → `auto_import_unmatched` crea los 3 gastos faltantes → total 4 gastos para 4 pagos idénticos.
+
 ## 0.8.84
 
 - **Scraper: guard final para N transacciones idénticas** (`scrapers_db.py`): v0.8.83 solo corregía el `fallback_descriptor` pero el cross-date match (que corre después) seguía encontrando el mismo ID sin exclusión, resultando en `via unknown` y colapsando igualmente. Ahora hay un guard justo antes del bloque `if existing:` que descarta cualquier resultado cuyo ID ya esté en `_used_raw_ids`, sin necesidad de modificar cada query individual. El resultado: 4 transacciones idénticas el mismo día generan 4 filas separadas en `movimientos_raw`.

@@ -153,6 +153,10 @@ def _conciliar_uno(raw: dict, db_path: str) -> None:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
+        # Excluir gastos ya "consumidos" por un raw en estado 'imported' de la
+        # misma fuente. Evita que N transacciones idénticas sin timestamp (ej.
+        # 4 pagos iguales el mismo día) collapsen todas al mismo gasto existente;
+        # en su lugar quedan 'unmatched' y auto_import crea los gastos faltantes.
         candidates = conn.execute(
             """
             SELECT id, fecha, descripcion, monto, moneda
@@ -161,6 +165,10 @@ def _conciliar_uno(raw: dict, db_path: str) -> None:
               AND moneda  = ?
               AND ABS(CAST(monto AS REAL) - ?) < 0.02
               AND fecha BETWEEN ? AND ?
+              AND id NOT IN (
+                  SELECT gasto_id FROM movimientos_raw
+                  WHERE fuente = ? AND gasto_id IS NOT NULL AND estado = 'imported'
+              )
             """,
             (
                 raw["fuente"],
@@ -168,6 +176,7 @@ def _conciliar_uno(raw: dict, db_path: str) -> None:
                 float(raw["monto"]),
                 date_from,
                 date_to,
+                raw["fuente"],
             ),
         ).fetchall()
     finally:
