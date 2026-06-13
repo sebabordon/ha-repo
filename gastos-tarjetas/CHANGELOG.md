@@ -1,3 +1,7 @@
+## 0.8.84
+
+- **Scraper: guard final para N transacciones idénticas** (`scrapers_db.py`): v0.8.83 solo corregía el `fallback_descriptor` pero el cross-date match (que corre después) seguía encontrando el mismo ID sin exclusión, resultando en `via unknown` y colapsando igualmente. Ahora hay un guard justo antes del bloque `if existing:` que descarta cualquier resultado cuyo ID ya esté en `_used_raw_ids`, sin necesidad de modificar cada query individual. El resultado: 4 transacciones idénticas el mismo día generan 4 filas separadas en `movimientos_raw`.
+
 ## 0.8.83
 
 - **Scraper: dedup correcto para N transacciones idénticas el mismo día** (`scrapers_db.py`): el `fallback_descriptor` en `insert_movimientos_raw` hacía `LIMIT 1` sin discriminar entre runs, por lo que 4 pagos idénticos (mismo día, monto y descripción, sin timestamp) colapsaban a un solo registro en `movimientos_raw` y se perdían las otras 3. Ahora se mantiene un set `_used_raw_ids` por run: cada ID ya matcheado o recién insertado se excluye del `fallback_descriptor` en las iteraciones siguientes, lo que permite insertar N filas distintas para N transacciones idénticas.

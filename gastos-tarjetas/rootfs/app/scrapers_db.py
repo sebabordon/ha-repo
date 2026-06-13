@@ -729,6 +729,19 @@ def insert_movimientos_raw(
                 except Exception:
                     pass   # si falla el cálculo de fechas, dejar pasar (INSERT normal)
 
+            # Guard final: si el ID encontrado ya fue usado como match en este
+            # run, descartarlo — permite que N transacciones idénticas sin
+            # timestamp (p.ej. 4 pagos iguales el mismo día) generen N filas
+            # en vez de colapsar sobre el mismo registro.
+            if existing:
+                try:
+                    _chk_id = existing['id']
+                except (KeyError, TypeError):
+                    _chk_id = None
+                if _chk_id is not None and _chk_id in _used_raw_ids:
+                    existing = None
+                    existing_check_name = None
+
             if existing:
                 # Extraer el id de existing (puede ser Row o dict)
                 try:
