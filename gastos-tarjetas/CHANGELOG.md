@@ -1,3 +1,7 @@
+## 0.9.5
+
+- **AMEX backfill: expandir todos los paneles del acordeón dentro de la ventana** (`scrapers/amex.py`): los resúmenes están agrupados en acordeones por período (ej. "2026" y un panel colapsado "mar.-dic. 2025"). El código solo expandía el primer panel, así que un backfill largo nunca llegaba a los resúmenes de años anteriores. Ahora se recorren todos los botones `header-YYYY-...`, se expanden los colapsados cuyo año alcance la ventana (`_resumenes_cutoff`), y tras cada expansión se extraen y acumulan los links (dedup por URL) — robusto ante acordeones que colapsan el panel anterior al abrir otro. Paneles de años fuera de la ventana no se expanden (eficiencia).
+
 ## 0.9.4
 
 - **AMEX backfill: fix resumen fuera de ventana por mes "sept"** (`scrapers/amex.py`): el título de los links de resumen usa "sept" (además de "sep"), pero `titleToDate` solo mapeaba "sep" → la fecha quedaba vacía → el filtro de ventana (que solo aplicaba con fecha) no lo excluía y se importaba un resumen viejo (ej. cierre 30/09/2025 al pedir 5 meses), arrastrando consumos de agosto. Fix: el lookup de mes normaliza a 3 letras (`slice(0,3)`), así "sept"→"sep". Además, salvaguarda: si un link no tiene fecha parseable se saltea (con log) en vez de importarse, para no traer resúmenes que no se pueden ubicar en la ventana.

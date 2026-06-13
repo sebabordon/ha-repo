@@ -691,36 +691,19 @@ class AmexScraper(BaseScraper):
             log_fn(f"  [amex-pdf] timeout esperando panel de resúmenes (URL={driver.current_url[:80]})")
             return
 
-        # Expandir el primer panel si está colapsado (carga lazy de los links)
-        try:
-            first_btn = driver.find_element(By.CSS_SELECTOR, 'button[id^="header-"]')
-            if first_btn.get_attribute("aria-expanded") == "false":
-                log_fn("  [amex-pdf] expandiendo panel de resúmenes…")
-                driver.execute_script("arguments[0].click();", first_btn)
-            else:
-                log_fn("  [amex-pdf] panel ya expandido — esperando links…")
-            # Esperar a que los links aparezcan en el DOM (hasta 45s — la SPA los carga async).
-            try:
-                WebDriverWait(driver, 45).until(lambda d: d.execute_script("""
-                    var all = document.querySelectorAll('a[href]');
-                    for (var i = 0; i < all.length; i++) {
-                        var h = all[i].getAttribute('href') || all[i].href || '';
-                        if (h.indexOf('/servicing/v1/documents/statements/') >= 0) return true;
-                    }
-                    return false;
-                """))
-            except Exception:
-                pass  # el diagnóstico más abajo mostrará qué hay en el DOM
-            time.sleep(0.5)
-        except Exception as exc:
-            log_fn(f"  [amex-pdf] aviso expandiendo panel: {exc}")
+        # Los resúmenes están agrupados en acordeones por período (ej. "2026" y
+        # "mar.-dic. 2025"), cada uno carga sus links lazy al expandirse. Expandimos
+        # los paneles cuyo año alcance la ventana pedida y, tras cada expansión,
+        # extraemos sus links y los acumulamos: algunos acordeones colapsan el panel
+        # anterior al abrir otro, así que no confiamos en tenerlos todos abiertos a la vez.
+        import re as _re
+        cutoff_year = self._resumenes_cutoff(config).year
 
-        # Extraer links de descarga del DOM renderizado.
-        # La página repite el mismo link en varios contenedores; se deduplican por URL.
-        # La fecha se parsea desde el title: "Estados de Cuenta en PDF. - 26 de may de 2026"
-        # Nota: se itera sobre todos los <a href> y se filtra por indexOf en JS porque el
-        # selector CSS [href*=...] no matchea correctamente en esta SPA de React.
-        links = driver.execute_script("""
+        # JS: extrae los links de descarga del DOM. La fecha se parsea del title
+        # ("... - 26 de may de 2026"); el mes se normaliza a 3 letras porque AMEX usa
+        # "sept" además de "sep". El selector se hace por indexOf (no [href*=]) porque
+        # el CSS no matchea bien en esta SPA de React.
+        _links_js = """
         return (function() {
             var MONTHS = {
                 'ene':'01','feb':'02','mar':'03','abr':'04','may':'05','jun':'06',
@@ -729,12 +712,10 @@ class AmexScraper(BaseScraper):
             function titleToDate(title) {
                 var m = /(\\d+) de (\\w+) de (\\d{4})/.exec(title || '');
                 if (!m) return '';
-                // Normalizar a 3 letras: AMEX usa "sept" además de "sep", etc.
                 var mon = MONTHS[m[2].toLowerCase().slice(0, 3)];
                 if (!mon) return '';
                 return m[3] + '-' + mon + '-' + ('0' + m[1]).slice(-2);
             }
-            var seen = {};
             var out = [];
             var all = document.querySelectorAll('a[href]');
             for (var i = 0; i < all.length; i++) {
@@ -742,13 +723,53 @@ class AmexScraper(BaseScraper):
                 var attr = a.getAttribute('href') || a.href || '';
                 if (attr.indexOf('/servicing/v1/documents/statements/') < 0) continue;
                 var url = a.href || attr;
-                if (seen[url]) continue;
-                seen[url] = true;
                 out.push({url: url, date: titleToDate(a.title), title: a.title || ''});
             }
             return out;
         })();
-        """) or []
+        """
+        _wait_links_js = """
+            var all = document.querySelectorAll('a[href]');
+            for (var i = 0; i < all.length; i++) {
+                var h = all[i].getAttribute('href') || all[i].href || '';
+                if (h.indexOf('/servicing/v1/documents/statements/') >= 0) return true;
+            }
+            return false;
+        """
+
+        links_by_url = {}
+
+        def _collect_links():
+            for it in (driver.execute_script(_links_js) or []):
+                u = it.get("url")
+                if u and u not in links_by_url:
+                    links_by_url[u] = it
+
+        try:
+            btns = driver.find_elements(By.CSS_SELECTOR, 'button[id^="header-"]')
+            log_fn(f"  [amex-pdf] {len(btns)} panel(es) de resúmenes (desde año {cutoff_year})")
+            for b in btns:
+                try:
+                    bid = b.get_attribute("id") or ""
+                    ym  = _re.search(r"(\d{4})", bid)
+                    if ym and int(ym.group(1)) < cutoff_year:
+                        continue  # panel de un año anterior a la ventana
+                    if (b.get_attribute("aria-expanded") or "") == "false":
+                        log_fn(f"  [amex-pdf] expandiendo panel {bid or '(sin id)'}…")
+                        driver.execute_script("arguments[0].click();", b)
+                        time.sleep(0.6)
+                    try:
+                        WebDriverWait(driver, 45).until(lambda d: d.execute_script(_wait_links_js))
+                    except Exception:
+                        pass  # el diagnóstico más abajo mostrará qué hay en el DOM
+                    time.sleep(0.3)
+                    _collect_links()
+                except Exception:
+                    continue
+        except Exception as exc:
+            log_fn(f"  [amex-pdf] aviso expandiendo paneles: {exc}")
+
+        links = list(links_by_url.values())
 
         if not links:
             # Diagnóstico: mostrar qué hrefs existen para entender el formato real
