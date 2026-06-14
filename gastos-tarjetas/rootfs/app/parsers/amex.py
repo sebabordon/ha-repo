@@ -19,7 +19,7 @@ from config import TITULAR2_NAME
 from models import Fuente, Moneda
 from parsers.base import BaseParser
 from parsers.utils import (
-    group_by_y, parse_ar_amount, parse_date_dmy_long, row_text, words_in_band
+    group_by_y, parse_ar_amount, parse_date_dmy_anchored, row_text, words_in_band
 )
 
 _TITULAR2_UPPER = TITULAR2_NAME.upper() if TITULAR2_NAME else ""
@@ -45,16 +45,25 @@ _AMEX_SALDO_RE = re.compile(r"-\s+\+\s+=\s+([\d.,]+)(?:\s+(\d{2}/\d{2}/\d{2,4}))
 _AMEX_DATE2_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{2,4})\b")
 
 
-def _detect_vencimiento_amex(pdf) -> Optional[_date]:
+def _detect_fact_venc_amex(pdf) -> tuple[Optional[_date], Optional[_date]]:
     """
     Locate the 'Facturación  Vencimiento' column header on page 1, then scan
-    the next 5 lines for one containing two DD/MM/YY dates.  The second date
-    is the current statement's due date (Vencimiento).
+    the next 5 lines for one containing two DD/MM/YY dates.  Returns
+    (facturacion, vencimiento): the FIRST date is the statement closing date
+    (Facturación), the SECOND is the due date (Vencimiento).
 
     Example header row : 'Titular  Número de Cuenta  Facturación  Vencimiento'
     Example data row   : 'SEBASTIAN ... 3701-320597-11005  28/04/26  06/05/26'
     Note: there may be an intermediate line ('Argentina') between header and data.
     """
+    def _mk(t) -> Optional[_date]:
+        d, m, y = t
+        year = int(y) + (2000 if len(y) == 2 else 0)
+        try:
+            return _date(year, int(m), int(d))
+        except ValueError:
+            return None
+
     for page in pdf.pages[:2]:
         text = page.extract_text() or ""
         lines = text.split("\n")
@@ -64,13 +73,8 @@ def _detect_vencimiento_amex(pdf) -> Optional[_date]:
                 for j in range(i + 1, min(i + 6, len(lines))):
                     matches = _AMEX_DATE_RE.findall(lines[j])
                     if len(matches) >= 2:
-                        d, m, y = matches[-1]  # last = Vencimiento column
-                        year = int(y) + (2000 if len(y) == 2 else 0)
-                        try:
-                            return _date(year, int(m), int(d))
-                        except ValueError:
-                            pass
-    return None
+                        return _mk(matches[0]), _mk(matches[-1])
+    return None, None
 
 
 def _detect_totals_amex(pdf) -> tuple[Optional["Decimal"], Optional["Decimal"], Optional[_date]]:
@@ -133,24 +137,24 @@ class AmexParser(BaseParser):
         gastos = []
         current_moneda: Optional[Moneda] = None
         current_usuario: Optional[str] = None  # None → upload default ("Titular")
-        facturacion_year: int = 2026
 
         with pdfplumber.open(file) as pdf:
-            self.fecha_vencimiento = _detect_vencimiento_amex(pdf)
+            fact_close, self.fecha_vencimiento = _detect_fact_venc_amex(pdf)
             self.stmt_total_ars, self.stmt_total_usd, self.proximo_venc = _detect_totals_amex(pdf)
             self.proximo_cierre = None  # AMEX does not publish the next billing date
+
+            # Ancla de año: los renglones de transacción no traen año, así que se
+            # infiere de la fecha de CIERRE del resumen (Facturación). Fallback al
+            # vencimiento (mismo mes/año aprox.) y, en última instancia, a hoy.
+            anchor = fact_close or self.fecha_vencimiento or _date.today()
+            close_month, close_year = anchor.month, anchor.year
+
             for page in pdf.pages:
                 words = page.extract_words(keep_blank_chars=False)
                 rows = group_by_y(words)
 
                 for i, row in enumerate(rows):
                     rtext = row_text(row)
-
-                    # Extract year from statement header
-                    m = re.search(r"Facturación\s+\d{2}/\d{2}/(\d{2,4})", rtext)
-                    if m:
-                        y = int(m.group(1))
-                        facturacion_year = y + 2000 if y < 100 else y
 
                     # Section detection — also detects secondary cardholder name
                     if "Nuevos Cargos en PESOS" in rtext:
@@ -252,7 +256,7 @@ class AmexParser(BaseParser):
                             description += f" CUOTA {cur_n:02d}/{tot_n:02d}"
                             break
 
-                    fecha = parse_date_dmy_long(int(first), month_name, facturacion_year)
+                    fecha = parse_date_dmy_anchored(int(first), month_name, close_month, close_year)
                     if fecha is None:
                         continue
 

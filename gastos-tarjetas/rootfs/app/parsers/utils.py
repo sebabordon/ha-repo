@@ -91,6 +91,27 @@ def parse_date_dmy_long(day: int, month_name: str, year: int) -> Optional[date]:
         return None
 
 
+def parse_date_dmy_anchored(day: int, month_name: str,
+                            close_month: int, close_year: int) -> Optional[date]:
+    """
+    Igual que parse_date_dmy_long pero infiere el AÑO a partir de la fecha de cierre
+    del resumen (un resumen no trae el año en cada renglón de transacción).
+
+    Regla de cruce de año: las transacciones de un resumen son del mismo mes de
+    cierre o de meses anteriores. Si el mes de la transacción es POSTERIOR al mes
+    de cierre, pertenece al año anterior (ej. cargos de diciembre en el resumen que
+    cierra en enero → diciembre del año previo). Así nunca se generan fechas futuras.
+    """
+    month = _MONTHS_ES_LONG.get(month_name.capitalize(), 0)
+    if not month:
+        return None
+    year = close_year if month <= close_month else close_year - 1
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
 def row_text(row_words: list) -> str:
     return " ".join(w["text"] for w in row_words)
 
