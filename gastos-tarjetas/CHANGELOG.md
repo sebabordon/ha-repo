@@ -1,3 +1,7 @@
+## 1.0.0
+
+Primera versión estable. Consolidación de todas las funcionalidades desarrolladas desde el prototipo inicial: importación de resúmenes PDF (AMEX, BBVA Mastercard/Visa/Cuenta, Galicia, MercadoPago), scrapers automáticos con schedule, categorización por reglas, presupuesto mensual, gráficos, conciliación de transferencias, gestión de pagos, widget de vencimientos, colores y nombres cortos por cuenta, selectores de color en Config → Interfaz, diseño responsivo y guía de diseño documentada en `DESIGN.md`.
+
 ## 0.10.12
 
 - **Visibilidad de categorías unificada entre Presupuesto y Categorías** (`static/app.js`): en la tab Presupuesto las categorías padre ahora usan `<strong>` + caret `▸` y las hijas usan `padding-left:1.6rem` sin reducción de font-size, igualando el estilo de la tab Categorías. Antes Presupuesto usaba `font-weight:600` inline y `font-size:.9em` en las hijas, produciendo un aspecto diferente.
