@@ -84,6 +84,11 @@
           <div class="chart-title">
             Movimientos ARS — mes a mes
             <div style="display:flex;align-items:center;gap:.25rem;margin-left:auto">
+              <select id="monthly-meses" title="Meses a mostrar" style="font-size:.8rem;padding:.15rem .4rem;border:1px solid #ccc;border-radius:4px;color:#555;margin-right:.25rem">
+                <option value="3">3 meses</option>
+                <option value="6">6 meses</option>
+                <option value="12">12 meses</option>
+              </select>
               <button class="chart-ctrl-btn" id="monthly-ctrl-up" onclick="_swapTopCharts()" title="Mover arriba">←</button>
               <button class="chart-ctrl-btn" id="monthly-ctrl-dn" onclick="_swapTopCharts()" title="Mover abajo" disabled>→</button>
               <button class="chart-toggle-btn" id="home-chart-toggle" onclick="toggleChartMode()" title="Alternar tamaño del gráfico" style="margin-left:.25rem"></button>

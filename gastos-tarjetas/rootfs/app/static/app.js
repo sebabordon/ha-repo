@@ -1108,11 +1108,15 @@ async function loadMonthlyChart() {
     }
     return;
   }
-  _populateMonthFilter(data.map(d => d.mes));
+  _populateMonthFilter(data.map(d => d.mes));   // dropdown del filtro: TODOS los meses
 
-  const labels   = data.map(d => _fmtMes(d.mes));
-  const egresos  = data.map(d => d.egresos);
-  const ingresos = data.map(d => d.ingresos);
+  // El gráfico muestra solo los últimos N meses (combo, persistido). data viene
+  // ordenado de más viejo a más nuevo, así que slice(-N) toma los más recientes.
+  const _n    = _monthlyMeses();
+  const shown = _n > 0 ? data.slice(-_n) : data;
+  const labels   = shown.map(d => _fmtMes(d.mes));
+  const egresos  = shown.map(d => d.egresos);
+  const ingresos = shown.map(d => d.ingresos);
   const ctx = document.getElementById("monthly-chart").getContext("2d");
 
   if (_monthlyChart) {
@@ -1139,6 +1143,22 @@ function _fmtMes(ym) {
   const [y,m] = ym.split("-");
   return ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][+m-1]+` ${y.slice(2)}`;
 }
+
+// Cuántos meses hacia atrás muestra el gráfico mes a mes (combo, persistido).
+function _monthlyMeses() {
+  const v = parseInt(localStorage.getItem("monthly_meses") || "12", 10);
+  return [3, 6, 12].includes(v) ? v : 12;
+}
+(function _initMonthlyMesesSel() {
+  const sel = document.getElementById("monthly-meses");
+  if (!sel) return;
+  sel.value = String(_monthlyMeses());
+  sel.addEventListener("change", function () {
+    localStorage.setItem("monthly_meses", this.value);
+    this.blur();
+    loadMonthlyChart();
+  });
+})();
 function _fmtNum(n) {
   return (+n||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
 }
