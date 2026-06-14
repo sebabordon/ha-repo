@@ -1,3 +1,7 @@
+## 0.10.11
+
+- **BBVA Cuenta: año correcto al cruzar diciembre→enero** (`parsers/bbva_cuenta.py`): el parser detectaba el año buscando el primer `20XX` en el PDF, pero los extractos de enero incluyen fechas de débito de diciembre del año anterior (ej. `"26/12/2025"`) antes de llegar a la referencia `"información al: 23/01/2026"`. Resultado: todas las transacciones de enero quedaban etiquetadas como 2025. Fix: `_detect_close_date` busca primero el patrón `"información al: DD/MM/YYYY"` que BBVA imprime en la sección de Transferencias (más confiable); luego `_parse_date_dm` usa lógica de cruce de año: mes ≤ close_month → close_year, mes > close_month → close_year − 1. Con esto "02/01" → 2026-01-02 y "26/12" → 2025-12-26.
+
 ## 0.10.10
 
 - **Color y nombre corto por cuenta** (`db.py`, `routes/cuentas.py`, `static/app.js`, `static/style.css`): cada cuenta ahora tiene dos campos opcionales — `color` (color hex del badge) y `short_name` (etiqueta corta para el badge). Se editan en la tab Cuentas → fila "🎨 Color badge / 📛 Nombre corto" dentro del panel expandido de cada cuenta. Al guardar, todos los badges de esa fuente (grilla de gastos, ventana de transferencias, cuotas) muestran el color y la etiqueta configurados. Sin color configurado, el badge sigue usando la clase CSS del banco. Se agregan columnas `color TEXT` y `short_name TEXT` a la tabla `cuentas` vía migración `ALTER TABLE`; la API `PUT /cuentas/{fuente}` ya las acepta.

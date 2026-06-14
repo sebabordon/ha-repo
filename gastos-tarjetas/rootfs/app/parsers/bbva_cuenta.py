@@ -65,18 +65,42 @@ _COMERCIO_X_MAX = 405.0   # COMERCIO column end
 _DEBIT_AMT_X_MIN = 480.0  # IMPORTE column start
 
 
-def _detect_year(pdf) -> int:
+def _detect_close_date(pdf) -> tuple[int, int]:
+    """
+    Returns (close_year, close_month) of the statement end date.
+
+    BBVA prints 'información al: DD/MM/YYYY' (e.g. 'información al: 23/01/2026')
+    in the Transferencias section — the most reliable source of the closing year
+    because it always carries the full 4-digit year even in cross-year statements.
+
+    Fallback: first bare 4-digit year in the document (may be wrong for
+    cross-year statements like Dec-2025 / Jan-2026).
+    """
+    for page in pdf.pages[:3]:
+        text = page.extract_text() or ""
+        m = re.search(r"informaci[oó]n\s+al:\s*(\d{2})/(\d{2})/(\d{4})", text, re.IGNORECASE)
+        if m:
+            return int(m.group(3)), int(m.group(2))
     for page in pdf.pages[:2]:
         text = page.extract_text() or ""
         m = re.search(r"\b(20\d{2})\b", text)
         if m:
-            return int(m.group(1))
-    return datetime.now().year
+            return int(m.group(1)), 12
+    return datetime.now().year, 12
 
 
-def _parse_date_dm(s: str, year: int) -> Optional[date]:
+def _parse_date_dm(s: str, close_year: int, close_month: int = 12) -> Optional[date]:
+    """
+    Parse 'DD/MM' using the statement's close year/month for year inference.
+
+    Transactions in a statement that closes in month M of year Y span from
+    approximately M-1 (or earlier) of Y through M of Y.  Any transaction whose
+    month is AFTER close_month must belong to year Y-1 (e.g. December in a
+    statement closing in January → previous year).
+    """
     try:
         day, month = int(s[:2]), int(s[3:5])
+        year = close_year if month <= close_month else close_year - 1
         return date(year, month, day)
     except (ValueError, IndexError):
         return None
@@ -91,7 +115,7 @@ def _parse_date_dmy(s: str) -> Optional[date]:
         return None
 
 
-def _parse_transfer_details(pdf, year: int) -> dict:
+def _parse_transfer_details(pdf, close_year: int, close_month: int) -> dict:
     """
     Lee la sección 'Transferencias' del extracto (subtablas RECIBIDAS y ENVIADAS) y
     devuelve {(fecha, abs_importe): [nombre, ...]} para enriquecer las descripciones
@@ -127,7 +151,7 @@ def _parse_transfer_details(pdf, year: int) -> dict:
             if not amts:
                 continue
             importe = parse_ar_amount(amts[-1])
-            fecha = _parse_date_dm(f"{m.group(1)}/{m.group(2)}", year)
+            fecha = _parse_date_dm(f"{m.group(1)}/{m.group(2)}", close_year, close_month)
             if importe is None or fecha is None:
                 continue
             if section == "recibidas":
@@ -150,11 +174,11 @@ class BBVACuentaParser(BaseParser):
         last_saldo = None
 
         with pdfplumber.open(file) as pdf:
-            year = _detect_year(pdf)
+            close_year, close_month = _detect_close_date(pdf)
 
             # Detalle de transferencias (RECIBIDAS/ENVIADAS) para enriquecer las
             # descripciones genéricas "TRANSFERENCIA" con el nombre de la contraparte.
-            transfer_details = _parse_transfer_details(pdf, year)
+            transfer_details = _parse_transfer_details(pdf, close_year, close_month)
 
             # ── Pass 1: collect debit-card purchases from "Tarjetas de Debito" ──
             # These have the real merchant name and a full DD/MM/YYYY date.
@@ -228,7 +252,7 @@ class BBVACuentaParser(BaseParser):
                     if not _DATE_RE.match(row[0]["text"]):
                         continue
 
-                    fecha = _parse_date_dm(row[0]["text"], year)
+                    fecha = _parse_date_dm(row[0]["text"], close_year, close_month)
                     if fecha is None:
                         continue
 
