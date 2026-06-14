@@ -736,6 +736,66 @@
               <input type="text"  id="ui-hex-cat_child" class="ui-hex-input" maxlength="7" placeholder="#4b5563" oninput="syncColorPicker('cat_child')">
             </div>
           </div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Egreso</span>
+              <span class="ui-color-desc">montos que salen (grilla) y barras de Egresos del gráfico mes a mes</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-egreso" oninput="syncColorHex('egreso')">
+              <input type="text"  id="ui-hex-egreso" class="ui-hex-input" maxlength="7" placeholder="#dc2626" oninput="syncColorPicker('egreso')">
+            </div>
+          </div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Ingreso</span>
+              <span class="ui-color-desc">montos que entran (grilla) y barras de Ingresos del gráfico mes a mes</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-ingreso" oninput="syncColorHex('ingreso')">
+              <input type="text"  id="ui-hex-ingreso" class="ui-hex-input" maxlength="7" placeholder="#16a34a" oninput="syncColorPicker('ingreso')">
+            </div>
+          </div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Presupuesto (gráfico)</span>
+              <span class="ui-color-desc">barra de Presupuesto en el gráfico Presupuesto vs Real</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-presup" oninput="syncColorHex('presup')">
+              <input type="text"  id="ui-hex-presup" class="ui-hex-input" maxlength="7" placeholder="#22c55e" oninput="syncColorPicker('presup')">
+            </div>
+          </div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Real / dentro de presupuesto</span>
+              <span class="ui-color-desc">barra Real cuando está dentro del presupuesto (si lo supera usa el color de Egreso)</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-real" oninput="syncColorHex('real')">
+              <input type="text"  id="ui-hex-real" class="ui-hex-input" maxlength="7" placeholder="#eab308" oninput="syncColorPicker('real')">
+            </div>
+          </div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Vencimiento urgente</span>
+              <span class="ui-color-desc">vencimientos urgentes / vencidos (cards y chips)</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-venc_urg" oninput="syncColorHex('venc_urg')">
+              <input type="text"  id="ui-hex-venc_urg" class="ui-hex-input" maxlength="7" placeholder="#dc2626" oninput="syncColorPicker('venc_urg')">
+            </div>
+          </div>
+          <div class="ui-color-row">
+            <div class="ui-color-label">
+              <span class="ui-color-name">Vencimiento próximo</span>
+              <span class="ui-color-desc">vencimientos que se acercan (cards y chips)</span>
+            </div>
+            <div class="ui-color-pick">
+              <input type="color" id="ui-col-venc_pronto" oninput="syncColorHex('venc_pronto')">
+              <input type="text"  id="ui-hex-venc_pronto" class="ui-hex-input" maxlength="7" placeholder="#f59e0b" oninput="syncColorPicker('venc_pronto')">
+            </div>
+          </div>
         </div>
 
           <!-- ── Preferencias generales ── -->

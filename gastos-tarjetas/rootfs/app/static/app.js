@@ -8,7 +8,17 @@ if (window.APP_VERSION) {
 const UI_COLOR_DEFAULTS = {
   ars: "#15803d", usd: "#2563eb", rg: "#94a3b8", tog: "#d97706", accent: "#16213e",
   cat_parent: "#111827", cat_child: "#4b5563",
+  // Montos y gráficos (configurables)
+  egreso: "#dc2626", ingreso: "#16a34a",   // grilla + chart mes a mes
+  presup: "#22c55e", real: "#eab308",       // chart Presupuesto vs Real
+  venc_urg: "#dc2626", venc_pronto: "#f59e0b",  // urgencia de vencimientos
 };
+
+// Lee una variable CSS del :root (para pasar colores configurables a Chart.js).
+function _cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 const UI_PREF_DEFAULTS = {
   dias_urgente:       3,
   dias_pronto:        7,
@@ -40,6 +50,12 @@ function applyUiColors() {
   root.style.setProperty("--color-accent",     c.accent);
   root.style.setProperty("--color-cat-parent", c.cat_parent);
   root.style.setProperty("--color-cat-child",  c.cat_child);
+  root.style.setProperty("--color-egreso",      c.egreso);
+  root.style.setProperty("--color-ingreso",     c.ingreso);
+  root.style.setProperty("--color-presup",      c.presup);
+  root.style.setProperty("--color-real",        c.real);
+  root.style.setProperty("--color-venc-urg",    c.venc_urg);
+  root.style.setProperty("--color-venc-pronto", c.venc_pronto);
 }
 
 function applyUiPrefs() {
@@ -613,7 +629,8 @@ function renderUiSettings() {
   // Colors
   const storedC = JSON.parse(localStorage.getItem("ui_colors") || "{}");
   const c = { ...UI_COLOR_DEFAULTS, ...storedC };
-  ["ars","usd","rg","tog","accent","cat_parent","cat_child"].forEach(k => {
+  ["ars","usd","rg","tog","accent","cat_parent","cat_child",
+   "egreso","ingreso","presup","real","venc_urg","venc_pronto"].forEach(k => {
     const picker = document.getElementById(`ui-col-${k}`);
     const hex    = document.getElementById(`ui-hex-${k}`);
     if (picker) picker.value = c[k];
@@ -670,7 +687,9 @@ function _getUiColorInputs() {
     return (h && /^#[0-9a-fA-F]{6}$/.test(h.value)) ? h.value : UI_COLOR_DEFAULTS[k];
   };
   return { ars: get("ars"), usd: get("usd"), rg: get("rg"), tog: get("tog"), accent: get("accent"),
-           cat_parent: get("cat_parent"), cat_child: get("cat_child") };
+           cat_parent: get("cat_parent"), cat_child: get("cat_child"),
+           egreso: get("egreso"), ingreso: get("ingreso"), presup: get("presup"), real: get("real"),
+           venc_urg: get("venc_urg"), venc_pronto: get("venc_pronto") };
 }
 
 function _getUiPrefInputs() {
@@ -711,6 +730,8 @@ function saveUiSettings() {
   applyUiPrefs();
   _applyChartMode(p.chart_home_mode);
   loadVencimientos();   // refresh widget with new thresholds & visibility prefs
+  loadMonthlyChart();   // re-render con los colores nuevos (egreso/ingreso)
+  loadBudgetChart();    // ídem (presupuesto/real)
   showToast("Configuración guardada.", "ok", 2500);
 }
 
@@ -1143,18 +1164,25 @@ async function loadMonthlyChart() {
   const ingresos = shown.map(d => d.ingresos);
   const ctx = document.getElementById("monthly-chart").getContext("2d");
 
+  const _cEgr = _cssVar("--color-egreso", "#dc2626");
+  const _cIng = _cssVar("--color-ingreso", "#16a34a");
+
   if (_monthlyChart) {
     _monthlyChart.data.labels = labels;
     _monthlyChart.data.datasets[0].data = egresos;
+    _monthlyChart.data.datasets[0].backgroundColor = _cEgr;
+    _monthlyChart.data.datasets[0].borderColor     = _cEgr;
     _monthlyChart.data.datasets[1].data = ingresos;
+    _monthlyChart.data.datasets[1].backgroundColor = _cIng;
+    _monthlyChart.data.datasets[1].borderColor     = _cIng;
     _monthlyChart.update();
     return;
   }
   _monthlyChart = new Chart(ctx, {
     type: "bar",
     data: { labels, datasets: [
-      { label:"Egresos",  data:egresos,  backgroundColor:"rgba(220,80,60,.75)",  borderColor:"rgba(200,50,40,1)",  borderWidth:1, borderRadius:3 },
-      { label:"Ingresos", data:ingresos, backgroundColor:"rgba(34,180,120,.75)", borderColor:"rgba(20,140,90,1)", borderWidth:1, borderRadius:3 },
+      { label:"Egresos",  data:egresos,  backgroundColor:_cEgr, borderColor:_cEgr, borderWidth:1, borderRadius:3 },
+      { label:"Ingresos", data:ingresos, backgroundColor:_cIng, borderColor:_cIng, borderWidth:1, borderRadius:3 },
     ]},
     options: { responsive:true, maintainAspectRatio:true,
       plugins:{ legend:{position:"top"},
@@ -7317,14 +7345,17 @@ function _drawBudgetChart() {
   const labels     = visible.map(d => d.categoria);
   const presup     = visible.map(d => d.presupuesto);
   const gastado    = visible.map(d => d.gastado);
-  const gastadoBg  = visible.map(d => d.presupuesto > 0 && d.gastado > d.presupuesto ? "rgba(239,68,68,.82)"  : "rgba(234,179,8,.82)");
-  const gastadoBdr = visible.map(d => d.presupuesto > 0 && d.gastado > d.presupuesto ? "rgba(215,35,35,1)"    : "rgba(202,138,0,1)");
+  const _cEgr  = _cssVar("--color-egreso", "#dc2626");   // Real por encima del presupuesto
+  const _cReal = _cssVar("--color-real",   "#eab308");   // Real dentro del presupuesto
+  const _cPres = _cssVar("--color-presup", "#22c55e");   // barra Presupuesto
+  const gastadoBg  = visible.map(d => d.presupuesto > 0 && d.gastado > d.presupuesto ? _cEgr : _cReal);
+  const gastadoBdr = gastadoBg;
 
   const chartData = {
     labels,
     datasets: [
-      { label: "Presupuesto", data: presup,  backgroundColor: "rgba(34,197,94,.75)", borderColor: "rgba(21,128,61,1)", borderWidth: 1, borderRadius: 3 },
-      { label: "Real",        data: gastado, backgroundColor: gastadoBg,             borderColor: gastadoBdr,          borderWidth: 1, borderRadius: 3 },
+      { label: "Presupuesto", data: presup,  backgroundColor: _cPres,    borderColor: _cPres,    borderWidth: 1, borderRadius: 3 },
+      { label: "Real",        data: gastado, backgroundColor: gastadoBg, borderColor: gastadoBdr, borderWidth: 1, borderRadius: 3 },
     ],
   };
 

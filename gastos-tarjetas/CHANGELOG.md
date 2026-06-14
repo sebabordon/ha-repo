@@ -1,3 +1,7 @@
+## 0.10.8
+
+- **6 nuevos selectores de color en Config → Interfaz** (`static/app.js`, `static/index.html`, `static/style.css`): se agregan controles de color para egreso/ingreso (grilla de gastos y gráfico mes a mes), presupuesto/real (gráfico Presupuesto vs Real), y urgente/pronto (chips y tarjetas de vencimientos). Los 6 valores nuevos se guardan en `ui_colors`, se aplican como variables CSS (`--color-egreso`, `--color-ingreso`, `--color-presup`, `--color-real`, `--color-venc-urg`, `--color-venc-pronto`) en `applyUiColors()`, y los gráficos se re-renderizan al guardar. Se agrega `_cssVar()` para leer variables CSS desde Chart.js. La paleta de donuts queda para una tanda separada.
+
 ## 0.10.7
 
 - **Subir PDF ya no pisa el saldo de la cuenta** (`routes/upload.py`): al importar un PDF manualmente se aplicaba el `saldo_final` que detecta el parser (`upsert_cuenta_saldo`), así que subir un resumen histórico cambiaba el saldo actual con un valor viejo. Ahora el saldo lo actualiza **solo el scraper** (vía API → `result.saldos`); la subida manual no lo toca. El parser sigue calculando `saldo_final` para uso interno (dedup).

@@ -456,8 +456,8 @@ tbody tr:hover { background: #fafbff; }
 .badge-mercadopago { background: #fef9c3; color: #854d0e; }
 
 .monto { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.monto.egreso  { color: #dc2626; }          /* rojo — dinero que sale  */
-.monto.ingreso { color: #16a34a; }          /* verde — dinero que entra */
+.monto.egreso  { color: var(--color-egreso, #dc2626); }   /* dinero que sale  */
+.monto.ingreso { color: var(--color-ingreso, #16a34a); }  /* dinero que entra */
 .monto.usd     { font-style: italic; }      /* USD en itálica (el color viene de egreso/ingreso) */
 
 /* Barra de orden de Gastos — solo visible en móvil (ver media query) */
@@ -1089,8 +1089,8 @@ tbody tr:hover { background: #fafbff; }
   gap: .15rem;
   min-width: 160px;
 }
-.venc-card.urgente  { border-left-color: #dc2626; }
-.venc-card.pronto   { border-left-color: #f59e0b; }
+.venc-card.urgente  { border-left-color: var(--color-venc-urg, #dc2626); }
+.venc-card.pronto   { border-left-color: var(--color-venc-pronto, #f59e0b); }
 .venc-card.ok       { border-left-color: var(--color-ars); }
 .venc-card.vencido  { border-left-color: #cbd5e1; }
 .venc-fuente {
@@ -1144,7 +1144,7 @@ tbody tr:hover { background: #fafbff; }
   font-size: .78rem;
   font-weight: 600;
 }
-.venc-card.urgente  .venc-dias { color: #dc2626; }
+.venc-card.urgente  .venc-dias { color: var(--color-venc-urg, #dc2626); }
 .venc-card.pronto   .venc-dias { color: #d97706; }
 .venc-card.ok       .venc-dias { color: var(--color-ars); }
 .venc-card.vencido  .venc-dias { color: #94a3b8; }
@@ -1229,10 +1229,10 @@ tbody tr:hover { background: #fafbff; }
   color: #475569;
 }
 .venc-chip:hover { background: #fafafa; }
-.venc-chip.urgente { border-left-color: #dc2626; color: #b91c1c; }
-.venc-chip.pronto  { border-left-color: #f59e0b; color: #b45309; }
+.venc-chip.urgente { border-left-color: var(--color-venc-urg, #dc2626); color: var(--color-venc-urg, #b91c1c); }
+.venc-chip.pronto  { border-left-color: var(--color-venc-pronto, #f59e0b); color: var(--color-venc-pronto, #b45309); }
 .venc-chip.ok      { border-left-color: var(--color-ars); }
-.venc-chip.vencido { border-left-color: #dc2626; color: #b91c1c; }
+.venc-chip.vencido { border-left-color: var(--color-venc-urg, #dc2626); color: var(--color-venc-urg, #b91c1c); }
 .venc-chip.paid    { border-left-color: #22c55e; color: #9ca3af; font-weight: 500; }
 .venc-aldia {
   grid-column: 1 / -1; display: flex; align-items: center;
@@ -1275,10 +1275,10 @@ tbody tr:hover { background: #fafbff; }
 .venc-chip-pdf   { color: #9ca3af; font-weight: 600; }
 .venc-chip-empty { color: #cbd5e1; font-weight: 600; }
 .venc-chip-badge { font-size: .7rem; font-weight: 700; white-space: nowrap; }
-.venc-chip-badge.urgente { color: #dc2626; }
+.venc-chip-badge.urgente { color: var(--color-venc-urg, #dc2626); }
 .venc-chip-badge.pronto  { color: #d97706; }
 .venc-chip-badge.ok      { color: var(--color-ars); }
-.venc-chip-badge.vencido { color: #dc2626; }
+.venc-chip-badge.vencido { color: var(--color-venc-urg, #dc2626); }
 .venc-chip-badge.paid    { color: #16a34a; }
 
 /* ── Cuentas tab ─────────────────────────────────────────────────────────────*/
