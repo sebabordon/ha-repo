@@ -1403,6 +1403,10 @@ class BbvaScraper(BaseScraper):
 
         _fechas_tmp = [str(g.fecha)[:7] for g in gastos]
         mes_resumen_check = Counter(_fechas_tmp).most_common(1)[0][0] if _fechas_tmp else None
+        # Prefer statement close date (set on parser during parse()) for the month guard.
+        _fecha_cierre_check = getattr(PARSERS[parser_key], "fecha_cierre", None)
+        if _fecha_cierre_check is not None:
+            mes_resumen_check = str(_fecha_cierre_check)[:7]
         if mes_resumen_check:
             from db import importacion_exists_mes, _conn as _db_conn
             if importacion_exists_mes(fuente_target, mes_resumen_check):
@@ -1453,10 +1457,19 @@ class BbvaScraper(BaseScraper):
         mes_resumen = Counter(fechas).most_common(1)[0][0] if fechas else None
 
         fecha_venc     = getattr(PARSERS[parser_key], "fecha_vencimiento", None)
+        fecha_cierre   = getattr(PARSERS[parser_key], "fecha_cierre",      None)
         stmt_ars       = getattr(PARSERS[parser_key], "stmt_total_ars",    None)
         stmt_usd       = getattr(PARSERS[parser_key], "stmt_total_usd",    None)
         proximo_cierre = getattr(PARSERS[parser_key], "proximo_cierre",    None)
         proximo_venc   = getattr(PARSERS[parser_key], "proximo_venc",      None)
+
+        # Prefer statement close date for mes_resumen — it's authoritative.
+        # Counting transaction dates produces wrong results because most charges
+        # fall in the month BEFORE the close date (e.g. a Jan-2026 statement
+        # has mostly Dec-2025 transactions) and installments without stmt_date
+        # keep their original purchase date (e.g. Jan-2025 for C.13/24).
+        if fecha_cierre is not None:
+            mes_resumen = str(fecha_cierre)[:7]
 
         import_info = {
             "fuente":         fuente_target,

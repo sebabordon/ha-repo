@@ -90,6 +90,9 @@ def _detect_vencimiento_bbva(pdf) -> tuple[Optional[date], Optional[date], Optio
     fecha_cierre (dates[0]) is also used as stmt_date for installment date
     remapping — _detect_statement_date() cannot parse the DD-Mmm-YY format that
     BBVA uses, so we derive it here instead.
+
+    The data row may be separated from the header by one or more blank lines
+    (seen in some PDF renderings), so we scan the next 3 lines after the header.
     """
     from parsers.utils import parse_ar_amount
     for page in pdf.pages[:2]:
@@ -97,10 +100,12 @@ def _detect_vencimiento_bbva(pdf) -> tuple[Optional[date], Optional[date], Optio
         lines = text.split("\n")
         for i, line in enumerate(lines):
             if "VENCIMIENTO ACTUAL" in line.upper() and "CIERRE ACTUAL" in line.upper():
-                if i + 1 < len(lines):
-                    tokens = lines[i + 1].split()
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    tokens  = lines[j].split()
                     dates   = [t for t in tokens if _DATE_RE.match(t)]
                     amounts = [t for t in tokens if _AMOUNT_WORD_RE.match(t) and not _DATE_RE.match(t)]
+                    if not dates:
+                        continue
                     cierre = parse_date_dmy(dates[0]) if len(dates) >= 1 else None
                     venc   = parse_date_dmy(dates[1]) if len(dates) >= 2 else None
                     s_ars  = parse_ar_amount(amounts[0]) if len(amounts) >= 1 else None
@@ -160,6 +165,7 @@ class BBVAParser(BaseParser):
             # returned None for BBVA, leaving stmt_date=None and preventing
             # installment date remapping.
             stmt_date, self.fecha_vencimiento, self.stmt_total_ars, self.stmt_total_usd = _detect_vencimiento_bbva(pdf)
+            self.fecha_cierre = stmt_date
             self.proximo_cierre, self.proximo_venc = _detect_proximo_bbva(pdf)
 
             for page in pdf.pages:

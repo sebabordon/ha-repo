@@ -1,3 +1,11 @@
+## 0.10.9
+
+- **BBVA: fecha de cierre autoritativa para `mes_resumen` e instalamentos** (`parsers/bbva.py`, `scrapers/bbva.py`): dos bugs relacionados causaban que un resumen de Enero 2026 quedara etiquetado como "enero 25":
+  1. `_detect_vencimiento_bbva` solo buscaba la línea inmediatamente siguiente al header "CIERRE ACTUAL VENCIMIENTO ACTUAL"; si había una línea en blanco entre el header y los datos (formato PDF variable), `stmt_date` quedaba `None` y las cuotas (`C.13/24`) conservaban su fecha original de compra (ej. Ene-25) en lugar de ser remapeadas al mes del cierre.
+  2. `mes_resumen` se calculaba por moda de fechas de transacciones, pero en un resumen de enero 2026 la mayoría de cargos son de diciembre 2025 (y sin `stmt_date`, las cuotas viejas dominan).
+  - **Fix 1**: `_detect_vencimiento_bbva` ahora escanea hasta 3 líneas después del header antes de rendirse.
+  - **Fix 2**: `BBVAParser.parse()` guarda `stmt_date` como `self.fecha_cierre`; `_import_resumen` la usa como `mes_resumen` autoritativo si está disponible, tanto para la guarda de "ya importado manualmente" como para el registro de la importación.
+
 ## 0.10.8
 
 - **6 nuevos selectores de color en Config → Interfaz** (`static/app.js`, `static/index.html`, `static/style.css`): se agregan controles de color para egreso/ingreso (grilla de gastos y gráfico mes a mes), presupuesto/real (gráfico Presupuesto vs Real), y urgente/pronto (chips y tarjetas de vencimientos). Los 6 valores nuevos se guardan en `ui_colors`, se aplican como variables CSS (`--color-egreso`, `--color-ingreso`, `--color-presup`, `--color-real`, `--color-venc-urg`, `--color-venc-pronto`) en `applyUiColors()`, y los gráficos se re-renderizan al guardar. Se agrega `_cssVar()` para leer variables CSS desde Chart.js. La paleta de donuts queda para una tanda separada.
