@@ -1,3 +1,7 @@
+## 0.10.2
+
+- **BBVA resúmenes: no importar resúmenes con fecha de cierre no parseable** (`scrapers/bbva.py`, `scrapers/bbva_tarjetas.py`): tanto en Caja de Ahorro como en VISA/MC, el filtro de ventana era `if cierre and cierre < cutoff: continue` y luego `candidatos.append((cierre or date.min, …))`. Si `_parse_cierre` devolvía None (fecha no parseable), el `and` se cortocircuitaba, NO se salteaba, y el resumen se agregaba con `date.min` → se importaba aunque estuviera fuera de la ventana (así se podía colar un resumen viejo, ej. enero 2025). Ahora, si la fecha de cierre no se puede parsear, se saltea con log y no se importa (mismo criterio que el backfill de AMEX). Nota: si `resumenes_meses` está seteado alto (≥ ~17 meses), un resumen de enero 2025 SÍ cae dentro de la ventana y se importa a propósito — eso no es bug.
+
 ## 0.10.1
 
 - **Gráfico "mes a mes": selector de meses a mostrar (3/6/12, persistido)** (`static/index.html`, `static/app.js`): se agrega un combo chico en el encabezado del gráfico de movimientos ARS para elegir cuántos meses hacia atrás mostrar (3, 6 o 12). El valor se guarda en localStorage (`monthly_meses`, default 12) y se aplica recortando los últimos N meses del set (los datos vienen de más viejo a más nuevo → `slice(-N)`). El dropdown del filtro de mes sigue listando todos los meses; el recorte es solo visual del gráfico.

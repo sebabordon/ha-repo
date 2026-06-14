@@ -1505,9 +1505,14 @@ class BbvaScraper(BaseScraper):
             if not ("CAJA DE AHORROS" in detalle and "PESOS" in detalle and "EUROS" not in detalle):
                 continue
             cierre = self._parse_cierre(ex.get("fechaCierre"))
-            if cierre and cierre < cutoff:
+            if cierre is None:
+                # Sin fecha de cierre parseable no podemos ubicarlo en la ventana →
+                # NO importarlo (evita colar resúmenes viejos fuera de rango).
+                log_fn(f"  [cuenta] salteado (cierre no parseable): {ex.get('fechaCierre')}")
                 continue
-            candidatos.append((cierre or date.min, ex))
+            if cierre < cutoff:
+                continue
+            candidatos.append((cierre, ex))
         candidatos.sort(key=lambda t: t[0], reverse=True)
 
         fuente_target = "bbva_cuenta"

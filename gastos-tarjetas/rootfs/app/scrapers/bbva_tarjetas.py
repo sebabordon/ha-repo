@@ -414,9 +414,14 @@ class BbvaTarjetasScraper(BbvaScraper):
             else:
                 continue
             cierre = self._parse_cierre(ex.get("fechaCierre"))
-            if cierre and cierre < cutoff:
+            if cierre is None:
+                # Sin fecha de cierre parseable no podemos ubicarlo en la ventana →
+                # NO importarlo (evita colar resúmenes viejos fuera de rango).
+                log_fn(f"  [{product_key}] salteado (cierre no parseable): {ex.get('fechaCierre')}")
                 continue
-            candidatos.append((cierre or date.min, product_key, parser_key, ex))
+            if cierre < cutoff:
+                continue
+            candidatos.append((cierre, product_key, parser_key, ex))
         candidatos.sort(key=lambda t: t[0], reverse=True)
 
         importados = 0
