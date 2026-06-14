@@ -91,6 +91,57 @@ def _parse_date_dmy(s: str) -> Optional[date]:
         return None
 
 
+def _parse_transfer_details(pdf, year: int) -> dict:
+    """
+    Lee la sección 'Transferencias' del extracto (subtablas RECIBIDAS y ENVIADAS) y
+    devuelve {(fecha, abs_importe): [nombre, ...]} para enriquecer las descripciones
+    genéricas 'TRANSFERENCIA' de la sección de movimientos.
+
+    - RECIBIDAS: el nombre es la empresa/servicio de origen (ej. 'INVERTIRONLINE',
+      'TARJ VIRTUAL BB'), que aparece entre el código de empresa y 'TR. E/'.
+    - ENVIADAS:  el nombre es el apellido del destinatario (ej. 'SAENZ').
+
+    La correlación con el movimiento se hace por fecha (DD/MM) + importe. Se guarda
+    una lista por clave para resolver el caso de varias transferencias del mismo
+    monto en el mismo día (se consumen en orden).
+    """
+    details: dict = defaultdict(list)
+    section: Optional[str] = None   # 'recibidas' | 'enviadas'
+    for page in pdf.pages:
+        for line in (page.extract_text() or "").split("\n"):
+            up = line.upper()
+            if "RECIBIDAS" in up and "INFORMACI" in up:
+                section = "recibidas"; continue
+            if up.startswith("ENVIADAS"):
+                section = "enviadas"; continue
+            if up.startswith("LEGALES"):
+                section = None; continue
+            if up.startswith("FECHA"):
+                continue
+            if section is None:
+                continue
+            m = re.match(r"^(\d{2})/(\d{2})\b", line)
+            if not m:
+                continue
+            amts = re.findall(r"[\d.]+,\d{2}", line)
+            if not amts:
+                continue
+            importe = parse_ar_amount(amts[-1])
+            fecha = _parse_date_dm(f"{m.group(1)}/{m.group(2)}", year)
+            if importe is None or fecha is None:
+                continue
+            if section == "recibidas":
+                nm = re.search(r"^\d{2}/\d{2}\s+\S+\s+\d+\s+(.+?)\s+TR\.\s*E/", line)
+            else:
+                nm = re.search(r"^\d{2}/\d{2}\s+\d+\s+([A-Za-zÁÉÍÓÚÑáéíóúñ\.\s]+?)\s+\d", line)
+            if not nm:
+                continue
+            nombre = re.sub(r"\s+", " ", nm.group(1).strip())
+            if nombre:
+                details[(fecha, abs(importe))].append(nombre)
+    return details
+
+
 class BBVACuentaParser(BaseParser):
     fuente = Fuente.BBVA_CUENTA
 
@@ -100,6 +151,10 @@ class BBVACuentaParser(BaseParser):
 
         with pdfplumber.open(file) as pdf:
             year = _detect_year(pdf)
+
+            # Detalle de transferencias (RECIBIDAS/ENVIADAS) para enriquecer las
+            # descripciones genéricas "TRANSFERENCIA" con el nombre de la contraparte.
+            transfer_details = _parse_transfer_details(pdf, year)
 
             # ── Pass 1: collect debit-card purchases from "Tarjetas de Debito" ──
             # These have the real merchant name and a full DD/MM/YYYY date.
@@ -216,6 +271,13 @@ class BBVACuentaParser(BaseParser):
                         if debit_consumed[key] < len(debit_purchases.get(key, [])):
                             debit_consumed[key] += 1
                             continue
+
+                    # Enriquecer transferencias genéricas con el nombre de la
+                    # contraparte tomado de la tabla de detalle (por fecha+importe).
+                    if description.upper().startswith("TRANSFERENCIA"):
+                        nombres = transfer_details.get((fecha, abs(monto)))
+                        if nombres:
+                            description = f"{description} — {nombres.pop(0)}"
 
                     gastos.append(self._gasto(fecha, description, monto, Moneda.ARS, filename))
 
