@@ -1,3 +1,7 @@
+## 1.0.2
+
+- **Fix doble dropdown en categoría de pagos manuales** (`static/index.html`): el campo `pago-cat` tenía `list="cat-datalist"` (datalist nativo del browser) simultáneo al dropdown custom de `_setupCatAC`, lo que mostraba dos selectores superpuestos. Se eliminó el atributo `list`, dejando solo el dropdown jerárquico propio de la app.
+
 ## 1.0.1
 
 - **Categoría en pagos manuales** (`static/index.html`, `static/app.js`, `routes/rules.py`): el formulario de Pagos / vencimientos manuales ahora incluye un campo Categoría con autocomplete (mismo dropdown que el resto de la app). Al salir del campo Descripción, si Categoría está vacía, se consulta automáticamente las reglas de categorización y se pre-rellena si hay match. La columna Categoría aparece también en la tabla de pagos. Al editar un pago existente se carga la categoría guardada.
