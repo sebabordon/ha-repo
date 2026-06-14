@@ -92,6 +92,13 @@ Examples of things that must NOT stay hardcoded:
 - NEVER commit anything inside `samples/` — those files contain real personal
   financial PDFs. The directory is `.gitignore`d; keep it that way.
 
+## UI / Design conventions (MANDATORY)
+
+Toda UI nueva (botones, chips, iconos, toggles, colores, fechas) **debe seguir
+`DESIGN.md`** en la raíz del add-on. Antes de agregar o cambiar un botón/control,
+leer `DESIGN.md` y reusar el vocabulario de emojis y los patrones ya definidos.
+Si algo nuevo no encaja, primero actualizar `DESIGN.md` y después implementar.
+
 ## Code conventions
 
 - Sign convention: `monto > 0` = egreso (money out), `monto < 0` = ingreso.

@@ -3664,7 +3664,7 @@ async function runRulePreview() {
     footer.style.display = "flex";
     updateRpCount();
   } finally {
-    btn.disabled = false; btn.textContent = "Buscar";
+    btn.disabled = false; btn.textContent = "🔍 Buscar";
   }
 }
 
@@ -6548,7 +6548,7 @@ document.getElementById("btn-apply-user-rules")?.addEventListener("click", async
     } else {
       showToast("Error al aplicar reglas", "err", 0);
     }
-  } finally { btn.disabled = false; btn.textContent = "Reaplicar a todos"; }
+  } finally { btn.disabled = false; btn.textContent = "🔄 Reaplicar a todos"; }
 });
 
 // ── Scrapers config ───────────────────────────────────────────────────────────
@@ -7392,7 +7392,7 @@ function toggleCatExpand(nombre) {
 function toggleAllCatsKeywords() {
   _showAllKeywords = !_showAllKeywords;
   const btn = document.getElementById("btn-toggle-all-keywords");
-  if (btn) btn.textContent = _showAllKeywords ? "Cerrar keywords" : "Ver keywords";
+  if (btn) btn.textContent = _showAllKeywords ? "🔑 Cerrar keywords" : "🔑 Ver keywords";
   renderCategoriasManaged();
 }
 
@@ -7677,7 +7677,7 @@ document.getElementById("btn-apply-rules-cat").addEventListener("click", async (
   } catch (e) {
     showToast(`❌ ${e.message}`, "err", 0);
   } finally {
-    btn.disabled = false; btn.textContent = "Reaplicar";
+    btn.disabled = false; btn.textContent = "🔄 Reaplicar";
   }
 });
 

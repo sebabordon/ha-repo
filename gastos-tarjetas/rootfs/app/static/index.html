@@ -218,7 +218,7 @@
 
       <!-- Gastos sub-tabs -->
       <div class="gtabs">
-        <button class="gtab active" data-gtab="movimientos">Movimientos</button>
+        <button class="gtab active" data-gtab="movimientos">🧾 Movimientos</button>
         <button class="gtab" data-gtab="transferencias">⇄ Transferencias</button>
       </div>
 
@@ -351,7 +351,7 @@
         <div id="tw-card-section" class="tw-zone" style="display:none">
           <div class="tw-zone-title">
             Pagos de tarjeta detectados <span class="tw-col-count" id="tw-card-count"></span>
-            <button id="btn-tw-card-all" class="btn btn-sm btn-primary" style="margin-left:auto;font-size:.73rem;padding:.15rem .55rem">Agregar todas a cola</button>
+            <button id="btn-tw-card-all" class="btn btn-sm btn-primary" style="margin-left:auto;font-size:.73rem;padding:.15rem .55rem">➕ Agregar todas a cola</button>
           </div>
           <div id="tw-card-list"></div>
         </div>
@@ -360,7 +360,7 @@
         <div id="tw-sug-section" class="tw-zone" style="display:none">
           <div class="tw-zone-title">
             Sugerencias automáticas <span class="tw-col-count" id="tw-sug-count"></span>
-            <button id="btn-tw-pair-all" class="btn btn-sm btn-primary" style="margin-left:auto;font-size:.73rem;padding:.15rem .55rem">Agregar todas a cola</button>
+            <button id="btn-tw-pair-all" class="btn btn-sm btn-primary" style="margin-left:auto;font-size:.73rem;padding:.15rem .55rem">➕ Agregar todas a cola</button>
           </div>
           <div id="tw-sug-list"></div>
         </div>
@@ -370,14 +370,14 @@
           <div class="tw-zone-title">Cola de confirmación</div>
           <div id="tw-queue-list" class="tw-queue-list"></div>
           <div class="tw-queue-footer">
-            <button id="btn-tw-confirm" class="btn btn-primary btn-sm">Confirmar pares</button>
+            <button id="btn-tw-confirm" class="btn btn-primary btn-sm">✓ Confirmar pares</button>
           </div>
         </div>
 
         <!-- Selection status bar -->
         <div id="tw-selection-bar" class="tw-selection-bar" style="display:none">
           <span id="tw-selection-label">Seleccionado: —</span>
-          <button id="btn-tw-mark-single" class="btn btn-sm">Marcar solo este</button>
+          <button id="btn-tw-mark-single" class="btn btn-sm">⇄ Marcar solo este</button>
           <button id="btn-tw-cancel-select" class="btn btn-sm">✕ Cancelar</button>
         </div>
 
@@ -583,8 +583,8 @@
           <h2>Categorías</h2>
           <button id="btn-add-categoria" class="btn">+ Nueva</button>
           <button id="btn-reload-categorias" class="btn" title="Recargar">↺</button>
-          <button id="btn-toggle-all-keywords" class="btn">Ver keywords</button>
-          <button id="btn-apply-rules-cat" class="btn">Reaplicar</button>
+          <button id="btn-toggle-all-keywords" class="btn">🔑 Ver keywords</button>
+          <button id="btn-apply-rules-cat" class="btn">🔄 Reaplicar</button>
           <button id="btn-export-rules-cat" class="btn">⬇ Exportar</button>
           <label class="btn" style="cursor:pointer">⬆ Importar<input type="file" id="inp-import-rules-cat" accept=".yaml,.yml" style="display:none"></label>
           <button id="btn-save-categorias" class="btn btn-primary">💾 Guardar</button>
@@ -633,7 +633,7 @@
             <div class="rules-header">
               <h2>Reglas de asignación de persona</h2>
               <button id="btn-add-user-rule" class="btn">+ Nueva regla</button>
-              <button id="btn-apply-user-rules" class="btn">Reaplicar a todos</button>
+              <button id="btn-apply-user-rules" class="btn">🔄 Reaplicar a todos</button>
               <button id="btn-export-user-rules" class="btn btn-sm">⬇ Exportar</button>
               <label class="btn btn-sm" style="cursor:pointer">⬆ Importar<input type="file" id="inp-import-user-rules" accept=".yaml,.yml" style="display:none"></label>
             </div>
@@ -868,7 +868,7 @@
 
         <div class="ui-colors-actions">
           <button class="btn btn-primary" onclick="saveUiSettings()">💾 Guardar</button>
-          <button class="btn" onclick="resetUiSettings()">Restablecer</button>
+          <button class="btn" onclick="resetUiSettings()">↩ Restablecer</button>
         </div>
         <div class="ui-preview">
           <div class="ui-preview-title">Vista previa de colores</div>
@@ -890,10 +890,10 @@
         </p>
         <p class="rules-hint">Estado: <span id="push-status-val">—</span></p>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-          <button id="btn-push-enable" class="btn btn-primary">Activar notificaciones</button>
+          <button id="btn-push-enable" class="btn btn-primary">🔔 Activar notificaciones</button>
           <button id="btn-push-test" class="btn">▶ Probar</button>
-          <button id="btn-push-disable" class="btn">Desactivar</button>
-          <button id="btn-push-reset" class="btn" title="Borra todas tus suscripciones y reactiva este dispositivo (arregla notificaciones duplicadas)">Resetear duplicadas</button>
+          <button id="btn-push-disable" class="btn">🔕 Desactivar</button>
+          <button id="btn-push-reset" class="btn" title="Borra todas tus suscripciones y reactiva este dispositivo (arregla notificaciones duplicadas)">🧹 Resetear duplicadas</button>
         </div>
 
         <hr style="margin:1.4rem 0;border:none;border-top:1px solid #eee">
@@ -932,7 +932,7 @@
             <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
               <button class="btn" onclick="addIconRow()">+ Fuente</button>
               <button class="btn btn-primary" onclick="saveIconosConfig()">💾 Guardar</button>
-              <button class="btn" onclick="loadIconosConfig()">Restablecer</button>
+              <button class="btn" onclick="loadIconosConfig()">↩ Restablecer</button>
               <span id="iconos-save-msg" style="color:#16a34a;font-size:.85em"></span>
             </div>
           </div>
@@ -986,7 +986,7 @@
         </div>
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
           <button class="btn btn-primary" onclick="saveCategorizacionConfig()">💾 Guardar</button>
-          <button class="btn" onclick="loadCategorizacionConfig()">Restablecer</button>
+          <button class="btn" onclick="loadCategorizacionConfig()">↩ Restablecer</button>
           <span id="cat-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
 
@@ -1001,7 +1001,7 @@
         </div>
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
           <button class="btn btn-primary" onclick="saveEspecialesConfig()">💾 Guardar</button>
-          <button class="btn" onclick="loadEspecialesConfig()">Restablecer</button>
+          <button class="btn" onclick="loadEspecialesConfig()">↩ Restablecer</button>
           <span id="especiales-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
           </div>
@@ -1055,7 +1055,7 @@
 
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
           <button class="btn btn-primary" onclick="saveDedupConfig()">💾 Guardar</button>
-          <button class="btn" onclick="loadDedupConfig()">Restablecer</button>
+          <button class="btn" onclick="loadDedupConfig()">↩ Restablecer</button>
           <span id="dedup-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
           </div>
@@ -1110,7 +1110,7 @@
 
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
           <button class="btn btn-primary" onclick="savePeriodoConfig()">💾 Guardar</button>
-          <button class="btn" onclick="loadPeriodoConfig()">Restablecer</button>
+          <button class="btn" onclick="loadPeriodoConfig()">↩ Restablecer</button>
           <span id="periodo-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
           </div>
@@ -1182,7 +1182,7 @@
 
         <div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center">
           <button class="btn btn-primary" onclick="saveVencMatchConfig()">💾 Guardar</button>
-          <button class="btn" onclick="loadVencMatchConfig()">Restablecer</button>
+          <button class="btn" onclick="loadVencMatchConfig()">↩ Restablecer</button>
           <span id="venc-match-save-msg" style="color:#16a34a;font-size:.85em"></span>
         </div>
           </div>
@@ -1313,7 +1313,7 @@
           <label>Desde <input type="date" id="rp-desde"></label>
           <label>Hasta <input type="date" id="rp-hasta"></label>
           <label class="rp-manuales-label" id="rp-manuales-row"><input type="checkbox" id="rp-manuales"> Incluir manuales</label>
-          <button id="btn-rp-run" class="btn btn-primary btn-sm" onclick="runRulePreview()">Buscar</button>
+          <button id="btn-rp-run" class="btn btn-primary btn-sm" onclick="runRulePreview()">🔍 Buscar</button>
         </div>
         <!-- Hidden spans used to pass column header labels into the dynamically rendered table -->
         <span id="rp-col-actual" style="display:none">Categoría actual</span>
@@ -1322,7 +1322,7 @@
       </div>
       <div class="modal-footer" id="rp-footer" style="display:none">
         <button class="btn btn-primary" onclick="applySelectedPreview()">
-          Categorizar seleccionados (<span id="rp-count">0</span>)
+          🏷️ Categorizar seleccionados (<span id="rp-count">0</span>)
         </button>
       </div>
     </div>

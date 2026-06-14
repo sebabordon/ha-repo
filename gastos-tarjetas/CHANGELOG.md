@@ -1,3 +1,7 @@
+## 0.10.6
+
+- **Emojis faltantes en botones de texto + guía de diseño documentada** (`static/index.html`, `static/app.js`, `DESIGN.md`, `CLAUDE.md`): se agregó emoji a los ~15 botones que eran solo texto, siguiendo un vocabulario consistente: ↩ Restablecer (×7), 🔄 Reaplicar / Reaplicar a todos, 🔑 Ver keywords, 🔍 Buscar, ✓ Confirmar pares, ⇄ Marcar solo este, ➕ Agregar todas a cola (×2), 🔔 Activar notificaciones, 🔕 Desactivar, 🧹 Resetear duplicadas, 🧾 Movimientos, 🏷️ Categorizar seleccionados. Para los botones cuyo texto se reescribe desde JS (Buscar, Reaplicar, Reaplicar a todos, Ver/Cerrar keywords) el emoji se agregó también en las asignaciones de `textContent` para que no se pierda. No se tocaron los botones `+` / `×` / `✕`. Se creó **`DESIGN.md`** con las convenciones de UI (clases de botón, vocabulario oficial de emojis, patrón de toggles icono/texto, estados de chip del scraper, colores, fechas en TZ del browser, refresco unificado) y un puntero MANDATORY en `CLAUDE.md` para que todo lo futuro siga ese estilo. El refactor estructural (toggle global icono+texto para todos los botones) queda documentado como pendiente en DESIGN.md.
+
 ## 0.10.5
 
 - **Botones de Pagos: toggle propio, iconos unificados y "Reabrir"** (`static/app.js`, `static/index.html`, `static/style.css`):
