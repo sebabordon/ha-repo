@@ -1,3 +1,7 @@
+## 0.9.9
+
+- **BBVA resúmenes: dedup de extractos en el fetch multi-año** (`scrapers/bbva.py`): cuando la ventana cruza años, `_fetch_extractos` consultaba la API una vez por año, pero la API de BBVA ignora el parámetro `fecha:año` y siempre devuelve los últimos ~100 resúmenes — así que cada año traía la MISMA lista y todo se procesaba dos veces (se veía cada `[cuenta] al día` duplicado, y en teoría se intentaría descargar dos veces un resumen nuevo). Ahora se deduplica por `reporte` al acumular, y el log muestra por año solo el conteo (en la API / nuevos) más la lista única una sola vez, en vez de repetir ~100 líneas por año. No cambia qué se importa (el filtro de ventana por fecha de cierre ya era correcto).
+
 ## 0.9.8
 
 - **Log unificado: timestamp en la TZ del browser** (`static/app.js`): `app_log.py` guarda `ts` como `datetime.now(timezone.utc)` ("YYYY-MM-DD HH:MM:SS", UTC sin sufijo) y el frontend lo mostraba crudo → se veía en UTC. Se agrega `_fmtLogTs()` que interpreta el valor como UTC y lo muestra en la zona horaria del browser, manteniendo el formato ordenable con segundos. El resto de timestamps de la UI (último intento/OK del scraper vía `_fmtTs`, `scraped_at`, próximo run vía `isoformat()` con offset) ya convertían bien — no requerían cambios.

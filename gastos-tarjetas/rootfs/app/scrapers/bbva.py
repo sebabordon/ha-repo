@@ -1253,7 +1253,11 @@ class BbvaScraper(BaseScraper):
 
         self._api_request(driver, self._EP_VIEWER_PDF)
 
+        # Dedup por `reporte`: la API de BBVA ignora el parámetro `fecha:año` y
+        # devuelve siempre los últimos ~100 resúmenes, así que consultar varios años
+        # trae la MISMA lista repetida. Sin dedup, cada resumen se procesaría N veces.
         all_extractos: list[dict] = []
+        seen: set[str] = set()
         for year in years:
             resp = self._api_request(
                 driver, self._EP_EXTRACTOS, method="POST", json_body={"fecha": year}
@@ -1263,13 +1267,24 @@ class BbvaScraper(BaseScraper):
                 continue
             sc = str(resp["json"].get("statusCode") or "")
             extractos = ((resp["json"].get("result") or {}).get("extractos") or [])
+            nuevos = 0
+            for ex in extractos:
+                rep = (ex.get("reporte") or "").strip()
+                if rep and rep in seen:
+                    continue
+                if rep:
+                    seen.add(rep)
+                all_extractos.append(ex)
+                nuevos += 1
             if extractos:
-                log_fn(f"  [extractos] {len(extractos)} resúmenes en la API (año {year}):")
-                for ex in extractos:
-                    log_fn(f"    • {ex.get('detalle','?')} — cierre {ex.get('fechaCierre','?')} (reporte={ex.get('reporte','?')})")
+                log_fn(f"  [extractos] año {year}: {len(extractos)} en la API, {nuevos} nuevos")
             else:
                 log_fn(f"  [extractos] año {year}: lista vacía (statusCode={sc}) — body: {resp['body'][:300]}")
-            all_extractos.extend(extractos)
+
+        if all_extractos:
+            log_fn(f"  [extractos] {len(all_extractos)} resúmenes únicos:")
+            for ex in all_extractos:
+                log_fn(f"    • {ex.get('detalle','?')} — cierre {ex.get('fechaCierre','?')} (reporte={ex.get('reporte','?')})")
         return all_extractos
 
     def _fetch_pdf_bytes(self, driver, reporte: str, log_fn) -> Optional[bytes]:
