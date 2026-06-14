@@ -173,6 +173,23 @@ def _conn():
 
 # ── scraper_status ────────────────────────────────────────────────────────────
 
+def reset_stale_running() -> int:
+    """
+    Marca como 'idle' los scrapers que quedaron en estado 'running'.
+
+    Un scrape que muere sin cerrar su estado (p.ej. por un update/reinicio del
+    add-on, que para el contenedor) deja `estado='running'` colgado para siempre.
+    Esta función se llama una vez por usuario por arranque del proceso: como es un
+    proceso nuevo, cualquier 'running' es de un run anterior ya muerto → se limpia.
+    Devuelve cuántas filas se resetearon.
+    """
+    with _conn() as conn:
+        cur = conn.execute(
+            "UPDATE scraper_status SET estado='idle' WHERE estado='running'"
+        )
+        return cur.rowcount or 0
+
+
 def upsert_scraper_status(fuente: str, **kwargs) -> None:
     """Actualiza campos de scraper_status para un banco dado."""
     if not kwargs:

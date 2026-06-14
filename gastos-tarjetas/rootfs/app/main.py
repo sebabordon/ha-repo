@@ -90,6 +90,13 @@ async def user_data_context(request: Request, call_next):
         token = userctx.set_user_context(email)
         if email not in _initialized_users:
             init_db()  # create/migrate tables in this user's DB
+            # Proceso nuevo → limpiar scrapers que quedaron 'running' (scrape muerto
+            # por un update/reinicio del add-on), para que el chip no quede pegado.
+            try:
+                from scrapers_db import reset_stale_running
+                reset_stale_running()
+            except Exception:
+                pass
             _initialized_users.add(email)
     try:
         response = await call_next(request)

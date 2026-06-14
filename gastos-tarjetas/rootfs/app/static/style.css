@@ -1249,6 +1249,9 @@ tbody tr:hover { background: #fafbff; }
 .venc-chip.scrape-warn { border-right: 5px solid #f59e0b; }
 .saldo-chip-btn.scrape-err,
 .venc-chip.scrape-err  { border-right: 5px solid #dc2626; }
+.saldo-chip-btn.scrape-run,
+.venc-chip.scrape-run  { border-right: 5px solid #2563eb; animation: scrape-pulse 1.2s ease-in-out infinite; }
+@keyframes scrape-pulse { 0%,100% { border-right-color:#2563eb; } 50% { border-right-color:#93c5fd; } }
 .venc-detail { margin-top: .45rem; }
 
 /* Chip de tarjeta en formato card: nombre arriba + consumo en vivo prominente,

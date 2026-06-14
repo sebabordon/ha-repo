@@ -3829,6 +3829,7 @@ function _scheduleIntervalHours(schedule) {
 //   null              → la cuenta no tiene scraper (manual) o está deshabilitado
 function _scraperStatusColor(c) {
   if (!c || !c.scraper_instance_id || !c.scraper_enabled) return null;
+  if (c.scraper_estado === "running") return "run";   // azul — corriendo ahora mismo
   if (c.scraper_estado === "error" || c.scraper_estado === "session_expired") return "err";
   const last = c.scraper_ultimo_ok || c.scraper_ultimo_run;
   if (!last) return "warn";  // nunca tuvo un run exitoso
@@ -3844,11 +3845,25 @@ function _scraperStatusColor(c) {
 function _scraperStatusTitle(c) {
   const st = _scraperStatusColor(c);
   if (!st) return "";
+  if (st === "run")  return "Scrape en curso… (se actualiza solo al terminar)";
   const last = c.scraper_ultimo_ok || c.scraper_ultimo_run;
   const when = last ? _fmtTs(last) : "nunca";
   if (st === "err")  return `Último scrape: FALLÓ — ${when}${c.scraper_error_msg ? ` (${c.scraper_error_msg})` : ""}`;
   if (st === "warn") return `Scrape atrasado — último OK: ${when}`;
   return `Último scrape OK — ${when}`;
+}
+
+// Mientras alguna cuenta esté con scrape corriendo (chip azul), refrescar solo
+// hasta que termine, para que el chip cambie de color sin recargar la página.
+let _scrapeRunningTimer = null;
+function _scheduleScrapeAutorefresh(cuentas) {
+  const anyRunning = (cuentas || []).some(c => _scraperStatusColor(c) === "run");
+  if (anyRunning && !_scrapeRunningTimer) {
+    _scrapeRunningTimer = setInterval(() => { loadSaldos(); loadVencimientos?.(); }, 8000);
+  } else if (!anyRunning && _scrapeRunningTimer) {
+    clearInterval(_scrapeRunningTimer);
+    _scrapeRunningTimer = null;
+  }
 }
 
 // Devuelve la cuenta (con campos scraper_*) por fuente, desde el cache del widget.
@@ -3883,6 +3898,7 @@ function _scheduleSelect(id, current) {
 function renderSaldos(cuentas) {
   const widget = document.getElementById("saldos-widget");
   if (!cuentas.length) { widget.style.display = "none"; return; }
+  _scheduleScrapeAutorefresh(cuentas);   // poll mientras haya scrapes corriendo
   widget.style.display = "grid";
   widget.innerHTML = cuentas.map(c => {
     const moneda  = c.moneda || "ARS";
