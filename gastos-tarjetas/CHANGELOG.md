@@ -1,3 +1,7 @@
+## 1.0.1
+
+- **Categoría en pagos manuales** (`static/index.html`, `static/app.js`, `routes/rules.py`): el formulario de Pagos / vencimientos manuales ahora incluye un campo Categoría con autocomplete (mismo dropdown que el resto de la app). Al salir del campo Descripción, si Categoría está vacía, se consulta automáticamente las reglas de categorización y se pre-rellena si hay match. La columna Categoría aparece también en la tabla de pagos. Al editar un pago existente se carga la categoría guardada.
+
 ## 1.0.0
 
 Primera versión estable. Consolidación de todas las funcionalidades desarrolladas desde el prototipo inicial: importación de resúmenes PDF (AMEX, BBVA Mastercard/Visa/Cuenta, Galicia, MercadoPago), scrapers automáticos con schedule, categorización por reglas, presupuesto mensual, gráficos, conciliación de transferencias, gestión de pagos, widget de vencimientos, colores y nombres cortos por cuenta, selectores de color en Config → Interfaz, diseño responsivo y guía de diseño documentada en `DESIGN.md`.

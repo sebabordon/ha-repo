@@ -926,6 +926,7 @@ function _pagoForm() {
     fecha:  document.getElementById("pago-fecha"),
     recur:  document.getElementById("pago-recur"),
     fin:    document.getElementById("pago-fin"),
+    cat:    document.getElementById("pago-cat"),
   };
 }
 
@@ -933,7 +934,7 @@ function resetPagoForm() {
   _editingPagoId = null;
   const f = _pagoForm();
   f.desc.value = ""; f.monto.value = ""; f.fecha.value = ""; f.fin.value = "";
-  f.recur.value = "unico"; f.moneda.value = "ARS";
+  f.recur.value = "unico"; f.moneda.value = "ARS"; f.cat.value = "";
   document.getElementById("btn-add-pago").textContent = "➕ Agregar";
   document.getElementById("btn-cancel-pago").style.display = "none";
 }
@@ -947,6 +948,7 @@ function editPago(p) {
   f.fecha.value  = String(p.fecha_vencimiento || "").slice(0, 10);
   f.recur.value  = p.recurrencia === "mensual" ? "mensual" : "unico";
   f.fin.value    = String(p.fecha_fin || "").slice(0, 10);
+  f.cat.value    = p.categoria || "";
   document.getElementById("btn-add-pago").textContent = "💾 Guardar";
   document.getElementById("btn-cancel-pago").style.display = "";
   f.desc.focus();
@@ -962,7 +964,7 @@ async function loadPagos() {
   if (!pagos.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 6; td.className = "empty"; td.textContent = "Sin pagos cargados.";
+    td.colSpan = 7; td.className = "empty"; td.textContent = "Sin pagos cargados.";
     tr.appendChild(td); tb.appendChild(tr); return;
   }
   const mkAction = (icon, label, cls, fn, title) => {
@@ -985,6 +987,7 @@ async function loadPagos() {
       p.descripcion,
       _fmtPagoMonto(p),
       tipo,
+      p.categoria || "",
       p.estado === "pagado" ? "Pagado" : "Pendiente",
     ];
     for (const txt of cells) {
@@ -1018,6 +1021,7 @@ async function savePago() {
     fecha_vencimiento: fecha,
     recurrencia:       f.recur.value,
     fecha_fin:         (f.recur.value === "mensual" ? f.fin.value : "") || "",
+    categoria:         f.cat.value.trim() || "",
   };
   const editing = _editingPagoId != null;
   try {
@@ -1079,6 +1083,20 @@ async function deletePago(id, desc) {
 document.getElementById("btn-add-pago")?.addEventListener("click", savePago);
 document.getElementById("btn-cancel-pago")?.addEventListener("click", resetPagoForm);
 document.getElementById("btn-reload-pagos")?.addEventListener("click", loadPagos);
+_setupCatAC(document.getElementById("pago-cat"), "");
+
+document.getElementById("pago-desc")?.addEventListener("blur", async () => {
+  const catEl = document.getElementById("pago-cat");
+  if (catEl.value.trim()) return;
+  const desc = document.getElementById("pago-desc").value.trim();
+  if (!desc) return;
+  try {
+    const res = await fetch(`${BASE}/api/rules/suggest?desc=${encodeURIComponent(desc)}`);
+    if (!res.ok) return;
+    const { categoria } = await res.json();
+    if (categoria) catEl.value = categoria;
+  } catch (_) {}
+});
 
 // ── User info ─────────────────────────────────────────────────────────────────
 fetch(`${BASE}/auth/me`).then(r => r.json()).then(u => {

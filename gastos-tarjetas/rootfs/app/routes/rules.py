@@ -107,6 +107,14 @@ def post_rules_learn(body: dict, request: Request):
     return {"ok": True, "agregado": added}
 
 
+@router.get("/rules/suggest")
+def get_rules_suggest(request: Request, desc: str = ""):
+    """Return the category suggested by rules for a given description."""
+    require_auth(request)
+    cat = categorize_by_rules(desc.strip()) if desc.strip() else None
+    return {"categoria": cat}
+
+
 @router.get("/rules/export")
 def get_rules_export(request: Request):
     require_auth(request)
