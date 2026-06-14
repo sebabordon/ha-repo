@@ -2497,9 +2497,11 @@ tbody tr:hover { background: #fafbff; }
 .pago-field-btns .btn { height: 34px; }
 
 /* Green heavy checkmark for "Marcar pagado" button */
-.btn.btn-pagado .tab-icon { color: #16a34a; font-size: 1.25em; }
+.btn.btn-pagado .pa-icon { color: #16a34a; font-size: 1.25em; }
 
-/* Pagos row — action buttons (icon+text, height-consistent across browsers) */
+/* Pagos row — action buttons (icon+text, height-consistent across browsers).
+   Clases propias .pa-icon/.pa-text (NO .tab-*) para que el modo de display de
+   los botones sea independiente del de las pestañas. */
 .btn.pago-action {
   display: inline-flex;
   align-items: center;
@@ -2509,15 +2511,21 @@ tbody tr:hover { background: #fafbff; }
   white-space: nowrap;
   line-height: 1;
 }
-/* Fixed-width icon area so wide emojis (✏️, 🗑) don't make the button wider */
-.pago-action .tab-icon {
+.pa-text { line-height: 1; }
+/* Fixed-width icon area así los glifos anchos no agrandan el botón */
+.pa-icon {
   display: inline-block;
   width: 1.1em;
+  font-size: 1.15em;
+  line-height: 1;
   text-align: center;
   flex-shrink: 0;
 }
-/* Icon-only mode: true square buttons */
-body.tab-mode-icons .btn.pago-action {
+/* Modo "solo íconos" / "solo texto" para los botones de Pagos */
+body.pago-btns-icons .pa-text { display: none; }
+body.pago-btns-text  .pa-icon { display: none; }
+/* Icon-only mode: botones cuadrados */
+body.pago-btns-icons .btn.pago-action {
   padding: 0;
   width: 34px;
   height: 34px;
@@ -2525,7 +2533,7 @@ body.tab-mode-icons .btn.pago-action {
 }
 @media (pointer: coarse) {
   .btn.pago-action { min-height: 38px; }
-  body.tab-mode-icons .btn.pago-action { width: 44px; height: 44px; }
+  body.pago-btns-icons .btn.pago-action { width: 44px; height: 44px; }
 }
 
 .cq-progress { font-variant-numeric: tabular-nums; white-space: nowrap; }

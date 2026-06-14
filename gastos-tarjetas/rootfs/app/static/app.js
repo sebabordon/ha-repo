@@ -21,6 +21,7 @@ const UI_PREF_DEFAULTS = {
   chart_home_mode:    "normal",   // "normal" | "compact" | "hidden"
   bud_chart_mode:     "normal",   // "normal" | "compact" | "hidden"
   tab_icon_mode:      "icons_text", // "icons_text" | "icons" | "text"
+  pago_btn_mode:      "icons_text", // botones de acción de Pagos: "icons_text" | "icons" | "text"
 };
 
 function getUiPref(key) {
@@ -55,6 +56,8 @@ function applyUiPrefs() {
   _applyBudChartMode(getUiPref("bud_chart_mode"));
   // Tab icon mode
   _applyTabIconMode(getUiPref("tab_icon_mode"));
+  // Pago action buttons mode (independiente del de pestañas)
+  _applyPagoBtnMode(getUiPref("pago_btn_mode"));
   // Top charts order
   _applyTopChartsOrder();
 }
@@ -63,6 +66,12 @@ function _applyTabIconMode(mode) {
   document.body.classList.remove("tab-mode-icons", "tab-mode-text");
   if (mode === "icons") document.body.classList.add("tab-mode-icons");
   if (mode === "text")  document.body.classList.add("tab-mode-text");
+}
+
+function _applyPagoBtnMode(mode) {
+  document.body.classList.remove("pago-btns-icons", "pago-btns-text");
+  if (mode === "icons") document.body.classList.add("pago-btns-icons");
+  if (mode === "text")  document.body.classList.add("pago-btns-text");
 }
 
 function _applyTopChartsOrder() {
@@ -628,6 +637,7 @@ function renderUiSettings() {
   setChk("ui-venc-show-pdf-ref",  p.venc_show_pdf_ref);
   setVal("ui-chart-home-mode",    p.chart_home_mode);
   setVal("ui-tab-icon-mode",      p.tab_icon_mode);
+  setVal("ui-pago-btn-mode",      p.pago_btn_mode);
   _updateUiPreview();
 }
 
@@ -678,6 +688,7 @@ function _getUiPrefInputs() {
     venc_show_pdf_ref:  chk("ui-venc-show-pdf-ref",  true),
     chart_home_mode:    sel("ui-chart-home-mode",    UI_PREF_DEFAULTS.chart_home_mode),
     tab_icon_mode:      sel("ui-tab-icon-mode",      UI_PREF_DEFAULTS.tab_icon_mode),
+    pago_btn_mode:      sel("ui-pago-btn-mode",      UI_PREF_DEFAULTS.pago_btn_mode),
   };
 }
 
@@ -937,8 +948,8 @@ async function loadPagos() {
     const b = document.createElement("button");
     b.className = "btn pago-action" + (cls ? " " + cls : "");
     b.title = title || label; b.onclick = fn;
-    const si = document.createElement("span"); si.className = "tab-icon"; si.textContent = icon;
-    const st = document.createElement("span"); st.className = "tab-text"; st.textContent = " " + label;
+    const si = document.createElement("span"); si.className = "pa-icon"; si.textContent = icon;
+    const st = document.createElement("span"); st.className = "pa-text"; st.textContent = " " + label;
     b.appendChild(si); b.appendChild(st);
     return b;
   };
@@ -961,12 +972,14 @@ async function loadPagos() {
     const tdA = document.createElement("td");
     tdA.style.cssText = "display:flex;align-items:center;gap:.3rem;white-space:nowrap";
     if (p.estado !== "pagado") {
-      tdA.appendChild(mkAction("✔", "Pagado", "btn-pagado", () => markPagoPaid(p.id), "Marcar pagado"));
+      tdA.appendChild(mkAction("✓", "Pagado", "btn-pagado", () => markPagoPaid(p.id), "Marcar pagado"));
       if (p.recurrencia === "mensual")
-        tdA.appendChild(mkAction("⏹", "Finalizar", "", () => finalizarPago(p.id, p.descripcion), "Finalizar serie"));
-      tdA.appendChild(mkAction("✏️", "Editar", "", () => editPago(p), "Editar"));
+        tdA.appendChild(mkAction("■", "Finalizar", "", () => finalizarPago(p.id, p.descripcion), "Finalizar serie"));
+      tdA.appendChild(mkAction("✎", "Editar", "", () => editPago(p), "Editar"));
+    } else {
+      tdA.appendChild(mkAction("↺", "Reabrir", "", () => reabrirPago(p.id), "Reabrir (volver a pendiente)"));
     }
-    tdA.appendChild(mkAction("🗑", "Borrar", "btn-danger", () => deletePago(p.id, p.descripcion), "Borrar"));
+    tdA.appendChild(mkAction("🗑︎", "Borrar", "btn-danger", () => deletePago(p.id, p.descripcion), "Borrar"));
     tr.appendChild(tdA);
     tb.appendChild(tr);
   }
@@ -1009,6 +1022,17 @@ async function markPagoPaid(id) {
       : "Marcado como pagado");
     loadPagos();
   } catch (_) { showToast("Error", "err"); }
+}
+
+async function reabrirPago(id) {
+  try {
+    const r = await fetch(`${BASE}/api/pagos/${id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ estado: "pendiente" }),
+    });
+    if (!r.ok) throw new Error();
+    showToast("Reabierto como pendiente"); loadPagos();
+  } catch (_) { showToast("No se pudo reabrir", "err"); }
 }
 
 async function finalizarPago(id, desc) {

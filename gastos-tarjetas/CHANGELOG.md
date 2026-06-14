@@ -1,3 +1,10 @@
+## 0.10.5
+
+- **Botones de Pagos: toggle propio, iconos unificados y "Reabrir"** (`static/app.js`, `static/index.html`, `static/style.css`):
+  - **#1 Desacople + 2º toggle:** los botones de acción de la tabla de Pagos usaban las clases `.tab-icon`/`.tab-text` de la navegación, así que el modo de display de las pestañas (íconos/texto/ambos) los afectaba sin querer. Ahora tienen clases propias `.pa-icon`/`.pa-text` y un toggle dedicado en Config → UI ("Botones de Pagos": íconos+texto / solo íconos / solo texto), persistido en `ui_prefs.pago_btn_mode`, independiente del de pestañas.
+  - **#3 Iconos unificados:** se reemplazaron los emoji de estilo mixto (✏️/🗑) por glifos monocromos que heredan el color del botón: ✓ Pagado, ■ Finalizar, ✎ Editar, 🗑︎ Borrar.
+  - **#4 Reabrir:** las filas marcadas como pagadas ahora muestran un botón "↺ Reabrir" que las vuelve a 'pendiente' (vía `PUT /pagos/{id}` con `estado:"pendiente"`, que ya existía), para revertir un "Pagado" puesto por error sin tener que borrar y recrear.
+
 ## 0.10.4
 
 - **Chips de cuenta: estado "corriendo" (azul) + auto-refresh + reset de estado colgado** (`static/app.js`, `static/style.css`, `scrapers_db.py`, `main.py`): los chips de saldo/vencimiento ya marcaban el estado del scraper con borde verde/amarillo/rojo; se agrega un cuarto estado **azul pulsante** cuando el scrape está corriendo (`scraper_estado === "running"` → `_scraperStatusColor` devuelve `"run"`). Mientras alguna cuenta esté corriendo, la vista se **refresca sola cada 8s** (`_scheduleScrapeAutorefresh`) y para cuando termina, así el chip cambia de azul a verde/rojo sin recargar — útil para ver de una sola vista si es seguro actualizar el add-on. Además, como un update/reinicio del add-on mata el scrape y dejaba el estado pegado en `running`, ahora al primer request de cada usuario tras arrancar el proceso se resetean los `running` colgados a `idle` (`reset_stale_running`, llamado desde el middleware junto a `init_db`).
