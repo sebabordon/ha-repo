@@ -1156,6 +1156,19 @@ function _fmtTs(iso) {
   return d.toLocaleString("es-AR", {day:"numeric", month:"numeric", year:"numeric", hour:"2-digit", minute:"2-digit"});
 }
 
+// Timestamp del log unificado: el backend (app_log.py) guarda "YYYY-MM-DD HH:MM:SS"
+// en UTC sin sufijo. Lo interpretamos como UTC y lo mostramos en la TZ del browser,
+// manteniendo el mismo formato ordenable (con segundos).
+function _fmtLogTs(ts) {
+  if (!ts) return "";
+  const norm = String(ts).trim().replace(" ", "T");
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(norm);
+  const d = new Date(hasTz ? norm : norm + "Z");
+  if (isNaN(d.getTime())) return ts;   // formato inesperado → mostrar tal cual
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 let _monthFilterReady = false;
 // Período que contiene hoy. Con el ciclo de cobro activo puede diferir del mes
 // calendario; lo setea loadMonthlyChart desde /api/gastos/monthly.
@@ -7784,7 +7797,7 @@ async function loadLogs() {
     const rows = [...entries].reverse().map(e => {
       const lvlCls = e.level === "ERROR" ? "log-err" : e.level === "WARNING" ? "log-warn" : "";
       return `<tr class="${lvlCls}">
-        <td style="white-space:nowrap">${escHtml(e.ts)}</td>
+        <td style="white-space:nowrap">${escHtml(_fmtLogTs(e.ts))}</td>
         <td><span class="log-level log-${(e.level||"").toLowerCase()}">${escHtml(e.level||"")}</span></td>
         <td style="word-break:break-all">${escHtml(e.source||"")}</td>
         <td style="word-break:break-all;white-space:pre-wrap">${escHtml(e.message||"")}</td>
