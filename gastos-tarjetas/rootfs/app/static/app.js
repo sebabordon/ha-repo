@@ -4437,8 +4437,14 @@ function renderPresupuesto() {
           const barCls  = pct >= 100 ? "over" : pct >= 80 ? "warn" : "";
           const diffCls = r.diferencia >= 0 ? "presup-diff-pos" : "presup-diff-neg";
           const nameCss = r._indent
-            ? "style=\"padding-left:1.4rem;color:var(--color-cat-child);font-size:.9em\""
-            : (r.tiene_hijos ? "style=\"font-weight:600;color:var(--color-cat-parent)\"" : "");
+            ? "style=\"padding-left:1.6rem;color:var(--color-cat-child)\""
+            : "";
+          const catCaret = r.tiene_hijos
+            ? `<span class="cat-caret" style="color:#999;font-size:.75rem;margin-right:.25rem">▸</span>`
+            : `<span style="display:inline-block;width:.9rem"></span>`;
+          const catName = r.tiene_hijos
+            ? `<strong style="color:var(--color-cat-parent)">${escHtml(r.categoria)}</strong>`
+            : escHtml(r.categoria);
           const prefix  = r._indent ? "└ " : "";
           // Parent WITH children: budget is auto-derived — show read-only
           const budgetCell = r.tiene_hijos
@@ -4448,7 +4454,7 @@ function renderPresupuesto() {
                      onfocus="this.select()"
                      onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />`;
           return `<tr${r._indent ? " class=\"presup-child-row\"" : ""}>
-            <td ${nameCss}>${prefix}${escHtml(r.categoria)}</td>
+            <td ${nameCss}>${prefix}${catCaret}${catName}</td>
             <td>${budgetCell}</td>
             <td style="font-variant-numeric:tabular-nums">${_fmtNum2(r.gastado)}</td>
             <td class="${budget > 0 ? diffCls : ""}">
@@ -7570,7 +7576,7 @@ function renderCategoriasManaged() {
     tableRows.push(`<tr${c._indent ? ' class="presup-child-row"' : ""}>
       <td style="${indentStyle}">${prefix}${nameCell}${!c._new ? kwBadge : ""}</td>
       <td data-lbl="Padre"><select class="cat-parent-sel" data-i="${c._i}" style="width:100%;max-width:220px">
-        <option value="">— Sin padre —</option>${opts}
+        <option value="">—</option>${opts}
       </select></td>
       <td data-lbl="Especial" style="text-align:center"><input type="checkbox" class="cat-especial-chk" data-i="${c._i}"${c.especial ? " checked" : ""}></td>
       <td style="white-space:nowrap">
