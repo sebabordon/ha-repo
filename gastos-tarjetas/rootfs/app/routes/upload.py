@@ -8,7 +8,7 @@ from auth import require_auth
 
 logger = logging.getLogger(__name__)
 from categorizer import categorize
-from db import insert_gastos, upsert_cuenta_saldo, _CC_FUENTES, importacion_exists
+from db import insert_gastos, _CC_FUENTES, importacion_exists
 from parsers import PARSERS
 from user_config import read_user_config
 
@@ -191,10 +191,11 @@ async def upload_file(
             logger.info("[upload] %s: %d duplicado(s) de scraper consolidados.",
                         effective_fuente, deduped)
 
-    # Auto-update balance if the parser detected one
-    saldo = getattr(PARSERS[fuente], "saldo_final", None)
-    if saldo is not None:
-        upsert_cuenta_saldo(effective_fuente, float(saldo))
+    # NOTA: el saldo NO se actualiza al subir un PDF manualmente. Un resumen
+    # (sobre todo un histórico) trae un saldo viejo que pisaría el actual sin
+    # sentido. El saldo lo actualiza SOLO el scraper (vía API → result.saldos).
+    # El parser puede seguir calculando `saldo_final` para uso interno (dedup),
+    # pero acá no se aplica.
 
     result: dict = {"importados": count, "total_parseados": len(gastos)}
     if ajuste_ars is not None:

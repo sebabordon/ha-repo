@@ -81,6 +81,48 @@ movimientos, reglas), llamar `refreshAfterDataChange()` — no listar `load*()` 
 mano (se olvida alguno). Excepción: edición de una sola celda de la grilla →
 refrescar solo gráficos (no `loadGastos`, perdería ediciones en curso).
 
+## Color y nombre por cuenta
+- El **color de cada cuenta** (el que se ve en los badges/chips de la tab Gastos)
+  es **por cuenta**, editable en la tab **Cuentas** (NO en Interfaz). Se guarda en
+  la tabla `cuentas` (columna `color`). El badge usa ese color inline; el CSS
+  `.badge-<fuente>` hardcodeado queda como fallback.
+- Cada cuenta tiene un **short name** (alias corto, columna `short_name`) editable
+  en Cuentas, que se usa como label del badge en lugar del `fuente` crudo
+  ("bbva_cuenta"). Fallback: `short_name` → `nombre` → `fuente`.
+- **Interfaz** (Config → UI) tiene los selectores de colores **globales**
+  (ARS/USD/categorías/acentos/estados), no los por-cuenta.
+
+## Saldo de cuenta — quién lo actualiza
+- El saldo lo actualiza **solo el scraper** (vía API → `result.saldos`).
+- **Subir un PDF manualmente NO toca el saldo** (un histórico traería un saldo
+  viejo). El parser puede calcular `saldo_final` para uso interno (dedup), pero
+  `upload.py` no lo aplica.
+
 ## Configuración
 Toda config va en la UI (Config → sección correspondiente), nunca hardcodeada en
 Python. Default sensato OK, pero override desde la UI siempre. (Ver CLAUDE.md.)
+
+## Internacionalización (i18n) — propuesta (pendiente)
+Objetivo: poder agregar idiomas sin reescribir. Todo lo nuevo debe quedar listo
+para esto, aunque el motor no esté todavía:
+
+- **No hardcodear strings de UI** dispersos. Centralizar los textos visibles en un
+  diccionario por idioma (ej. `static/i18n.js` con `{ es: {...}, en: {...} }`) y
+  referenciarlos por clave (`t("btn.guardar")`). Hoy estamos lejos, pero a partir
+  de ahora **los strings nuevos se agregan pensando en una clave** (aunque por
+  ahora vivan inline, dejarlos fáciles de extraer: frases completas, no
+  concatenaciones).
+- **Emojis y formato numérico/fecha** son agnósticos del idioma → ya OK
+  (`toLocaleString("es-AR")` se parametrizaría por locale).
+- **Backend**: los mensajes de log/scraper en español quedan como están (son para
+  el operador); la i18n apunta a la UI del usuario.
+- **Selector de idioma**: iría en Config → UI, persistido en `ui_prefs.lang`,
+  con default `es`. Aplicado en el front (re-render con el diccionario activo).
+- Migración gradual: cuando se arme el motor, se van moviendo los textos a claves
+  por pantalla; no hace falta un big-bang.
+
+## Pendientes / roadmap de UI
+- Toggle global icono+texto para TODOS los botones (convención `.btn-icon` /
+  `.btn-text` + `body.btns-icons|text`). Hoy solo pestañas y botones de Pagos.
+- Motor i18n (ver arriba).
+- Más selectores de color globales en Interfaz (a definir cuáles).
