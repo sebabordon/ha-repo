@@ -1,6 +1,7 @@
 ## 0.10.10
 
 - **Color y nombre corto por cuenta** (`db.py`, `routes/cuentas.py`, `static/app.js`, `static/style.css`): cada cuenta ahora tiene dos campos opcionales — `color` (color hex del badge) y `short_name` (etiqueta corta para el badge). Se editan en la tab Cuentas → fila "🎨 Color badge / 📛 Nombre corto" dentro del panel expandido de cada cuenta. Al guardar, todos los badges de esa fuente (grilla de gastos, ventana de transferencias, cuotas) muestran el color y la etiqueta configurados. Sin color configurado, el badge sigue usando la clase CSS del banco. Se agregan columnas `color TEXT` y `short_name TEXT` a la tabla `cuentas` vía migración `ALTER TABLE`; la API `PUT /cuentas/{fuente}` ya las acepta.
+- **Badges on the fly al guardar apariencia** (`static/app.js`): `saveCuentaDisplay` ahora hace `await loadSaldos()` antes de `loadGastos()` para asegurar que `_widgetCuentas` esté actualizado antes de re-renderizar la grilla; antes los badges mostraban el color viejo hasta dar refresh manual.
 
 ## 0.10.9
 

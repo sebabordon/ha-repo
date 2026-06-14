@@ -5833,7 +5833,10 @@ async function saveCuentaDisplay(fuente) {
     method: "PUT", headers: {"Content-Type":"application/json"},
     body: JSON.stringify({ color: color || null, short_name: short_name || null }),
   });
-  await loadCuentas();
+  // loadSaldos actualiza _widgetCuentas (caché que usan los badges); debe
+  // completar ANTES de loadGastos para que los badges vean el color nuevo.
+  await loadSaldos();
+  renderCuentas();
   await loadGastos();
   showToast("Apariencia guardada", "ok");
 }
