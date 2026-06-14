@@ -1347,6 +1347,14 @@ tbody tr:hover { background: #fafbff; }
   flex-wrap: wrap;
   align-items: center;
 }
+.cuenta-display-row {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: 0 1rem .6rem;
+  flex-wrap: wrap;
+}
+.cuenta-display-label { font-size: .78rem; color: #6b7280; }
 .cuenta-movs {
   border-top: 1px solid #f0f0f0;
   padding: .5rem 1rem .75rem;

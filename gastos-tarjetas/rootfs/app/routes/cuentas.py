@@ -101,6 +101,8 @@ def put_cuenta(fuente: str, body: dict, request: Request):
     moneda = body.get("moneda", current["moneda"])
     if moneda not in ("ARS", "USD", "MULTI"):
         moneda = current["moneda"]
+    color      = body.get("color",      current.get("color"))      or None
+    short_name = body.get("short_name", current.get("short_name")) or None
     update_cuenta(
         fuente=fuente,
         saldo=float(body.get("saldo", current["saldo"])),
@@ -109,6 +111,8 @@ def put_cuenta(fuente: str, body: dict, request: Request):
         activa=int(body.get("activa", current["activa"])),
         auto_saldo=int(body.get("auto_saldo", current["auto_saldo"])),
         cuenta_tipo=str(body.get("cuenta_tipo", current.get("cuenta_tipo", "bank"))),
+        color=color,
+        short_name=short_name,
     )
     return {"ok": True}
 

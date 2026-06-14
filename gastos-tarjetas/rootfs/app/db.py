@@ -360,6 +360,10 @@ def init_db():
             ).fetchall()
             for i, r in enumerate(existentes):
                 conn.execute("UPDATE cuentas SET orden=? WHERE fuente=?", (i, r[0]))
+        if "color" not in ccols:
+            conn.execute("ALTER TABLE cuentas ADD COLUMN color TEXT")
+        if "short_name" not in ccols:
+            conn.execute("ALTER TABLE cuentas ADD COLUMN short_name TEXT")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS presupuestos (
@@ -2394,13 +2398,14 @@ def get_credit_card_fuentes() -> set:
 
 
 def update_cuenta(fuente: str, saldo: float, saldo_usd: float, moneda: str,
-                  activa: int, auto_saldo: int, cuenta_tipo: str = "bank"):
+                  activa: int, auto_saldo: int, cuenta_tipo: str = "bank",
+                  color: str = None, short_name: str = None):
     if cuenta_tipo not in ("bank", "credit_card"):
         cuenta_tipo = "bank"
     with _conn() as conn:
         conn.execute(
-            "UPDATE cuentas SET saldo=?, saldo_usd=?, moneda=?, activa=?, auto_saldo=?, cuenta_tipo=? WHERE fuente=?",
-            (saldo, saldo_usd, moneda, activa, auto_saldo, cuenta_tipo, fuente),
+            "UPDATE cuentas SET saldo=?, saldo_usd=?, moneda=?, activa=?, auto_saldo=?, cuenta_tipo=?, color=?, short_name=? WHERE fuente=?",
+            (saldo, saldo_usd, moneda, activa, auto_saldo, cuenta_tipo, color or None, short_name or None, fuente),
         )
 
 

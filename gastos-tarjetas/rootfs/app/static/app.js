@@ -2291,7 +2291,7 @@ function _renderGastos() {
       </td>
       <td class="monto ${g.moneda==="USD"?"usd":""} ${egreso?"egreso":"ingreso"}">${displayStr}</td>
       <td class="col-moneda">${g.moneda}</td>
-      <td class="col-fuente"><span class="badge badge-${g.fuente}">${g.fuente.replace("_"," ")}</span></td>
+      <td class="col-fuente">${_fuenteBadge(g.fuente)}</td>
       <td class="col-persona">
         <select class="usuario-select" onchange="saveUsuario(${g.id},this)">
           <option value="" ${!u?"selected":""}>—</option>
@@ -2771,14 +2771,14 @@ let _twCardQueue  = [];
 let _twCardQueuedIds = new Set();
 
 function _twFuenteLabel(f) {
-  return _FUENTE_LABEL[f] || f.replace(/_/g, " ");
+  return _cuentaShortName(f);
 }
 
 function _twSugPairSide(g, amtSign, amtCls) {
   const amt = _fmtNum2(Math.abs(parseFloat(g.monto)));
   return `<div class="tw-pair-side">` +
     `<span class="tw-item-date">${g.fecha}</span>` +
-    `<span class="badge badge-${g.fuente}">${_twFuenteLabel(g.fuente)}</span>` +
+    `${_fuenteBadge(g.fuente)}` +
     `<span class="tw-item-desc">${escHtml((g.descripcion || "").slice(0, 28))}</span>` +
     `<span class="tw-item-amount ${amtCls}">${amtSign}${amt}</span>` +
     `</div>`;
@@ -2995,7 +2995,7 @@ function _twMakeItem(g, side) {
   const cls  = side === "egreso" ? "tw-amt-egreso" : "tw-amt-ingreso";
   div.innerHTML =
     `<span class="tw-item-date">${g.fecha}</span>` +
-    `<span class="badge badge-${g.fuente}">${_twFuenteLabel(g.fuente)}</span>` +
+    `${_fuenteBadge(g.fuente)}` +
     `<span class="tw-item-desc">${escHtml(g.descripcion || "")}</span>` +
     `<span class="tw-item-amount ${cls}">${sign}${_fmtNum2(amt)}</span>`;
   div.addEventListener("click", () => {
@@ -3124,14 +3124,14 @@ function renderTwQueue() {
     row.innerHTML =
       `<div class="tw-pair-side">` +
         `<span class="tw-item-date">${pair.out.fecha}</span>` +
-        `<span class="badge badge-${pair.out.fuente}">${_twFuenteLabel(pair.out.fuente)}</span>` +
+        `${_fuenteBadge(pair.out.fuente)}` +
         `<span class="tw-item-desc">${escHtml((pair.out.descripcion||"").slice(0,28))}</span>` +
         `<span class="tw-item-amount tw-amt-egreso">−${amtOut}</span>` +
       `</div>` +
       `<span class="tw-pair-arrow">⇄</span>` +
       `<div class="tw-pair-side">` +
         `<span class="tw-item-date">${pair.in.fecha}</span>` +
-        `<span class="badge badge-${pair.in.fuente}">${_twFuenteLabel(pair.in.fuente)}</span>` +
+        `${_fuenteBadge(pair.in.fuente)}` +
         `<span class="tw-item-desc">${escHtml((pair.in.descripcion||"").slice(0,28))}</span>` +
         `<span class="tw-item-amount tw-amt-ingreso">+${amtIn}</span>` +
       `</div>`;
@@ -3211,14 +3211,14 @@ function renderTwExisting() {
     row.innerHTML =
       `<div class="tw-pair-side">` +
         `<span class="tw-item-date">${pair.out.fecha}</span>` +
-        `<span class="badge badge-${pair.out.fuente}">${_twFuenteLabel(pair.out.fuente)}</span>` +
+        `${_fuenteBadge(pair.out.fuente)}` +
         `<span class="tw-item-desc">${escHtml((pair.out.descripcion||"").slice(0,28))}</span>` +
         `<span class="tw-item-amount tw-amt-egreso">−${amtOut}</span>` +
       `</div>` +
       `<span class="tw-pair-arrow">${arrow}</span>` +
       `<div class="tw-pair-side">` +
         `<span class="tw-item-date">${pair.in.fecha}</span>` +
-        `<span class="badge badge-${pair.in.fuente}">${_twFuenteLabel(pair.in.fuente)}</span>` +
+        `${_fuenteBadge(pair.in.fuente)}` +
         `<span class="tw-item-desc">${escHtml((pair.in.descripcion||"").slice(0,28))}</span>` +
         `<span class="tw-item-amount tw-amt-ingreso">+${amtIn}</span>` +
       `</div>` + catBadge;
@@ -3238,7 +3238,7 @@ function renderTwExisting() {
     row.innerHTML =
       `<div class="tw-pair-side">` +
         `<span class="tw-item-date">${g.fecha}</span>` +
-        `<span class="badge badge-${g.fuente}">${_twFuenteLabel(g.fuente)}</span>` +
+        `${_fuenteBadge(g.fuente)}` +
         `<span class="tw-item-desc">${escHtml((g.descripcion||"").slice(0,28))}</span>` +
         `<span class="tw-item-amount ${cls}">${sign}${amt}</span>` +
       `</div>` +
@@ -3277,14 +3277,14 @@ function renderTwIgnored() {
     row.innerHTML =
       `<div class="tw-pair-side">` +
         `<span class="tw-item-date">${p.fecha_out}</span>` +
-        `<span class="badge badge-${p.fuente_out}">${_twFuenteLabel(p.fuente_out)}</span>` +
+        `${_fuenteBadge(p.fuente_out)}` +
         `<span class="tw-item-desc">${escHtml((p.desc_out||"").slice(0,28))}</span>` +
         `<span class="tw-item-amount tw-amt-egreso">−${amtOut}</span>` +
       `</div>` +
       `<span class="tw-pair-arrow">⇄</span>` +
       `<div class="tw-pair-side">` +
         `<span class="tw-item-date">${p.fecha_in}</span>` +
-        `<span class="badge badge-${p.fuente_in}">${_twFuenteLabel(p.fuente_in)}</span>` +
+        `${_fuenteBadge(p.fuente_in)}` +
         `<span class="tw-item-desc">${escHtml((p.desc_in||"").slice(0,28))}</span>` +
         `<span class="tw-item-amount tw-amt-ingreso">+${amtIn}</span>` +
       `</div>`;
@@ -4041,8 +4041,22 @@ const _FUENTE_LABELS = {
 // Nombre custom de la cuenta (el que edita el usuario en Config → Cuentas).
 // Cae al label fijo de la fuente si todavía no se cargaron las cuentas.
 function _cuentaNombre(fuente) {
-  const c = _widgetCuentas.find(x => x.fuente === fuente);
+  const c = (_widgetCuentas || []).find(x => x.fuente === fuente);
   return (c && c.nombre) || _FUENTE_LABELS[fuente] || fuente;
+}
+function _cuentaShortName(fuente) {
+  const c = (_widgetCuentas || []).find(x => x.fuente === fuente);
+  return (c && (c.short_name || c.nombre)) || _FUENTE_LABELS[fuente] || fuente.replace(/_/g, " ");
+}
+function _cuentaColor(fuente) {
+  const c = (_widgetCuentas || []).find(x => x.fuente === fuente);
+  return (c && c.color) || null;
+}
+function _fuenteBadge(fuente) {
+  const color = _cuentaColor(fuente);
+  const label = _cuentaShortName(fuente);
+  const style = color ? ` style="background:${escHtml(color)};color:#fff"` : "";
+  return `<span class="badge badge-${escHtml(fuente)}"${style}>${escHtml(label)}</span>`;
 }
 
 let _vencData = [];  // último payload de vencimientos (para re-render al cargar cuentas)
@@ -5046,6 +5060,18 @@ function _renderCuentaCard(c, idx = 0) {
       </div>
       <div class="cuenta-actions">${actions}</div>
       ${editSaldoRow}
+      <div class="cuenta-display-row">
+        <label class="cuenta-display-label">🎨 Color badge</label>
+        <input type="color" id="cd-col-${c.fuente}" value="${c.color || '#64748b'}"
+               oninput="document.getElementById('cd-hex-${c.fuente}').value=this.value">
+        <input type="text" id="cd-hex-${c.fuente}" class="ui-hex-input" maxlength="7"
+               value="${c.color || ''}" placeholder="#64748b"
+               oninput="if(/^#[0-9a-fA-F]{6}$/.test(this.value))document.getElementById('cd-col-${c.fuente}').value=this.value">
+        <label class="cuenta-display-label" style="margin-left:.5rem">📛 Nombre corto</label>
+        <input type="text" id="cd-sn-${c.fuente}" class="ui-hex-input" maxlength="12"
+               value="${escHtml(c.short_name||'')}" placeholder="${escHtml(c.nombre||c.fuente)}">
+        <button class="btn btn-sm btn-primary" onclick="saveCuentaDisplay('${c.fuente}')">✓</button>
+      </div>
       ${movsSection}
       ${parserSection}
       ${scraperSection}
@@ -5794,6 +5820,22 @@ async function saveCuentaTipo(fuente, cuenta_tipo) {
   });
   loadCuentas();
   showToast(`Tipo actualizado: ${cuenta_tipo === "credit_card" ? "💳 Tarjeta" : "🏦 Banco"}`, "ok");
+}
+
+async function saveCuentaDisplay(fuente) {
+  const colorEl = document.getElementById(`cd-col-${fuente}`);
+  const hexEl   = document.getElementById(`cd-hex-${fuente}`);
+  const snEl    = document.getElementById(`cd-sn-${fuente}`);
+  const color     = (hexEl && /^#[0-9a-fA-F]{6}$/.test(hexEl.value)) ? hexEl.value
+                  : (colorEl ? colorEl.value : null);
+  const short_name = snEl ? snEl.value.trim() : null;
+  await fetch(`${BASE}/api/cuentas/${fuente}`, {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ color: color || null, short_name: short_name || null }),
+  });
+  await loadCuentas();
+  await loadGastos();
+  showToast("Apariencia guardada", "ok");
 }
 
 async function moveCuenta(fuente, dir) {
@@ -7847,7 +7889,7 @@ function _renderCuotas(data) {
     if (past) tr.className = "cq-past";
     tr.innerHTML = `
       <td title="${escHtml(c.descripcion_original)}">${escHtml(c.descripcion)}</td>
-      <td><span class="badge badge-${c.fuente}">${c.fuente.replace("_"," ")}</span></td>
+      <td>${_fuenteBadge(c.fuente)}</td>
       <td>${escHtml(c.usuario || "—")}</td>
       <td class="cq-progress">${c.cuota_actual}/${c.total_cuotas}</td>
       <td class="col-moneda">${c.moneda}</td>
