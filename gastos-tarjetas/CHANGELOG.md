@@ -1,3 +1,7 @@
+## 1.2.2
+
+- **Fix Cocos Cloudflare 403** (`scrapers/cocos.py`, `requirements.txt`): reemplazada la implementación httpx por `cloudscraper` (mismo approach que pyCocos) para bypassear el WAF Cloudflare que protege `api.cocos.capital`. Toda la lógica HTTP pasa a sync y se ejecuta via `asyncio.to_thread`. Dependencia nueva: `cloudscraper>=1.2.71`.
+
 ## 1.2.1
 
 - **Fix CocosScraper** (`scrapers/cocos.py`): faltaba implementar el método abstracto `scrape()` heredado de `BaseScraper` — impedía instanciar la clase.

@@ -2,6 +2,7 @@
 Scraper Cocos Capital — API REST.
 
 No usa Selenium. Autenticación JWT (Supabase GoTrue) con 2FA TOTP y refresh automático.
+Usa cloudscraper para bypass del WAF Cloudflare que protege api.cocos.capital.
 
 Cómo obtener el TOTP secret:
   1. En la app/web de Cocos, ir a Seguridad → Autenticación de dos factores
@@ -20,13 +21,18 @@ Endpoints usados:
   GET  api/v1/wallet/portfolio                  → tenencias y saldo ARS/USD
 """
 
+import asyncio
 import json as _json
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-import httpx
+try:
+    import cloudscraper as _cloudscraper
+    _HAS_CLOUDSCRAPER = True
+except ImportError:
+    _HAS_CLOUDSCRAPER = False
 
 try:
     import pyotp as _pyotp
@@ -50,7 +56,6 @@ _ANON_KEY = (
     ".f0w62k0q0eyyGBDkAP7vUUEg_Ingb9YbOlhsGCC4R3c"
 )
 
-# Tipos de movimiento que son ingresos (signo negativo en nuestra convención).
 _INGRESO_TYPES = frozenset({
     "deposit", "income", "credit", "acreditacion", "cobro",
     "dividendo", "intereses", "renta", "transfer_in",
@@ -62,10 +67,87 @@ class CocosScraper(BaseScraper):
     nombre       = "Cocos Capital"
     login_origin = "https://app.cocos.capital"
 
+    # ── Punto de entrada (override: REST, no Selenium) ────────────────────────
+
+    async def run(self, config: dict) -> ScraperResult:
+        now_iso = datetime.utcnow().isoformat()
+        upsert_scraper_status(self.fuente, estado="running", ultimo_run=now_iso)
+
+        if not _HAS_CLOUDSCRAPER:
+            err = "cloudscraper no está instalado — agregalo a requirements.txt"
+            upsert_scraper_status(self.fuente, estado="error", error_msg=err)
+            return ScraperResult(fuente=self.fuente, error=err)
+
+        if not _HAS_PYOTP:
+            err = "pyotp no está instalado — agregalo a requirements.txt"
+            upsert_scraper_status(self.fuente, estado="error", error_msg=err)
+            return ScraperResult(fuente=self.fuente, error=err)
+
+        result = await asyncio.to_thread(self._run_sync, config, now_iso)
+        return result
+
+    def _run_sync(self, config: dict, now_iso: str) -> ScraperResult:
+        """Lógica completa en sync usando cloudscraper (necesario para bypass Cloudflare)."""
+        log: list[str] = []
+
+        def _l(msg: str) -> None:
+            logger.info("[cocos] %s", msg)
+            log.append(msg)
+
+        session = _cloudscraper.create_scraper()
+        session.headers.update({
+            "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+            "Content-Type": "application/json",
+        })
+
+        try:
+            token = self._ensure_token_sync(session, config, _l)
+
+            api_hdrs = {
+                "apikey":        "",
+                "Authorization": f"Bearer {token}",
+                "Content-Type":  "application/json",
+            }
+
+            dias            = int(config.get("dias") or _DIAS_DEFAULT)
+            debug_log       = bool(config.get("debug_log"))
+            default_usuario = (config.get("usuario") or "").strip()
+
+            today_art  = datetime.now(_ART).date()
+            since_date = today_art - timedelta(days=dias - 1)
+
+            movimientos = self._fetch_movements_sync(
+                session, api_hdrs, since_date, today_art, default_usuario, _l, debug_log
+            )
+            saldos = self._fetch_saldos_sync(session, api_hdrs, _l, debug_log)
+
+            upsert_scraper_status(
+                self.fuente,
+                estado             = "ok",
+                ultimo_ok          = now_iso,
+                error_msg          = None,
+                movimientos_nuevos = len(movimientos),
+                saldo_ars          = (saldos.get("cocos") or {}).get("saldo_ars"),
+                last_log           = "\n".join(log),
+            )
+            return ScraperResult(
+                fuente      = self.fuente,
+                movimientos = movimientos,
+                saldos      = saldos,
+                log_lines   = log,
+            )
+
+        except Exception as exc:
+            err = str(exc)
+            _l(f"ERROR: {err}")
+            upsert_scraper_status(
+                self.fuente, estado="error", error_msg=err, last_log="\n".join(log)
+            )
+            return ScraperResult(fuente=self.fuente, error=err, log_lines=log)
+
     # ── Token management ──────────────────────────────────────────────────────
 
     def _load_session(self) -> Optional[dict]:
-        """Carga sesión guardada. Si está a ≤5 min de expirar, devuelve solo refresh_token."""
         if not os.path.exists(self.session_path):
             return None
         try:
@@ -87,7 +169,6 @@ class CocosScraper(BaseScraper):
         try:
             expires_at_raw = token_resp.get("expires_at")
             if isinstance(expires_at_raw, (int, float)):
-                # Supabase devuelve expires_at como Unix timestamp en algunos flujos
                 expires_at = datetime.fromtimestamp(expires_at_raw, tz=timezone.utc).isoformat()
             elif expires_at_raw:
                 expires_at = str(expires_at_raw)
@@ -103,13 +184,7 @@ class CocosScraper(BaseScraper):
         except Exception as exc:
             logger.warning("[cocos] Error guardando sesión: %s", exc)
 
-    async def _ensure_token(
-        self,
-        client: httpx.AsyncClient,
-        config: dict,
-        log_fn,
-    ) -> str:
-        """Devuelve un access_token válido: cache → refresh → login+TOTP completo."""
+    def _ensure_token_sync(self, session, config: dict, log_fn) -> str:
         saved = self._load_session()
 
         if saved and saved.get("access_token"):
@@ -119,7 +194,7 @@ class CocosScraper(BaseScraper):
         if saved and saved.get("refresh_token"):
             log_fn("Token Cocos expirado — intentando refresh…")
             try:
-                resp = await client.post(
+                resp = session.post(
                     f"{_BASE}/auth/v1/token",
                     params={"grant_type": "refresh_token"},
                     json={"refresh_token": saved["refresh_token"]},
@@ -135,20 +210,9 @@ class CocosScraper(BaseScraper):
             except Exception as exc:
                 log_fn(f"Refresh error: {exc} — re-login")
 
-        return await self._full_login(client, config, log_fn)
+        return self._full_login_sync(session, config, log_fn)
 
-    async def _full_login(
-        self,
-        client: httpx.AsyncClient,
-        config: dict,
-        log_fn,
-    ) -> str:
-        """Login completo: email+password → 2FA TOTP → access_token final."""
-        if not _HAS_PYOTP:
-            raise RuntimeError(
-                "pyotp no está instalado — agregalo a requirements.txt: pyotp>=2.9.0"
-            )
-
+    def _full_login_sync(self, session, config: dict, log_fn) -> str:
         email       = (config.get("email")       or "").strip()
         password    = (config.get("password")    or "").strip()
         totp_secret = (config.get("totp_secret") or "").strip()
@@ -156,13 +220,13 @@ class CocosScraper(BaseScraper):
             raise ValueError("Credenciales Cocos incompletas (email y/o contraseña vacíos)")
         if not totp_secret:
             raise ValueError(
-                "TOTP secret no configurado — necesario para el 2FA de Cocos. "
+                "TOTP secret no configurado. "
                 "Ver instrucciones en Config → Scrapers → Cocos Capital."
             )
 
-        # 1. Login email+password → phase-1 token
+        # 1. Login email+password
         log_fn("Autenticando en Cocos Capital…")
-        resp = await client.post(
+        resp = session.post(
             f"{_BASE}/auth/v1/token",
             params={"grant_type": "password"},
             json={"email": email, "password": password, "gotrue_meta_security": {}},
@@ -170,153 +234,68 @@ class CocosScraper(BaseScraper):
             timeout=15,
         )
         if resp.status_code != 200:
-            raise ValueError(
-                f"Login Cocos falló — HTTP {resp.status_code}: {resp.text[:300]}"
-            )
+            raise ValueError(f"Login Cocos falló — HTTP {resp.status_code}: {resp.text[:300]}")
         phase1 = resp.json()
         phase1_token = phase1.get("access_token")
         if not phase1_token:
-            raise ValueError(
-                f"Login Cocos: access_token no encontrado. Respuesta: {resp.text[:300]}"
-            )
+            raise ValueError(f"Login Cocos: access_token no encontrado. Respuesta: {resp.text[:300]}")
 
         auth_hdrs = {**_anon_headers(), "Authorization": f"Bearer {phase1_token}"}
 
         # 2. Obtener factor 2FA
-        resp = await client.get(f"{_BASE}/auth/v1/factors/default", headers=auth_hdrs, timeout=15)
+        resp = session.get(f"{_BASE}/auth/v1/factors/default", headers=auth_hdrs, timeout=15)
         if resp.status_code != 200:
-            raise ValueError(
-                f"Cocos 2FA factors falló — HTTP {resp.status_code}: {resp.text[:200]}"
-            )
+            raise ValueError(f"Cocos 2FA factors falló — HTTP {resp.status_code}: {resp.text[:200]}")
         factor_data = resp.json()
         factor_id   = factor_data.get("id")
         if not factor_id:
             raise ValueError(f"Cocos 2FA: factor_id no encontrado. Respuesta: {resp.text[:200]}")
 
         # 3. Iniciar challenge
-        resp = await client.post(
+        resp = session.post(
             f"{_BASE}/auth/v1/factors/{factor_id}/challenge",
             headers=auth_hdrs,
             timeout=15,
         )
         if resp.status_code not in (200, 201):
-            raise ValueError(
-                f"Cocos 2FA challenge falló — HTTP {resp.status_code}: {resp.text[:200]}"
-            )
+            raise ValueError(f"Cocos 2FA challenge falló — HTTP {resp.status_code}: {resp.text[:200]}")
 
         # 4. Verificar con código TOTP
         totp_code = _pyotp.TOTP(totp_secret).now()
         log_fn("Verificando 2FA TOTP…")
-        resp = await client.post(
+        resp = session.post(
             f"{_BASE}/auth/v1/factors/{factor_id}/verify",
             json={"challenge_id": "_", "code": totp_code},
             headers=auth_hdrs,
             timeout=15,
         )
         if resp.status_code != 200:
-            raise ValueError(
-                f"Cocos 2FA verify falló — HTTP {resp.status_code}: {resp.text[:300]}"
-            )
+            raise ValueError(f"Cocos 2FA verify falló — HTTP {resp.status_code}: {resp.text[:300]}")
         phase2 = resp.json()
         final_token = phase2.get("access_token")
         if not final_token:
-            raise ValueError(
-                f"Cocos 2FA: access_token final no encontrado. Respuesta: {resp.text[:200]}"
-            )
+            raise ValueError(f"Cocos 2FA: access_token final no encontrado. Respuesta: {resp.text[:200]}")
 
         self._save_session(phase2)
         log_fn("Login Cocos OK — sesión guardada")
         return final_token
 
-    # ── Punto de entrada (override: async REST, no Selenium) ──────────────────
-
-    async def run(self, config: dict) -> ScraperResult:
-        now_iso = datetime.utcnow().isoformat()
-        upsert_scraper_status(self.fuente, estado="running", ultimo_run=now_iso)
-        log: list[str] = []
-
-        def _l(msg: str) -> None:
-            logger.info("[cocos] %s", msg)
-            log.append(msg)
-
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                token = await self._ensure_token(client, config, _l)
-                hdrs  = {
-                    "apikey":        "",
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type":  "application/json",
-                }
-
-                dias            = int(config.get("dias") or _DIAS_DEFAULT)
-                debug_log       = bool(config.get("debug_log"))
-                default_usuario = (config.get("usuario") or "").strip()
-
-                today_art  = datetime.now(_ART).date()
-                since_date = today_art - timedelta(days=dias - 1)
-
-                # 1. Movimientos de cuenta
-                movimientos = await self._fetch_movements(
-                    client, hdrs, since_date, today_art, default_usuario, _l, debug_log
-                )
-
-                # 2. Saldo y tenencias
-                saldos = await self._fetch_saldos(client, hdrs, _l, debug_log)
-
-            result = ScraperResult(
-                fuente      = self.fuente,
-                movimientos = movimientos,
-                saldos      = saldos,
-                log_lines   = log,
-            )
-            upsert_scraper_status(
-                self.fuente,
-                estado             = "ok",
-                ultimo_ok          = now_iso,
-                error_msg          = None,
-                movimientos_nuevos = len(movimientos),
-                saldo_ars          = (saldos.get("cocos") or {}).get("saldo_ars"),
-                last_log           = "\n".join(log),
-            )
-            return result
-
-        except httpx.HTTPStatusError as exc:
-            code = exc.response.status_code
-            if code == 401:
-                self.clear_session()
-                err = "Sesión Cocos inválida (401) — sesión eliminada, el próximo run re-autenticará."
-            else:
-                err = f"Error HTTP {code}: {exc.response.text[:300]}"
-            _l(f"ERROR: {err}")
-            upsert_scraper_status(self.fuente, estado="error", error_msg=err, last_log="\n".join(log))
-            return ScraperResult(fuente=self.fuente, error=err, log_lines=log)
-
-        except Exception as exc:
-            err = str(exc)
-            _l(f"ERROR: {err}")
-            upsert_scraper_status(self.fuente, estado="error", error_msg=err, last_log="\n".join(log))
-            return ScraperResult(fuente=self.fuente, error=err, log_lines=log)
-
     # ── Movimientos ───────────────────────────────────────────────────────────
 
-    async def _fetch_movements(
-        self,
-        client: httpx.AsyncClient,
-        hdrs: dict,
-        since: date,
-        until: date,
-        default_usuario: str,
-        log_fn,
-        debug: bool = False,
+    def _fetch_movements_sync(
+        self, session, hdrs: dict, since: date, until: date,
+        default_usuario: str, log_fn, debug: bool = False,
     ) -> list[MovimientoRaw]:
         log_fn(f"Consultando movimientos Cocos ({since} → {until})…")
-        resp = await client.get(
+        resp = session.get(
             f"{_BASE}/api/v1/transfers",
             params={"date_from": since.isoformat(), "date_to": until.isoformat()},
             headers=hdrs,
+            timeout=30,
         )
         if resp.status_code == 401:
-            resp.raise_for_status()
+            self.clear_session()
+            raise ValueError("Sesión Cocos inválida (401) — sesión eliminada, el próximo run re-autenticará.")
         if resp.status_code != 200:
             log_fn(f"  [!] Movimientos — HTTP {resp.status_code}: {resp.text[:200]}")
             return []
@@ -351,7 +330,6 @@ class CocosScraper(BaseScraper):
     def _movement_to_raw(
         self, item: dict, default_usuario: str
     ) -> tuple[Optional[MovimientoRaw], str]:
-        """Convierte un movimiento de la API Cocos en MovimientoRaw."""
         try:
             uid = (
                 item.get("id") or item.get("extId") or item.get("ext_id")
@@ -382,7 +360,6 @@ class CocosScraper(BaseScraper):
                 or item.get("name") or item_type or "Movimiento Cocos"
             ).strip()
 
-            # Signo: si el amount ya viene firmado negativo → ingreso
             if isinstance(amount_raw, (int, float)) and float(amount_raw) < 0:
                 sign = -1
             elif item_type in _INGRESO_TYPES:
@@ -413,17 +390,12 @@ class CocosScraper(BaseScraper):
 
     # ── Saldos ────────────────────────────────────────────────────────────────
 
-    async def _fetch_saldos(
-        self,
-        client: httpx.AsyncClient,
-        hdrs: dict,
-        log_fn,
-        debug: bool = False,
+    def _fetch_saldos_sync(
+        self, session, hdrs: dict, log_fn, debug: bool = False,
     ) -> dict:
-        """Obtiene saldo disponible del portfolio de Cocos."""
         log_fn("Consultando portfolio Cocos…")
         try:
-            resp = await client.get(f"{_BASE}/api/v1/wallet/portfolio", headers=hdrs, timeout=20)
+            resp = session.get(f"{_BASE}/api/v1/wallet/portfolio", headers=hdrs, timeout=20)
             if resp.status_code != 200:
                 log_fn(f"  [!] Portfolio — HTTP {resp.status_code}: {resp.text[:150]}")
                 return {}
@@ -435,8 +407,6 @@ class CocosScraper(BaseScraper):
             saldo_ars: Optional[float] = None
             saldo_usd: Optional[float] = None
 
-            # Intentar extraer saldo ARS/USD de estructuras comunes.
-            # Si la estructura real difiere, el log de debug muestra el JSON completo.
             if isinstance(data, dict):
                 for key in ("cash", "efectivo", "available", "liquidado", "saldo"):
                     val = data.get(key)
