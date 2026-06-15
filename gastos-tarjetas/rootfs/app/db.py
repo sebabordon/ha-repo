@@ -2949,6 +2949,127 @@ def stats_forecast(
     return {"historical": historical, "forecast": forecast}
 
 
+def stats_forecast_v2(
+    meses_futuro: int = 6,
+    meses_historico: int = 3,
+    exclude_income_cats: list = None,
+) -> dict:
+    """
+    Budget-aware forecast:
+    - Budgeted categories (and their ancestors): use monthly budget amount.
+    - Unbudgeted categories: use simple average of last `meses_historico`
+      closed months.
+    - Ingresos: simple average of recent closed months.
+    Each forecast point includes a `breakdown` with the two egreso components.
+    """
+    historical = monthly_summary()
+
+    if exclude_income_cats:
+        placeholders = ",".join("?" * len(exclude_income_cats))
+        excl_q = f"""
+            SELECT {_mes_sql()} AS mes,
+              ROUND(SUM(CASE WHEN CAST(monto AS REAL) < 0 THEN -CAST(monto AS REAL) ELSE 0 END), 2) AS ingreso_excl
+            FROM gastos
+            WHERE moneda = 'ARS'
+              AND categoria IN ({placeholders})
+            GROUP BY mes
+        """
+        with _conn() as conn:
+            rows = conn.execute(excl_q, list(exclude_income_cats)).fetchall()
+        excl_map = {r["mes"]: float(r["ingreso_excl"]) for r in rows}
+        historical = [
+            {**h, "ingresos": max(0.0, h["ingresos"] - excl_map.get(h["mes"], 0.0))}
+            for h in historical
+        ]
+
+    if len(historical) < 2:
+        return {"historical": historical, "forecast": []}
+
+    current_ym = periodo_actual()
+    closed = [h for h in historical if h["mes"] < current_ym]
+    if len(closed) < 2:
+        closed = historical[:-1] if len(historical) > 1 else historical
+
+    recent = closed[-max(2, meses_historico):]
+    n = len(recent)
+    recent_keys = {r["mes"] for r in recent}
+
+    # ── Budget ────────────────────────────────────────────────────────────────
+    budget_rows = get_presupuestos()
+    budget: dict[str, float] = {
+        r["categoria"]: float(r["monto_mensual"])
+        for r in budget_rows
+        if r.get("monto_mensual") and float(r["monto_mensual"]) > 0
+    }
+
+    # Build parent_of map to walk the hierarchy upward
+    children_map = _get_categorias_children_map()
+    parent_of: dict[str, str] = {}
+    for par, kids in children_map.items():
+        for kid in kids:
+            parent_of[kid] = par
+
+    def _has_budget_ancestor(cat: str) -> bool:
+        node: str | None = cat
+        while node:
+            if node in budget:
+                return True
+            node = parent_of.get(node)
+        return False
+
+    # ── Per-category historical avg (recent closed months only) ───────────────
+    specials = get_special_categorias()
+    months_needed = max(meses_historico + 2, 6)
+    ph_sp = ",".join("?" * len(specials)) if specials else None
+    sp_clause = f"AND (categoria IS NULL OR categoria NOT IN ({ph_sp}))" if ph_sp else ""
+    cat_q = f"""
+        SELECT {_mes_sql()} AS mes,
+               COALESCE(categoria, 'Sin categoría') AS cat,
+               ROUND(SUM({_EGRESO_EXPR}), 2) AS total
+        FROM gastos
+        WHERE moneda = 'ARS'
+          AND fecha >= date('now', '-{months_needed} months')
+          {sp_clause}
+        GROUP BY mes, cat
+        HAVING total > 0
+    """
+    with _conn() as conn:
+        cat_rows = conn.execute(cat_q, list(specials) if specials else []).fetchall()
+
+    cat_totals: dict[str, float] = {}
+    for r in cat_rows:
+        if r["mes"] not in recent_keys:
+            continue
+        cat_totals[r["cat"]] = cat_totals.get(r["cat"], 0.0) + float(r["total"])
+
+    cat_avg: dict[str, float] = {cat: total / n for cat, total in cat_totals.items()}
+
+    # ── Compose forecast components ───────────────────────────────────────────
+    budget_total = round(sum(budget.values()), 2)
+    hist_unbudgeted = round(
+        sum(avg for cat, avg in cat_avg.items() if not _has_budget_ancestor(cat)),
+        2,
+    )
+    avg_ingresos = round(sum(r["ingresos"] for r in recent) / n, 2)
+
+    forecast_egreso = round(budget_total + hist_unbudgeted, 2)
+
+    last_mes = historical[-1]["mes"]
+    forecast = []
+    for k in range(1, meses_futuro + 1):
+        forecast.append({
+            "mes":      _add_months(last_mes, k),
+            "egresos":  forecast_egreso,
+            "ingresos": avg_ingresos,
+            "breakdown": {
+                "presupuesto":              budget_total,
+                "historico_sin_presupuesto": hist_unbudgeted,
+            },
+        })
+
+    return {"historical": historical, "forecast": forecast}
+
+
 def delete_all_gastos(fuente: str = None, import_id: int = None) -> int:
     with _conn() as conn:
         if import_id:

@@ -4,7 +4,7 @@ from auth import require_auth
 from db import (
     stats_by_category, stats_by_fuente, stats_by_usuario,
     stats_top_descriptions, stats_monthly_by_category, stats_forecast,
-    list_vencimientos,
+    stats_forecast_v2, list_vencimientos,
 )
 
 router = APIRouter()
@@ -49,7 +49,10 @@ def get_forecast(
     meses:        int = Query(6),
     historico:    int = Query(3),
     exclude_cats: Optional[str] = Query(None),
+    modo:         str = Query("regresion"),
 ):
     require_auth(request)
     excl = [c.strip() for c in exclude_cats.split(",") if c.strip()] if exclude_cats else None
+    if modo == "presupuesto":
+        return stats_forecast_v2(meses_futuro=meses, meses_historico=historico, exclude_income_cats=excl)
     return stats_forecast(meses_futuro=meses, meses_historico=historico, exclude_income_cats=excl)

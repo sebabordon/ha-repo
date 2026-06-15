@@ -1,3 +1,7 @@
+## 1.0.3
+
+- **Forecast modo "Presupuesto + Histórico"** (`db.py`, `routes/stats.py`, `static/app.js`): nuevo modo de proyección que reemplaza la regresión lineal global por una estimación por categoría: las categorías con presupuesto configurado usan el monto mensual del presupuesto; las categorías sin presupuesto usan el promedio histórico de los últimos N meses cerrados. Los ingresos siguen siendo promedio simple. El selector "Modo" en el header del gráfico Forecast permite alternar entre "Regresión" (comportamiento anterior) y "Presupuesto + Histórico" (nuevo). En modo presupuesto, el tooltip de cada punto proyectado muestra el desglose presupuesto vs. histórico sin presupuesto.
+
 ## 1.0.2
 
 - **Fix doble dropdown en categoría de pagos manuales** (`static/index.html`): el campo `pago-cat` tenía `list="cat-datalist"` (datalist nativo del browser) simultáneo al dropdown custom de `_setupCatAC`, lo que mostraba dos selectores superpuestos. Se eliminó el atributo `list`, dejando solo el dropdown jerárquico propio de la app.

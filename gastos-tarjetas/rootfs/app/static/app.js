@@ -1512,6 +1512,11 @@ function _buildChartBox(cid, idx, total) {
             <option value="3" selected>Últimos 3 meses</option><option value="6">Últimos 6 meses</option>
           </select>
         </label>
+        <label>Modo:
+          <select id="cf-forecast-modo" onchange="this.blur();loadForecast()">
+            <option value="regresion" selected>Regresión</option><option value="presupuesto">Presupuesto + Histórico</option>
+          </select>
+        </label>
         <div id="forecast-exclude-wrap" style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">
           <span>Excluir de ingresos:</span>
           <span id="forecast-exclude-chips" style="display:inline-flex;flex-wrap:wrap;gap:.25rem"></span>
@@ -4861,14 +4866,15 @@ async function _onForecastExcludeAdd() {
 async function loadForecast() {
   const meses     = document.getElementById("cf-forecast-meses")?.value || "6";
   const historico = document.getElementById("cf-forecast-historico")?.value || "3";
-  const params    = new URLSearchParams({meses, historico});
+  const modo      = document.getElementById("cf-forecast-modo")?.value || "regresion";
+  const params    = new URLSearchParams({meses, historico, modo});
   if (_forecastExcludes.length > 0) params.set("exclude_cats", _forecastExcludes.join(","));
   const res  = await fetch(`${BASE}/api/stats/forecast?${params}`);
   const data = await res.json();
-  _drawForecast(data);
+  _drawForecast(data, modo);
 }
 
-function _drawForecast(data) {
+function _drawForecast(data, modo) {
   const historical = data.historical || [];
   const forecast   = data.forecast   || [];
   if (!historical.length) return;
@@ -4877,27 +4883,45 @@ function _drawForecast(data) {
   const labels    = allMonths.map(_fmtMes);
   const nH        = historical.length;
 
-  // Extend historical data with nulls for forecast slots
   const egH  = [...historical.map(d => d.egresos),  ...Array(forecast.length).fill(null)];
   const inH  = [...historical.map(d => d.ingresos), ...Array(forecast.length).fill(null)];
-  // Forecast starts at last historical point for visual continuity
   const egF  = [...Array(nH - 1).fill(null), historical.at(-1).egresos,  ...forecast.map(d => d.egresos)];
   const inF  = [...Array(nH - 1).fill(null), historical.at(-1).ingresos, ...forecast.map(d => d.ingresos)];
+
+  // Breakdown tooltip for presupuesto mode
+  const breakdownMap = {};
+  if (modo === "presupuesto") {
+    forecast.forEach(d => { if (d.breakdown) breakdownMap[d.mes] = d.breakdown; });
+  }
 
   _destroyAndCreate("chart-forecast", {
     type: "line",
     data: { labels, datasets: [
       { label:"Egresos",          data:egH, borderColor:"rgba(220,80,60,1)",   backgroundColor:"rgba(220,80,60,.08)",  borderWidth:2, pointRadius:3, tension:.3, fill:false },
       { label:"Ingresos",         data:inH, borderColor:"rgba(34,180,120,1)",  backgroundColor:"rgba(34,180,120,.08)", borderWidth:2, pointRadius:3, tension:.3, fill:false },
-      { label:"Egresos (proy.)",  data:egF, borderColor:"rgba(220,80,60,.55)", backgroundColor:"transparent",           borderWidth:2, pointRadius:3, tension:.3, fill:false, borderDash:[6,4] },
-      { label:"Ingresos (proy.)", data:inF, borderColor:"rgba(34,180,120,.55)",backgroundColor:"transparent",           borderWidth:2, pointRadius:3, tension:.3, fill:false, borderDash:[6,4] },
+      { label:"Egresos (proy.)",  data:egF, borderColor:"rgba(220,80,60,.55)", backgroundColor:"transparent",          borderWidth:2, pointRadius:3, tension:.3, fill:false, borderDash:[6,4] },
+      { label:"Ingresos (proy.)", data:inF, borderColor:"rgba(34,180,120,.55)",backgroundColor:"transparent",          borderWidth:2, pointRadius:3, tension:.3, fill:false, borderDash:[6,4] },
     ]},
     options: {
       responsive:true, maintainAspectRatio:true,
       spanGaps: false,
       plugins:{
         legend:{ position:"top", labels:{ boxWidth:12, font:{size:11} } },
-        tooltip:{ callbacks:{ label: c => c.raw!=null ? ` ${c.dataset.label}: ${_fmtNum(c.raw)}` : null } },
+        tooltip:{
+          callbacks:{
+            label: c => c.raw != null ? ` ${c.dataset.label}: ${_fmtNum(c.raw)}` : null,
+            afterBody: items => {
+              if (modo !== "presupuesto") return [];
+              const mes = allMonths[items[0]?.dataIndex];
+              const bd  = breakdownMap[mes];
+              if (!bd) return [];
+              return [
+                `  · Presupuesto: ${_fmtNum(bd.presupuesto)}`,
+                `  · Sin presupuesto (hist.): ${_fmtNum(bd.historico_sin_presupuesto)}`,
+              ];
+            },
+          },
+        },
       },
       scales:{ y:{ ticks:{ callback: v => v>=1000?`${(v/1000).toFixed(0)}k`:v } } },
     },
