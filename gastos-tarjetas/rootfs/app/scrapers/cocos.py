@@ -350,16 +350,19 @@ class CocosScraper(BaseScraper):
                 log_fn(f"  [!] Estructura inesperada (offset={offset}): claves={list(data.keys()) if isinstance(data, dict) else type(data).__name__} — {_json.dumps(data)[:300]}")
                 break
 
+            pagination  = data.get("pagination") or {}
+            total_items = int(pagination.get("total_items") or 0)
+            total_pages = int(pagination.get("total_pages") or 1)
+
             if offset == 0:
                 account_id_used = hdrs.get("x-account-id", "(vacío)")
-                pagination = data.get("pagination") or {}
-                log_fn(f"  [dbg] account_id={account_id_used!r}, días={len(day_groups)}, claves={list(data.keys())}, pagination={pagination}")
+                log_fn(f"  [dbg] account_id={account_id_used!r}, días={len(day_groups)}, total_items={total_items}, total_pages={total_pages}")
                 if day_groups:
                     log_fn(f"  [dbg] primer día: {day_groups[0].get('executionDate')} — {len(day_groups[0].get('cashMovements') or [])} movs, balance={day_groups[0].get('balance')}")
                     raw_bal = day_groups[0].get("balance")
                     if raw_bal is not None:
                         saldo_ars = float(raw_bal)
-                elif not day_groups:
+                else:
                     log_fn(f"  [dbg] data vacío — respuesta completa: {_json.dumps(data)[:400]}")
 
             batch: list[dict] = []
@@ -368,8 +371,8 @@ class CocosScraper(BaseScraper):
 
             all_items.extend(batch)
 
-            total_items = int(batch[0].get("total_items") or 0) if batch else 0
-            if not batch or len(all_items) >= total_items or len(batch) < _LIMIT:
+            curr_page = int(pagination.get("curr_page") or 1)
+            if not batch or curr_page >= total_pages:
                 break
             offset += _LIMIT
 

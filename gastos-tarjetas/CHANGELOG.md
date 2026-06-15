@@ -1,3 +1,7 @@
+## 1.2.11
+
+- **Fix Cocos — paginación via campo `pagination`** (`scrapers/cocos.py`): la paginación se leía de `batch[0].get("total_items")` (dentro de cada movimiento), pero el campo correcto está en `data.pagination.total_items` / `total_pages` / `curr_page` a nivel de respuesta. Ahora el loop de páginas usa `curr_page >= total_pages` como condición de corte. El log de debug muestra `total_items` y `total_pages` en lugar de las claves JSON crudas.
+
 ## 1.2.10
 
 - **Fix Cocos — account_id faltante en sesión reutilizada** (`scrapers/cocos.py`): cuando la sesión guardada tiene `access_token` pero `account_id` vacío (sesiones antiguas anteriores al fix de 1.2.4), el scraper ahora detecta el vacío y llama a `GET /api/v1/users/me` para obtenerlo, actualiza el archivo de sesión, y continúa sin re-login. El método `_fetch_account_id_sync` se extrae como helper reutilizado también desde `_full_login_sync`.
