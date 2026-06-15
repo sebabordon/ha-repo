@@ -1,3 +1,7 @@
+## 1.2.10
+
+- **Fix Cocos — account_id faltante en sesión reutilizada** (`scrapers/cocos.py`): cuando la sesión guardada tiene `access_token` pero `account_id` vacío (sesiones antiguas anteriores al fix de 1.2.4), el scraper ahora detecta el vacío y llama a `GET /api/v1/users/me` para obtenerlo, actualiza el archivo de sesión, y continúa sin re-login. El método `_fetch_account_id_sync` se extrae como helper reutilizado también desde `_full_login_sync`.
+
 ## 1.2.9
 
 - **Debug Cocos account_id y paginación** (`scrapers/cocos.py`): el log ahora muestra el `account_id` que se está usando en el header `x-account-id`, el objeto `pagination` de la respuesta, y el JSON completo cuando `data` viene vacío. También se restauran `date_from=` y `date_to=` vacíos en el request (igual que el browser).

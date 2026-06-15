@@ -189,8 +189,15 @@ class CocosScraper(BaseScraper):
         saved = self._load_session()
 
         if saved and saved.get("access_token"):
-            log_fn("Sesión Cocos vigente — reutilizando")
-            return saved["access_token"], saved.get("account_id") or ""
+            account_id = saved.get("account_id") or ""
+            token      = saved["access_token"]
+            if not account_id:
+                log_fn("Sesión Cocos vigente pero sin account_id — obteniendo…")
+                account_id = self._fetch_account_id_sync(session, token, log_fn)
+                self._save_session(saved, account_id)
+            else:
+                log_fn("Sesión Cocos vigente — reutilizando")
+            return token, account_id
 
         if saved and saved.get("refresh_token"):
             log_fn("Token Cocos expirado — intentando refresh…")
@@ -279,29 +286,31 @@ class CocosScraper(BaseScraper):
             raise ValueError(f"Cocos 2FA: access_token final no encontrado. Respuesta: {resp.text[:200]}")
 
         # 5. Obtener account_id desde api/v1/users/me
-        api_hdrs = {
-            "Authorization": f"Bearer {final_token}",
-            "Content-Type":  "application/json",
-        }
-        account_id = ""
-        try:
-            resp = session.get(f"{_BASE}/api/v1/users/me", headers=api_hdrs, timeout=15)
-            if resp.status_code == 200:
-                me = resp.json()
-                accounts = me.get("id_accounts") or []
-                if accounts:
-                    account_id = str(accounts[0])
-                    log_fn(f"Account ID: {account_id}")
-                else:
-                    log_fn(f"  [!] id_accounts vacío en /api/v1/users/me: {resp.text[:200]}")
-            else:
-                log_fn(f"  [!] /api/v1/users/me — HTTP {resp.status_code}: {resp.text[:200]}")
-        except Exception as exc:
-            log_fn(f"  [!] Error obteniendo account_id: {exc}")
+        account_id = self._fetch_account_id_sync(session, final_token, log_fn)
 
         self._save_session(phase2, account_id)
         log_fn("Login Cocos OK — sesión guardada")
         return final_token, account_id
+
+    def _fetch_account_id_sync(self, session, token: str, log_fn) -> str:
+        try:
+            resp = session.get(
+                f"{_BASE}/api/v1/users/me",
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                accounts = resp.json().get("id_accounts") or []
+                if accounts:
+                    account_id = str(accounts[0])
+                    log_fn(f"Account ID: {account_id}")
+                    return account_id
+                log_fn(f"  [!] id_accounts vacío en /api/v1/users/me: {resp.text[:200]}")
+            else:
+                log_fn(f"  [!] /api/v1/users/me — HTTP {resp.status_code}: {resp.text[:200]}")
+        except Exception as exc:
+            log_fn(f"  [!] Error obteniendo account_id: {exc}")
+        return ""
 
     # ── Movimientos ───────────────────────────────────────────────────────────
 
