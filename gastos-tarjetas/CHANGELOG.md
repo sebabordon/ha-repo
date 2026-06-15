@@ -1,3 +1,7 @@
+## 1.0.8
+
+- **Tabla debug forecast eliminada** (`db.py`, `static/app.js`): removida la tabla de desglose temporal, ya cumplió su propósito.
+
 ## 1.0.7
 
 - **Fix doble conteo en presupuesto forecast** (`db.py`): el total del presupuesto ahora suma solo las categorías hoja (sin descendientes con presupuesto propio), evitando que el padre y sus hijos se cuenten múltiples veces. En la tabla debug, las categorías padre (roll-up) se muestran tachadas para identificarlas.

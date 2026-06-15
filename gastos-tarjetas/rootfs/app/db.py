@@ -3087,18 +3087,11 @@ def stats_forecast_v2(
 
     leaf_budget = {cat: amt for cat, amt in budget.items() if _is_leaf_budget(cat)}
 
-    budget_cats_detail = sorted(
-        [{"categoria": cat, "monto": round(amt, 2), "es_hoja": _is_leaf_budget(cat)}
-         for cat, amt in budget.items()],
-        key=lambda x: -x["monto"],
-    )
-    hist_unbudgeted_detail = sorted(
-        [{"categoria": cat, "promedio": round(avg, 2)}
-         for cat, avg in cat_avg.items() if not _has_budget_ancestor(cat)],
-        key=lambda x: -x["promedio"],
-    )
     budget_total    = round(sum(leaf_budget.values()), 2)
-    hist_unbudgeted = round(sum(d["promedio"] for d in hist_unbudgeted_detail), 2)
+    hist_unbudgeted = round(
+        sum(avg for cat, avg in cat_avg.items() if not _has_budget_ancestor(cat)),
+        2,
+    )
     avg_ingresos    = round(sum(r["ingresos"] for r in recent) / n, 2)
     forecast_egreso = round(budget_total + hist_unbudgeted, 2)
 
@@ -3115,18 +3108,7 @@ def stats_forecast_v2(
             },
         })
 
-    return {
-        "historical": closed,
-        "forecast":   forecast,
-        "debug": {
-            "meses_base":        n,
-            "periodo_base":      [r["mes"] for r in recent],
-            "presupuesto_total": budget_total,
-            "presupuesto_cats":  budget_cats_detail,
-            "historico_sin_presupuesto_total": hist_unbudgeted,
-            "historico_sin_presupuesto_cats":  hist_unbudgeted_detail,
-        },
-    }
+    return {"historical": closed, "forecast": forecast}
 
 
 def delete_all_gastos(fuente: str = None, import_id: int = None) -> int:

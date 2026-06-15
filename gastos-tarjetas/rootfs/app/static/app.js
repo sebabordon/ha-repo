@@ -1523,8 +1523,7 @@ function _buildChartBox(cid, idx, total) {
           <button id="btn-forecast-exclude-add" class="btn btn-sm" style="padding:.15rem .5rem;font-size:.82rem">+</button>
         </div>
       </div>
-      <canvas id="chart-forecast"></canvas>
-      <div id="forecast-debug" style="display:none;margin-top:1rem"></div>`;
+      <canvas id="chart-forecast"></canvas>`;
     // Re-bind exclude button (was lost on DOM rebuild)
     setTimeout(() => {
       document.getElementById("btn-forecast-exclude-add")?.addEventListener("click", _onForecastExcludeAdd);
@@ -4893,42 +4892,6 @@ function _drawForecast(data, modo) {
   const breakdownMap = {};
   if (modo === "presupuesto") {
     forecast.forEach(d => { if (d.breakdown) breakdownMap[d.mes] = d.breakdown; });
-  }
-
-  // Debug table (presupuesto mode only)
-  const dbgEl = document.getElementById("forecast-debug");
-  if (dbgEl) {
-    const dbg = data.debug;
-    if (modo === "presupuesto" && dbg) {
-      const fmtRow = (cat, amt, tachado = false) =>
-        `<tr style="${tachado ? "opacity:.4;text-decoration:line-through" : ""}"><td style="padding:.15rem .5rem">${cat}</td><td style="padding:.15rem .5rem;text-align:right">${_fmtNum(amt)}</td></tr>`;
-      const budgetRows  = dbg.presupuesto_cats.map(d =>
-        fmtRow((d.es_hoja ? "" : "⊃ ") + d.categoria, d.monto, !d.es_hoja)
-      ).join("");
-      const histRows    = dbg.historico_sin_presupuesto_cats.map(d => fmtRow(d.categoria, d.promedio)).join("");
-      const tableStyle  = "border-collapse:collapse;font-size:.8rem;width:100%";
-      const thStyle     = "padding:.2rem .5rem;text-align:left;border-bottom:1px solid #ddd;color:#888;font-weight:500";
-      const sectionHtml = (title, total, rows) => `
-        <div style="flex:1;min-width:260px">
-          <div style="font-size:.8rem;font-weight:600;margin-bottom:.3rem">${title} <span style="color:#888;font-weight:400">(total: ${_fmtNum(total)})</span></div>
-          <table style="${tableStyle}">
-            <thead><tr><th style="${thStyle}">Categoría</th><th style="${thStyle};text-align:right">$/mes</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="2" style="padding:.3rem .5rem;color:#aaa">—</td></tr>'}</tbody>
-          </table>
-        </div>`;
-      dbgEl.innerHTML = `
-        <div style="font-size:.75rem;color:#aaa;margin-bottom:.4rem">
-          Base: ${dbg.periodo_base.join(", ")} (${dbg.meses_base} mes${dbg.meses_base !== 1 ? "es" : ""})
-          · Total proyectado: ${_fmtNum(dbg.presupuesto_total + dbg.historico_sin_presupuesto_total)}
-        </div>
-        <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
-          ${sectionHtml("Presupuesto", dbg.presupuesto_total, budgetRows)}
-          ${sectionHtml("Histórico sin presupuesto", dbg.historico_sin_presupuesto_total, histRows)}
-        </div>`;
-      dbgEl.style.display = "block";
-    } else {
-      dbgEl.style.display = "none";
-    }
   }
 
   _destroyAndCreate("chart-forecast", {
