@@ -686,12 +686,12 @@ class MercadoPagoScraper(BaseScraper):
         await self._ensure_settlement_config(client, _URL, log_fn)
 
         # ── Paso 1: usar el reporte existente más reciente ────────────────────
-        csv_text, latest_date = await self._download_latest_settlement(
+        rpt_data, latest_date = await self._download_latest_settlement(
             client, _URL, log_fn
         )
         result = []
-        if csv_text is not None:
-            result = self._parse_settlement_csv(csv_text, existing_ids, log_fn, debug)
+        if rpt_data is not None:
+            result = self._parse_settlement_csv(rpt_data, existing_ids, log_fn, debug)
 
         # ── Paso 2: solicitar reporte nuevo solo si no hay uno de hoy ────────
         today_art = datetime.now(_ART).date()
@@ -774,7 +774,7 @@ class MercadoPagoScraper(BaseScraper):
     ) -> tuple[Optional[str], Optional[date]]:
         """
         Consulta la lista de reportes y descarga el más reciente si existe.
-        Devuelve (csv_text, date_created_art) o (None, None) si la lista está vacía/falla.
+        Devuelve (raw_bytes, date_created_art) o (None, None) si la lista está vacía/falla.
         date_created_art es la fecha local ART del reporte más reciente, usada para
         decidir si hay que generar uno nuevo.
         """
@@ -815,21 +815,48 @@ class MercadoPagoScraper(BaseScraper):
         base_url: str,
         file_name: str,
         log_fn,
-    ) -> Optional[str]:
-        """Descarga un archivo de reporte por nombre. Devuelve el texto o None."""
+    ) -> Optional[bytes]:
+        """Descarga un archivo de reporte por nombre. Devuelve bytes o None."""
         try:
             dl = await client.get(f"{base_url}/{file_name}", timeout=60)
             if dl.status_code == 200:
                 log_fn(f"Settlement report: descargando {file_name} …")
-                return dl.text
+                return dl.content
             log_fn(f"Settlement report: download status {dl.status_code}")
         except Exception as exc:
             log_fn(f"Settlement report: error descargando — {exc}")
         return None
 
+    @staticmethod
+    def _settlement_bytes_to_rows(data: bytes) -> list[dict]:
+        """
+        Convierte el contenido del settlement report a lista de dicts con las
+        mismas claves que el CSV (columnas en mayúsculas).
+        MP devuelve a veces CSV con separador ";" y a veces xlsx binario.
+        Detección: si empieza con PK (magic bytes de ZIP/xlsx) → openpyxl.
+        """
+        if data[:2] == b"PK":
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            ws = wb.active
+            rows_iter = ws.iter_rows(values_only=True)
+            headers = [str(h).strip() if h is not None else "" for h in next(rows_iter, [])]
+            result = []
+            for row in rows_iter:
+                result.append({
+                    headers[i]: (str(v).strip() if v is not None else "")
+                    for i, v in enumerate(row)
+                    if i < len(headers)
+                })
+            wb.close()
+            return result
+        # CSV con separador ";"
+        text = data.decode("utf-8", errors="replace")
+        return list(csv_mod.DictReader(io.StringIO(text), delimiter=";"))
+
     def _parse_settlement_csv(  # noqa: C901 (long but linear)
         self,
-        csv_text: str,
+        csv_text: bytes,
         existing_ids: set,
         log_fn,
         debug: bool = False,
@@ -872,9 +899,9 @@ class MercadoPagoScraper(BaseScraper):
         # Varios SOURCE_IDs de 13 dígitos (rendimientos) aparecen en múltiples
         # filas con montos parciales. Los sumamos para importar el total correcto.
         try:
-            raw_rows = list(csv_mod.DictReader(io.StringIO(csv_text), delimiter=";"))
+            raw_rows = self._settlement_bytes_to_rows(csv_text)
         except Exception as exc:
-            log_fn(f"Settlement report: error leyendo CSV — {exc}")
+            log_fn(f"Settlement report: error leyendo archivo — {exc}")
             return []
 
         # Agrupar: clave = source_id si no vacío, sino posición en la lista

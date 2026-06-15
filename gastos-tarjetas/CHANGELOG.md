@@ -1,3 +1,7 @@
+## 1.2.3
+
+- **Fix settlement report MP — soporte xlsx** (`scrapers/mercadopago.py`): MP cambió el formato del settlement report de CSV a xlsx binario. El código anterior intentaba leerlo como texto y fallaba con "new-line character seen in unquoted field". Ahora `_download_settlement_file` retorna `bytes` y el nuevo helper `_settlement_bytes_to_rows` detecta el formato por magic bytes: si empieza con `PK` (ZIP/xlsx) lo parsea con `openpyxl`; si no, lo decodifica como CSV con separador `;`. Ambos formatos producen la misma lista de dicts para `_parse_settlement_csv`.
+
 ## 1.2.2
 
 - **Fix Cocos Cloudflare 403** (`scrapers/cocos.py`, `requirements.txt`): reemplazada la implementación httpx por `cloudscraper` (mismo approach que pyCocos) para bypassear el WAF Cloudflare que protege `api.cocos.capital`. Toda la lógica HTTP pasa a sync y se ejecuta via `asyncio.to_thread`. Dependencia nueva: `cloudscraper>=1.2.71`.
