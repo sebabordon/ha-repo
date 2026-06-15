@@ -1,3 +1,7 @@
+## 1.0.6
+
+- **Forecast debug en modo Presupuesto** (`db.py`, `static/app.js`): debajo del gráfico aparece una tabla con dos columnas — categorías del presupuesto con su monto mensual, y categorías con historial pero sin presupuesto con su promedio mensual. Permite identificar exactamente qué está inflando el componente "histórico sin presupuesto".
+
 ## 1.0.5
 
 - **Fix: categorías especiales se expanden a sus hijos** (`db.py`): `get_special_categorias()` ahora incluye todos los descendientes de cada categoría marcada como especial, no solo el nodo raíz. Esto corrige un doble conteo en stats y forecast donde los pagos de tarjeta y transferencias intercuentas (hijos de "Pagos Especiales") se filtraban del presupuesto pero no del histórico por no tener `especial=1` propio. El fix aplica a todos los callers: `monthly_summary`, `stats_monthly_by_category`, ambos modos de forecast, etc.

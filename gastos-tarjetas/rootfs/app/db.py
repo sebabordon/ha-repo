@@ -3078,13 +3078,18 @@ def stats_forecast_v2(
     cat_avg: dict[str, float] = {cat: total / n for cat, total in cat_totals.items()}
 
     # ── Compose forecast components ───────────────────────────────────────────
-    budget_total = round(sum(budget.values()), 2)
-    hist_unbudgeted = round(
-        sum(avg for cat, avg in cat_avg.items() if not _has_budget_ancestor(cat)),
-        2,
+    budget_cats_detail = sorted(
+        [{"categoria": cat, "monto": round(amt, 2)} for cat, amt in budget.items()],
+        key=lambda x: -x["monto"],
     )
-    avg_ingresos = round(sum(r["ingresos"] for r in recent) / n, 2)
-
+    hist_unbudgeted_detail = sorted(
+        [{"categoria": cat, "promedio": round(avg, 2)}
+         for cat, avg in cat_avg.items() if not _has_budget_ancestor(cat)],
+        key=lambda x: -x["promedio"],
+    )
+    budget_total    = round(sum(budget.values()), 2)
+    hist_unbudgeted = round(sum(d["promedio"] for d in hist_unbudgeted_detail), 2)
+    avg_ingresos    = round(sum(r["ingresos"] for r in recent) / n, 2)
     forecast_egreso = round(budget_total + hist_unbudgeted, 2)
 
     last_mes = closed[-1]["mes"]
@@ -3095,12 +3100,23 @@ def stats_forecast_v2(
             "egresos":  forecast_egreso,
             "ingresos": avg_ingresos,
             "breakdown": {
-                "presupuesto":              budget_total,
+                "presupuesto":               budget_total,
                 "historico_sin_presupuesto": hist_unbudgeted,
             },
         })
 
-    return {"historical": closed, "forecast": forecast}
+    return {
+        "historical": closed,
+        "forecast":   forecast,
+        "debug": {
+            "meses_base":        n,
+            "periodo_base":      [r["mes"] for r in recent],
+            "presupuesto_total": budget_total,
+            "presupuesto_cats":  budget_cats_detail,
+            "historico_sin_presupuesto_total": hist_unbudgeted,
+            "historico_sin_presupuesto_cats":  hist_unbudgeted_detail,
+        },
+    }
 
 
 def delete_all_gastos(fuente: str = None, import_id: int = None) -> int:
