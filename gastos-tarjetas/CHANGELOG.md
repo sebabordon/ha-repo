@@ -1,3 +1,7 @@
+## 1.2.7
+
+- **Fix Cocos — filtro de fecha client-side** (`scrapers/cocos.py`): la API de `cash_movements` ignora los parámetros `date_from`/`date_to` cuando se envían con valores (devuelve vacío); el HAR muestra que la app los envía vacíos (`date_from=&date_to=`). Ahora se envían vacíos y el filtro por período se aplica client-side comparando `execution_date` contra el rango configurado.
+
 ## 1.2.6
 
 - **Fix Cocos — endpoint correcto de movimientos** (`scrapers/cocos.py`): el endpoint real que usa la app es `GET /api/v1/wallet/cash_movements?currency=ARS&date_from=&date_to=&limit=50&offset=0`, no `/api/v1/transfers` (que devolvía 404). Respuesta: `{data:[{executionDate, balance, cashMovements:[...]}]}`. Cambios: (1) endpoint corregido con paginación offset-based (50/página), (2) campo de monto cambia de `amount` a `quantity` (negativo = egreso), (3) saldo ARS se lee de `data[0].balance` sin llamada extra a portfolio, (4) descripción compuesta `description — detail`, (5) dedup key: `cm_{id_cash_movement}` > `tk_{id_ticket}` > clave sintética, (6) removida llamada 404 a `wallet/portfolio`, (7) removido header `apikey: ""` que no envía la app.

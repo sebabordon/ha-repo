@@ -321,8 +321,8 @@ class CocosScraper(BaseScraper):
                 f"{_BASE}/api/v1/wallet/cash_movements",
                 params={
                     "currency":  "ARS",
-                    "date_from": since.isoformat(),
-                    "date_to":   until.isoformat(),
+                    "date_from": "",
+                    "date_to":   "",
                     "limit":     _LIMIT,
                     "offset":    offset,
                 },
@@ -362,9 +362,15 @@ class CocosScraper(BaseScraper):
         if debug:
             log_fn(f"  [dbg] estructura primer movimiento: {_json.dumps(all_items[0])[:600]}")
 
+        since_str = since.isoformat()
+        until_str = until.isoformat()
         movimientos: list[MovimientoRaw] = []
         skipped = 0
         for item in all_items:
+            # Filtro de fecha client-side (la API no filtra por date_from/date_to)
+            fecha_item = (item.get("execution_date") or "")[:10]
+            if fecha_item and (fecha_item < since_str or fecha_item > until_str):
+                continue
             mov, reason = self._movement_to_raw(item, default_usuario)
             if mov is None:
                 skipped += 1
