@@ -837,17 +837,52 @@ class MercadoPagoScraper(BaseScraper):
         """
         if data[:2] == b"PK":
             import openpyxl
+            # MP cambió el xlsx a encabezados en español; mapeamos a los nombres
+            # en inglés que espera _parse_settlement_csv.
+            _COL_MAP = {
+                "FECHA DE ORIGEN":                              "TRANSACTION_DATE",
+                "NÚMERO DE IDENTIFICACIÓN":                     "EXTERNAL_REFERENCE",
+                "ID DE OPERACIÓN EN MERCADO PAGO":              "SOURCE_ID",
+                "TIPO DE MEDIO DE PAGO":                        "PAYMENT_METHOD_TYPE",
+                "MEDIO DE PAGO":                                "PAYMENT_METHOD",
+                "TIPO DE OPERACIÓN":                            "TRANSACTION_TYPE",
+                "VALOR DE LA COMPRA":                           "TRANSACTION_AMOUNT",
+                "MONEDA":                                       "TRANSACTION_CURRENCY",
+                "COMISIONES + IVA":                             "FEE_AMOUNT",
+                "MONTO NETO DE LA OPERACIÓN":                   "SETTLEMENT_NET_AMOUNT",
+                "DATOS EXTRA":                                  "METADATA",
+                "IMPUESTOS COBRADOS POR RETENCIONES DE IIBB":   "TAXES_AMOUNT",
+                "DETALLE DE LA VENTA":                          "DESCRIPTION",
+                "NÚMERO DE IDENTIFICACIÓN DEL PAGADOR":         "PAYER_ID_NUMBER",
+                "PAGADOR":                                      "PAYER_NAME",
+                "BANCO DE ORIGEN":                              "POI_BANK_NAME",
+            }
+            # TRANSACTION_TYPE values also changed to Spanish
+            _TYPE_MAP = {
+                "Pago aprobado":            "SETTLEMENT",
+                "Devolución":               "REFUND",
+                "Contracargo":              "CHARGEBACK",
+                "Retiro":                   "WITHDRAWAL",
+                "Retiro cancelado":         "WITHDRAWAL_CANCEL",
+                "Retención":                "TAX_WITHHELD",
+                "Tarjeta de crédito":       "SETTLEMENT",
+                "Tarjeta de débito":        "SETTLEMENT",
+            }
             wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
             ws = wb.active
             rows_iter = ws.iter_rows(values_only=True)
-            headers = [str(h).strip() if h is not None else "" for h in next(rows_iter, [])]
+            raw_headers = [str(h).strip() if h is not None else "" for h in next(rows_iter, [])]
+            headers = [_COL_MAP.get(h, h) for h in raw_headers]
             result = []
             for row in rows_iter:
-                result.append({
+                d = {
                     headers[i]: (str(v).strip() if v is not None else "")
                     for i, v in enumerate(row)
                     if i < len(headers)
-                })
+                }
+                tt = d.get("TRANSACTION_TYPE", "")
+                d["TRANSACTION_TYPE"] = _TYPE_MAP.get(tt, tt)
+                result.append(d)
             wb.close()
             return result
         # CSV con separador ";"

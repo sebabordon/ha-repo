@@ -1,3 +1,7 @@
+## 1.2.5
+
+- **Fix settlement report MP — mapeo de columnas xlsx en español** (`scrapers/mercadopago.py`): el xlsx que MP envía por mail usa encabezados en español (`TIPO DE OPERACIÓN`, `PAGADOR`, `DETALLE DE LA VENTA`, etc.) en lugar de los nombres ingleses que espera el parser (`TRANSACTION_TYPE`, `PAYER_NAME`, `DESCRIPTION`, etc.). `_settlement_bytes_to_rows` ahora mapea los 16 encabezados conocidos al nombre canónico en inglés y normaliza también los valores de `TRANSACTION_TYPE` (ej. `"Pago aprobado"` → `"SETTLEMENT"`, `"Retiro"` → `"WITHDRAWAL"`).
+
 ## 1.2.4
 
 - **Fix Cocos "Account ID is required"** (`scrapers/cocos.py`): después del login TOTP, llama a `GET api/v1/users/me` para obtener `id_accounts[0]` y lo incluye como header `x-account-id` en todas las llamadas de API. El account_id se persiste en el session file para evitar la llamada extra en runs subsiguientes.
