@@ -1,3 +1,7 @@
+## 1.0.5
+
+- **Fix: categorías especiales se expanden a sus hijos** (`db.py`): `get_special_categorias()` ahora incluye todos los descendientes de cada categoría marcada como especial, no solo el nodo raíz. Esto corrige un doble conteo en stats y forecast donde los pagos de tarjeta y transferencias intercuentas (hijos de "Pagos Especiales") se filtraban del presupuesto pero no del histórico por no tener `especial=1` propio. El fix aplica a todos los callers: `monthly_summary`, `stats_monthly_by_category`, ambos modos de forecast, etc.
+
 ## 1.0.4
 
 - **Forecast: período actual excluido del histórico** (`db.py`): el período de cobro en curso (que aparecía casi vacío creando un "bache") se excluye del histórico y pasa a ser el primer punto de la proyección, tanto en modo regresión como en modo presupuesto.

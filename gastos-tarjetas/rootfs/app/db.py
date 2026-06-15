@@ -169,6 +169,19 @@ def get_special_categorias() -> set[str]:
         pass
 
     result = builtin | db_specials | yaml_specials
+
+    # Expand to include all descendants of special categories so that children
+    # of a special parent are also excluded from stats even if not individually
+    # marked especial=1.
+    try:
+        cm = _get_categorias_children_map()
+        extra: set[str] = set()
+        for cat in list(result):
+            extra.update(_get_all_descendants(cat, cm))
+        result = result | extra
+    except Exception:
+        pass
+
     _specials_cache[db_path] = (key, result)
     return result
 
