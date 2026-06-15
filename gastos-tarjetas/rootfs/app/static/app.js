@@ -977,24 +977,93 @@ async function loadPagos() {
     return b;
   };
   for (const p of pagos) {
+    const matches   = p.matches || [];
+    const detectado = p.estado === "pendiente" && matches.length > 0;
+
     const tr = document.createElement("tr");
     if (p.estado === "pagado") tr.style.opacity = ".5";
     let tipo = p.recurrencia === "mensual" ? "Mensual" : "Único";
     if (p.recurrencia === "mensual" && p.fecha_fin)
       tipo += ` (hasta ${String(p.fecha_fin).slice(0, 10)})`;
-    const cells = [
+
+    const textCells = [
       String(p.fecha_vencimiento || "").slice(0, 10),
       p.descripcion,
       _fmtPagoMonto(p),
       tipo,
       p.categoria || "",
-      p.estado === "pagado" ? "Pagado" : "Pendiente",
     ];
-    for (const txt of cells) {
+    for (const txt of textCells) {
       const td = document.createElement("td"); td.textContent = txt; tr.appendChild(td);
     }
+
+    // Estado cell
+    const tdEstado = document.createElement("td");
+    if (detectado) {
+      const chip = document.createElement("span");
+      chip.className = "estado-detectado";
+      chip.textContent = "🔍 Detectado" + (matches.length > 1 ? ` (${matches.length})` : "");
+      tdEstado.appendChild(chip);
+    } else {
+      tdEstado.textContent = p.estado === "pagado" ? "Pagado" : "Pendiente";
+    }
+    tr.appendChild(tdEstado);
+
+    // Actions cell
     const tdA = document.createElement("td");
     tdA.style.cssText = "display:flex;align-items:center;gap:.3rem;white-space:nowrap";
+
+    // Build the match detail row before wiring the toggle button
+    let trDet = null;
+    if (detectado) {
+      trDet = document.createElement("tr");
+      trDet.className = "pago-match-row";
+      trDet.style.display = "none";
+      const tdDet = document.createElement("td");
+      tdDet.colSpan = 7;
+
+      const panel = document.createElement("div");
+      panel.className = "pago-match-panel";
+
+      const title = document.createElement("div");
+      title.className = "pago-match-title";
+      title.textContent = matches.length === 1
+        ? "Posible pago detectado en tus movimientos:"
+        : `${matches.length} posibles pagos detectados:`;
+      panel.appendChild(title);
+
+      for (const m of matches) {
+        const item = document.createElement("div");
+        item.className = "pago-match-item";
+
+        const info = document.createElement("span");
+        info.className = "pago-match-info";
+        const sym = m.moneda === "USD" ? "US$" : "$";
+        const cat = m.categoria ? `  ·  ${m.categoria}` : "";
+        info.textContent = `${m.fecha}  ·  ${m.descripcion}  ·  ${sym} ${Number(m.monto).toLocaleString("es-AR")}${cat}  [${m.fuente}]`;
+        item.appendChild(info);
+
+        const btnConf = document.createElement("button");
+        btnConf.className = "btn btn-pagado btn-sm";
+        btnConf.style.whiteSpace = "nowrap";
+        btnConf.textContent = "✓ Confirmar pagado";
+        btnConf.onclick = () => markPagoPaid(p.id);
+        item.appendChild(btnConf);
+
+        panel.appendChild(item);
+      }
+
+      tdDet.appendChild(panel);
+      trDet.appendChild(tdDet);
+
+      // "+" toggle button — first in the actions cell
+      const btnVer = mkAction("+", "Ver", "", () => {
+        const open = trDet.style.display === "none";
+        trDet.style.display = open ? "" : "none";
+      }, "Ver movimiento detectado");
+      tdA.appendChild(btnVer);
+    }
+
     if (p.estado !== "pagado") {
       tdA.appendChild(mkAction("✓", "Pagado", "btn-pagado", () => markPagoPaid(p.id), "Marcar pagado"));
       if (p.recurrencia === "mensual")
@@ -1006,6 +1075,7 @@ async function loadPagos() {
     tdA.appendChild(mkAction("🗑︎", "Borrar", "btn-danger", () => deletePago(p.id, p.descripcion), "Borrar"));
     tr.appendChild(tdA);
     tb.appendChild(tr);
+    if (trDet) tb.appendChild(trDet);
   }
 }
 

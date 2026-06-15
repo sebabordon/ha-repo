@@ -24,8 +24,11 @@ def _valid_fecha(s: str) -> str:
 @router.get("/pagos")
 def get_pagos(request: Request, estado: str = ""):
     require_auth(request)
-    from db import list_pagos
-    return {"pagos": list_pagos(estado or None)}
+    from db import list_pagos, find_pago_gasto_matches
+    pagos = list_pagos(estado or None)
+    for p in pagos:
+        p["matches"] = find_pago_gasto_matches(p) if p.get("estado") == "pendiente" else []
+    return {"pagos": pagos}
 
 
 @router.post("/pagos")

@@ -1164,6 +1164,70 @@ def mark_pago_pagado(pago_id: int, regenerate: bool = True) -> dict | None:
     return None
 
 
+def find_pago_gasto_matches(pago: dict) -> list[dict]:
+    """
+    Busca gastos que posiblemente correspondan a un pago manual pendiente.
+    Criterio: moneda igual, monto ≈ pago.monto (±tolerancia configurable),
+    fecha dentro de ±N días de fecha_vencimiento, y si el pago tiene categoria
+    definida se filtra por ella. Usa la misma config venc_pago_match_* que el
+    matcher de tarjetas (Config → Vencimientos).
+    """
+    from user_config import read_user_config
+    cfg = read_user_config()
+    try:
+        dias = int(cfg.get("venc_pago_match_dias", 8) or 8)
+    except (TypeError, ValueError):
+        dias = 8
+    try:
+        tol_ars = float(cfg.get("venc_pago_match_tol_ars", 5000.0) or 5000.0)
+    except (TypeError, ValueError):
+        tol_ars = 5000.0
+    try:
+        tol_usd = float(cfg.get("venc_pago_match_tol_usd", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        tol_usd = 1.0
+
+    monto  = pago.get("monto")
+    fecha  = pago.get("fecha_vencimiento")
+    moneda = (pago.get("moneda") or "ARS").upper()
+    cat    = (pago.get("categoria") or "").strip()
+
+    if monto is None or not fecha:
+        return []
+
+    tol       = tol_ars if moneda == "ARS" else tol_usd
+    monto_abs = abs(float(monto))
+
+    params: dict = {
+        "moneda":    moneda,
+        "monto_abs": monto_abs,
+        "tol":       tol,
+        "fecha":     str(fecha)[:10],
+        "dias_neg":  f"-{dias} days",
+        "dias_pos":  f"+{dias} days",
+    }
+    cat_clause = ""
+    if cat:
+        params["cat"] = cat
+        cat_clause = "AND LOWER(TRIM(categoria)) = LOWER(TRIM(:cat))"
+
+    with _conn() as conn:
+        rows = conn.execute(f"""
+            SELECT id, fecha, descripcion, monto, moneda, fuente, categoria
+            FROM gastos
+            WHERE moneda = :moneda
+              AND CAST(monto AS REAL) > 0
+              AND CAST(monto AS REAL) BETWEEN :monto_abs - :tol AND :monto_abs + :tol
+              AND fecha >= date(:fecha, :dias_neg)
+              AND fecha <= date(:fecha, :dias_pos)
+              {cat_clause}
+            ORDER BY ABS(CAST(monto AS REAL) - :monto_abs), fecha
+            LIMIT 5
+        """, params).fetchall()
+
+    return [dict(r) for r in rows]
+
+
 def list_vencimientos() -> list[dict]:
     """
     Return the most-recent import per fuente that has a fecha_venc.

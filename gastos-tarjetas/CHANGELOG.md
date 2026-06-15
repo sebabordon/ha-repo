@@ -1,3 +1,7 @@
+## 1.0.9
+
+- **Detección automática de pagos manuales** (`db.py`, `routes/pagos.py`, `static/app.js`, `static/style.css`): para cada pago pendiente, el backend busca gastos que coincidan por monto (±tolerancia), fecha (±N días) y categoría (si el pago la tiene definida). Usa la misma config `venc_pago_match_*` de Config → Vencimientos. En la tabla, la columna Estado muestra el chip 🔍 Detectado (fondo amarillo) y aparece un botón `+` que expande un panel con el detalle del gasto encontrado y el botón "✓ Confirmar pagado".
+
 ## 1.0.8
 
 - **Tabla debug forecast eliminada** (`db.py`, `static/app.js`): removida la tabla de desglose temporal, ya cumplió su propósito.
