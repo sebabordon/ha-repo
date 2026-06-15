@@ -1,3 +1,7 @@
+## 1.2.8
+
+- **Debug Cocos movimientos** (`scrapers/cocos.py`): el scraper devolvía "Sin movimientos" sin explicar por qué. Ahora loguea la estructura de la respuesta (días recibidos, primer día, balance, claves JSON) siempre en el primer page, y muestra el body raw si la respuesta no es JSON o tiene estructura inesperada. También se eliminan `date_from`/`date_to` vacíos del request (se enviaban como strings vacíos que podían alterar la URL).
+
 ## 1.2.7
 
 - **Fix Cocos — filtro de fecha client-side** (`scrapers/cocos.py`): la API de `cash_movements` ignora los parámetros `date_from`/`date_to` cuando se envían con valores (devuelve vacío); el HAR muestra que la app los envía vacíos (`date_from=&date_to=`). Ahora se envían vacíos y el filtro por período se aplica client-side comparando `execution_date` contra el rango configurado.

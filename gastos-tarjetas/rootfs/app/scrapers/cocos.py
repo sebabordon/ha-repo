@@ -319,13 +319,7 @@ class CocosScraper(BaseScraper):
         while True:
             resp = session.get(
                 f"{_BASE}/api/v1/wallet/cash_movements",
-                params={
-                    "currency":  "ARS",
-                    "date_from": "",
-                    "date_to":   "",
-                    "limit":     _LIMIT,
-                    "offset":    offset,
-                },
+                params={"currency": "ARS", "limit": _LIMIT, "offset": offset},
                 headers=hdrs,
                 timeout=30,
             )
@@ -333,16 +327,27 @@ class CocosScraper(BaseScraper):
                 self.clear_session()
                 raise ValueError("Sesión Cocos inválida (401) — sesión eliminada, el próximo run re-autenticará.")
             if resp.status_code != 200:
-                log_fn(f"  [!] Movimientos — HTTP {resp.status_code}: {resp.text[:200]}")
+                log_fn(f"  [!] Movimientos — HTTP {resp.status_code}: {resp.text[:300]}")
                 return [], saldo_ars
 
-            data       = resp.json()
-            day_groups = data.get("data") or []
+            try:
+                data = resp.json()
+            except Exception as exc:
+                log_fn(f"  [!] Respuesta no es JSON: {exc} — body: {resp.text[:300]}")
+                return [], saldo_ars
 
-            if offset == 0 and day_groups:
-                raw_bal = day_groups[0].get("balance")
-                if raw_bal is not None:
-                    saldo_ars = float(raw_bal)
+            day_groups = data.get("data") if isinstance(data, dict) else None
+            if day_groups is None:
+                log_fn(f"  [!] Estructura inesperada (offset={offset}): claves={list(data.keys()) if isinstance(data, dict) else type(data).__name__} — {_json.dumps(data)[:300]}")
+                break
+
+            if offset == 0:
+                log_fn(f"  [dbg] días recibidos: {len(day_groups)}, claves respuesta: {list(data.keys())}")
+                if day_groups:
+                    log_fn(f"  [dbg] primer día: {day_groups[0].get('executionDate')} — {len(day_groups[0].get('cashMovements') or [])} movs, balance={day_groups[0].get('balance')}")
+                    raw_bal = day_groups[0].get("balance")
+                    if raw_bal is not None:
+                        saldo_ars = float(raw_bal)
 
             batch: list[dict] = []
             for group in day_groups:
@@ -356,7 +361,7 @@ class CocosScraper(BaseScraper):
             offset += _LIMIT
 
         if not all_items:
-            log_fn("  → Sin movimientos en el período")
+            log_fn(f"  → API devolvió 0 items (saldo_ars={saldo_ars})")
             return [], saldo_ars
 
         if debug:
