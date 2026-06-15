@@ -1,3 +1,7 @@
+## 1.2.4
+
+- **Fix Cocos "Account ID is required"** (`scrapers/cocos.py`): después del login TOTP, llama a `GET api/v1/users/me` para obtener `id_accounts[0]` y lo incluye como header `x-account-id` en todas las llamadas de API. El account_id se persiste en el session file para evitar la llamada extra en runs subsiguientes.
+
 ## 1.2.3
 
 - **Fix settlement report MP — soporte xlsx** (`scrapers/mercadopago.py`): MP cambió el formato del settlement report de CSV a xlsx binario. El código anterior intentaba leerlo como texto y fallaba con "new-line character seen in unquoted field". Ahora `_download_settlement_file` retorna `bytes` y el nuevo helper `_settlement_bytes_to_rows` detecta el formato por magic bytes: si empieza con `PK` (ZIP/xlsx) lo parsea con `openpyxl`; si no, lo decodifica como CSV con separador `;`. Ambos formatos producen la misma lista de dicts para `_parse_settlement_csv`.

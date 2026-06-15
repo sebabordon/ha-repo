@@ -101,11 +101,12 @@ class CocosScraper(BaseScraper):
         })
 
         try:
-            token = self._ensure_token_sync(session, config, _l)
+            token, account_id = self._ensure_token_sync(session, config, _l)
 
             api_hdrs = {
                 "apikey":        "",
                 "Authorization": f"Bearer {token}",
+                "x-account-id":  account_id,
                 "Content-Type":  "application/json",
             }
 
@@ -165,7 +166,7 @@ class CocosScraper(BaseScraper):
             logger.warning("[cocos] Error leyendo sesión: %s", exc)
             return None
 
-    def _save_session(self, token_resp: dict) -> None:
+    def _save_session(self, token_resp: dict, account_id: str = "") -> None:
         try:
             expires_at_raw = token_resp.get("expires_at")
             if isinstance(expires_at_raw, (int, float)):
@@ -180,16 +181,18 @@ class CocosScraper(BaseScraper):
                     "access_token":  token_resp.get("access_token"),
                     "refresh_token": token_resp.get("refresh_token"),
                     "expires_at":    expires_at,
+                    "account_id":    account_id,
                 }, f)
         except Exception as exc:
             logger.warning("[cocos] Error guardando sesión: %s", exc)
 
-    def _ensure_token_sync(self, session, config: dict, log_fn) -> str:
+    def _ensure_token_sync(self, session, config: dict, log_fn) -> tuple[str, str]:
+        """Devuelve (access_token, account_id)."""
         saved = self._load_session()
 
         if saved and saved.get("access_token"):
             log_fn("Sesión Cocos vigente — reutilizando")
-            return saved["access_token"]
+            return saved["access_token"], saved.get("account_id") or ""
 
         if saved and saved.get("refresh_token"):
             log_fn("Token Cocos expirado — intentando refresh…")
@@ -203,16 +206,17 @@ class CocosScraper(BaseScraper):
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    self._save_session(data)
+                    account_id = saved.get("account_id") or ""
+                    self._save_session(data, account_id)
                     log_fn("Token Cocos refrescado OK")
-                    return data["access_token"]
+                    return data["access_token"], account_id
                 log_fn(f"Refresh falló (HTTP {resp.status_code}) — re-login")
             except Exception as exc:
                 log_fn(f"Refresh error: {exc} — re-login")
 
         return self._full_login_sync(session, config, log_fn)
 
-    def _full_login_sync(self, session, config: dict, log_fn) -> str:
+    def _full_login_sync(self, session, config: dict, log_fn) -> tuple[str, str]:
         email       = (config.get("email")       or "").strip()
         password    = (config.get("password")    or "").strip()
         totp_secret = (config.get("totp_secret") or "").strip()
@@ -276,9 +280,31 @@ class CocosScraper(BaseScraper):
         if not final_token:
             raise ValueError(f"Cocos 2FA: access_token final no encontrado. Respuesta: {resp.text[:200]}")
 
-        self._save_session(phase2)
+        # 5. Obtener account_id desde api/v1/users/me
+        api_hdrs = {
+            "apikey":        "",
+            "Authorization": f"Bearer {final_token}",
+            "Content-Type":  "application/json",
+        }
+        account_id = ""
+        try:
+            resp = session.get(f"{_BASE}/api/v1/users/me", headers=api_hdrs, timeout=15)
+            if resp.status_code == 200:
+                me = resp.json()
+                accounts = me.get("id_accounts") or []
+                if accounts:
+                    account_id = str(accounts[0])
+                    log_fn(f"Account ID: {account_id}")
+                else:
+                    log_fn(f"  [!] id_accounts vacío en /api/v1/users/me: {resp.text[:200]}")
+            else:
+                log_fn(f"  [!] /api/v1/users/me — HTTP {resp.status_code}: {resp.text[:200]}")
+        except Exception as exc:
+            log_fn(f"  [!] Error obteniendo account_id: {exc}")
+
+        self._save_session(phase2, account_id)
         log_fn("Login Cocos OK — sesión guardada")
-        return final_token
+        return final_token, account_id
 
     # ── Movimientos ───────────────────────────────────────────────────────────
 
