@@ -1,3 +1,7 @@
+## 1.2.1
+
+- **Fix CocosScraper** (`scrapers/cocos.py`): faltaba implementar el método abstracto `scrape()` heredado de `BaseScraper` — impedía instanciar la clase.
+
 ## 1.2.0
 
 - **Scraper Cocos Capital** (`scrapers/cocos.py`, `scraper_credentials.py`, `scraper_scheduler.py`, `requirements.txt`): nuevo scraper REST para Cocos Capital. Autenticación JWT vía Supabase GoTrue con 2FA TOTP automático (requiere TOTP secret key del usuario). Flujo: email+password → token phase-1 → challenge TOTP → token final. Refresh automático de sesión guardada en `/data/sessions/cocos.json`. Importa movimientos de cuenta (`api/v1/transfers`) y saldo/tenencias (`api/v1/wallet/portfolio`). Debug log muestra estructura del primer movimiento para verificar integración. Dedup via `transaction_id` en `raw_data`. Dependencia nueva: `pyotp>=2.9.0`.
