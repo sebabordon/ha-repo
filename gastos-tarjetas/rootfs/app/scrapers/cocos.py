@@ -461,13 +461,16 @@ class CocosScraper(BaseScraper):
             log_fn(f"  [!] Error obteniendo portfolio: {exc}")
             return {}
 
-    # ── Stubs Selenium (no aplican) ───────────────────────────────────────────
+    # ── Stubs Selenium (no aplican: scraper REST puro) ───────────────────────
 
     def check_session(self, driver) -> bool:
         return False
 
     def do_login(self, driver, config: dict) -> None:
         pass
+
+    def scrape(self, driver, config: dict) -> ScraperResult:
+        return ScraperResult(fuente=self.fuente)
 
 
 def _anon_headers() -> dict:
