@@ -1,3 +1,7 @@
+## 1.1.0
+
+- **Resolución de nombres en transferencias MP salientes** (`scrapers/mercadopago.py`): para cada transferencia saliente (`money_transfer` egreso), el scraper intenta resolver el nombre del receptor via `GET /v1/users/{collector_id}`. Si la API responde con nombre y apellido, la descripción pasa de `"Transferencia: Alquiler [id:123456]"` a `"Juan Pérez — Transferencia: Alquiler"`, permitiendo clasificarla con reglas de categorización. Best-effort: si la llamada falla (403, 404, error de red), la descripción queda con el `[id:xxx]` previo.
+
 ## 1.0.9
 
 - **Detección automática de pagos manuales** (`db.py`, `routes/pagos.py`, `static/app.js`, `static/style.css`): para cada pago pendiente, el backend busca gastos que coincidan por monto (±tolerancia), fecha (±N días) y categoría (si el pago la tiene definida). Usa la misma config `venc_pago_match_*` de Config → Vencimientos. En la tabla, la columna Estado muestra el chip 🔍 Detectado (fondo amarillo) y aparece un botón `+` que expande un panel con el detalle del gasto encontrado y el botón "✓ Confirmar pagado".

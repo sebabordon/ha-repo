@@ -14,6 +14,7 @@ El token se envía como:  Authorization: Bearer {access_token}
 
 Endpoints usados:
   GET  /users/me                            → ID y datos del usuario autenticado
+  GET  /v1/users/{collector_id}            → nombre del receptor de transferencias salientes (best-effort)
   GET  /v1/payments/search?payer.id=…      → pagos realizados (egresos)
   GET  /v1/payments/search?collector.id=…  → cobros recibidos (ingresos)
   GET  /users/{user_id}/mercadopago_account/balance → saldo disponible
@@ -41,6 +42,7 @@ import csv as csv_mod
 import io
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -60,6 +62,10 @@ _ART = timezone(timedelta(hours=-3))
 
 # Códigos técnicos que puede devolver la API en reason/description; los filtramos
 # para no usarlos como nombre del comercio.
+# Patrón para detectar transferencias salientes con collector_id pendiente de resolver.
+# Generado por _build_description_base (Regla 3, sign=+1).
+_TRANSFER_ID_RE = re.compile(r"^(Transferencia(?:: .+)?) \[id:(\d+)\]$")
+
 _TECHNICAL_CODES = frozenset({
     "debit_card", "credit_card", "prepaid_card", "account_money", "ticket",
     "bank_transfer", "atm", "checkout_on", "checkout_pro", "regular_payment",
@@ -128,7 +134,10 @@ class MercadoPagoScraper(BaseScraper):
                     f"({stats['skipped']} ya existían)"
                 )
 
-                # 3b. Settlement report: captura transferencias a CBU externo que
+                # 3b. Resolver nombres de receptores en transferencias salientes.
+                await self._enrich_transfer_names(client, movimientos, _l)
+
+                # 3c. Settlement report: captura transferencias a CBU externo que
                 #     no aparecen en /v1/payments/search (ej. retiros a banco).
                 rpt_movs = await self._fetch_settlement_report(
                     client, since_date, today_art, existing_ids, _l, debug_log
@@ -457,6 +466,63 @@ class MercadoPagoScraper(BaseScraper):
             raw_data["usuario"] = default_usuario
 
         return raw_data
+
+    async def _enrich_transfer_names(
+        self,
+        client: httpx.AsyncClient,
+        movimientos: list[MovimientoRaw],
+        log_fn,
+    ) -> None:
+        """Resuelve nombres de receptores en transferencias salientes (best-effort).
+
+        Para cada movimiento cuya descripción tiene el patrón "[id:NNNNN]" (generado
+        por _build_description_base para money_transfer egresos), llama a
+        GET /v1/users/{collector_id} y, si devuelve un nombre, lo incorpora:
+          "Transferencia: Alquiler [id:123]" → "Juan Pérez — Transferencia: Alquiler"
+        Si la llamada falla (403, 404, error de red), la descripción queda sin cambios.
+        """
+        to_enrich: list[tuple[MovimientoRaw, int, str]] = []
+        unique_ids: set[int] = set()
+        for mov in movimientos:
+            if not mov.raw_data or mov.monto <= 0:
+                continue
+            if mov.raw_data.get("operation_type") != "money_transfer":
+                continue
+            collector_id = mov.raw_data.get("collector_id")
+            if not collector_id:
+                continue
+            m = _TRANSFER_ID_RE.match(mov.descripcion or "")
+            if not m:
+                continue
+            cid = int(collector_id)
+            to_enrich.append((mov, cid, m.group(1)))
+            unique_ids.add(cid)
+
+        if not to_enrich:
+            return
+
+        name_cache: dict[int, str] = {}
+        for cid in unique_ids:
+            try:
+                resp = await client.get(f"{_BASE}/v1/users/{cid}")
+                if resp.status_code == 200:
+                    data  = resp.json()
+                    first = (data.get("first_name") or "").strip()
+                    last  = (data.get("last_name")  or "").strip()
+                    name  = f"{first} {last}".strip() or (data.get("nickname") or "").strip()
+                    if name:
+                        name_cache[cid] = name
+            except Exception:
+                pass  # best-effort; descripción queda con [id:xxx]
+
+        if not name_cache:
+            return
+
+        log_fn(f"  → {len(name_cache)} nombre(s) de receptor MP resueltos")
+        for mov, cid, base_label in to_enrich:
+            name = name_cache.get(cid)
+            if name:
+                mov.descripcion = f"{name} — {base_label}"
 
     def _build_description_base(self, p: dict, sign: int = +1) -> str:
         """
