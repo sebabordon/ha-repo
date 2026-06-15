@@ -2878,6 +2878,15 @@ def _add_months(ym: str, n: int) -> str:
     return f"{y:04d}-{m:02d}"
 
 
+def _expand_cats_with_descendants(cats: list) -> list:
+    """Expand a list of category names to include all their descendants."""
+    cm = _get_categorias_children_map()
+    expanded = set(cats)
+    for cat in cats:
+        expanded.update(_get_all_descendants(cat, cm))
+    return list(expanded)
+
+
 def stats_forecast(
     meses_futuro: int = 6,
     meses_historico: int = 3,
@@ -2887,10 +2896,17 @@ def stats_forecast(
     Linear-regression forecast on the last `meses_historico` months.
     Returns historical monthly data + projected future months.
 
-    If ``exclude_income_cats`` is provided, those categories are subtracted
-    from each month's income total before fitting the trend line (useful to
-    ignore one-off windfalls like bonuses when projecting).
+    If ``exclude_income_cats`` is provided, those categories (and all their
+    descendants) are subtracted from each month's income total before fitting
+    the trend line (useful to ignore one-off windfalls like bonuses).
+
+    The current (incomplete) billing period is excluded from the historical
+    series and becomes the first forecast point instead.
     """
+    # Expand excluded categories to include subcategories
+    if exclude_income_cats:
+        exclude_income_cats = _expand_cats_with_descendants(exclude_income_cats)
+
     historical = monthly_summary()
 
     if exclude_income_cats:
@@ -2911,18 +2927,16 @@ def stats_forecast(
             for h in historical
         ]
 
-    if len(historical) < 2:
+    current_ym = periodo_actual()
+    # Closed months only: exclude current (incomplete) period from both the
+    # historical display and the regression base.  The current period becomes
+    # the first forecast point so the chart shows no bache.
+    closed = [h for h in historical if h["mes"] < current_ym]
+
+    if len(closed) < 2:
         return {"historical": historical, "forecast": []}
 
-    # Exclude the current (incomplete) month from the regression baseline so a
-    # partial month doesn't drag the trend line toward zero.  The current month
-    # is still shown in the historical series on the chart.
-    current_ym = periodo_actual()
-    regression_base = [h for h in historical if h["mes"] < current_ym]
-    if len(regression_base) < 2:
-        regression_base = historical  # fall back if not enough complete months
-
-    recent = regression_base[-max(2, meses_historico):]
+    recent = closed[-max(2, meses_historico):]
     n = len(recent)
 
     def _linreg(vals):
@@ -2936,7 +2950,7 @@ def stats_forecast(
     eg_b,  eg_m  = _linreg([r["egresos"]  for r in recent])
     ing_b, ing_m = _linreg([r["ingresos"] for r in recent])
 
-    last_mes = historical[-1]["mes"]
+    last_mes = closed[-1]["mes"]
     forecast = []
     for k in range(1, meses_futuro + 1):
         x = n - 1 + k
@@ -2946,7 +2960,7 @@ def stats_forecast(
             "ingresos": round(max(0, ing_b + ing_m * x), 2),
         })
 
-    return {"historical": historical, "forecast": forecast}
+    return {"historical": closed, "forecast": forecast}
 
 
 def stats_forecast_v2(
@@ -2961,7 +2975,15 @@ def stats_forecast_v2(
       closed months.
     - Ingresos: simple average of recent closed months.
     Each forecast point includes a `breakdown` with the two egreso components.
+
+    Excluded income categories are expanded to include all descendants.
+    The current (incomplete) billing period is excluded from historical and
+    becomes the first forecast point.
     """
+    # Expand excluded categories to include subcategories
+    if exclude_income_cats:
+        exclude_income_cats = _expand_cats_with_descendants(exclude_income_cats)
+
     historical = monthly_summary()
 
     if exclude_income_cats:
@@ -2982,13 +3004,11 @@ def stats_forecast_v2(
             for h in historical
         ]
 
-    if len(historical) < 2:
-        return {"historical": historical, "forecast": []}
-
     current_ym = periodo_actual()
     closed = [h for h in historical if h["mes"] < current_ym]
+
     if len(closed) < 2:
-        closed = historical[:-1] if len(historical) > 1 else historical
+        return {"historical": historical, "forecast": []}
 
     recent = closed[-max(2, meses_historico):]
     n = len(recent)
@@ -3054,7 +3074,7 @@ def stats_forecast_v2(
 
     forecast_egreso = round(budget_total + hist_unbudgeted, 2)
 
-    last_mes = historical[-1]["mes"]
+    last_mes = closed[-1]["mes"]
     forecast = []
     for k in range(1, meses_futuro + 1):
         forecast.append({
@@ -3067,7 +3087,7 @@ def stats_forecast_v2(
             },
         })
 
-    return {"historical": historical, "forecast": forecast}
+    return {"historical": closed, "forecast": forecast}
 
 
 def delete_all_gastos(fuente: str = None, import_id: int = None) -> int:

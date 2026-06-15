@@ -1,3 +1,8 @@
+## 1.0.4
+
+- **Forecast: período actual excluido del histórico** (`db.py`): el período de cobro en curso (que aparecía casi vacío creando un "bache") se excluye del histórico y pasa a ser el primer punto de la proyección, tanto en modo regresión como en modo presupuesto.
+- **Forecast: excluir categorías expande a subcategorías** (`db.py`): al excluir una categoría de ingresos, ahora se excluyen automáticamente también todas sus subcategorías descendientes. Aplica a ambos modos de forecast.
+
 ## 1.0.3
 
 - **Forecast modo "Presupuesto + Histórico"** (`db.py`, `routes/stats.py`, `static/app.js`): nuevo modo de proyección que reemplaza la regresión lineal global por una estimación por categoría: las categorías con presupuesto configurado usan el monto mensual del presupuesto; las categorías sin presupuesto usan el promedio histórico de los últimos N meses cerrados. Los ingresos siguen siendo promedio simple. El selector "Modo" en el header del gráfico Forecast permite alternar entre "Regresión" (comportamiento anterior) y "Presupuesto + Histórico" (nuevo). En modo presupuesto, el tooltip de cada punto proyectado muestra el desglose presupuesto vs. histórico sin presupuesto.
