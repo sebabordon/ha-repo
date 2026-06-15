@@ -1,3 +1,7 @@
+## 1.2.9
+
+- **Debug Cocos account_id y paginación** (`scrapers/cocos.py`): el log ahora muestra el `account_id` que se está usando en el header `x-account-id`, el objeto `pagination` de la respuesta, y el JSON completo cuando `data` viene vacío. También se restauran `date_from=` y `date_to=` vacíos en el request (igual que el browser).
+
 ## 1.2.8
 
 - **Debug Cocos movimientos** (`scrapers/cocos.py`): el scraper devolvía "Sin movimientos" sin explicar por qué. Ahora loguea la estructura de la respuesta (días recibidos, primer día, balance, claves JSON) siempre en el primer page, y muestra el body raw si la respuesta no es JSON o tiene estructura inesperada. También se eliminan `date_from`/`date_to` vacíos del request (se enviaban como strings vacíos que podían alterar la URL).

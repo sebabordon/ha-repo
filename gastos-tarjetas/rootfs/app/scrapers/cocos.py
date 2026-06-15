@@ -319,7 +319,7 @@ class CocosScraper(BaseScraper):
         while True:
             resp = session.get(
                 f"{_BASE}/api/v1/wallet/cash_movements",
-                params={"currency": "ARS", "limit": _LIMIT, "offset": offset},
+                params={"currency": "ARS", "date_from": "", "date_to": "", "limit": _LIMIT, "offset": offset},
                 headers=hdrs,
                 timeout=30,
             )
@@ -342,12 +342,16 @@ class CocosScraper(BaseScraper):
                 break
 
             if offset == 0:
-                log_fn(f"  [dbg] días recibidos: {len(day_groups)}, claves respuesta: {list(data.keys())}")
+                account_id_used = hdrs.get("x-account-id", "(vacío)")
+                pagination = data.get("pagination") or {}
+                log_fn(f"  [dbg] account_id={account_id_used!r}, días={len(day_groups)}, claves={list(data.keys())}, pagination={pagination}")
                 if day_groups:
                     log_fn(f"  [dbg] primer día: {day_groups[0].get('executionDate')} — {len(day_groups[0].get('cashMovements') or [])} movs, balance={day_groups[0].get('balance')}")
                     raw_bal = day_groups[0].get("balance")
                     if raw_bal is not None:
                         saldo_ars = float(raw_bal)
+                elif not day_groups:
+                    log_fn(f"  [dbg] data vacío — respuesta completa: {_json.dumps(data)[:400]}")
 
             batch: list[dict] = []
             for group in day_groups:
