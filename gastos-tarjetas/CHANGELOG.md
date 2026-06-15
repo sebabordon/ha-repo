@@ -1,3 +1,7 @@
+## 1.0.7
+
+- **Fix doble conteo en presupuesto forecast** (`db.py`): el total del presupuesto ahora suma solo las categorías hoja (sin descendientes con presupuesto propio), evitando que el padre y sus hijos se cuenten múltiples veces. En la tabla debug, las categorías padre (roll-up) se muestran tachadas para identificarlas.
+
 ## 1.0.6
 
 - **Forecast debug en modo Presupuesto** (`db.py`, `static/app.js`): debajo del gráfico aparece una tabla con dos columnas — categorías del presupuesto con su monto mensual, y categorías con historial pero sin presupuesto con su promedio mensual. Permite identificar exactamente qué está inflando el componente "histórico sin presupuesto".

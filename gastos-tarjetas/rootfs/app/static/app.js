@@ -4900,9 +4900,11 @@ function _drawForecast(data, modo) {
   if (dbgEl) {
     const dbg = data.debug;
     if (modo === "presupuesto" && dbg) {
-      const fmtRow = (cat, amt) =>
-        `<tr><td style="padding:.15rem .5rem">${cat}</td><td style="padding:.15rem .5rem;text-align:right">${_fmtNum(amt)}</td></tr>`;
-      const budgetRows  = dbg.presupuesto_cats.map(d => fmtRow(d.categoria, d.monto)).join("");
+      const fmtRow = (cat, amt, tachado = false) =>
+        `<tr style="${tachado ? "opacity:.4;text-decoration:line-through" : ""}"><td style="padding:.15rem .5rem">${cat}</td><td style="padding:.15rem .5rem;text-align:right">${_fmtNum(amt)}</td></tr>`;
+      const budgetRows  = dbg.presupuesto_cats.map(d =>
+        fmtRow((d.es_hoja ? "" : "⊃ ") + d.categoria, d.monto, !d.es_hoja)
+      ).join("");
       const histRows    = dbg.historico_sin_presupuesto_cats.map(d => fmtRow(d.categoria, d.promedio)).join("");
       const tableStyle  = "border-collapse:collapse;font-size:.8rem;width:100%";
       const thStyle     = "padding:.2rem .5rem;text-align:left;border-bottom:1px solid #ddd;color:#888;font-weight:500";

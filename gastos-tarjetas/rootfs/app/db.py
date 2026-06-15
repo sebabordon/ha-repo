@@ -3078,8 +3078,18 @@ def stats_forecast_v2(
     cat_avg: dict[str, float] = {cat: total / n for cat, total in cat_totals.items()}
 
     # ── Compose forecast components ───────────────────────────────────────────
+    # Only count leaf-level budget entries: if a category has any descendant
+    # with its own budget, the parent value is a roll-up and must be skipped
+    # to avoid double-counting parent + children.
+    budgeted_cats = set(budget.keys())
+    def _is_leaf_budget(cat: str) -> bool:
+        return not any(d in budgeted_cats for d in _get_all_descendants(cat, children_map))
+
+    leaf_budget = {cat: amt for cat, amt in budget.items() if _is_leaf_budget(cat)}
+
     budget_cats_detail = sorted(
-        [{"categoria": cat, "monto": round(amt, 2)} for cat, amt in budget.items()],
+        [{"categoria": cat, "monto": round(amt, 2), "es_hoja": _is_leaf_budget(cat)}
+         for cat, amt in budget.items()],
         key=lambda x: -x["monto"],
     )
     hist_unbudgeted_detail = sorted(
@@ -3087,7 +3097,7 @@ def stats_forecast_v2(
          for cat, avg in cat_avg.items() if not _has_budget_ancestor(cat)],
         key=lambda x: -x["promedio"],
     )
-    budget_total    = round(sum(budget.values()), 2)
+    budget_total    = round(sum(leaf_budget.values()), 2)
     hist_unbudgeted = round(sum(d["promedio"] for d in hist_unbudgeted_detail), 2)
     avg_ingresos    = round(sum(r["ingresos"] for r in recent) / n, 2)
     forecast_egreso = round(budget_total + hist_unbudgeted, 2)
