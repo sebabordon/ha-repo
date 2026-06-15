@@ -17,8 +17,10 @@ Endpoints usados:
   POST auth/v1/factors/{factor_id}/challenge    → iniciar challenge TOTP
   POST auth/v1/factors/{factor_id}/verify       → verificar código TOTP → token final
   POST auth/v1/token?grant_type=refresh_token   → refresh de sesión (evita re-login)
-  GET  api/v1/transfers?date_from=&date_to=     → movimientos de cuenta
-  GET  api/v1/wallet/portfolio                  → tenencias y saldo ARS/USD
+  GET  api/v1/users/me                          → account_id (id_accounts[0])
+  GET  api/v1/wallet/cash_movements             → movimientos de cuenta (paginado, limit/offset)
+                                                   Respuesta: {data:[{executionDate, balance,
+                                                   cashMovements:[...]}]}. data[0].balance = saldo ARS.
 """
 
 import asyncio
@@ -56,10 +58,7 @@ _ANON_KEY = (
     ".f0w62k0q0eyyGBDkAP7vUUEg_Ingb9YbOlhsGCC4R3c"
 )
 
-_INGRESO_TYPES = frozenset({
-    "deposit", "income", "credit", "acreditacion", "cobro",
-    "dividendo", "intereses", "renta", "transfer_in",
-})
+_LIMIT = 50  # registros por página en cash_movements
 
 
 class CocosScraper(BaseScraper):
@@ -104,7 +103,6 @@ class CocosScraper(BaseScraper):
             token, account_id = self._ensure_token_sync(session, config, _l)
 
             api_hdrs = {
-                "apikey":        "",
                 "Authorization": f"Bearer {token}",
                 "x-account-id":  account_id,
                 "Content-Type":  "application/json",
@@ -117,10 +115,10 @@ class CocosScraper(BaseScraper):
             today_art  = datetime.now(_ART).date()
             since_date = today_art - timedelta(days=dias - 1)
 
-            movimientos = self._fetch_movements_sync(
+            movimientos, saldo_ars = self._fetch_movements_sync(
                 session, api_hdrs, since_date, today_art, default_usuario, _l, debug_log
             )
-            saldos = self._fetch_saldos_sync(session, api_hdrs, _l, debug_log)
+            saldos = {"cocos": {"saldo_ars": saldo_ars, "saldo_usd": None}}
 
             upsert_scraper_status(
                 self.fuente,
@@ -128,7 +126,7 @@ class CocosScraper(BaseScraper):
                 ultimo_ok          = now_iso,
                 error_msg          = None,
                 movimientos_nuevos = len(movimientos),
-                saldo_ars          = (saldos.get("cocos") or {}).get("saldo_ars"),
+                saldo_ars          = saldo_ars,
                 last_log           = "\n".join(log),
             )
             return ScraperResult(
@@ -282,7 +280,6 @@ class CocosScraper(BaseScraper):
 
         # 5. Obtener account_id desde api/v1/users/me
         api_hdrs = {
-            "apikey":        "",
             "Authorization": f"Bearer {final_token}",
             "Content-Type":  "application/json",
         }
@@ -311,37 +308,63 @@ class CocosScraper(BaseScraper):
     def _fetch_movements_sync(
         self, session, hdrs: dict, since: date, until: date,
         default_usuario: str, log_fn, debug: bool = False,
-    ) -> list[MovimientoRaw]:
+    ) -> tuple[list[MovimientoRaw], Optional[float]]:
+        """Returns (movimientos, saldo_ars). Saldo viene de data[0].balance del primer page."""
         log_fn(f"Consultando movimientos Cocos ({since} → {until})…")
-        resp = session.get(
-            f"{_BASE}/api/v1/transfers",
-            params={"date_from": since.isoformat(), "date_to": until.isoformat()},
-            headers=hdrs,
-            timeout=30,
-        )
-        if resp.status_code == 401:
-            self.clear_session()
-            raise ValueError("Sesión Cocos inválida (401) — sesión eliminada, el próximo run re-autenticará.")
-        if resp.status_code != 200:
-            log_fn(f"  [!] Movimientos — HTTP {resp.status_code}: {resp.text[:200]}")
-            return []
 
-        data  = resp.json()
-        items = (
-            data if isinstance(data, list)
-            else data.get("data") or data.get("movements") or data.get("transfers") or []
-        )
+        all_items: list[dict] = []
+        saldo_ars: Optional[float] = None
+        offset = 0
 
-        if not items:
+        while True:
+            resp = session.get(
+                f"{_BASE}/api/v1/wallet/cash_movements",
+                params={
+                    "currency":  "ARS",
+                    "date_from": since.isoformat(),
+                    "date_to":   until.isoformat(),
+                    "limit":     _LIMIT,
+                    "offset":    offset,
+                },
+                headers=hdrs,
+                timeout=30,
+            )
+            if resp.status_code == 401:
+                self.clear_session()
+                raise ValueError("Sesión Cocos inválida (401) — sesión eliminada, el próximo run re-autenticará.")
+            if resp.status_code != 200:
+                log_fn(f"  [!] Movimientos — HTTP {resp.status_code}: {resp.text[:200]}")
+                return [], saldo_ars
+
+            data       = resp.json()
+            day_groups = data.get("data") or []
+
+            if offset == 0 and day_groups:
+                raw_bal = day_groups[0].get("balance")
+                if raw_bal is not None:
+                    saldo_ars = float(raw_bal)
+
+            batch: list[dict] = []
+            for group in day_groups:
+                batch.extend(group.get("cashMovements") or [])
+
+            all_items.extend(batch)
+
+            total_items = int(batch[0].get("total_items") or 0) if batch else 0
+            if not batch or len(all_items) >= total_items or len(batch) < _LIMIT:
+                break
+            offset += _LIMIT
+
+        if not all_items:
             log_fn("  → Sin movimientos en el período")
-            return []
+            return [], saldo_ars
 
         if debug:
-            log_fn(f"  [dbg] estructura primer movimiento: {_json.dumps(items[0])[:600]}")
+            log_fn(f"  [dbg] estructura primer movimiento: {_json.dumps(all_items[0])[:600]}")
 
         movimientos: list[MovimientoRaw] = []
         skipped = 0
-        for item in items:
+        for item in all_items:
             mov, reason = self._movement_to_raw(item, default_usuario)
             if mov is None:
                 skipped += 1
@@ -350,112 +373,67 @@ class CocosScraper(BaseScraper):
                 continue
             movimientos.append(mov)
 
-        log_fn(f"  → {len(movimientos)} movimientos ({skipped} omitidos)")
-        return movimientos
+        log_fn(f"  → {len(movimientos)} movimientos, saldo ARS: {saldo_ars} ({skipped} omitidos)")
+        return movimientos, saldo_ars
 
     def _movement_to_raw(
         self, item: dict, default_usuario: str
     ) -> tuple[Optional[MovimientoRaw], str]:
         try:
-            uid = (
-                item.get("id") or item.get("extId") or item.get("ext_id")
-                or item.get("transactionId") or item.get("transaction_id")
-            )
+            # Dedup key: id_cash_movement > id_ticket > sintético
+            id_cash   = item.get("id_cash_movement")
+            id_ticket = (item.get("id_ticket") or "").strip()
+            if id_cash is not None:
+                uid = f"cm_{id_cash}"
+            elif id_ticket:
+                uid = f"tk_{id_ticket}"
+            else:
+                qty  = item.get("quantity", 0)
+                dt   = (item.get("execution_date") or "")[:10]
+                acct = item.get("id_account", "")
+                uid  = f"syn_{acct}_{dt}_{qty}"
 
-            fecha = (
-                item.get("date") or item.get("createdAt") or item.get("created_at")
-                or item.get("settlementDate") or item.get("settlement_date") or ""
-            )[:10]
+            fecha = (item.get("execution_date") or item.get("settlement_date") or "")[:10]
             if not fecha or len(fecha) < 10:
                 return None, "sin_fecha"
 
-            amount_raw = (
-                item.get("amount") or item.get("net") or item.get("netAmount")
-                or item.get("net_amount") or 0
-            )
-            monto = abs(float(amount_raw))
-            if monto <= 0:
-                return None, f"monto={monto}"
+            quantity = float(item.get("quantity") or 0)
+            if quantity == 0:
+                return None, "monto=0"
 
-            item_type = (
-                item.get("type") or item.get("operationType") or item.get("operation_type") or ""
-            ).lower()
+            # quantity < 0 = salida (egreso); sign convention: monto > 0 = egreso
+            monto = round(-quantity, 2)
 
-            description = (
-                item.get("description") or item.get("concept") or item.get("label")
-                or item.get("name") or item_type or "Movimiento Cocos"
-            ).strip()
-
-            if isinstance(amount_raw, (int, float)) and float(amount_raw) < 0:
-                sign = -1
-            elif item_type in _INGRESO_TYPES:
-                sign = -1
+            description = (item.get("description") or "").strip()
+            detail      = (item.get("detail") or "").strip()
+            if detail and detail.lower() != description.lower():
+                full_desc = f"{description} — {detail}" if description else detail
             else:
-                sign = +1
+                full_desc = description or "Movimiento Cocos"
 
-            monto_final = round(monto * sign, 2)
-
-            currency_raw = (item.get("currency") or item.get("moneda") or "ARS").upper()
+            currency_raw = (item.get("id_currency") or "ARS").upper()
             moneda = "USD" if "USD" in currency_raw else "ARS"
 
-            raw_data: dict = {"transaction_id": uid, "type": item_type}
+            raw_data: dict = {
+                "transaction_id": uid,
+                "operation_type": item.get("operation_type"),
+                "source":         item.get("source"),
+                "id_concept":     item.get("id_concept"),
+            }
             if default_usuario:
                 raw_data["usuario"] = default_usuario
 
             return MovimientoRaw(
                 fuente      = "cocos",
                 fecha       = fecha,
-                descripcion = description,
-                monto       = monto_final,
+                descripcion = full_desc,
+                monto       = monto,
                 moneda      = moneda,
                 raw_data    = raw_data,
             ), ""
 
         except Exception as exc:
             return None, f"excepcion: {exc}"
-
-    # ── Saldos ────────────────────────────────────────────────────────────────
-
-    def _fetch_saldos_sync(
-        self, session, hdrs: dict, log_fn, debug: bool = False,
-    ) -> dict:
-        log_fn("Consultando portfolio Cocos…")
-        try:
-            resp = session.get(f"{_BASE}/api/v1/wallet/portfolio", headers=hdrs, timeout=20)
-            if resp.status_code != 200:
-                log_fn(f"  [!] Portfolio — HTTP {resp.status_code}: {resp.text[:150]}")
-                return {}
-            data = resp.json()
-
-            if debug:
-                log_fn(f"  [dbg] portfolio (primeros 600 chars): {_json.dumps(data)[:600]}")
-
-            saldo_ars: Optional[float] = None
-            saldo_usd: Optional[float] = None
-
-            if isinstance(data, dict):
-                for key in ("cash", "efectivo", "available", "liquidado", "saldo"):
-                    val = data.get(key)
-                    if val is None:
-                        continue
-                    if isinstance(val, (int, float)):
-                        saldo_ars = float(val)
-                        break
-                    if isinstance(val, dict):
-                        ars_v = val.get("ARS") or val.get("ars") or val.get("pesos")
-                        usd_v = val.get("USD") or val.get("usd") or val.get("dolares")
-                        if ars_v is not None:
-                            saldo_ars = float(ars_v)
-                        if usd_v is not None:
-                            saldo_usd = float(usd_v)
-                        break
-
-            log_fn(f"  → Saldo ARS: {saldo_ars}, USD: {saldo_usd}")
-            return {"cocos": {"saldo_ars": saldo_ars, "saldo_usd": saldo_usd}}
-
-        except Exception as exc:
-            log_fn(f"  [!] Error obteniendo portfolio: {exc}")
-            return {}
 
     # ── Stubs Selenium (no aplican: scraper REST puro) ───────────────────────
 
