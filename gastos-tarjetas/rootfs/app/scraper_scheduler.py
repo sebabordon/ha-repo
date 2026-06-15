@@ -200,6 +200,7 @@ _SCRAPER_CLASSES = {
     "galicia":         "scrapers.galicia:GaliciaScraper",
     "mercadopago":     "scrapers.mercadopago:MercadoPagoScraper",
     "invertironline":  "scrapers.invertironline:InvertirOnlineScraper",
+    "cocos":           "scrapers.cocos:CocosScraper",
 }
 
 # Default fuente que emite cada scraper "estándar" cuando no hay overriding por
@@ -210,6 +211,7 @@ _BANCO_DEFAULT_FUENTE = {
     "galicia":        "galicia_mc",
     "mercadopago":    "mercadopago",
     "invertironline": "invertironline",
+    "cocos":          "cocos",
     # BBVA y bbva_tarjetas NO están acá porque hacen remap per-product internamente.
 }
 

@@ -1,3 +1,7 @@
+## 1.2.0
+
+- **Scraper Cocos Capital** (`scrapers/cocos.py`, `scraper_credentials.py`, `scraper_scheduler.py`, `requirements.txt`): nuevo scraper REST para Cocos Capital. Autenticación JWT vía Supabase GoTrue con 2FA TOTP automático (requiere TOTP secret key del usuario). Flujo: email+password → token phase-1 → challenge TOTP → token final. Refresh automático de sesión guardada en `/data/sessions/cocos.json`. Importa movimientos de cuenta (`api/v1/transfers`) y saldo/tenencias (`api/v1/wallet/portfolio`). Debug log muestra estructura del primer movimiento para verificar integración. Dedup via `transaction_id` en `raw_data`. Dependencia nueva: `pyotp>=2.9.0`.
+
 ## 1.1.0
 
 - **Resolución de nombres en transferencias MP salientes** (`scrapers/mercadopago.py`): para cada transferencia saliente (`money_transfer` egreso), el scraper intenta resolver el nombre del receptor via `GET /v1/users/{collector_id}`. Si la API responde con nombre y apellido, la descripción pasa de `"Transferencia: Alquiler [id:123456]"` a `"Juan Pérez — Transferencia: Alquiler"`, permitiendo clasificarla con reglas de categorización. Best-effort: si la llamada falla (403, 404, error de red), la descripción queda con el `[id:xxx]` previo.

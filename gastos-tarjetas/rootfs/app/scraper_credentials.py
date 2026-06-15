@@ -220,6 +220,45 @@ BANKS: dict[str, dict] = {
             },
         ],
     },
+    "cocos": {
+        "nombre":   "Cocos Capital",
+        "schedule": "every:4h",
+        "campos": [
+            {"key": "email",    "label": "Email",      "type": "text",     "required": True,
+             "hint": "El email con el que entrás a app.cocos.capital"},
+            {"key": "password", "label": "Contraseña", "type": "password", "required": True},
+            {
+                "key":      "totp_secret",
+                "label":    "TOTP Secret Key",
+                "type":     "password",
+                "required": True,
+                "hint":     "El parámetro `secret=XXXX` de la URI otpauth de tu 2FA. Ver instrucciones en Config → Scrapers → Cocos Capital.",
+            },
+            {
+                "key":         "usuario",
+                "label":       "Usuario (nombre)",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "Titular",
+                "hint":        "Nombre del titular para etiquetar los gastos importados",
+            },
+            {
+                "key":         "dias",
+                "label":       "Días a consultar",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "60",
+                "hint":        "Días hacia atrás para importar movimientos (default: 60)",
+            },
+            {
+                "key":      "debug_log",
+                "label":    "Log de debug",
+                "type":     "checkbox",
+                "required": False,
+                "hint":     "Loguea la estructura del primer movimiento recibido. Útil para verificar la integración en el primer run.",
+            },
+        ],
+    },
 }
 
 # Campos que nunca se devuelven en las respuestas de la API
@@ -238,6 +277,7 @@ _DEFAULT_LINK: dict[str, tuple[str, str]] = {
     "galicia":        ("galicia_mc",     "main"),
     "mercadopago":    ("mercadopago",    "main"),
     "invertironline": ("invertironline", "main"),
+    "cocos":          ("cocos",          "main"),
 }
 
 
