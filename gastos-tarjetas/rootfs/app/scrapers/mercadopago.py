@@ -686,19 +686,24 @@ class MercadoPagoScraper(BaseScraper):
         await self._ensure_settlement_config(client, _URL, log_fn)
 
         # ── Paso 1: usar el reporte existente más reciente ────────────────────
-        rpt_data, latest_date = await self._download_latest_settlement(
+        rpt_data, latest_dt = await self._download_latest_settlement(
             client, _URL, log_fn
         )
         result = []
         if rpt_data is not None:
             result = self._parse_settlement_csv(rpt_data, existing_ids, log_fn, debug)
 
-        # ── Paso 2: solicitar reporte nuevo solo si no hay uno de hoy ────────
-        today_art = datetime.now(_ART).date()
-        if latest_date is None or latest_date < today_art:
+        # ── Paso 2: solicitar reporte nuevo si el existente tiene más de 4 h ─
+        # Las transferencias a CBU externo solo aparecen en el settlement report,
+        # no en /v1/payments/search. Con umbral de 4 h se capturan transferencias
+        # hechas durante el día sin generar un reporte en cada run automatizado.
+        _RPT_STALE_HOURS = 4
+        now_art = datetime.now(_ART)
+        if latest_dt is None or (now_art - latest_dt).total_seconds() > _RPT_STALE_HOURS * 3600:
             await self._request_settlement_report(client, _URL, log_fn)
         else:
-            log_fn("Settlement report: ya existe uno de hoy, no se solicita nuevo")
+            age_min = int((now_art - latest_dt).total_seconds() / 60)
+            log_fn(f"Settlement report: reporte de hace {age_min} min, no se solicita nuevo (umbral {_RPT_STALE_HOURS}h)")
 
         return result
 
@@ -771,12 +776,12 @@ class MercadoPagoScraper(BaseScraper):
         client: httpx.AsyncClient,
         base_url: str,
         log_fn,
-    ) -> tuple[Optional[str], Optional[date]]:
+    ) -> tuple[Optional[bytes], Optional[datetime]]:
         """
         Consulta la lista de reportes y descarga el más reciente si existe.
-        Devuelve (raw_bytes, date_created_art) o (None, None) si la lista está vacía/falla.
-        date_created_art es la fecha local ART del reporte más reciente, usada para
-        decidir si hay que generar uno nuevo.
+        Devuelve (raw_bytes, datetime_created_art) o (None, None).
+        El datetime se usa para decidir si hay que generar uno nuevo
+        (comparando con un umbral de horas, no solo la fecha).
         """
         try:
             list_resp = await client.get(f"{base_url}/list")
@@ -788,23 +793,25 @@ class MercadoPagoScraper(BaseScraper):
             ]
             if not reports:
                 return None, None
-            # Ordenar por date_created descendente y tomar el más reciente
             reports.sort(key=lambda r: r.get("date_created") or "", reverse=True)
             latest   = reports[0]
             rpt_file = str(latest["file_name"]).strip()
 
-            # Extraer fecha local ART del reporte más reciente
-            rpt_date: Optional[date] = None
-            raw_date = (latest.get("date_created") or "")[:10]
-            if len(raw_date) == 10:
+            # Parsear timestamp completo para comparar con umbral de horas
+            rpt_dt: Optional[datetime] = None
+            raw_dt = (latest.get("date_created") or "").strip()
+            if raw_dt:
                 try:
-                    rpt_date = date.fromisoformat(raw_date)
+                    rpt_dt = datetime.fromisoformat(raw_dt.replace("Z", "+00:00"))
+                    if rpt_dt.tzinfo is None:
+                        rpt_dt = rpt_dt.replace(tzinfo=timezone.utc)
+                    rpt_dt = rpt_dt.astimezone(_ART)
                 except ValueError:
                     pass
 
-            log_fn(f"Settlement report: usando existente {rpt_file}")
-            csv_text = await self._download_settlement_file(client, base_url, rpt_file, log_fn)
-            return csv_text, rpt_date
+            log_fn(f"Settlement report: usando existente {rpt_file} ({raw_dt[:16]})")
+            csv_bytes = await self._download_settlement_file(client, base_url, rpt_file, log_fn)
+            return csv_bytes, rpt_dt
         except Exception as exc:
             log_fn(f"Settlement report: error consultando lista — {exc}")
             return None, None

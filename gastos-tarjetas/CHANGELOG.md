@@ -1,3 +1,7 @@
+## 1.2.12
+
+- **Fix settlement report MP — umbral 4h en lugar de "solo una vez por día"** (`scrapers/mercadopago.py`): las transferencias a CBU externo solo aparecen en el settlement report (no en `/v1/payments/search`). El código anterior comparaba solo por fecha, así que si ya había un reporte de hoy (ej. 01:48) no solicitaba uno nuevo aunque el scraper corriera a las 20:14 y hubiera transferencias de las 11:39. Ahora `_download_latest_settlement` devuelve el `datetime` completo del reporte, y se solicita uno nuevo si el existente tiene más de 4 horas. El log muestra la antigüedad en minutos cuando no se solicita (`"reporte de hace N min, no se solicita nuevo"`).
+
 ## 1.2.11
 
 - **Fix Cocos — paginación via campo `pagination`** (`scrapers/cocos.py`): la paginación se leía de `batch[0].get("total_items")` (dentro de cada movimiento), pero el campo correcto está en `data.pagination.total_items` / `total_pages` / `curr_page` a nivel de respuesta. Ahora el loop de páginas usa `curr_page >= total_pages` como condición de corte. El log de debug muestra `total_items` y `total_pages` en lugar de las claves JSON crudas.
