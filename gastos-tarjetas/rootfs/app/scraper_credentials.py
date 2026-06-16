@@ -212,6 +212,14 @@ BANKS: dict[str, dict] = {
                 "hint":        "1 = solo hoy, 2 = hoy y ayer, N = últimos N días (default: 60)",
             },
             {
+                "key":         "settlement_stale_hours",
+                "label":       "Settlement report — umbral (horas)",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "1",
+                "hint":        "Solicita un nuevo reporte de liquidaciones si el último tiene más de N horas (default: 1). A menor valor, menor latencia en transferencias CBU/CVU.",
+            },
+            {
                 "key":         "debug_log",
                 "label":       "Log de debug",
                 "type":        "checkbox",

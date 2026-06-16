@@ -1,6 +1,6 @@
 ## 1.2.14
 
-- **Settlement report MP — umbral reducido a 1h** (`scrapers/mercadopago.py`): cambia `_RPT_STALE_HOURS` de 4 a 1 hora para que el scraper solicite un reporte nuevo más frecuentemente y las transferencias entrantes aparezcan con menor latencia.
+- **Settlement report MP — umbral configurable desde la UI** (`scrapers/mercadopago.py`, `scraper_credentials.py`): el umbral para solicitar un nuevo reporte de liquidaciones (antes hardcodeado en 4h, luego en 1h) pasa a ser configurable desde Config → Scrapers → MercadoPago → "Settlement report — umbral (horas)". Default: 1h. Se pasa como parámetro `stale_hours` a `_fetch_settlement_report`.
 
 ## 1.2.13
 

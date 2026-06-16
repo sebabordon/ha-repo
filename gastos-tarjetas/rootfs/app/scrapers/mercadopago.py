@@ -102,6 +102,7 @@ class MercadoPagoScraper(BaseScraper):
         debug_log = bool(config.get("debug_log"))
 
         dias = int(config.get("dias") or _DIAS_DEFAULT)
+        settlement_stale_hours = int(config.get("settlement_stale_hours") or 1)
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type":  "application/json",
@@ -143,7 +144,8 @@ class MercadoPagoScraper(BaseScraper):
                 # 3c. Settlement report: captura transferencias a CBU externo que
                 #     no aparecen en /v1/payments/search (ej. retiros a banco).
                 rpt_movs = await self._fetch_settlement_report(
-                    client, since_date, today_art, existing_ids, _l, debug_log
+                    client, since_date, today_art, existing_ids, _l, debug_log,
+                    stale_hours=settlement_stale_hours,
                 )
                 movimientos.extend(rpt_movs)
 
@@ -730,6 +732,7 @@ class MercadoPagoScraper(BaseScraper):
         existing_ids: set,
         log_fn,
         debug: bool = False,
+        stale_hours: int = 1,
     ) -> list[MovimientoRaw]:
         """
         Descarga el settlement report de MP para capturar retiros a CVU/CBU externo.
@@ -757,17 +760,16 @@ class MercadoPagoScraper(BaseScraper):
         if rpt_data is not None:
             result = self._parse_settlement_csv(rpt_data, existing_ids, log_fn, debug)
 
-        # ── Paso 2: solicitar reporte nuevo si el existente tiene más de 4 h ─
+        # ── Paso 2: solicitar reporte nuevo si el existente supera el umbral ──
         # Las transferencias a CBU externo solo aparecen en el settlement report,
-        # no en /v1/payments/search. Con umbral de 4 h se capturan transferencias
-        # hechas durante el día sin generar un reporte en cada run automatizado.
-        _RPT_STALE_HOURS = 1
+        # no en /v1/payments/search. El umbral (stale_hours) es configurable desde
+        # la UI del scraper (campo "settlement_stale_hours", default 1h).
         now_art = datetime.now(_ART)
-        if latest_dt is None or (now_art - latest_dt).total_seconds() > _RPT_STALE_HOURS * 3600:
+        if latest_dt is None or (now_art - latest_dt).total_seconds() > stale_hours * 3600:
             await self._request_settlement_report(client, _URL, log_fn)
         else:
             age_min = int((now_art - latest_dt).total_seconds() / 60)
-            log_fn(f"Settlement report: reporte de hace {age_min} min, no se solicita nuevo (umbral {_RPT_STALE_HOURS}h)")
+            log_fn(f"Settlement report: reporte de hace {age_min} min, no se solicita nuevo (umbral {stale_hours}h)")
 
         return result
 
