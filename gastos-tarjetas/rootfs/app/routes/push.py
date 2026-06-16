@@ -206,7 +206,7 @@ async def push_test(request: Request):
     if not subs:
         raise HTTPException(400, "No hay suscripciones activas en este dispositivo.")
     ok, dead = await run_in_threadpool(
-        send_push, subs, "Finance Me",
+        send_push, subs, "SnapBudget",
         "🔔 Notificaciones activadas correctamente.", "/",
     )
     for ep in dead:

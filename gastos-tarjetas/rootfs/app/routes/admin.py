@@ -292,7 +292,7 @@ async def admin_export_all(request: Request):
     return FileResponse(
         tmp_zip,
         media_type="application/zip",
-        filename=f"finance-me_full_{stamp}.zip",
+        filename=f"snap-budget_full_{stamp}.zip",
         background=BackgroundTask(lambda: os.path.exists(tmp_zip) and os.unlink(tmp_zip)),
     )
 
@@ -319,7 +319,7 @@ async def admin_import_all(request: Request, file: UploadFile = File(...)):
         return _render_panel(
             request,
             "Error: el backup no contiene users.json — no parece una copia completa "
-            "de Finance Me (¿usaste el export-backup per-usuario en vez de Exportar todo?).",
+            "de SnapBudget (¿usaste el export-backup per-usuario en vez de Exportar todo?).",
         )
 
     base_abs = os.path.abspath(DATA_DIR)

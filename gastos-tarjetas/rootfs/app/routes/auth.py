@@ -72,9 +72,9 @@ _STYLE = """
 
 _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Finance Me</title>{style}</head><body>
+<title>SnapBudget</title>{style}</head><body>
 <div class="card">
-  <h2>Finance Me</h2>
+  <h2>SnapBudget</h2>
   {error}
   <form method="post" action="{prefix}/auth/login">
     <div class="field"><input type="email" name="email" placeholder="Email (@{domain})" required autofocus></div>
@@ -86,7 +86,7 @@ _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 
 _REGISTER_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Finance Me — Registro</title>{style}</head><body>
+<title>SnapBudget — Registro</title>{style}</head><body>
 <div class="card">
   <h2>Crear cuenta</h2>
   {error}

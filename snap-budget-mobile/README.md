@@ -1,10 +1,10 @@
-# Finance Me — App iOS (Capacitor)
+# SnapBudget — App iOS (Capacitor)
 
-Contenedor nativo **iOS** que envuelve la PWA de Finance Me (el add-on de Home
+Contenedor nativo **iOS** que envuelve la PWA de SnapBudget (el add-on de Home
 Assistant que está en [`../gastos-tarjetas`](../gastos-tarjetas)) en un `WKWebView`, para
 poder distribuirla por la **App Store**.
 
-> **Arquitectura.** Finance Me es una app *server-driven*: el backend FastAPI
+> **Arquitectura.** SnapBudget es una app *server-driven*: el backend FastAPI
 > sirve la UI, la auth y la API. Por eso este contenedor carga la PWA **remota**
 > definida en `server.url` de [`capacitor.config.json`](capacitor.config.json),
 > en vez de empaquetar el frontend. Ventaja: la app móvil nunca queda
@@ -47,7 +47,7 @@ Editá [`capacitor.config.json`](capacitor.config.json) y reemplazá el dominio:
 ## 2. Generar el proyecto iOS
 
 ```bash
-cd finance-me-mobile
+cd snap-budget-mobile
 npm install
 npx cap add ios       # crea la carpeta ios/ con el proyecto Xcode (solo la 1ª vez)
 npx cap sync ios      # copia config + plugins (correr tras cada cambio de config)
@@ -75,7 +75,7 @@ En Xcode:
 1. Seleccioná el target **App** → pestaña **Signing & Capabilities**.
 2. Elegí tu **Team** (tu cuenta de Apple Developer). Xcode genera el
    *provisioning profile* automáticamente.
-3. Cambiá el **Bundle Identifier** si querés (default `ar.com.sbsoft.financeme`,
+3. Cambiá el **Bundle Identifier** si querés (default `ar.com.sbsoft.snapbudget`,
    también en `capacitor.config.json` → `appId`; deben coincidir).
 4. Elegí un simulador (p. ej. *iPhone 15*) y dale ▶ para probar.
 5. Para probar en tu iPhone físico: conectalo, seleccionalo como destino y ▶.
@@ -85,7 +85,7 @@ En Xcode:
 ## 5. Publicar en la App Store — paso a paso
 
 1. **App Store Connect** → [appstoreconnect.apple.com](https://appstoreconnect.apple.com)
-   → *Mis Apps* → **+** → *Nueva App*. Cargá nombre ("Finance Me"), idioma,
+   → *Mis Apps* → **+** → *Nueva App*. Cargá nombre ("SnapBudget"), idioma,
    bundle id y SKU.
 2. **Versión y build** en Xcode: subí `Version` (1.0.0) y `Build` (1) en el
    target *App* → *General*.
@@ -99,7 +99,7 @@ En Xcode:
    la probás como usuario real.
 6. **Ficha de la App Store:** capturas de pantalla (por cada tamaño de pantalla
    requerido), descripción, categoría, **política de privacidad** (obligatoria,
-   ver §6), y el cuestionario *App Privacy* (qué datos recolecta — Finance Me
+   ver §6), y el cuestionario *App Privacy* (qué datos recolecta — SnapBudget
    maneja datos financieros, declaralo).
 7. **Enviar a revisión:** seleccionás la build procesada → *Add for Review* →
    *Submit*. La revisión de Apple suele tardar 24–48 h.
@@ -125,7 +125,7 @@ rechazo por **Guideline 4.2 (Minimum Functionality)**:
   la rechazan. Asegurate de que el dominio HTTPS esté estable durante la revisión.
 
 ### ¿Alternativa sin App Store?
-Como Finance Me **ya es una PWA instalable**, en iOS podés "Agregar a inicio"
+Como SnapBudget **ya es una PWA instalable**, en iOS podés "Agregar a inicio"
 desde Safari y queda como app standalone, sin cuenta de Apple ni revisión. Es la
 vía más rápida; la App Store solo aporta descubribilidad y features nativas.
 
@@ -134,7 +134,7 @@ vía más rápida; la App Store solo aporta descubribilidad y features nativas.
 ## Estructura
 
 ```
-finance-me-mobile/
+snap-budget-mobile/
 ├── capacitor.config.json   # appId, appName, server.url (← editá el dominio)
 ├── package.json            # deps de Capacitor
 ├── www/                    # fallback offline (la PWA real se carga de server.url)

@@ -1,6 +1,6 @@
 {
-  "appId": "ar.com.sbsoft.financeme",
-  "appName": "Finance Me",
+  "appId": "ar.com.sbsoft.snapbudget",
+  "appName": "SnapBudget",
   "webDir": "www",
   "server": {
     "url": "https://money.sbsoft.com.ar",

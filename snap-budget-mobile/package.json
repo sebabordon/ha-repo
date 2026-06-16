@@ -1,7 +1,7 @@
 {
-  "name": "finance-me-mobile",
+  "name": "snap-budget-mobile",
   "version": "0.8.47",
-  "description": "Contenedor nativo iOS (Capacitor) para la PWA Finance Me",
+  "description": "Contenedor nativo iOS (Capacitor) para la PWA SnapBudget",
   "private": true,
   "scripts": {
     "sync": "cap sync ios",

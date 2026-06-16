@@ -1,5 +1,5 @@
-/* Finance Me — service worker (minimal, cache-first for statics) */
-const CACHE = "finance-me-v0.2.42";
+/* SnapBudget — service worker (minimal, cache-first for statics) */
+const CACHE = "snap-budget-v0.2.42";
 const PRECACHE = ["/", "/static/app.js", "/static/style.css"];
 
 self.addEventListener("install", e => {
@@ -50,7 +50,7 @@ self.addEventListener("push", e => {
   let data = {};
   try { data = e.data ? e.data.json() : {}; }
   catch (_) { data = { body: e.data ? e.data.text() : "" }; }
-  const title = data.title || "Finance Me";
+  const title = data.title || "SnapBudget";
   e.waitUntil(self.registration.showNotification(title, {
     body:  data.body || "",
     icon:  "/static/icono-sb.png",

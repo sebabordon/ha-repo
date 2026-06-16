@@ -1,3 +1,7 @@
+## 1.2.15
+
+- **Rebrand a "SnapBudget"** (`config.yaml`, `rootfs/app/main.py`, `static/index.html`, `static/quick.html`, `static/manifest.json`, `static/sw.js`, `routes/auth.py`, `routes/admin.py`, `routes/push.py`, `DOCS.md`, `DESIGN.md`): el nombre visible de la marca pasa de "Finance Me" a "SnapBudget" en todos los puntos de UI: `<title>`, `apple-mobile-web-app-title`, manifest PWA (estático y dinámico), navbar, pantalla de login/registro, nombre del sender en push notifications, y filename del backup `.zip`. También se actualiza el proyecto Capacitor (`snap-budget-mobile/`): `appName`, `appId` (`ar.com.sbsoft.snapbudget`), `package.json` y `README.md`. El slug del add-on (`gastos_tarjetas`), el nombre de la carpeta del add-on y todos los términos de dominio no se tocan.
+
 ## 1.2.14
 
 - **Settlement report MP — umbral configurable desde la UI** (`scrapers/mercadopago.py`, `scraper_credentials.py`): el umbral para solicitar un nuevo reporte de liquidaciones (antes hardcodeado en 4h, luego en 1h) pasa a ser configurable desde Config → Scrapers → MercadoPago → "Settlement report — umbral (horas)". Default: 1h. Se pasa como parámetro `stale_hours` a `_fetch_settlement_report`.

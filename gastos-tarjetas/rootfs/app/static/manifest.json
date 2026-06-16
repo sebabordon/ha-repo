@@ -1,7 +1,7 @@
 {
-  "name": "Finance Me",
-  "short_name": "Finance Me",
-  "description": "Finance Me — gestor de gastos de tarjetas",
+  "name": "SnapBudget",
+  "short_name": "SnapBudget",
+  "description": "SnapBudget — gestor de gastos de tarjetas",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#16213e",

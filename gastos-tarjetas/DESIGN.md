@@ -1,4 +1,4 @@
-# Guía de diseño — Finance Me (gastos-tarjetas)
+# Guía de diseño — SnapBudget (gastos-tarjetas)
 
 Convenciones de UI para que la app crezca con un estilo consistente. **Todo
 agregado nuevo de UI debe seguir esto.** Si algo no encaja, primero se actualiza
