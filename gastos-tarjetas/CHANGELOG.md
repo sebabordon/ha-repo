@@ -1,3 +1,7 @@
+## 1.2.13
+
+- **Enriquecimiento retroactivo de transferencias MP** (`scrapers/mercadopago.py`, `scrapers_db.py`): `_enrich_transfer_names` solo resolvía nombres en el momento de importar; transferencias ya en la DB quedaban como "Transferencia: Varios [id:xxx]". El nuevo método `_retroactive_enrich_transfers` consulta la DB buscando movimientos_raw de mercadopago con ese patrón, llama a `GET /v1/users/{collector_id}` para cada ID único y actualiza la descripción en `movimientos_raw` y en `gastos` (respetando `descripcion_editada` si el usuario la editó manualmente). Se ejecuta en cada run del scraper MP.
+
 ## 1.2.12
 
 - **Fix settlement report MP — umbral 4h en lugar de "solo una vez por día"** (`scrapers/mercadopago.py`): las transferencias a CBU externo solo aparecen en el settlement report (no en `/v1/payments/search`). El código anterior comparaba solo por fecha, así que si ya había un reporte de hoy (ej. 01:48) no solicitaba uno nuevo aunque el scraper corriera a las 20:14 y hubiera transferencias de las 11:39. Ahora `_download_latest_settlement` devuelve el `datetime` completo del reporte, y se solicita uno nuevo si el existente tiene más de 4 horas. El log muestra la antigüedad en minutos cuando no se solicita (`"reporte de hace N min, no se solicita nuevo"`).

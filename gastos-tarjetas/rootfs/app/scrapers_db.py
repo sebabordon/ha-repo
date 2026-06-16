@@ -221,6 +221,42 @@ def get_scraper_status(fuente: str) -> Optional[dict]:
 
 # ── movimientos_raw ───────────────────────────────────────────────────────────
 
+def get_unresolved_transfer_descriptions(fuente: str) -> list[dict]:
+    """
+    Devuelve movimientos_raw cuya descripción tiene el patrón '[id:NNN]'
+    y cuyo raw_data contiene collector_id (candidatos a enriquecimiento retroactivo).
+    """
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT id, descripcion, raw_data, gasto_id
+               FROM movimientos_raw
+               WHERE fuente = ?
+                 AND descripcion LIKE '%[id:%'
+                 AND raw_data LIKE '%collector_id%'""",
+            (fuente,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_transfer_description(raw_id: int, gasto_id: Optional[int], new_desc: str) -> None:
+    """
+    Actualiza descripcion en movimientos_raw y, si hay gasto vinculado,
+    también en gastos (solo si el usuario no editó la descripción manualmente).
+    """
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE movimientos_raw SET descripcion=? WHERE id=?",
+            (new_desc, raw_id),
+        )
+        if gasto_id:
+            conn.execute(
+                """UPDATE gastos SET descripcion=?
+                   WHERE id=?
+                     AND (descripcion_editada IS NULL OR descripcion_editada='')""",
+                (new_desc, gasto_id),
+            )
+
+
 def insert_movimiento_raw_single(m: dict) -> int:
     """
     Inserta un único movimiento y devuelve su ID.

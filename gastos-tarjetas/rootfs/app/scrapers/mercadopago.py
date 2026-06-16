@@ -134,8 +134,11 @@ class MercadoPagoScraper(BaseScraper):
                     f"({stats['skipped']} ya existían)"
                 )
 
-                # 3b. Resolver nombres de receptores en transferencias salientes.
+                # 3b. Resolver nombres de receptores en transferencias salientes (nuevas).
                 await self._enrich_transfer_names(client, movimientos, _l)
+
+                # 3b2. Enriquecer retroactivamente transferencias ya en DB sin nombre.
+                await self._retroactive_enrich_transfers(client, _l)
 
                 # 3c. Settlement report: captura transferencias a CBU externo que
                 #     no aparecen en /v1/payments/search (ej. retiros a banco).
@@ -523,6 +526,67 @@ class MercadoPagoScraper(BaseScraper):
             name = name_cache.get(cid)
             if name:
                 mov.descripcion = f"{name} — {base_label}"
+
+    async def _retroactive_enrich_transfers(self, client: httpx.AsyncClient, log_fn) -> None:
+        """
+        Busca en la DB movimientos_raw de MP con '[id:NNN]' en la descripción
+        (aún sin nombre resuelto) y actualiza descripcion en movimientos_raw y gastos.
+        Respeta descripcion_editada: no sobreescribe ediciones manuales del usuario.
+        """
+        from scrapers_db import get_unresolved_transfer_descriptions, update_transfer_description
+
+        candidates = get_unresolved_transfer_descriptions("mercadopago")
+        if not candidates:
+            return
+
+        to_update: list[tuple[int, Optional[int], int, str]] = []  # (raw_id, gasto_id, cid, base_label)
+        unique_ids: set[int] = set()
+        for row in candidates:
+            m = _TRANSFER_ID_RE.match(row["descripcion"] or "")
+            if not m:
+                continue
+            try:
+                raw = json.loads(row["raw_data"] or "{}")
+            except Exception:
+                continue
+            if raw.get("operation_type") != "money_transfer":
+                continue
+            cid_raw = raw.get("collector_id")
+            if not cid_raw:
+                continue
+            cid = int(cid_raw)
+            to_update.append((row["id"], row["gasto_id"], cid, m.group(1)))
+            unique_ids.add(cid)
+
+        if not to_update:
+            return
+
+        name_cache: dict[int, str] = {}
+        for cid in unique_ids:
+            try:
+                resp = await client.get(f"{_BASE}/v1/users/{cid}")
+                if resp.status_code == 200:
+                    data  = resp.json()
+                    first = (data.get("first_name") or "").strip()
+                    last  = (data.get("last_name")  or "").strip()
+                    name  = f"{first} {last}".strip() or (data.get("nickname") or "").strip()
+                    if name:
+                        name_cache[cid] = name
+            except Exception:
+                pass
+
+        if not name_cache:
+            return
+
+        updated = 0
+        for raw_id, gasto_id, cid, base_label in to_update:
+            name = name_cache.get(cid)
+            if name:
+                update_transfer_description(raw_id, gasto_id, f"{name} — {base_label}")
+                updated += 1
+
+        if updated:
+            log_fn(f"  → {updated} transferencia(s) existente(s) actualizadas con nombre del receptor")
 
     def _build_description_base(self, p: dict, sign: int = +1) -> str:
         """
