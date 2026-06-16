@@ -761,7 +761,7 @@ class MercadoPagoScraper(BaseScraper):
         # Las transferencias a CBU externo solo aparecen en el settlement report,
         # no en /v1/payments/search. Con umbral de 4 h se capturan transferencias
         # hechas durante el día sin generar un reporte en cada run automatizado.
-        _RPT_STALE_HOURS = 4
+        _RPT_STALE_HOURS = 1
         now_art = datetime.now(_ART)
         if latest_dt is None or (now_art - latest_dt).total_seconds() > _RPT_STALE_HOURS * 3600:
             await self._request_settlement_report(client, _URL, log_fn)

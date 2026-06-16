@@ -1,3 +1,7 @@
+## 1.2.14
+
+- **Settlement report MP — umbral reducido a 1h** (`scrapers/mercadopago.py`): cambia `_RPT_STALE_HOURS` de 4 a 1 hora para que el scraper solicite un reporte nuevo más frecuentemente y las transferencias entrantes aparezcan con menor latencia.
+
 ## 1.2.13
 
 - **Enriquecimiento retroactivo de transferencias MP** (`scrapers/mercadopago.py`, `scrapers_db.py`): `_enrich_transfer_names` solo resolvía nombres en el momento de importar; transferencias ya en la DB quedaban como "Transferencia: Varios [id:xxx]". El nuevo método `_retroactive_enrich_transfers` consulta la DB buscando movimientos_raw de mercadopago con ese patrón, llama a `GET /v1/users/{collector_id}` para cada ID único y actualiza la descripción en `movimientos_raw` y en `gastos` (respetando `descripcion_editada` si el usuario la editó manualmente). Se ejecuta en cada run del scraper MP.
