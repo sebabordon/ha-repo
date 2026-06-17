@@ -780,8 +780,9 @@ class MercadoPagoScraper(BaseScraper):
         log_fn,
     ) -> None:
         """
-        Asegura que EXTERNAL_REFERENCE esté en las columnas del settlement report.
-        GET config → si ya está, no hace nada. Si falta, agrega la columna y hace PUT.
+        Asegura que EXTERNAL_REFERENCE esté en las columnas del settlement report
+        y que notifier_emails esté vacío (para evitar emails cada vez que se genera).
+        GET config → si todo está bien, no hace nada. Si falta algo, hace PUT.
         El campo `scheduled` es read-only y se omite del PUT.
         """
         config_url = f"{base_url}/config"
@@ -791,13 +792,21 @@ class MercadoPagoScraper(BaseScraper):
                 return
             config  = resp.json() or {}
             columns = config.get("columns") or []
-            if any(c.get("key") == "EXTERNAL_REFERENCE" for c in columns):
-                return  # ya configurado, nada que hacer
-            config["columns"] = columns + [{"key": "EXTERNAL_REFERENCE"}]
+            has_ext_ref    = any(c.get("key") == "EXTERNAL_REFERENCE" for c in columns)
+            has_emails     = bool(config.get("notifier_emails"))
+            if has_ext_ref and not has_emails:
+                return  # ya configurado correctamente, nada que hacer
+            changes = []
+            if not has_ext_ref:
+                config["columns"] = columns + [{"key": "EXTERNAL_REFERENCE"}]
+                changes.append("agregado EXTERNAL_REFERENCE")
+            if has_emails:
+                config["notifier_emails"] = []
+                changes.append("notifier_emails vaciado")
             config.pop("scheduled", None)  # read-only, no enviar en PUT
             put = await client.put(config_url, json=config)
             if put.status_code == 200:
-                log_fn("Settlement report: config actualizada — agregado EXTERNAL_REFERENCE")
+                log_fn(f"Settlement report: config actualizada — {', '.join(changes)}")
             else:
                 log_fn(f"Settlement report: no se pudo actualizar config ({put.status_code})")
         except Exception as exc:

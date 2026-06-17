@@ -1,3 +1,7 @@
+## 1.2.17
+
+- **Settlement report MP: desactivar notificaciones por email** (`scrapers/mercadopago.py`): `_ensure_settlement_config` ahora también vacía el campo `notifier_emails` del config del settlement report cuando está no-vacío, evitando que MP envíe un email por cada reporte generado. El PUT se hace en una sola llamada junto con la adición de `EXTERNAL_REFERENCE` si corresponde; si ambos ya están correctos, no se hace ninguna llamada extra.
+
 ## 1.2.16
 
 - **Refresco automático de widgets** (`static/app.js`, `static/index.html`): los chips de saldo y vencimientos se actualizan en background sin recargar la página. Se agrega un `setInterval` configurable (nueva pref `widget_refresh_mins` en Config → Interfaz → "Refresco de widgets", opciones 2/5/10/15/30 min o desactivado, default 5 min) que llama a `loadSaldos()` y `loadVencimientos()` mientras no haya un scrape corriendo. Además, un listener `visibilitychange` refresca los widgets al instante cuando el usuario vuelve al tab tras dejarlo en background. Ambos mecanismos combinados evitan que los chips queden en amarillo por datos obsoletos al dejar la app abierta.
