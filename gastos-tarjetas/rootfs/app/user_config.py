@@ -83,6 +83,10 @@ _DEFAULT_CONFIG: dict = {
     "categorias_especiales_builtin": [
         "Transferencia", "Transferencia Intercuentas", "Pago de Tarjeta",
     ],
+    # ── Tipo de cambio USD para presupuesto ──────────────────────────────────
+    # Tipo de cotización a usar al convertir presupuestos/gastos en USD a ARS.
+    # Valores: "tarjeta" (oficial + impuestos, default), "oficial", "blue".
+    "tc_dolar_tipo": "tarjeta",
     # ── Paleta de íconos PWA por fuente (color de fondo + siglas) ────────────
     # Antes hardcodeada en main.py (_FUENTE_ICON_STYLES). Cada entrada:
     #   {"bg": "#RRGGBB", "fg": "#RRGGBB", "lines": ["LIN1", "LIN2"]}

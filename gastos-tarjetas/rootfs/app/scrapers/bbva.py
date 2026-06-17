@@ -1471,6 +1471,19 @@ class BbvaScraper(BaseScraper):
         if fecha_cierre is not None:
             mes_resumen = str(fecha_cierre)[:7]
 
+        # Enriquecer gastos USD con TC del momento (fecha_cierre como proxy)
+        if any(r.get("moneda") == "USD" for r in records):
+            from user_config import read_user_config, config_default
+            from tc import fetch_tc_dolar
+            _uc   = read_user_config()
+            _tipo = _uc.get("tc_dolar_tipo") or config_default("tc_dolar_tipo") or "tarjeta"
+            _tc   = fetch_tc_dolar(_tipo)
+            if _tc:
+                for r in records:
+                    if r.get("moneda") == "USD":
+                        r["tc_ars"] = _tc
+                log_fn(f"  [import] TC USD ({_tipo}): ${_tc:.2f}")
+
         import_info = {
             "fuente":         fuente_target,
             "archivo":        filename,

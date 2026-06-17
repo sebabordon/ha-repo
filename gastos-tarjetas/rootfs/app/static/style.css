@@ -1520,6 +1520,24 @@ tbody tr:hover { background: #fafbff; }
   text-transform: uppercase; letter-spacing: .04em; vertical-align: middle;
 }
 
+/* USD budget rows */
+.presup-usd-badge {
+  font-size: .65em; font-weight: 700; letter-spacing: .05em;
+  background: #dbeafe; color: #1d4ed8;
+  border-radius: 3px; padding: 1px 4px; vertical-align: middle;
+}
+.presup-usd-hint {
+  display: block;
+  font-size: .75rem; color: #888;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.presup-moneda-sel {
+  font-size: .75rem; padding: 1px 3px; border: 1px solid #d1d5db;
+  border-radius: 3px; background: transparent; color: inherit;
+  cursor: pointer;
+}
+
 .presup-summary {
   display: flex;
   gap: 1.25rem;

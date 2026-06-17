@@ -9,17 +9,30 @@ from db import (
 router = APIRouter()
 
 
+def _get_tc_actual() -> Optional[float]:
+    """Fetch current USD TC using the configured tipo. Never raises."""
+    try:
+        from user_config import read_user_config, config_default
+        from tc import fetch_tc_dolar
+        cfg  = read_user_config()
+        tipo = cfg.get("tc_dolar_tipo") or config_default("tc_dolar_tipo") or "tarjeta"
+        return fetch_tc_dolar(tipo)
+    except Exception:
+        return None
+
+
 @router.get("/presupuesto")
 def get_presupuesto(
     request: Request,
     mes: Optional[str] = Query(None),
 ):
     require_auth(request)
-    items = get_presupuestos()
+    items     = get_presupuestos()
+    tc_actual = _get_tc_actual()
     if mes:
-        vs_actual = stats_presupuesto_vs_actual(mes)
-        return {"items": items, "vs_actual": vs_actual}
-    return {"items": items, "vs_actual": []}
+        vs_actual = stats_presupuesto_vs_actual(mes, tc_actual=tc_actual)
+        return {"items": items, "vs_actual": vs_actual, "tc_actual": tc_actual}
+    return {"items": items, "vs_actual": [], "tc_actual": tc_actual}
 
 
 @router.put("/presupuesto")

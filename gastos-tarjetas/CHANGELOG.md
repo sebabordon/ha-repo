@@ -1,3 +1,7 @@
+## 1.2.18
+
+- **Presupuesto en USD con conversión a pesos** (`db.py`, `tc.py`, `routes/presupuesto.py`, `routes/config_route.py`, `user_config.py`, `scrapers/bbva.py`, `scrapers/amex.py`, `static/app.js`, `static/index.html`, `static/style.css`): los presupuestos mensuales por categoría ahora soportan moneda USD. Por categoría se puede elegir ARS o USD via un dropdown inline. El TC se obtiene automáticamente de dolarapi.com (tipo configurable: tarjeta/oficial/blue, default tarjeta) y se muestra en el header del tab; al comparar contra el real, los gastos USD se convierten al TC almacenado en cada transacción (`gastos.tc_ars`) o al TC actual como fallback. El resumen muestra también totales en USD brutos para presupuesto y gasto real. Los scrapers AMEX y BBVA ahora almacenan el TC del momento en cada transacción USD importada.
+
 ## 1.2.17
 
 - **Settlement report MP: desactivar notificaciones por email** (`scrapers/mercadopago.py`): `_ensure_settlement_config` ahora también vacía el campo `notifier_emails` del config del settlement report cuando está no-vacío, evitando que MP envíe un email por cada reporte generado. El PUT se hace en una sola llamada junto con la adición de `EXTERNAL_REFERENCE` si corresponde; si ambos ya están correctos, no se hace ninguna llamada extra.

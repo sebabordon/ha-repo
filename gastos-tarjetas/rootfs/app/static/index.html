@@ -553,6 +553,17 @@
         Editá los presupuestos y compará con el gasto real del mes seleccionado.
         Las barras se vuelven amarillas al 80% y rojas al superar el 100%.
       </p>
+      <div id="presup-tc-row" class="ui-pref-row" style="display:none">
+        <label class="ui-pref-label">TC dólar</label>
+        <div class="ui-pref-control" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <span id="presup-tc-val" style="font-variant-numeric:tabular-nums;font-weight:600"></span>
+          <select id="presup-tc-tipo" onchange="saveTcConfig()">
+            <option value="tarjeta">Tarjeta</option>
+            <option value="oficial">Oficial</option>
+            <option value="blue">Blue</option>
+          </select>
+        </div>
+      </div>
 
       <div class="presup-section-header">
         <h3 class="presup-section-title">Por categoría</h3>

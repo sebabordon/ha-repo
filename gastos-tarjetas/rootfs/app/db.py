@@ -271,6 +271,8 @@ def init_db():
             conn.execute("ALTER TABLE gastos ADD COLUMN import_id INTEGER")
         if "descripcion_editada" not in gcols:
             conn.execute("ALTER TABLE gastos ADD COLUMN descripcion_editada TEXT")
+        if "tc_ars" not in gcols:
+            conn.execute("ALTER TABLE gastos ADD COLUMN tc_ars REAL")
 
         # Índices de la tabla `gastos`. Todas las listas/agregados filtran y
         # ordenan por estas columnas (ver list_gastos, monthly_summary, charts);
@@ -1015,8 +1017,8 @@ def insert_gastos(gastos: list[dict], import_info: dict = None) -> int:
         before = conn.execute("SELECT total_changes()").fetchone()[0]
         conn.executemany(
             """INSERT INTO gastos
-               (fecha, descripcion, monto, moneda, fuente, categoria, categoria_fuente, archivo_origen, usuario, import_id)
-               VALUES (:fecha, :descripcion, :monto, :moneda, :fuente, :categoria, :categoria_fuente, :archivo_origen, :usuario, :import_id)""",
+               (fecha, descripcion, monto, moneda, fuente, categoria, categoria_fuente, archivo_origen, usuario, import_id, tc_ars)
+               VALUES (:fecha, :descripcion, :monto, :moneda, :fuente, :categoria, :categoria_fuente, :archivo_origen, :usuario, :import_id, :tc_ars)""",
             [
                 {
                     **g,
@@ -1024,6 +1026,7 @@ def insert_gastos(gastos: list[dict], import_info: dict = None) -> int:
                     "monto":    str(g["monto"]),
                     "usuario":  g.get("usuario"),
                     "import_id": import_id,
+                    "tc_ars":   g.get("tc_ars"),
                 }
                 for g in gastos
             ],
@@ -2717,27 +2720,67 @@ def save_presupuestos(items: list[dict]):
         )
 
 
-def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
+def stats_presupuesto_vs_actual(mes: str, tc_actual: float | None = None) -> list[dict]:
     """
     Returns categories with a budget OR actual spending in `mes`.
     Parent categories roll up the gastado of all their descendants.
     Each row includes `parent` (parent category name or None) and
     `tiene_hijos` (bool) so the frontend can render the tree.
     Ordered: top-level items (gastado DESC) then their children right after.
+
+    tc_actual: tipo de cambio ARS/USD actual; used to convert USD budget entries
+    to ARS for display and to convert USD gastos without a stored tc_ars.
     """
-    where, params = _base_where(mes=mes)
+    where_ars, params_ars = _base_where(mes=mes, moneda='ARS')
     q_actual = f"""
         SELECT COALESCE(categoria,'Sin categoría') AS cat,
                ROUND(SUM({_EGRESO_EXPR}), 2) AS gastado
-        FROM gastos {where}
+        FROM gastos {where_ars}
         GROUP BY cat
     """
     with _conn() as conn:
-        actual_rows = conn.execute(q_actual, params).fetchall()
-        budget_rows = conn.execute("SELECT categoria, monto_mensual FROM presupuestos").fetchall()
+        actual_rows = conn.execute(q_actual, params_ars).fetchall()
+        budget_rows = conn.execute("SELECT categoria, monto_mensual, moneda FROM presupuestos").fetchall()
+
+    # Split budgets by currency
+    budget_ars = {r["categoria"]: float(r["monto_mensual"]) for r in budget_rows if (r["moneda"] or "ARS") == "ARS"}
+    budget_usd = {r["categoria"]: float(r["monto_mensual"]) for r in budget_rows if (r["moneda"] or "ARS") == "USD"}
+    budget = {**budget_ars}  # ARS budget for the tree logic (presupuesto column = ARS value)
+    # USD budgets contribute their ARS-equivalent to budget (tc_actual required)
+    if budget_usd and tc_actual:
+        for cat, monto_usd in budget_usd.items():
+            budget[cat] = round(monto_usd * tc_actual, 2)
 
     actual = {r["cat"]: float(r["gastado"]) for r in actual_rows if float(r["gastado"]) > 0}
-    budget = {r["categoria"]: float(r["monto_mensual"]) for r in budget_rows}
+
+    # Fetch USD actual spending for categories with USD budgets, converted to ARS
+    actual_usd_raw: dict[str, float] = {}   # cat → sum USD (raw)
+    actual_usd_ars: dict[str, float] = {}   # cat → sum ARS equiv
+    if budget_usd and tc_actual:
+        where_usd, params_usd = _base_where(mes=mes, moneda='USD')
+        # Convert each USD gasto using its stored tc_ars; fall back to tc_actual
+        q_usd = f"""
+            SELECT COALESCE(categoria,'Sin categoría') AS cat,
+                   ROUND(SUM(CASE WHEN CAST(monto AS REAL) > 0
+                                  THEN CAST(monto AS REAL) * COALESCE(tc_ars, ?)
+                                  ELSE 0 END), 2) AS gastado_ars,
+                   ROUND(SUM(CASE WHEN CAST(monto AS REAL) > 0
+                                  THEN CAST(monto AS REAL) ELSE 0 END), 2) AS gastado_usd
+            FROM gastos {where_usd}
+            GROUP BY cat
+        """
+        with _conn() as conn:
+            usd_rows = conn.execute(q_usd, [tc_actual] + params_usd).fetchall()
+        for r in usd_rows:
+            g_ars = float(r["gastado_ars"] or 0)
+            g_usd = float(r["gastado_usd"] or 0)
+            if g_usd > 0:
+                actual_usd_raw[r["cat"]] = g_usd
+                actual_usd_ars[r["cat"]] = g_ars
+        # Merge USD ARS-equiv into actual for USD-budgeted categories only
+        for cat in budget_usd:
+            if cat in actual_usd_ars:
+                actual[cat] = actual.get(cat, 0) + actual_usd_ars[cat]
 
     children_map = _get_categorias_children_map()
     parent_of: dict[str, str] = {}
@@ -2763,10 +2806,10 @@ def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
         # (existe en la tabla `presupuestos`, aunque con monto 0 — categoría
         # "trackeada"). Lo de los descendientes garantiza que el PADRE siempre
         # aparezca cuando se presupuesta una subcategoría, para poder anidarla.
-        budget_in_subtree = any(c in budget for c in [cat] + descendants)
+        budget_in_subtree = any(c in budget or c in budget_usd for c in [cat] + descendants)
         if g == 0 and b == 0 and not budget_in_subtree:
             continue
-        result.append({
+        row: dict = {
             "categoria":   cat,
             "presupuesto": b,
             "gastado":     g,
@@ -2774,7 +2817,14 @@ def stats_presupuesto_vs_actual(mes: str) -> list[dict]:
             "pct":         round(g / b * 100, 1) if b > 0 else None,
             "parent":      parent_of.get(cat),
             "tiene_hijos": bool(children_map.get(cat)),
-        })
+        }
+        # USD-budgeted categories: add raw USD fields for UI display
+        if cat in budget_usd:
+            row["moneda_presup"] = "USD"
+            row["monto_usd"]     = budget_usd[cat]
+            row["gastado_usd"]   = round(sum(actual_usd_raw.get(c, 0.0) for c in [cat] + descendants), 2)
+            row["tc_actual"]     = tc_actual
+        result.append(row)
 
     # Derive parent budget = sum of children's budgets (always, ignoring any
     # individually stored budget on the parent). Iterate until stable so that

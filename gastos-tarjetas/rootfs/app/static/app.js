@@ -238,7 +238,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); _monthlyChart?.resize(); }
     if (tab.dataset.tab === "cuotas")      { loadCuotas(); loadPagos(); }
-    if (tab.dataset.tab === "presupuesto") { loadPresupuesto(); loadPresupuestoUsuario(); }
+    if (tab.dataset.tab === "presupuesto") { loadTcConfig(); loadPresupuesto(); loadPresupuestoUsuario(); }
     if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); loadPeriodoConfig(); loadVencMatchConfig(); loadCategorizacionConfig(); loadEspecialesConfig(); loadIconosConfig(); }
   });
 });
@@ -4424,6 +4424,8 @@ document.getElementById("vencimientos-widget").addEventListener("dblclick", e =>
 let _presupItems    = [];  // [{categoria, monto_mensual, moneda}]
 let _presupVsActual = [];
 let _presupSort     = {col: "gastado", dir: -1};
+let _presupTcActual = null;   // TC USD actual (del servidor)
+let _presupTcTipo   = "tarjeta";
 
 function sortPresup(col) {
   if (_presupSort.col === col) _presupSort.dir *= -1;
@@ -4438,7 +4440,48 @@ async function loadPresupuesto() {
   const data = await res.json();
   _presupItems    = data.items || [];
   _presupVsActual = data.vs_actual || [];
+  if (data.tc_actual != null) _presupTcActual = data.tc_actual;
   renderPresupuesto();
+  _renderPresupTcRow();
+}
+
+function _renderPresupTcRow() {
+  const hasUsd = _presupItems.some(it => (it.moneda || "ARS") === "USD");
+  const row = document.getElementById("presup-tc-row");
+  if (!row) return;
+  row.style.display = hasUsd ? "" : "none";
+  const valEl = document.getElementById("presup-tc-val");
+  if (valEl) valEl.textContent = _presupTcActual ? `$ ${_fmtNum2(_presupTcActual)}` : "—";
+  const tipoEl = document.getElementById("presup-tc-tipo");
+  if (tipoEl && _presupTcTipo) tipoEl.value = _presupTcTipo;
+}
+
+async function loadTcConfig() {
+  try {
+    const res  = await fetch(`${BASE}/api/config/tc-dolar`);
+    const data = await res.json();
+    _presupTcTipo   = data.tipo   || "tarjeta";
+    _presupTcActual = data.tc     || _presupTcActual;
+    _renderPresupTcRow();
+  } catch(e) { console.warn("loadTcConfig:", e); }
+}
+
+async function saveTcConfig() {
+  const tipoEl = document.getElementById("presup-tc-tipo");
+  const tipo = tipoEl?.value || "tarjeta";
+  const res = await fetch(`${BASE}/api/config/tc-dolar`, {
+    method: "PUT",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({tipo}),
+  });
+  if (res.ok) {
+    _presupTcTipo = tipo;
+    _presupTcActual = null; // force refetch
+    await loadPresupuesto();
+    showToast("✓ Tipo de cambio guardado", "ok");
+  } else {
+    showToast("Error al guardar TC", "err");
+  }
 }
 
 function renderPresupuesto() {
@@ -4449,13 +4492,23 @@ function renderPresupuesto() {
     return;
   }
 
-  const budgetMap = {};
-  _presupItems.forEach(it => { budgetMap[it.categoria] = it.monto_mensual; });
+  const budgetMap    = {};
+  const budgetMoneda = {};
+  _presupItems.forEach(it => {
+    budgetMap[it.categoria]    = it.monto_mensual;
+    budgetMoneda[it.categoria] = it.moneda || "ARS";
+  });
 
-  const rawRows = vsActual.length ? vsActual.slice() : _presupItems.map(it => ({
-    categoria: it.categoria, presupuesto: it.monto_mensual, gastado: 0, diferencia: it.monto_mensual, pct: null,
-    parent: _catParentOf[it.categoria] || null, tiene_hijos: (_catHierarchy[it.categoria] || []).length > 0,
-  }));
+  const rawRows = vsActual.length ? vsActual.slice() : _presupItems.map(it => {
+    const isUsdItem = (it.moneda || "ARS") === "USD";
+    return {
+      categoria: it.categoria, presupuesto: it.monto_mensual, gastado: 0,
+      diferencia: it.monto_mensual, pct: null,
+      parent: _catParentOf[it.categoria] || null,
+      tiene_hijos: (_catHierarchy[it.categoria] || []).length > 0,
+      ...(isUsdItem ? {moneda_presup: "USD", monto_usd: it.monto_mensual, gastado_usd: 0} : {}),
+    };
+  });
 
   // Merge: categorías agregadas al presupuesto que todavía no tienen gasto (no
   // están en vs_actual) deben aparecer igual, anidadas bajo su padre si son
@@ -4463,11 +4516,13 @@ function renderPresupuesto() {
   const _present = new Set(rawRows.map(r => r.categoria));
   _presupItems.forEach(it => {
     if (_present.has(it.categoria)) return;
+    const _isUsd = (it.moneda || "ARS") === "USD";
     rawRows.push({
       categoria: it.categoria, presupuesto: it.monto_mensual, gastado: 0,
       diferencia: it.monto_mensual, pct: null,
       parent: _catParentOf[it.categoria] || null,
       tiene_hijos: (_catHierarchy[it.categoria] || []).length > 0,
+      ...(_isUsd ? {moneda_presup: "USD", monto_usd: it.monto_mensual, gastado_usd: 0} : {}),
     });
     _present.add(it.categoria);
   });
@@ -4512,15 +4567,25 @@ function renderPresupuesto() {
          .forEach(r => rows.push({...r, _indent: false}));
 
   // Totals: skip indented (child) rows to avoid double-counting
+  // presupuesto y gastado ya están en ARS (las filas USD tienen su equivalente convertido)
   let totalPresup = 0, totalGastado = 0;
+  let totalPresupUsd = 0, totalGastadoUsd = 0;
+  const hasUsdRows = rows.some(r => r.moneda_presup === "USD");
   rows.filter(r => !r._indent).forEach(r => {
     totalPresup  += r.presupuesto > 0 ? r.presupuesto : (budgetMap[r.categoria] || 0);
     totalGastado += r.gastado || 0;
+    if (r.moneda_presup === "USD") {
+      totalPresupUsd  += r.monto_usd   || 0;
+      totalGastadoUsd += r.gastado_usd || 0;
+    }
   });
   const totalDiff   = totalPresup - totalGastado;
   const totalPct    = totalPresup > 0 ? Math.round(totalGastado / totalPresup * 100) : 0;
   const totalBarCls = totalPct >= 100 ? "over" : totalPct >= 80 ? "warn" : "";
 
+  const tcNote = hasUsdRows && _presupTcActual
+    ? `<span style="color:#888;font-size:.8rem">TC ${_presupTcTipo}: $${_fmtNum2(_presupTcActual)} · USD presup: U$D ${_fmtNum2(totalPresupUsd)} · USD real: U$D ${_fmtNum2(totalGastadoUsd)}</span>`
+    : "";
   const summaryHtml = vsActual.length ? `
     <div class="presup-summary">
       <span>Presupuestado: <strong>${_fmtNum2(totalPresup)}</strong></span>
@@ -4529,6 +4594,7 @@ function renderPresupuesto() {
         Diferencia: <strong>${totalDiff >= 0 ? "+" : ""}${_fmtNum2(totalDiff)}</strong>
       </span>
       ${totalPresup > 0 ? `<span style="color:#888">${totalPct}% utilizado</span>` : ""}
+      ${tcNote}
     </div>` : "";
 
   const _psi = col => _presupSort.col === col ? (_presupSort.dir > 0 ? "▲" : "▼") : "";
@@ -4547,6 +4613,7 @@ function renderPresupuesto() {
       </thead>
       <tbody>
         ${rows.map(r => {
+          const isUsd   = r.moneda_presup === "USD";
           const budget  = r.presupuesto > 0 ? r.presupuesto : (budgetMap[r.categoria] || 0);
           const pct     = budget > 0 ? Math.round(r.gastado / budget * 100) : 0;
           const barW    = Math.min(pct, 100);
@@ -4562,17 +4629,51 @@ function renderPresupuesto() {
             ? `<strong style="color:var(--color-cat-parent)">${escHtml(r.categoria)}</strong>`
             : escHtml(r.categoria);
           const prefix  = r._indent ? "└ " : "";
-          // Parent WITH children: budget is auto-derived — show read-only
-          const budgetCell = r.tiene_hijos
-            ? `<span class="presup-auto-val">${budget > 0 ? _fmtNum2(budget) : "—"}</span><span class="presup-auto-badge">Σ hijos</span>`
-            : `<input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
+          const usdBadge = isUsd
+            ? `<span class="presup-usd-badge">USD</span>`
+            : "";
+          // Moneda dropdown para categorías hoja (permite cambiar ARS↔USD)
+          const _monedaItem = _presupItems.find(it => it.categoria === r.categoria);
+          const _monedaCur  = _monedaItem ? (_monedaItem.moneda || "ARS") : (isUsd ? "USD" : "ARS");
+          const monedaSel   = !r.tiene_hijos
+            ? `<select class="presup-moneda-sel" title="Moneda del presupuesto"
+                 onchange="updatePresupMoneda('${escHtml(r.categoria)}',this.value)">
+                 <option value="ARS"${_monedaCur==="ARS"?" selected":""}>ARS</option>
+                 <option value="USD"${_monedaCur==="USD"?" selected":""}>USD</option>
+               </select>`
+            : "";
+          // Budget cell: for USD rows show USD amount + ARS equiv hint
+          let budgetCell;
+          if (r.tiene_hijos) {
+            budgetCell = `<span class="presup-auto-val">${budget > 0 ? _fmtNum2(budget) : "—"}</span><span class="presup-auto-badge">Σ hijos</span>${usdBadge}`;
+          } else if (isUsd) {
+            const usdVal = r.monto_usd || 0;
+            budgetCell = `<span style="display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">
+              <input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
+                     value="${_fmtNum2(usdVal)}"
+                     onfocus="this.select()"
+                     onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />
+              ${monedaSel}
+              ${budget > 0 && _presupTcActual ? `<span class="presup-usd-hint">≈ $${_fmtNum2(budget)}</span>` : ""}
+            </span>`;
+          } else {
+            budgetCell = `<span style="display:flex;align-items:center;gap:.3rem">
+              <input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
                      value="${_fmtNum2(budget)}"
                      onfocus="this.select()"
-                     onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />`;
+                     onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />
+              ${monedaSel}
+            </span>`;
+          }
+          // Gastado cell: for USD rows show ARS equiv + raw USD
+          const gastadoCell = isUsd && r.gastado_usd
+            ? `<span style="font-variant-numeric:tabular-nums">${_fmtNum2(r.gastado)}</span>
+               <span class="presup-usd-hint">U$D ${_fmtNum2(r.gastado_usd)}</span>`
+            : `<span style="font-variant-numeric:tabular-nums">${_fmtNum2(r.gastado)}</span>`;
           return `<tr${r._indent ? " class=\"presup-child-row\"" : ""}>
             <td ${nameCss}>${prefix}${catCaret}${catName}</td>
             <td>${budgetCell}</td>
-            <td style="font-variant-numeric:tabular-nums">${_fmtNum2(r.gastado)}</td>
+            <td>${gastadoCell}</td>
             <td class="${budget > 0 ? diffCls : ""}">
               ${budget > 0 ? (r.diferencia >= 0 ? "+" : "") + _fmtNum2(r.diferencia) : "—"}
             </td>
@@ -4652,6 +4753,19 @@ function updatePresupItem(categoria, rawValue) {
   // categorías que se muestran por tener gastos (input en 0, sin tocar) NO se
   // persisten al presupuesto. Las agregadas con el "+" entran vía addPresupRow.
   else if (val > 0) _presupItems.push({categoria, monto_mensual: val, moneda: "ARS"});
+}
+
+function updatePresupMoneda(categoria, moneda) {
+  if ((_catHierarchy[categoria] || []).length > 0) return;
+  const existing = _presupItems.find(it => it.categoria === categoria);
+  if (existing) {
+    existing.moneda = moneda;
+  } else {
+    _presupItems.push({categoria, monto_mensual: 0, moneda});
+  }
+  renderPresupuesto();
+  _renderPresupTcRow();
+  _scheduleSavePresup();
 }
 
 function removePresupItem(categoria) {

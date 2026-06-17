@@ -977,6 +977,19 @@ class AmexScraper(BaseScraper):
         fechas      = [str(r.get("fecha", ""))[:7] for r in records if r.get("fecha")]
         mes_resumen = Counter(fechas).most_common(1)[0][0] if fechas else None
 
+        # Enriquecer gastos USD con TC del momento
+        if any(r.get("moneda") == "USD" for r in records):
+            from user_config import read_user_config, config_default
+            from tc import fetch_tc_dolar
+            _uc   = read_user_config()
+            _tipo = _uc.get("tc_dolar_tipo") or config_default("tc_dolar_tipo") or "tarjeta"
+            _tc   = fetch_tc_dolar(_tipo)
+            if _tc:
+                for r in records:
+                    if r.get("moneda") == "USD":
+                        r["tc_ars"] = _tc
+                log_fn(f"  [amex-pdf] TC USD ({_tipo}): ${_tc:.2f}")
+
         parser      = PARSERS["amex"]
         import_info = {
             "fuente":         fuente_target,

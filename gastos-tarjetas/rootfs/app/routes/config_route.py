@@ -615,3 +615,31 @@ def rename_usuario_in_db(body: dict, request: Request):
     from db import rename_usuario_in_gastos
     count = rename_usuario_in_gastos(old_name, new_name)
     return {"actualizados": count}
+
+
+# ── Tipo de cambio USD para presupuesto ──────────────────────────────────────
+
+_TC_TIPOS_VALIDOS = {"tarjeta", "oficial", "blue"}
+
+
+@router.get("/config/tc-dolar")
+def get_tc_dolar_config(request: Request):
+    require_auth(request)
+    from user_config import config_default
+    from tc import fetch_tc_dolar
+    cfg  = read_user_config()
+    tipo = cfg.get("tc_dolar_tipo") or config_default("tc_dolar_tipo") or "tarjeta"
+    tc   = fetch_tc_dolar(tipo)
+    return {"tipo": tipo, "tc": tc}
+
+
+@router.put("/config/tc-dolar")
+def put_tc_dolar_config(body: dict, request: Request):
+    require_auth(request)
+    tipo = str(body.get("tipo") or "tarjeta").strip().lower()
+    if tipo not in _TC_TIPOS_VALIDOS:
+        raise HTTPException(400, f"tipo inválido: {tipo}. Válidos: {sorted(_TC_TIPOS_VALIDOS)}")
+    cfg = read_user_config()
+    cfg["tc_dolar_tipo"] = tipo
+    write_user_config(cfg)
+    return {"ok": True, "tipo": tipo}
