@@ -20,18 +20,19 @@ function _cssVar(name, fallback) {
   return v || fallback;
 }
 const UI_PREF_DEFAULTS = {
-  dias_urgente:       3,
-  dias_pronto:        7,
-  graf_meses:         "6",
-  graf_moneda:        "ARS",
-  font_size:          14,
-  venc_show_proximos: true,
-  venc_show_rg5617:   true,
-  venc_show_pdf_ref:  true,
-  chart_home_mode:    "normal",   // "normal" | "compact" | "hidden"
-  bud_chart_mode:     "normal",   // "normal" | "compact" | "hidden"
-  tab_icon_mode:      "icons_text", // "icons_text" | "icons" | "text"
-  pago_btn_mode:      "icons_text", // botones de acción de Pagos: "icons_text" | "icons" | "text"
+  dias_urgente:          3,
+  dias_pronto:           7,
+  graf_meses:            "6",
+  graf_moneda:           "ARS",
+  font_size:             14,
+  venc_show_proximos:    true,
+  venc_show_rg5617:      true,
+  venc_show_pdf_ref:     true,
+  chart_home_mode:       "normal",     // "normal" | "compact" | "hidden"
+  bud_chart_mode:        "normal",     // "normal" | "compact" | "hidden"
+  tab_icon_mode:         "icons_text", // "icons_text" | "icons" | "text"
+  pago_btn_mode:         "icons_text", // botones de acción de Pagos: "icons_text" | "icons" | "text"
+  widget_refresh_mins:   "5",          // intervalo de refresco automático de widgets ("0" = desactivado)
 };
 
 function getUiPref(key) {
@@ -655,6 +656,7 @@ function renderUiSettings() {
   setVal("ui-chart-home-mode",    p.chart_home_mode);
   setVal("ui-tab-icon-mode",      p.tab_icon_mode);
   setVal("ui-pago-btn-mode",      p.pago_btn_mode);
+  setVal("ui-widget-refresh",     p.widget_refresh_mins);
   _updateUiPreview();
 }
 
@@ -706,8 +708,9 @@ function _getUiPrefInputs() {
     venc_show_rg5617:   chk("ui-venc-show-rg5617",   true),
     venc_show_pdf_ref:  chk("ui-venc-show-pdf-ref",  true),
     chart_home_mode:    sel("ui-chart-home-mode",    UI_PREF_DEFAULTS.chart_home_mode),
-    tab_icon_mode:      sel("ui-tab-icon-mode",      UI_PREF_DEFAULTS.tab_icon_mode),
-    pago_btn_mode:      sel("ui-pago-btn-mode",      UI_PREF_DEFAULTS.pago_btn_mode),
+    tab_icon_mode:         sel("ui-tab-icon-mode",      UI_PREF_DEFAULTS.tab_icon_mode),
+    pago_btn_mode:         sel("ui-pago-btn-mode",      UI_PREF_DEFAULTS.pago_btn_mode),
+    widget_refresh_mins:   sel("ui-widget-refresh",     UI_PREF_DEFAULTS.widget_refresh_mins),
   };
 }
 
@@ -732,6 +735,7 @@ function saveUiSettings() {
   loadVencimientos();   // refresh widget with new thresholds & visibility prefs
   loadMonthlyChart();   // re-render con los colores nuevos (egreso/ingreso)
   loadBudgetChart();    // ídem (presupuesto/real)
+  _restartBgRefresh();  // aplica el nuevo intervalo de refresco de widgets
   showToast("Configuración guardada.", "ok", 2500);
 }
 
@@ -4122,6 +4126,25 @@ async function saveSaldo(fuente) {
 }
 
 loadSaldos();
+
+// Refresco automático de widgets en background (configurable en UI → Interfaz).
+// Solo actúa cuando no hay un scrape corriendo (ese caso ya usa _scrapeRunningTimer a 8s).
+let _bgRefreshTimer = null;
+function _restartBgRefresh() {
+  if (_bgRefreshTimer) { clearInterval(_bgRefreshTimer); _bgRefreshTimer = null; }
+  const mins = parseInt(getUiPref("widget_refresh_mins"), 10);
+  if (!mins) return;
+  _bgRefreshTimer = setInterval(() => {
+    const anyRunning = (_widgetCuentas || []).some(c => _scraperStatusColor(c) === "run");
+    if (!anyRunning) { loadSaldos(); loadVencimientos?.(); }
+  }, mins * 60 * 1000);
+}
+_restartBgRefresh();
+
+// Al volver al tab tras estar oculto, refresca de golpe.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) { loadSaldos(); loadVencimientos?.(); }
+});
 
 // ── Vencimientos widget ───────────────────────────────────────────────────────
 

@@ -1,3 +1,7 @@
+## 1.2.16
+
+- **Refresco automático de widgets** (`static/app.js`, `static/index.html`): los chips de saldo y vencimientos se actualizan en background sin recargar la página. Se agrega un `setInterval` configurable (nueva pref `widget_refresh_mins` en Config → Interfaz → "Refresco de widgets", opciones 2/5/10/15/30 min o desactivado, default 5 min) que llama a `loadSaldos()` y `loadVencimientos()` mientras no haya un scrape corriendo. Además, un listener `visibilitychange` refresca los widgets al instante cuando el usuario vuelve al tab tras dejarlo en background. Ambos mecanismos combinados evitan que los chips queden en amarillo por datos obsoletos al dejar la app abierta.
+
 ## 1.2.15
 
 - **Rebrand a "SnapBudget"** (`config.yaml`, `rootfs/app/main.py`, `static/index.html`, `static/quick.html`, `static/manifest.json`, `static/sw.js`, `routes/auth.py`, `routes/admin.py`, `routes/push.py`, `DOCS.md`, `DESIGN.md`): el nombre visible de la marca pasa de "Finance Me" a "SnapBudget" en todos los puntos de UI: `<title>`, `apple-mobile-web-app-title`, manifest PWA (estático y dinámico), navbar, pantalla de login/registro, nombre del sender en push notifications, y filename del backup `.zip`. También se actualiza el proyecto Capacitor (`snap-budget-mobile/`): `appName`, `appId` (`ar.com.sbsoft.snapbudget`), `package.json` y `README.md`. El slug del add-on (`gastos_tarjetas`), el nombre de la carpeta del add-on y todos los términos de dominio no se tocan.
