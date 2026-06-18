@@ -2753,12 +2753,13 @@ def stats_presupuesto_vs_actual(mes: str, tc_actual: float | None = None) -> lis
 
     actual = {r["cat"]: float(r["gastado"]) for r in actual_rows if float(r["gastado"]) > 0}
 
-    # Fetch USD actual spending for categories with USD budgets, converted to ARS
+    # Fetch ALL USD spending, convert to ARS, and add to gastado of every category.
+    # tc_actual is required for conversion; without it USD gastos are excluded.
     actual_usd_raw: dict[str, float] = {}   # cat → sum USD (raw)
     actual_usd_ars: dict[str, float] = {}   # cat → sum ARS equiv
-    if budget_usd and tc_actual:
+    if tc_actual:
         where_usd, params_usd = _base_where(mes=mes, moneda='USD')
-        # Convert each USD gasto using its stored tc_ars; fall back to tc_actual
+        # Use the stored tc_ars on each transaction (set at import time); fall back to tc_actual.
         q_usd = f"""
             SELECT COALESCE(categoria,'Sin categoría') AS cat,
                    ROUND(SUM(CASE WHEN CAST(monto AS REAL) > 0
@@ -2777,10 +2778,8 @@ def stats_presupuesto_vs_actual(mes: str, tc_actual: float | None = None) -> lis
             if g_usd > 0:
                 actual_usd_raw[r["cat"]] = g_usd
                 actual_usd_ars[r["cat"]] = g_ars
-        # Merge USD ARS-equiv into actual for USD-budgeted categories only
-        for cat in budget_usd:
-            if cat in actual_usd_ars:
-                actual[cat] = actual.get(cat, 0) + actual_usd_ars[cat]
+                # Add ARS-equivalent to every category's gastado (not just USD-budget ones)
+                actual[r["cat"]] = actual.get(r["cat"], 0) + g_ars
 
     children_map = _get_categorias_children_map()
     parent_of: dict[str, str] = {}
@@ -2818,12 +2817,14 @@ def stats_presupuesto_vs_actual(mes: str, tc_actual: float | None = None) -> lis
             "parent":      parent_of.get(cat),
             "tiene_hijos": bool(children_map.get(cat)),
         }
-        # USD-budgeted categories: add raw USD fields for UI display
+        # Add raw USD fields for any category with USD spending or USD budget
+        g_usd = round(sum(actual_usd_raw.get(c, 0.0) for c in [cat] + descendants), 2)
         if cat in budget_usd:
             row["moneda_presup"] = "USD"
             row["monto_usd"]     = budget_usd[cat]
-            row["gastado_usd"]   = round(sum(actual_usd_raw.get(c, 0.0) for c in [cat] + descendants), 2)
-            row["tc_actual"]     = tc_actual
+        if g_usd > 0 or cat in budget_usd:
+            row["gastado_usd"] = g_usd
+            row["tc_actual"]   = tc_actual
         result.append(row)
 
     # Derive parent budget = sum of children's budgets (always, ignoring any

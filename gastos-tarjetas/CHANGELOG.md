@@ -1,3 +1,7 @@
+## 1.2.19
+
+- **Presupuesto: gastos USD incluidos en el total de cualquier categoría** (`db.py`): el `gastado` de cada categoría ahora suma ARS + USD × TC, independientemente de si el presupuesto está en ARS o USD. Antes, los gastos USD solo contaban si la categoría tenía presupuesto en USD; ahora una categoría con presupuesto en ARS que también tiene gastos en dólares (ej. Streaming con Netflix USD y una suscripción ARS) muestra el total real convertido. El desglose `gastado_usd` aparece en la UI siempre que haya gastos en dólares, no solo en categorías con presupuesto USD.
+
 ## 1.2.18
 
 - **Presupuesto en USD con conversión a pesos** (`db.py`, `tc.py`, `routes/presupuesto.py`, `routes/config_route.py`, `user_config.py`, `scrapers/bbva.py`, `scrapers/amex.py`, `static/app.js`, `static/index.html`, `static/style.css`): los presupuestos mensuales por categoría ahora soportan moneda USD. Por categoría se puede elegir ARS o USD via un dropdown inline. El TC se obtiene automáticamente de dolarapi.com (tipo configurable: tarjeta/oficial/blue, default tarjeta) y se muestra en el header del tab; al comparar contra el real, los gastos USD se convierten al TC almacenado en cada transacción (`gastos.tc_ars`) o al TC actual como fallback. El resumen muestra también totales en USD brutos para presupuesto y gasto real. Los scrapers AMEX y BBVA ahora almacenan el TC del momento en cada transacción USD importada.
