@@ -4130,20 +4130,26 @@ loadSaldos();
 // Refresco automático de widgets en background (configurable en UI → Interfaz).
 // Solo actúa cuando no hay un scrape corriendo (ese caso ya usa _scrapeRunningTimer a 8s).
 let _bgRefreshTimer = null;
+function _isEditingGastos() {
+  const el = document.activeElement;
+  return el && document.getElementById("gastos-body")?.contains(el);
+}
+function _bgRefresh() {
+  const anyRunning = (_widgetCuentas || []).some(c => _scraperStatusColor(c) === "run");
+  if (anyRunning) return;
+  if (_isEditingGastos()) { loadSaldos(); loadVencimientos?.(); return; }
+  refreshAfterDataChange();
+}
 function _restartBgRefresh() {
   if (_bgRefreshTimer) { clearInterval(_bgRefreshTimer); _bgRefreshTimer = null; }
   const mins = parseInt(getUiPref("widget_refresh_mins"), 10);
   if (!mins) return;
-  _bgRefreshTimer = setInterval(() => {
-    const anyRunning = (_widgetCuentas || []).some(c => _scraperStatusColor(c) === "run");
-    if (!anyRunning) { loadSaldos(); loadVencimientos?.(); }
-  }, mins * 60 * 1000);
+  _bgRefreshTimer = setInterval(_bgRefresh, mins * 60 * 1000);
 }
 _restartBgRefresh();
 
-// Al volver al tab tras estar oculto, refresca de golpe.
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { loadSaldos(); loadVencimientos?.(); }
+  if (!document.hidden) _bgRefresh();
 });
 
 // ── Vencimientos widget ───────────────────────────────────────────────────────
