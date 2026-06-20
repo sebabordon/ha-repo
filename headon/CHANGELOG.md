@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8
+- Iconos PNG para iOS PWA: apple-touch-icon 180px, manifest 192px y 512px.
+- Favicon .ico para browsers desktop.
+
 ## 0.1.7
 - Datos en `/addon_configs/headon/` (visible desde HA file editor y Samba).
   Antes usaba `/data` que es interno del container.

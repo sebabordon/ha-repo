@@ -13,7 +13,7 @@ import db
 from auth import router as auth_router, admin_router, is_session_token_valid
 from openpyxl import Workbook
 
-APP_VERSION = "0.1.7"
+APP_VERSION = "0.1.8"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 
@@ -98,6 +98,8 @@ async def manifest():
         "background_color": "#f0f2f5",
         "theme_color": "#16213e",
         "icons": [
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"},
             {"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml"}
         ]
     })
