@@ -1,3 +1,7 @@
+## 1.2.22
+
+- **Gráficos: opción "9 meses" en todos los selectores de rango** (`index.html`): se agregó la opción de 9 meses en los tres combos de selección de período — gráfico principal mes a mes (`#monthly-meses`), gráficos personalizados (`#cf-meses`), y configuración de meses por defecto en UI (`#ui-graf-meses`). Ahora las opciones son 3-6-9-12 (y 24 donde ya existía).
+
 ## 1.2.21
 
 - **Período de cobro: aclarada la semántica de los overrides por mes** (`static/index.html`, `db.py`): los overrides `YYYY-MM = delta` se aplican según el **mes en que cae el movimiento** (el mes del sueldo), no el período destino. Esto confundía: un override `2025-12 = 5` no afectaba al sueldo del 26/11 (un movimiento de noviembre) y quedaba en noviembre. Se reescribió el texto de ayuda de "Excepciones por mes" con el ejemplo concreto (cobro 26-nov → `2025-11 = 5` para que cuente en diciembre; con `4` no cruza porque 26+4=30-nov) y se reforzó el comentario en `_mes_sql`. Sin cambios de lógica: el keying por mes del movimiento es el comportamiento deseado.
