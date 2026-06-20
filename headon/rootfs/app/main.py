@@ -13,7 +13,7 @@ import db
 from auth import router as auth_router, admin_router, is_session_token_valid
 from openpyxl import Workbook
 
-APP_VERSION = "0.1.4"
+APP_VERSION = "0.1.5"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 
@@ -57,6 +57,8 @@ async def auth_middleware(request: Request, call_next):
             return JSONResponse({"detail": "No autenticado"}, status_code=401)
         prefix = request.headers.get("X-Ingress-Path", "")
         return RedirectResponse(f"{prefix}/auth/login")
+    db.set_user(user["email"])
+    db.init_db()
     return await call_next(request)
 
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+- Aislamiento de datos por usuario: cada usuario tiene su propia DB en
+  `/data/users/{email}/migraines.db`. No hay filtración entre usuarios.
+
 ## 0.1.4
 - Chips de tipo de dolor más compactos para caber en una fila en mobile.
 - Fix "vundefined": /api/version ahora es público (no requiere auth).

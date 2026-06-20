@@ -1,19 +1,36 @@
 import os
 import sqlite3
 import json
+import contextvars
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
-DB_PATH = os.path.join(DATA_DIR, "migraines.db")
+
+_current_user = contextvars.ContextVar("current_user", default=None)
+
+
+def set_user(email: str):
+    _current_user.set(email)
+
+
+def _user_dir() -> str:
+    email = _current_user.get()
+    if not email:
+        return DATA_DIR
+    d = os.path.join(DATA_DIR, "users", email.replace("@", "_at_"))
+    os.makedirs(d, exist_ok=True)
+    return d
+
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    db_path = os.path.join(_user_dir(), "migraines.db")
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
+
 def init_db():
-    os.makedirs(DATA_DIR, exist_ok=True)
     conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS migraines (
@@ -36,6 +53,7 @@ def init_db():
     """)
     conn.close()
 
+
 def list_migraines(limit=50, offset=0, fecha_desde=None, fecha_hasta=None):
     conn = get_db()
     sql = "SELECT * FROM migraines WHERE 1=1"
@@ -52,11 +70,13 @@ def list_migraines(limit=50, offset=0, fecha_desde=None, fecha_hasta=None):
     conn.close()
     return [dict(r) for r in rows]
 
+
 def get_migraine(mid):
     conn = get_db()
     row = conn.execute("SELECT * FROM migraines WHERE id=?", (mid,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
 
 def create_migraine(data):
     conn = get_db()
@@ -77,6 +97,7 @@ def create_migraine(data):
     mid = cur.lastrowid
     conn.close()
     return mid
+
 
 def update_migraine(mid, data):
     conn = get_db()
@@ -99,11 +120,13 @@ def update_migraine(mid, data):
     conn.commit()
     conn.close()
 
+
 def delete_migraine(mid):
     conn = get_db()
     conn.execute("DELETE FROM migraines WHERE id=?", (mid,))
     conn.commit()
     conn.close()
+
 
 def get_calendar_data(year, month):
     fecha_desde = f"{year}-{month:02d}-01"
@@ -125,11 +148,13 @@ def get_calendar_data(year, month):
         by_day[d].append(dict(r))
     return by_day
 
+
 def get_config(key, default=None):
     conn = get_db()
     row = conn.execute("SELECT value FROM config WHERE key=?", (key,)).fetchone()
     conn.close()
     return row["value"] if row else default
+
 
 def set_config(key, value):
     conn = get_db()
