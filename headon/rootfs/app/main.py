@@ -13,7 +13,7 @@ import db
 from auth import router as auth_router, admin_router, is_session_token_valid
 from openpyxl import Workbook
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 

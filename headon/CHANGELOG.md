@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+- Admin puede crear usuarios con cualquier email (sin restricción de dominio).
+- Formulario de creación de usuario en el panel de administración.
+
 ## 0.1.1
 - Agregar build.yaml con imágenes base por arquitectura (fix build en HA).
 

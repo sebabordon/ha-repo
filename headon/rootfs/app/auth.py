@@ -137,16 +137,19 @@ def verify_admin(email: str, password: str) -> bool:
         return False
     return email.lower() == ADMIN_EMAIL and hmac.compare_digest(password, ADMIN_PASSWORD)
 
-def create_user(email: str, password: str) -> tuple[bool, str]:
-    if not get_registration_enabled():
-        return False, "El registro de nuevos usuarios está deshabilitado."
-    if not email.lower().endswith(f"@{ALLOWED_DOMAIN}"):
-        return False, f"Solo se permiten emails @{ALLOWED_DOMAIN}"
+def create_user(email: str, password: str, skip_checks: bool = False) -> tuple[bool, str]:
+    if not skip_checks:
+        if not get_registration_enabled():
+            return False, "El registro de nuevos usuarios está deshabilitado."
+        if not email.lower().endswith(f"@{ALLOWED_DOMAIN}"):
+            return False, f"Solo se permiten emails @{ALLOWED_DOMAIN}"
     if email.lower() == ADMIN_EMAIL:
         return False, "Ese email no está disponible."
     users = _load_users()
     if email in users:
         return False, "El usuario ya existe"
+    if len(password) < 8:
+        return False, "La contraseña debe tener al menos 8 caracteres."
     salt = os.urandom(16).hex()
     users[email] = {"hash": _hash(password, salt), "salt": salt}
     _save_users(users)
@@ -410,6 +413,13 @@ def _render_admin(request: Request, msg: str = "") -> HTMLResponse:
   {msg_html}
   <h3>Registro de usuarios</h3>
   <div class="row"><span>Estado: {badge}</span>{toggle_btn}</div>
+  <h3>Crear usuario</h3>
+  <form method="post" action="{prefix}/admin/users/create" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;padding:.5rem 0">
+    <input type="email" name="email" placeholder="Email (cualquier dominio)" required style="padding:.25rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.85rem;flex:1;min-width:180px">
+    <input type="password" name="password" placeholder="Contraseña" minlength="8" required style="padding:.25rem .5rem;border:1px solid #ccc;border-radius:4px;font-size:.85rem;width:140px">
+    <button class="btn btn-primary btn-sm" type="submit">Crear</button>
+  </form>
+
   <h3>Usuarios registrados ({len(users)})</h3>
   {users_html}
 </div></body></html>"""
@@ -429,6 +439,16 @@ async def toggle_registration(request: Request, enabled: str = Form(...)):
     val = enabled.lower() in ("true", "1", "yes")
     set_registration_enabled(val)
     return _render_admin(request, f"Registro de usuarios {'activado' if val else 'desactivado'}.")
+
+@admin_router.post("/users/create", response_class=HTMLResponse)
+async def admin_create_user(request: Request, email: str = Form(...), password: str = Form(...)):
+    from html import escape
+    if not _require_admin(request):
+        return _admin_redirect(request, "/")
+    ok, err = create_user(email.lower(), password, skip_checks=True)
+    if not ok:
+        return _render_admin(request, f"Error: {escape(err)}")
+    return _render_admin(request, f"Usuario {escape(email)} creado.")
 
 @admin_router.post("/users/delete", response_class=HTMLResponse)
 async def admin_delete_user(request: Request, email: str = Form(...)):
