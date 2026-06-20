@@ -37,7 +37,9 @@ _BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas", "P
 # siempre relativo al fin de mes (que es como cae el cobro: anteúltimo día
 # hábil), sin casos especiales de febrero/bisiesto. Ej. con D=2, el sueldo del
 # 30 cuenta para el mes siguiente; el 27 se queda en el mes corriente.
-# Overrides {YYYY-MM: delta} ajustan el delta de un mes calendario puntual.
+# Overrides {YYYY-MM: delta}: la CLAVE es el mes calendario en que cae el
+# movimiento (el mes del sueldo), no el período destino. Para mandar un sueldo
+# del 26-nov a diciembre va {2025-11: 5} (26+5=1-dic), NO {2025-12: ...}.
 
 def _periodo_cfg() -> tuple[bool, int, dict]:
     """Lee la config del ciclo de cobro: (activo, delta_dias, overrides)."""

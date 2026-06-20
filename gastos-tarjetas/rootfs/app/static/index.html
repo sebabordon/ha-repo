@@ -87,6 +87,7 @@
               <select id="monthly-meses" title="Meses a mostrar" style="font-size:.8rem;padding:.15rem .4rem;border:1px solid #ccc;border-radius:4px;color:#555;margin-right:.25rem">
                 <option value="3">3 meses</option>
                 <option value="6">6 meses</option>
+                <option value="9">9 meses</option>
                 <option value="12">12 meses</option>
               </select>
               <button class="chart-ctrl-btn" id="monthly-ctrl-up" onclick="_swapTopCharts()" title="Mover arriba">←</button>
@@ -117,6 +118,7 @@
         <select id="cf-meses">
           <option value="3">3 meses</option>
           <option value="6" selected>6 meses</option>
+          <option value="9">9 meses</option>
           <option value="12">12 meses</option>
           <option value="24">24 meses</option>
         </select>
@@ -1190,16 +1192,24 @@
 
           <div style="margin-bottom:1rem">
             <label class="field-label">Excepciones por mes
-              <span class="hint">(opcional: meses donde el cobro cayó otro día)</span>
+              <span class="hint">(opcional: meses donde cobraste un día distinto)</span>
             </label>
             <p class="hint" style="margin:.2rem 0 .5rem">
-              Una por línea, formato <code>YYYY-MM = delta</code>. Ej:
-              <code>2026-06 = 3</code> · <code>2026-12 = 4</code>.
-              El delta general cubre el resto automáticamente.
+              Una por línea, formato <code>YYYY-MM = delta</code>. La clave es el
+              <strong>mes en que cae el movimiento</strong> (el mes del sueldo), no
+              el período al que querés mandarlo. El delta corre la fecha esos días
+              hacia adelante: para que un sueldo cruce al mes siguiente, el delta
+              tiene que alcanzar el fin de mes.
+            </p>
+            <p class="hint" style="margin:.2rem 0 .5rem">
+              Ej.: cobraste el <strong>26-nov</strong> (nov tiene 30 días) y querés
+              que cuente para <strong>diciembre</strong> → poné <code>2025-11 = 5</code>
+              (26 + 5 = 1-dic). Con <code>4</code> no cruza (26 + 4 = 30-nov). Ojo:
+              va <code>2025-11</code>, el mes del sueldo — no <code>2025-12</code>.
             </p>
             <textarea id="periodo-overrides" rows="5"
                       style="width:100%;font-family:monospace;font-size:0.85em"
-                      placeholder="2026-06 = 3"></textarea>
+                      placeholder="2025-11 = 5"></textarea>
           </div>
         </div>
 

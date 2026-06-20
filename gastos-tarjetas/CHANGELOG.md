@@ -1,3 +1,7 @@
+## 1.2.21
+
+- **Período de cobro: aclarada la semántica de los overrides por mes** (`static/index.html`, `db.py`): los overrides `YYYY-MM = delta` se aplican según el **mes en que cae el movimiento** (el mes del sueldo), no el período destino. Esto confundía: un override `2025-12 = 5` no afectaba al sueldo del 26/11 (un movimiento de noviembre) y quedaba en noviembre. Se reescribió el texto de ayuda de "Excepciones por mes" con el ejemplo concreto (cobro 26-nov → `2025-11 = 5` para que cuente en diciembre; con `4` no cruza porque 26+4=30-nov) y se reforzó el comentario en `_mes_sql`. Sin cambios de lógica: el keying por mes del movimiento es el comportamiento deseado.
+
 ## 1.2.19
 
 - **Presupuesto: gastos USD incluidos en el total de cualquier categoría** (`db.py`): el `gastado` de cada categoría ahora suma ARS + USD × TC, independientemente de si el presupuesto está en ARS o USD. Antes, los gastos USD solo contaban si la categoría tenía presupuesto en USD; ahora una categoría con presupuesto en ARS que también tiene gastos en dólares (ej. Streaming con Netflix USD y una suscripción ARS) muestra el total real convertido. El desglose `gastado_usd` aparece en la UI siempre que haya gastos en dólares, no solo en categorías con presupuesto USD.
