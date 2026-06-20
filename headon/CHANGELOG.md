@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.1
+- Agregar build.yaml con imágenes base por arquitectura (fix build en HA).
+
 ## 0.1.0
 - Release inicial como HeadOn: registro de episodios de migraña.
 - Selector de localización SVG estilo Migraine Buddy: vista frontal (corona,

@@ -1,6 +1,6 @@
 name: "HeadOn"
 description: "Registro y seguimiento de episodios de migraña"
-version: "0.1.0"
+version: "0.1.1"
 slug: "headon"
 url: "https://github.com/sebabordon/ha-repo/tree/main/headon"
 stage: experimental
