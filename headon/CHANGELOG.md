@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+- Datos en `/addon_configs/headon/` (visible desde HA file editor y Samba).
+  Antes usaba `/data` que es interno del container.
+
 ## 0.1.6
 - Fix concurrencia server: contextvar se resetea con token después de cada
   request (patrón SnapBudget). Cache de init_db por usuario.

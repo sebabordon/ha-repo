@@ -3,7 +3,7 @@
 export ALLOWED_DOMAIN=$(bashio::config 'allowed_domain')
 export REGISTRATION_ENABLED=$(bashio::config 'registration_enabled')
 export ADMIN_PASSWORD=$(bashio::config 'admin_password')
-export DATA_DIR="/data"
+export DATA_DIR="/addon_configs/headon"
 
 mkdir -p "${DATA_DIR}"
 
