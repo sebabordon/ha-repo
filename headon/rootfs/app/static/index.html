@@ -42,11 +42,16 @@
         <div class="card form-card">
           <h3 class="form-title">Registrar episodio</h3>
 
-          <label class="field-label">Fecha</label>
-          <input type="date" id="f-fecha" class="field-input" />
-
-          <label class="field-label">Hora de inicio</label>
-          <input type="time" id="f-inicio" class="field-input" />
+          <div class="field-row">
+            <div class="field-col">
+              <label class="field-label">Fecha</label>
+              <input type="date" id="f-fecha" class="field-input" />
+            </div>
+            <div class="field-col">
+              <label class="field-label">Hora de inicio</label>
+              <input type="time" id="f-inicio" class="field-input" />
+            </div>
+          </div>
 
           <label class="field-label">Intensidad</label>
           <div id="f-intensidad" class="intensity-row"></div>
@@ -172,10 +177,11 @@
           <label class="field-label">Comentarios</label>
           <textarea id="f-comentarios" class="field-input field-textarea" rows="2" placeholder="Notas adicionales..."></textarea>
 
-          <div class="form-actions">
-            <button class="btn btn-primary" onclick="saveMigraine()">Guardar</button>
-            <button class="btn btn-secondary" onclick="hideForm()">Cancelar</button>
-          </div>
+          <div class="form-actions-spacer"></div>
+        </div>
+        <div class="form-fab">
+          <button class="btn btn-primary btn-fab" onclick="saveMigraine()">Guardar</button>
+          <button class="btn btn-secondary btn-fab" onclick="hideForm()">Cancelar</button>
         </div>
       </div>
 

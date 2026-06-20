@@ -117,6 +117,10 @@ body {
 .field-input:focus { outline: none; border-color: var(--color-accent); }
 .field-textarea { resize: vertical; font-family: inherit; }
 
+.field-row { display: flex; gap: .75rem; }
+.field-col { flex: 1; }
+.field-col .field-label { margin-top: 0; }
+
 /* ── Buttons ─────────────────────────────────────────────────────────────────*/
 
 .btn {
@@ -138,8 +142,25 @@ body {
 .btn-danger { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
 .btn-block { width: 100%; }
 .btn-sm { padding: .35rem .7rem; font-size: .82rem; }
-.form-actions { display: flex; gap: .75rem; margin-top: 1.25rem; }
-.form-actions .btn { flex: 1; }
+
+.form-actions-spacer { height: 70px; }
+.form-fab {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  border-top: 1px solid #e5e7eb;
+  padding: .6rem .75rem;
+  display: flex;
+  gap: .75rem;
+  z-index: 300;
+  margin: 0 -1.25rem;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+  padding-bottom: max(.6rem, env(safe-area-inset-bottom));
+  box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+  border-radius: 0 0 6px 6px;
+}
+.btn-fab { flex: 1; padding: .7rem; font-size: .95rem; }
 
 /* ── Intensity selector ──────────────────────────────────────────────────────*/
 

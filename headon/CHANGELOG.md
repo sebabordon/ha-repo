@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3
+- Fecha y hora de inicio en la misma línea para mayor compacidad.
+- Botones Guardar/Cancelar flotantes (sticky bottom) para acceso rápido.
+
 ## 0.1.2
 - Admin puede crear usuarios con cualquier email (sin restricción de dominio).
 - Formulario de creación de usuario en el panel de administración.
