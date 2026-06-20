@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+- Fix pérdida de datos entre updates: DATA_DIR vuelve a /data (storage
+  persistente nativo de HA). addon_config:rw se mantiene para browsing
+  pero el dato vive en /data que HA garantiza entre rebuilds.
+
 ## 0.1.9
 - Agregar icon.png y logo.png para la UI de Home Assistant.
 
