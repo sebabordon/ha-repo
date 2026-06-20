@@ -35,14 +35,23 @@ let state = {
 
 // ── Offline queue (IndexedDB) ───────────────────────────────────────────────
 
-const DB_NAME = "headon_offline";
+let _idbName = "headon_offline";
 const DB_VER = 1;
 let _idb = null;
+let _currentEmail = "";
+
+function _setIDBForUser(email) {
+  if (email && email !== _currentEmail) {
+    if (_idb) { _idb.close(); _idb = null; }
+    _currentEmail = email;
+    _idbName = "headon_" + email.replace(/[^a-zA-Z0-9]/g, "_");
+  }
+}
 
 function openIDB() {
   return new Promise((resolve, reject) => {
     if (_idb) return resolve(_idb);
-    const req = indexedDB.open(DB_NAME, DB_VER);
+    const req = indexedDB.open(_idbName, DB_VER);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains("queue"))
@@ -113,14 +122,13 @@ async function syncQueue() {
 // ── Init ────────────────────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", async () => {
-  await openIDB();
   initTabs();
   buildIntensityRow();
+  setDefaultDates();
+  await loadUser();
   await loadConfig();
   buildMedChips();
   renderMedConfig();
-  setDefaultDates();
-  await loadUser();
   await loadMigraines();
   loadVersion();
 
@@ -152,6 +160,8 @@ async function loadUser() {
     if (!r.ok) return;
     const d = await r.json();
     if (d.email) {
+      _setIDBForUser(d.email);
+      await openIDB();
       document.getElementById("user-email").textContent = d.email;
       if (d.is_admin)
         document.getElementById("admin-link").style.display = "";

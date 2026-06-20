@@ -9,7 +9,10 @@ _current_user = contextvars.ContextVar("current_user", default=None)
 
 
 def set_user(email: str):
-    _current_user.set(email)
+    return _current_user.set(email)
+
+def reset_user(token):
+    _current_user.reset(token)
 
 
 def _user_dir() -> str:

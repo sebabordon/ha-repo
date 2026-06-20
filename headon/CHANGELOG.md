@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6
+- Fix concurrencia server: contextvar se resetea con token después de cada
+  request (patrón SnapBudget). Cache de init_db por usuario.
+- Fix offline multi-usuario: IndexedDB namespaceada por email. Dos usuarios
+  en el mismo dispositivo ya no comparten cache ni cola de sync.
+
 ## 0.1.5
 - Aislamiento de datos por usuario: cada usuario tiene su propia DB en
   `/data/users/{email}/migraines.db`. No hay filtración entre usuarios.
