@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.9
+- Agregar icon.png y logo.png para la UI de Home Assistant.
+
 ## 0.1.8
 - Iconos PNG para iOS PWA: apple-touch-icon 180px, manifest 192px y 512px.
 - Favicon .ico para browsers desktop.
