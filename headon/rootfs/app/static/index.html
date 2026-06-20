@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>HeadOn</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icon.svg">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#16213e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="HeadOn">
+</head>
+<body>
+  <nav class="navbar">
+    <span class="brand">🧠 HeadOn <span id="app-version" class="app-version"></span></span>
+    <div class="nav-right">
+      <span id="user-email" class="nav-user"></span>
+      <a id="admin-link" href="/admin" style="display:none" class="nav-link">⚙</a>
+      <a id="logout-link" href="/auth/logout" class="nav-link">Salir</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="tabs">
+      <button class="tab active" data-tab="registro"><span class="tab-icon">📝</span><span class="tab-text"> Registro</span></button>
+      <button class="tab" data-tab="calendario"><span class="tab-icon">📅</span><span class="tab-text"> Calendario</span></button>
+      <button class="tab" data-tab="exportar"><span class="tab-icon">📊</span><span class="tab-text"> Exportar</span></button>
+      <button class="tab" data-tab="config"><span class="tab-icon">⚙</span><span class="tab-text"> Config</span></button>
+    </div>
+
+    <!-- ── Tab: Registro ─────────────────────────────────────── -->
+    <section id="tab-registro" class="tab-content active">
+      <div id="offline-banner" class="offline-banner" style="display:none">📴 Sin conexión — los cambios se sincronizarán al volver</div>
+      <div id="active-episode" style="display:none"></div>
+      <button id="btn-nuevo" class="btn btn-primary btn-block" onclick="showForm()">+ Nuevo episodio</button>
+
+      <div id="form-wrap" style="display:none">
+        <div class="card form-card">
+          <h3 class="form-title">Registrar episodio</h3>
+
+          <label class="field-label">Fecha</label>
+          <input type="date" id="f-fecha" class="field-input" />
+
+          <label class="field-label">Hora de inicio</label>
+          <input type="time" id="f-inicio" class="field-input" />
+
+          <label class="field-label">Intensidad</label>
+          <div id="f-intensidad" class="intensity-row"></div>
+
+          <label class="field-label">Localización</label>
+          <div class="head-selector">
+            <!-- ── Vista frontal ── -->
+            <div class="head-view">
+              <div class="head-view-label">Frente</div>
+              <svg viewBox="0 0 220 310" class="head-svg" id="head-front">
+                <path d="M110 12 C60 12, 28 55, 28 105 C28 140, 32 160, 40 180
+                         C44 190, 50 205, 55 215 L55 240 C55 260, 70 275, 110 275
+                         C150 275, 165 260, 165 240 L165 215
+                         C170 205, 176 190, 180 180 C188 160, 192 140, 192 105
+                         C192 55, 160 12, 110 12Z" class="head-outline"/>
+                <path d="M80 265 L80 295 Q110 305, 140 295 L140 265" class="head-outline"/>
+                <line x1="110" y1="20" x2="110" y2="270" class="head-line"/>
+                <ellipse cx="80" cy="140" rx="16" ry="8" class="head-feature"/>
+                <ellipse cx="140" cy="140" rx="16" ry="8" class="head-feature"/>
+                <circle cx="80" cy="140" r="4" fill="#9ca3af"/>
+                <circle cx="140" cy="140" r="4" fill="#9ca3af"/>
+                <path d="M62 126 Q80 118, 96 126" class="head-feature" fill="none"/>
+                <path d="M124 126 Q140 118, 158 126" class="head-feature" fill="none"/>
+                <path d="M110 148 L105 172 Q110 178, 115 172 Z" class="head-feature" fill="none"/>
+                <path d="M94 198 Q110 210, 126 198" class="head-feature" fill="none"/>
+
+                <path d="M110 18 C80 18, 50 40, 42 75 L110 75 Z"
+                      class="zone" data-zone="corona_izq" onclick="toggleZone(this)"/>
+                <text x="80" y="52" class="zone-label">Corona</text>
+                <path d="M110 18 C140 18, 170 40, 178 75 L110 75 Z"
+                      class="zone" data-zone="corona_der" onclick="toggleZone(this)"/>
+                <text x="140" y="52" class="zone-label">Corona</text>
+                <path d="M42 75 C36 90, 34 105, 34 115 L110 115 L110 75 Z"
+                      class="zone" data-zone="frente_izq" onclick="toggleZone(this)"/>
+                <text x="72" y="100" class="zone-label">Frente</text>
+                <path d="M178 75 C184 90, 186 105, 186 115 L110 115 L110 75 Z"
+                      class="zone" data-zone="frente_der" onclick="toggleZone(this)"/>
+                <text x="148" y="100" class="zone-label">Frente</text>
+                <path d="M34 115 C30 130, 30 150, 35 170 L60 170 L60 115 Z"
+                      class="zone" data-zone="sien_izq" onclick="toggleZone(this)"/>
+                <text x="44" y="145" class="zone-label" style="font-size:8px">Sien</text>
+                <path d="M186 115 C190 130, 190 150, 185 170 L160 170 L160 115 Z"
+                      class="zone" data-zone="sien_der" onclick="toggleZone(this)"/>
+                <text x="176" y="145" class="zone-label" style="font-size:8px">Sien</text>
+                <ellipse cx="80" cy="140" rx="24" ry="18"
+                         class="zone" data-zone="ojo_izq" onclick="toggleZone(this)"/>
+                <text x="80" y="140" class="zone-label" style="font-size:8px">Ojo</text>
+                <ellipse cx="140" cy="140" rx="24" ry="18"
+                         class="zone" data-zone="ojo_der" onclick="toggleZone(this)"/>
+                <text x="140" y="140" class="zone-label" style="font-size:8px">Ojo</text>
+                <path d="M60 170 L35 170 C40 190, 50 210, 60 220 L110 220 L110 170 Z"
+                      class="zone" data-zone="mejilla_izq" onclick="toggleZone(this)"/>
+                <text x="75" y="198" class="zone-label" style="font-size:8px">Mejilla</text>
+                <path d="M160 170 L185 170 C180 190, 170 210, 160 220 L110 220 L110 170 Z"
+                      class="zone" data-zone="mejilla_der" onclick="toggleZone(this)"/>
+                <text x="145" y="198" class="zone-label" style="font-size:8px">Mejilla</text>
+                <path d="M60 220 C70 250, 90 268, 110 270 C130 268, 150 250, 160 220 L110 220 Z"
+                      class="zone" data-zone="mandibula" onclick="toggleZone(this)"/>
+                <text x="110" y="248" class="zone-label" style="font-size:8px">Mandíbula</text>
+
+                <text x="18" y="145" class="side-label">derecha</text>
+                <text x="202" y="145" class="side-label">izquierda</text>
+              </svg>
+            </div>
+
+            <!-- ── Vista posterior ── -->
+            <div class="head-view">
+              <div class="head-view-label">Atrás</div>
+              <svg viewBox="0 0 220 310" class="head-svg" id="head-back">
+                <path d="M110 12 C60 12, 28 55, 28 105 C28 140, 32 160, 40 180
+                         C44 190, 50 205, 55 215 L55 240 C55 260, 70 275, 110 275
+                         C150 275, 165 260, 165 240 L165 215
+                         C170 205, 176 190, 180 180 C188 160, 192 140, 192 105
+                         C192 55, 160 12, 110 12Z" class="head-outline"/>
+                <path d="M80 265 L80 295 Q110 305, 140 295 L140 265" class="head-outline"/>
+                <line x1="110" y1="20" x2="110" y2="270" class="head-line"/>
+                <line x1="35" y1="145" x2="185" y2="145" class="head-line"/>
+                <ellipse cx="26" cy="140" rx="8" ry="18" class="head-feature" fill="none"/>
+                <ellipse cx="194" cy="140" rx="8" ry="18" class="head-feature" fill="none"/>
+
+                <path d="M110 18 C70 18, 38 50, 32 100 L32 145 L110 145 L110 18 Z"
+                      class="zone" data-zone="parietal_izq" onclick="toggleZone(this)"/>
+                <text x="72" y="85" class="zone-label">Parietal</text>
+                <path d="M110 18 C150 18, 182 50, 188 100 L188 145 L110 145 L110 18 Z"
+                      class="zone" data-zone="parietal_der" onclick="toggleZone(this)"/>
+                <text x="148" y="85" class="zone-label">Parietal</text>
+                <path d="M32 145 C32 175, 40 200, 55 225 L55 240 C55 258, 70 270, 110 270 L110 145 Z"
+                      class="zone" data-zone="occipital_izq" onclick="toggleZone(this)"/>
+                <text x="72" y="210" class="zone-label">Occipital</text>
+                <path d="M188 145 C188 175, 180 200, 165 225 L165 240 C165 258, 150 270, 110 270 L110 145 Z"
+                      class="zone" data-zone="occipital_der" onclick="toggleZone(this)"/>
+                <text x="148" y="210" class="zone-label">Occipital</text>
+                <path d="M80 268 L80 295 Q110 305, 140 295 L140 268
+                         C130 272, 120 274, 110 274 C100 274, 90 272, 80 268 Z"
+                      class="zone" data-zone="cuello" onclick="toggleZone(this)"/>
+                <text x="110" y="288" class="zone-label" style="font-size:8px">Cuello</text>
+
+                <text x="18" y="145" class="side-label">izquierda</text>
+                <text x="202" y="145" class="side-label">derecha</text>
+              </svg>
+            </div>
+          </div>
+          <div id="selected-zones" class="selected-zones"></div>
+
+          <label class="field-label">Tipo de dolor</label>
+          <div id="f-tipo" class="chip-row">
+            <button class="chip" data-val="pulsatil" onclick="selectChip(this)">Pulsátil</button>
+            <button class="chip" data-val="opresivo" onclick="selectChip(this)">Opresivo</button>
+            <button class="chip" data-val="punzante" onclick="selectChip(this)">Punzante</button>
+            <button class="chip" data-val="quemante" onclick="selectChip(this)">Quemante</button>
+          </div>
+
+          <label class="field-label">Aura</label>
+          <div id="f-aura" class="chip-row">
+            <button class="chip" data-val="0" onclick="selectAura(this)">No</button>
+            <button class="chip" data-val="1" onclick="selectAura(this)">Sí</button>
+          </div>
+
+          <label class="field-label">Medicación</label>
+          <div id="f-med-chips" class="chip-row chip-multi"></div>
+          <input type="text" id="f-med-extra" class="field-input" placeholder="Otra medicación..." />
+
+          <label class="field-label">Comentarios</label>
+          <textarea id="f-comentarios" class="field-input field-textarea" rows="2" placeholder="Notas adicionales..."></textarea>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" onclick="saveMigraine()">Guardar</button>
+            <button class="btn btn-secondary" onclick="hideForm()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="section-title" style="margin-top:1.5rem">Últimos episodios</h3>
+      <div id="recent-list"></div>
+    </section>
+
+    <!-- ── Tab: Calendario ───────────────────────────────────── -->
+    <section id="tab-calendario" class="tab-content">
+      <div class="cal-nav">
+        <button class="btn btn-sm" onclick="calPrev()">◀</button>
+        <span id="cal-title" class="cal-title"></span>
+        <button class="btn btn-sm" onclick="calNext()">▶</button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-header">Lu</div><div class="cal-header">Ma</div>
+        <div class="cal-header">Mi</div><div class="cal-header">Ju</div>
+        <div class="cal-header">Vi</div><div class="cal-header">Sá</div>
+        <div class="cal-header">Do</div>
+      </div>
+      <div id="cal-days" class="cal-grid"></div>
+      <div id="cal-detail" class="cal-detail" style="display:none"></div>
+    </section>
+
+    <!-- ── Tab: Exportar ─────────────────────────────────────── -->
+    <section id="tab-exportar" class="tab-content">
+      <div class="card">
+        <h3 class="form-title">Exportar a Excel</h3>
+        <label class="field-label">Desde</label>
+        <input type="date" id="exp-desde" class="field-input" />
+        <label class="field-label">Hasta</label>
+        <input type="date" id="exp-hasta" class="field-input" />
+        <button class="btn btn-primary btn-block" onclick="exportExcel()" style="margin-top:1rem">Descargar .xlsx</button>
+      </div>
+    </section>
+
+    <!-- ── Tab: Config ───────────────────────────────────────── -->
+    <section id="tab-config" class="tab-content">
+      <div class="card">
+        <h3 class="form-title">Interfaz</h3>
+        <label class="field-label">Color principal</label>
+        <div class="color-row">
+          <input type="color" id="cfg-accent" value="#16213e" onchange="applyAccent(this.value, true)" />
+          <span id="cfg-accent-hex" class="color-hex">#16213e</span>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <h3 class="form-title">Medicaciones frecuentes</h3>
+        <div id="cfg-meds-list"></div>
+        <div class="med-add-row">
+          <input type="text" id="cfg-med-new" class="field-input" placeholder="Agregar medicación..." />
+          <button class="btn btn-sm btn-primary" onclick="addMedConfig()">+</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/static/sw.js");</script>
+</body>
+</html>

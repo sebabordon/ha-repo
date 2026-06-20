@@ -1,0 +1,23 @@
+name: "HeadOn"
+description: "Registro y seguimiento de episodios de migraña"
+version: "0.1.0"
+slug: "headon"
+url: "https://github.com/sebabordon/ha-repo/tree/main/headon"
+stage: experimental
+init: false
+arch:
+  - aarch64
+  - amd64
+homeassistant_api: false
+options:
+  allowed_domain: "example.com"
+  registration_enabled: false
+  admin_password: ""
+schema:
+  allowed_domain: str
+  registration_enabled: bool
+  admin_password: str?
+ports:
+  8100/tcp: 8100
+ports_description:
+  8100/tcp: "Web UI"
