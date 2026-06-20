@@ -13,7 +13,7 @@ import db
 from auth import router as auth_router, admin_router, is_session_token_valid
 from openpyxl import Workbook
 
-APP_VERSION = "0.1.3"
+APP_VERSION = "0.1.4"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 
@@ -45,7 +45,7 @@ async def on_startup():
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/auth/") or path.startswith("/static/") or path in ("/manifest.json",):
+    if path.startswith("/auth/") or path.startswith("/static/") or path in ("/manifest.json", "/api/version"):
         return await call_next(request)
     user = request.session.get("user")
     if user and user.get("email"):
@@ -208,6 +208,30 @@ async def api_get_config(key: str):
 async def api_set_config(key: str, req: Request):
     data = await req.json()
     db.set_config(key, data.get("value", ""))
+    return {"ok": True}
+
+
+@app.post("/api/change-password")
+async def api_change_password(req: Request):
+    from auth import verify_password, reset_password
+    data = await req.json()
+    user = req.session.get("user", {})
+    email = user.get("email", "")
+    if not email:
+        return JSONResponse({"ok": False, "error": "No autenticado"}, status_code=401)
+    if not verify_password(email, data.get("current", "")):
+        return JSONResponse({"ok": False, "error": "Contraseña actual incorrecta"})
+    new_pw = data.get("new", "")
+    if len(new_pw) < 8:
+        return JSONResponse({"ok": False, "error": "Mínimo 8 caracteres"})
+    ok, err = reset_password(email, new_pw)
+    if not ok:
+        return JSONResponse({"ok": False, "error": err})
+    from auth import issue_session_token
+    req.session["user"] = {
+        "email": email, "is_admin": user.get("is_admin", False),
+        "stoken": issue_session_token(email),
+    }
     return {"ok": True}
 
 

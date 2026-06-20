@@ -236,6 +236,13 @@
           <button class="btn btn-sm btn-primary" onclick="addMedConfig()">+</button>
         </div>
       </div>
+      <div class="card" style="margin-top:1rem">
+        <h3 class="form-title">Cambiar contraseña</h3>
+        <input type="password" id="cfg-pw-current" class="field-input" placeholder="Contraseña actual" />
+        <input type="password" id="cfg-pw-new" class="field-input" placeholder="Nueva contraseña (mín 8)" style="margin-top:.5rem" />
+        <input type="password" id="cfg-pw-confirm" class="field-input" placeholder="Repetir nueva contraseña" style="margin-top:.5rem" />
+        <button class="btn btn-primary btn-block" onclick="changePassword()" style="margin-top:.75rem">Cambiar</button>
+      </div>
     </section>
   </main>
 

@@ -257,13 +257,13 @@ body {
 
 /* ── Chip selectors (tipo dolor, aura, meds) ─────────────────────────────────*/
 
-.chip-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+.chip-row { display: flex; flex-wrap: wrap; gap: .3rem; }
 .chip {
-  padding: .4rem .9rem;
+  padding: .35rem .7rem;
   border: 1.5px solid #d1d5db;
   border-radius: 20px;
   background: #fafafa;
-  font-size: .85rem;
+  font-size: .8rem;
   cursor: pointer;
   transition: all .15s;
 }

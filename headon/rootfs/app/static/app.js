@@ -671,6 +671,32 @@ function exportExcel() {
   window.open(url, "_blank");
 }
 
+// ── Change password ─────────────────────────────────────────────────────────
+
+async function changePassword() {
+  const current = document.getElementById("cfg-pw-current").value;
+  const newPw = document.getElementById("cfg-pw-new").value;
+  const confirm = document.getElementById("cfg-pw-confirm").value;
+  if (!current || !newPw) { toast("Completá todos los campos", true); return; }
+  if (newPw !== confirm) { toast("Las contraseñas no coinciden", true); return; }
+  if (newPw.length < 8) { toast("Mínimo 8 caracteres", true); return; }
+  try {
+    const r = await fetch("/api/change-password", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ current, new: newPw })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast("Contraseña actualizada");
+      document.getElementById("cfg-pw-current").value = "";
+      document.getElementById("cfg-pw-new").value = "";
+      document.getElementById("cfg-pw-confirm").value = "";
+    } else {
+      toast(d.error || "Error", true);
+    }
+  } catch { toast("Error de conexión", true); }
+}
+
 // ── Utils ───────────────────────────────────────────────────────────────────
 
 function formatDate(str) {

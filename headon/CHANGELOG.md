@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+- Chips de tipo de dolor más compactos para caber en una fila en mobile.
+- Fix "vundefined": /api/version ahora es público (no requiere auth).
+- Cambio de contraseña self-service en tab Config.
+
 ## 0.1.3
 - Fecha y hora de inicio en la misma línea para mayor compacidad.
 - Botones Guardar/Cancelar flotantes (sticky bottom) para acceso rápido.
