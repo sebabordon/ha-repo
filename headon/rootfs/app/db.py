@@ -46,6 +46,7 @@ def init_db():
             tipo_dolor  TEXT,
             aura        INTEGER DEFAULT 0,
             medicacion  TEXT,
+            sintomas    TEXT,
             comentarios TEXT,
             created_at  TEXT DEFAULT (datetime('now','localtime'))
         );
@@ -54,6 +55,20 @@ def init_db():
             value TEXT
         );
     """)
+    # Migración: agregar columna sintomas si no existe
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(migraines)").fetchall()]
+    if "sintomas" not in cols:
+        conn.execute("ALTER TABLE migraines ADD COLUMN sintomas TEXT")
+    conn.close()
+
+
+def auto_finalize_past():
+    """Cierra episodios de días anteriores que no tienen fin."""
+    from datetime import date
+    today = date.today().isoformat()
+    conn = get_db()
+    conn.execute("UPDATE migraines SET fin='23:59' WHERE fin IS NULL AND fecha < ?", (today,))
+    conn.commit()
     conn.close()
 
 
@@ -85,8 +100,8 @@ def create_migraine(data):
     conn = get_db()
     cur = conn.execute("""
         INSERT INTO migraines (fecha, inicio, fin, intensidad, localizacion,
-                               tipo_dolor, aura, medicacion, comentarios)
-        VALUES (?,?,?,?,?,?,?,?,?)
+                               tipo_dolor, aura, medicacion, sintomas, comentarios)
+        VALUES (?,?,?,?,?,?,?,?,?,?)
     """, (
         data["fecha"], data["inicio"], data.get("fin"),
         data["intensidad"],
@@ -94,6 +109,7 @@ def create_migraine(data):
         data.get("tipo_dolor", ""),
         1 if data.get("aura") else 0,
         data.get("medicacion", ""),
+        json.dumps(data.get("sintomas", [])),
         data.get("comentarios", ""),
     ))
     conn.commit()
@@ -116,6 +132,9 @@ def update_migraine(mid, data):
     if "localizacion" in data:
         fields.append("localizacion=?")
         params.append(json.dumps(data["localizacion"]))
+    if "sintomas" in data:
+        fields.append("sintomas=?")
+        params.append(json.dumps(data["sintomas"]))
     if not fields:
         return
     params.append(mid)

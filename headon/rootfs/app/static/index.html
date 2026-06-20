@@ -19,6 +19,7 @@
   <nav class="navbar">
     <span class="brand">🧠 HeadOn <span id="app-version" class="app-version"></span></span>
     <div class="nav-right">
+      <span id="offline-dot" class="offline-dot" style="display:none" title="Sin conexión">●</span>
       <span id="user-email" class="nav-user"></span>
       <a id="admin-link" href="/admin" style="display:none" class="nav-link">⚙</a>
       <a id="logout-link" href="/auth/logout" class="nav-link">Salir</a>
@@ -51,6 +52,13 @@
             <div class="field-col">
               <label class="field-label">Hora de inicio</label>
               <input type="time" id="f-inicio" class="field-input" />
+            </div>
+          </div>
+
+          <div id="f-fin-row" class="field-row" style="display:none">
+            <div class="field-col">
+              <label class="field-label">Hora de fin</label>
+              <input type="time" id="f-fin" class="field-input" />
             </div>
           </div>
 
@@ -175,6 +183,14 @@
           <div id="f-med-chips" class="chip-row chip-multi"></div>
           <input type="text" id="f-med-extra" class="field-input" placeholder="Otra medicación..." />
 
+          <div class="extra-toggle" onclick="toggleExtras()">
+            <span id="extras-arrow" class="extras-arrow">▸</span>
+            <span class="field-label" style="margin:0;cursor:pointer">Más síntomas</span>
+          </div>
+          <div id="f-extras" class="extras-body" style="display:none">
+            <div id="f-sintomas" class="chip-row chip-multi"></div>
+          </div>
+
           <label class="field-label">Comentarios</label>
           <textarea id="f-comentarios" class="field-input field-textarea" rows="2" placeholder="Notas adicionales..."></textarea>
 
@@ -235,6 +251,13 @@
         <div class="med-add-row">
           <input type="text" id="cfg-med-new" class="field-input" placeholder="Agregar medicación..." />
           <button class="btn btn-sm btn-primary" onclick="addMedConfig()">+</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <h3 class="form-title">Formulario</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span class="field-label" style="margin:0">"Más síntomas" abierto por defecto</span>
+          <input type="checkbox" id="cfg-extras-open" onchange="saveExtrasDefault(this.checked)" />
         </div>
       </div>
       <div class="card" style="margin-top:1rem">

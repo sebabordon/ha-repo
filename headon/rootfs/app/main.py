@@ -13,7 +13,7 @@ import db
 from auth import router as auth_router, admin_router, is_session_token_valid
 from openpyxl import Workbook
 
-APP_VERSION = "0.2.2"
+APP_VERSION = "0.3.0"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 
@@ -131,13 +131,17 @@ async def api_me(request: Request):
 @app.get("/api/migraines")
 async def api_list(limit: int = 50, offset: int = 0,
                    fecha_desde: str = None, fecha_hasta: str = None):
+    db.auto_finalize_past()
     rows = db.list_migraines(limit, offset, fecha_desde, fecha_hasta)
     for r in rows:
-        if r.get("localizacion"):
-            try:
-                r["localizacion"] = json.loads(r["localizacion"])
-            except (json.JSONDecodeError, TypeError):
-                r["localizacion"] = []
+        for field in ("localizacion", "sintomas"):
+            if r.get(field):
+                try:
+                    r[field] = json.loads(r[field])
+                except (json.JSONDecodeError, TypeError):
+                    r[field] = []
+            else:
+                r[field] = []
     return rows
 
 
@@ -180,7 +184,7 @@ async def api_export(fecha_desde: str = None, fecha_hasta: str = None):
     ws = wb.active
     ws.title = "Migrañas"
     headers = ["Fecha", "Inicio", "Fin", "Duración", "Intensidad",
-               "Localización", "Tipo Dolor", "Aura", "Medicación", "Comentarios"]
+               "Localización", "Tipo Dolor", "Aura", "Medicación", "Síntomas", "Comentarios"]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = cell.font.copy(bold=True)
@@ -202,11 +206,17 @@ async def api_export(fecha_desde: str = None, fecha_hasta: str = None):
                     dur = f"{mins // 60}h {mins % 60}m"
             except ValueError:
                 pass
+        sint = r.get("sintomas", "")
+        if sint:
+            try:
+                sint = ", ".join(json.loads(sint))
+            except (json.JSONDecodeError, TypeError):
+                pass
         ws.append([
             r.get("fecha", ""), r.get("inicio", ""), r.get("fin", ""), dur,
             r.get("intensidad", ""), loc, r.get("tipo_dolor", ""),
             "Sí" if r.get("aura") else "No",
-            r.get("medicacion", ""), r.get("comentarios", ""),
+            r.get("medicacion", ""), sint, r.get("comentarios", ""),
         ])
     for col in ws.columns:
         max_len = max(len(str(c.value or "")) for c in col)

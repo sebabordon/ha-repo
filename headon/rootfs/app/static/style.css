@@ -35,6 +35,8 @@ body {
 .nav-user { font-size: .78rem; color: #cbd5e1; }
 .nav-link { color: #cbd5e1; text-decoration: none; font-size: .82rem; }
 .nav-link:hover { color: #fff; }
+.offline-dot { color: #f59e0b; font-size: 1.1rem; animation: pulse-off 2s infinite; }
+@keyframes pulse-off { 0%,100%{opacity:1} 50%{opacity:.3} }
 
 /* ── Layout ──────────────────────────────────────────────────────────────────*/
 
@@ -162,6 +164,26 @@ body {
   border-radius: 0 0 6px 6px;
 }
 .btn-fab { flex: 1; padding: .7rem; font-size: .95rem; }
+
+/* ── Extras (collapsible symptoms) ───────────────────────────────────────────*/
+
+.extra-toggle {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  cursor: pointer;
+  margin-top: .9rem;
+  user-select: none;
+}
+.extras-arrow {
+  font-size: .9rem;
+  transition: transform .2s;
+  display: inline-block;
+}
+.extras-arrow.open { transform: rotate(90deg); }
+.extras-body {
+  padding: .5rem 0;
+}
 
 /* ── Intensity selector ──────────────────────────────────────────────────────*/
 

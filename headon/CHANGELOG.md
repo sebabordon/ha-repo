@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+- Indicador offline: dot ámbar pulsante en la navbar cuando no hay red.
+- Auto-finalización: episodios de días anteriores sin fin se cierran a 23:59
+  automáticamente al cargar.
+- Campo "Hora de fin" visible solo al editar (no al crear).
+- Síntomas adicionales: sección colapsable "Más síntomas" con chips multi-select
+  (Náuseas, Vómitos, Fotofobia, Fonofobia, Mareos, Visión borrosa, Rigidez
+  cervical, Congestión nasal, Lagrimeo, Internación).
+- Config: toggle para mostrar síntomas abiertos por defecto.
+- Síntomas en el listado de episodios y en el export Excel.
+
 ## 0.2.2
 - Fix ícono iOS: servir apple-touch-icon.png y favicon.ico desde la raíz
   (iOS busca /apple-touch-icon.png, no dentro de /static/). Rutas públicas

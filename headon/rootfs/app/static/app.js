@@ -16,6 +16,8 @@ const INTENSITY_COLORS = [
 ];
 
 const DEFAULT_MEDS = ["Ibuprofeno", "Paracetamol", "Ketorolac", "Triptán", "Ergotamina"];
+const DEFAULT_SINTOMAS = ["Náuseas", "Vómitos", "Fotofobia", "Fonofobia", "Mareos",
+  "Visión borrosa", "Rigidez cervical", "Congestión nasal", "Lagrimeo", "Internación"];
 
 let state = {
   migraines: [],
@@ -24,13 +26,15 @@ let state = {
   selectedAura: 0,
   selectedIntensity: 0,
   selectedMeds: [],
+  selectedSintomas: [],
   editingId: null,
   calYear: new Date().getFullYear(),
   calMonth: new Date().getMonth() + 1,
   calData: {},
   meds: [...DEFAULT_MEDS],
   accent: "#16213e",
-  online: navigator.onLine
+  online: navigator.onLine,
+  extrasOpen: false
 };
 
 // ── Offline queue (IndexedDB) ───────────────────────────────────────────────
@@ -128,6 +132,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadUser();
   await loadConfig();
   buildMedChips();
+  buildSintomaChips();
   renderMedConfig();
   await loadMigraines();
   loadVersion();
@@ -135,14 +140,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   window.addEventListener("online", () => {
     state.online = true;
     document.getElementById("offline-banner").style.display = "none";
+    document.getElementById("offline-dot").style.display = "none";
     syncQueue();
   });
   window.addEventListener("offline", () => {
     state.online = false;
     document.getElementById("offline-banner").style.display = "block";
+    document.getElementById("offline-dot").style.display = "";
   });
   if (!navigator.onLine) {
     document.getElementById("offline-banner").style.display = "block";
+    document.getElementById("offline-dot").style.display = "";
   }
 });
 
@@ -194,6 +202,10 @@ async function loadConfig() {
     r = await fetch("/api/config/meds");
     d = await r.json();
     if (d.value) state.meds = JSON.parse(d.value);
+    r = await fetch("/api/config/extras_open");
+    d = await r.json();
+    if (d.value === "true") state.extrasOpen = true;
+    document.getElementById("cfg-extras-open").checked = state.extrasOpen;
   } catch {
     const cached = await cacheGet("meds");
     if (cached) state.meds = JSON.parse(cached);
@@ -274,29 +286,43 @@ function showForm(ep) {
   state.selectedAura = 0;
   state.selectedIntensity = 0;
   state.selectedMeds = [];
+  state.selectedSintomas = [];
+
+  const finRow = document.getElementById("f-fin-row");
 
   if (ep) {
     state.editingId = ep.id;
     document.getElementById("f-fecha").value = ep.fecha;
     document.getElementById("f-inicio").value = ep.inicio;
+    document.getElementById("f-fin").value = ep.fin || "";
+    finRow.style.display = "flex";
     state.selectedIntensity = ep.intensidad;
     state.selectedZones = Array.isArray(ep.localizacion) ? [...ep.localizacion] : [];
     state.selectedTipo = ep.tipo_dolor || "";
     state.selectedAura = ep.aura ? 1 : 0;
     state.selectedMeds = ep.medicacion ? ep.medicacion.split(", ").filter(Boolean) : [];
+    state.selectedSintomas = Array.isArray(ep.sintomas) ? [...ep.sintomas] : [];
     document.getElementById("f-comentarios").value = ep.comentarios || "";
     document.querySelector(".form-title").textContent = "Editar episodio";
   } else {
     setDefaultDates();
+    document.getElementById("f-fin").value = "";
+    finRow.style.display = "none";
     document.getElementById("f-comentarios").value = "";
     document.querySelector(".form-title").textContent = "Registrar episodio";
   }
+
+  // extras section
+  const showExtras = state.extrasOpen || state.selectedSintomas.length > 0;
+  document.getElementById("f-extras").style.display = showExtras ? "block" : "none";
+  document.getElementById("extras-arrow").classList.toggle("open", showExtras);
 
   updateIntensityUI();
   updateZonesUI();
   updateTipoUI();
   updateAuraUI();
   buildMedChips();
+  buildSintomaChips();
 
   document.getElementById("form-wrap").style.display = "block";
   document.getElementById("btn-nuevo").style.display = "none";
@@ -423,6 +449,7 @@ async function saveMigraine() {
   const allMeds = [...state.selectedMeds];
   if (extra) allMeds.push(extra);
 
+  const fin = document.getElementById("f-fin").value || undefined;
   const data = {
     fecha, inicio,
     intensidad: state.selectedIntensity,
@@ -430,8 +457,10 @@ async function saveMigraine() {
     tipo_dolor: state.selectedTipo,
     aura: state.selectedAura,
     medicacion: allMeds.join(", "),
+    sintomas: state.selectedSintomas,
     comentarios: document.getElementById("f-comentarios").value.trim()
   };
+  if (fin) data.fin = fin;
 
   if (state.online) {
     const url = state.editingId ? "/api/migraines/" + state.editingId : "/api/migraines";
@@ -560,6 +589,7 @@ function renderEpisodeCard(ep, isActive) {
       ${ep.tipo_dolor ? `<span>${capitalize(ep.tipo_dolor)}</span>` : ""}
       ${ep.aura ? "<span>✨ Aura</span>" : ""}
       ${ep.medicacion ? `<span>💊 ${ep.medicacion}</span>` : ""}
+      ${(ep.sintomas && ep.sintomas.length) ? `<span>🩺 ${ep.sintomas.join(", ")}</span>` : ""}
     </div>
     ${zoneChips ? `<div class="ep-zones">${zoneChips}</div>` : ""}
     ${ep.comentarios ? `<div class="ep-details" style="margin-top:.3rem;font-style:italic">${escHtml(ep.comentarios)}</div>` : ""}
@@ -679,6 +709,42 @@ function exportExcel() {
   if (desde) url += "fecha_desde=" + desde + "&";
   if (hasta) url += "fecha_hasta=" + hasta;
   window.open(url, "_blank");
+}
+
+// ── Síntomas ────────────────────────────────────────────────────────────────
+
+function buildSintomaChips() {
+  const wrap = document.getElementById("f-sintomas");
+  wrap.innerHTML = "";
+  DEFAULT_SINTOMAS.forEach(s => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip" + (state.selectedSintomas.includes(s) ? " selected" : "");
+    chip.textContent = s;
+    chip.onclick = () => {
+      const idx = state.selectedSintomas.indexOf(s);
+      if (idx >= 0) state.selectedSintomas.splice(idx, 1);
+      else state.selectedSintomas.push(s);
+      chip.classList.toggle("selected");
+    };
+    wrap.appendChild(chip);
+  });
+}
+
+function toggleExtras() {
+  const body = document.getElementById("f-extras");
+  const arrow = document.getElementById("extras-arrow");
+  const open = body.style.display === "none";
+  body.style.display = open ? "block" : "none";
+  arrow.classList.toggle("open", open);
+}
+
+function saveExtrasDefault(checked) {
+  state.extrasOpen = checked;
+  fetch("/api/config/extras_open", {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({value: checked ? "true" : "false"})
+  }).catch(() => {});
 }
 
 // ── Change password ─────────────────────────────────────────────────────────
