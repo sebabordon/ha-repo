@@ -139,12 +139,5 @@ EOF
 fi
 
 export PORT=51822
-
-DEFAULT_IF=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
-DEFAULT_IF="${DEFAULT_IF:-eth0}"
-
-export WG_POST_UP="${WG_POST_UP:-/usr/sbin/nft add table inet wgeasy; /usr/sbin/nft add chain inet wgeasy POSTROUTING '{ type nat hook postrouting priority srcnat; policy accept; }'; /usr/sbin/nft add rule inet wgeasy POSTROUTING oifname \"${DEFAULT_IF}\" masquerade; /usr/sbin/nft add chain inet wgeasy FORWARD '{ type filter hook forward priority filter; policy accept; }'; /usr/sbin/nft add rule inet wgeasy FORWARD iifname \"wg0\" accept; /usr/sbin/nft add rule inet wgeasy FORWARD oifname \"wg0\" accept}"
-export WG_POST_DOWN="${WG_POST_DOWN:-/usr/sbin/nft delete table inet wgeasy}"
-
 nginx
 exec node /app/server/index.mjs
