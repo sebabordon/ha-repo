@@ -118,8 +118,9 @@ body {
 .field-textarea { resize: vertical; font-family: inherit; }
 
 .field-row { display: flex; gap: .75rem; }
-.field-col { flex: 1; }
+.field-col { flex: 1; min-width: 0; }
 .field-col .field-label { margin-top: 0; }
+.field-col .field-input { min-width: 0; width: 100%; }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────────*/
 
