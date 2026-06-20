@@ -13,7 +13,7 @@ import db
 from auth import router as auth_router, admin_router, is_session_token_valid
 from openpyxl import Workbook
 
-APP_VERSION = "0.2.1"
+APP_VERSION = "0.2.2"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 
@@ -48,7 +48,10 @@ _initialized_users: set[str] = set()
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/auth/") or path.startswith("/static/") or path in ("/manifest.json", "/api/version"):
+    if (path.startswith("/auth/") or path.startswith("/static/")
+            or path in ("/manifest.json", "/api/version",
+                        "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
+                        "/favicon.ico")):
         return await call_next(request)
     user = request.session.get("user")
     if user and user.get("email"):
@@ -82,6 +85,15 @@ app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(admin_router, prefix="/admin", tags=["admin"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+@app.get("/apple-touch-icon.png")
+@app.get("/apple-touch-icon-precomposed.png")
+async def apple_touch_icon():
+    return FileResponse("static/apple-touch-icon.png", media_type="image/png")
+
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse("static/favicon.ico", media_type="image/x-icon")
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):

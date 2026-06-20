@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+- Fix ícono iOS: servir apple-touch-icon.png y favicon.ico desde la raíz
+  (iOS busca /apple-touch-icon.png, no dentro de /static/). Rutas públicas
+  sin auth para que iOS las descargue al agregar a inicio.
+
 ## 0.2.1
 - Fix fecha/hora en iOS: forzar min-width:0 en flex children para que los
   inputs nativos de date/time no desborden y queden en una fila.
