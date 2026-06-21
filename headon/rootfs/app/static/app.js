@@ -666,11 +666,22 @@ async function renderCalendar() {
 
     const entries = state.calData[dateStr];
     if (entries && entries.length) {
-      const maxInt = Math.max(...entries.map(e => e.intensidad));
-      const dot = document.createElement("div");
-      dot.className = "cal-dot";
-      dot.style.background = INTENSITY_COLORS[maxInt];
-      cell.appendChild(dot);
+      const barsWrap = document.createElement("div");
+      barsWrap.className = "cal-bars";
+      entries.forEach(e => {
+        const bar = document.createElement("div");
+        bar.className = "cal-bar";
+        const [h0, m0] = (e.inicio || "0:0").split(":").map(Number);
+        const fin = e.fin || "23:59";
+        const [h1, m1] = fin.split(":").map(Number);
+        const startPct = ((h0 * 60 + m0) / 1440) * 100;
+        const endPct = ((h1 * 60 + m1) / 1440) * 100;
+        bar.style.left = startPct + "%";
+        bar.style.width = Math.max(endPct - startPct, 3) + "%";
+        bar.style.background = INTENSITY_COLORS[e.intensidad] || "#9ca3af";
+        barsWrap.appendChild(bar);
+      });
+      cell.appendChild(barsWrap);
     }
 
     cell.onclick = () => showCalDetail(dateStr, entries, cell);

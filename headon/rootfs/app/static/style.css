@@ -400,11 +400,20 @@ body {
 .cal-day.today { border-color: var(--color-accent); font-weight: 700; }
 .cal-day.empty { background: transparent; cursor: default; }
 .cal-day.selected { background: #dbeafe; border-color: #93c5fd; }
-.cal-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
+.cal-bars {
   position: absolute;
-  bottom: 4px;
+  bottom: 3px;
+  left: 2px;
+  right: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cal-bar {
+  height: 4px;
+  border-radius: 2px;
+  position: relative;
+  min-width: 3px;
 }
 
 .cal-detail {

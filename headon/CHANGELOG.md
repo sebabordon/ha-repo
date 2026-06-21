@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+- Calendario: reemplazar dots por barras horizontales proporcionales a la
+  duración del episodio. Posición = hora inicio, largo = duración, color =
+  intensidad. Varios episodios en un día se apilan verticalmente.
+
 ## 0.3.0
 - Indicador offline: dot ámbar pulsante en la navbar cuando no hay red.
 - Auto-finalización: episodios de días anteriores sin fin se cierran a 23:59
