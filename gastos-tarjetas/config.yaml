@@ -1,6 +1,6 @@
 name: "SnapBudget"
 description: "Parsea y categoriza gastos de AMEX, Mastercard, Visa y MercadoLibre Argentina"
-version: "1.2.32"
+version: "1.2.33"
 slug: "gastos_tarjetas"
 url: "https://github.com/sebabordon/ha-repo/tree/main/gastos-tarjetas"
 stage: stable
@@ -31,5 +31,7 @@ schema:
   scraper_encryption_key: str?
 ports:
   8000/tcp: 8000
+  6080/tcp: 6080
 ports_description:
   8000/tcp: "Web UI"
+  6080/tcp: "Visor noVNC del browser del scraper (debug AMEX) — http://<ip>:6080/vnc.html"

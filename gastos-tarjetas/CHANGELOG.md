@@ -1,3 +1,7 @@
+## 1.2.33
+
+- **Visor noVNC del browser del scraper en vivo** (`Dockerfile`, `run.sh`, `config.yaml`): para poder observar en tiempo real qué hace el Chromium headful durante el login de AMEX (y entender por qué InAuth bloquea el submit), se agregó `x11vnc` + `novnc` + `websockify` al Dockerfile. `run.sh` arranca `x11vnc` sobre el display `:99` y sirve noVNC en el puerto `6080`. Se expone `6080/tcp` en `config.yaml`. Se accede desde `http://<ip-de-HA>:6080/vnc.html` — sin password (se asume red interna). El display existe siempre; cuando el scraper lanza Chromium se ve la sesión en vivo. **Requiere rebuild de la imagen.**
+
 ## 1.2.32
 
 - **Scraper AMEX: Chromium headful bajo Xvfb para pasar InAuth** (`Dockerfile`, `run.sh`, `scrapers/base.py`, `scrapers/amex.py`): el diagnóstico confirmó que InAuth (anti-bot de AMEX) detecta el Chromium headless y no completa el handshake de device profile, por lo que el submit del login no dispara nada (sin error, sin navegación). Solución estándar para muros tipo InAuth/Akamai: correr el browser NO-headless bajo un display virtual. Se agregó `xvfb` al Dockerfile, `run.sh` arranca `Xvfb :99` y exporta `DISPLAY`, y `BaseScraper` ahora tiene un flag `headless` (default True) que AMEX setea en False. Solo AMEX corre headful; BBVA y MercadoPago siguen headless e ignoran el display virtual. **Requiere rebuild de la imagen del add-on** (no alcanza con reiniciar).
