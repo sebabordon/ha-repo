@@ -192,148 +192,102 @@ class AmexScraper(BaseScraper):
 
     def do_login(self, driver, config: dict) -> None:
         """
-        Login en la SPA React de AMEX AR.
+        Login en AMEX AR via POST directo al endpoint de login.
 
-        La página renderiza los inputs ~2-3 s después de la carga inicial.
-        Algunos flows muestran usuario y contraseña en pantallas separadas
-        (botón «Continuar» entre ambas); este código lo maneja.
+        InAuth (device fingerprinting de AMEX) bloquea el submit del form React
+        en Chromium headless. Se bypasea haciendo el POST directamente con
+        fetch(), que es la misma request que el form haría si InAuth lo dejara.
         """
         from selenium.common.exceptions import TimeoutException
 
         logger.info("[amex] do_login: navegando a %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
 
-        # ── Usuario ───────────────────────────────────────────────────────────
-        _user_sel = (
-            "input#eliloUserID, input[name='eliloUserID'], "
-            "input[type='email'][autocomplete='username']"
-        )
-        logger.info("[amex] do_login: esperando campo de usuario…")
+        # Esperar a que la página cargue (establece cookies necesarias)
         try:
-            user_el = self.wait_visible(driver, _user_sel, timeout=20)
+            self.wait_visible(driver, "input#eliloUserID", timeout=20)
         except TimeoutException:
             diag = self._login_diag(driver)
-            logger.error("[amex] do_login: campo usuario no encontrado\n%s", diag)
-            raise TimeoutException(
-                f"Campo usuario no encontrado tras 20s.\n{diag}"
-            )
-        # ── Ingresar credenciales vía setter nativo de React ─────────────────
-        # send_keys pone el valor en el DOM pero React no lo registra en su
-        # state interno (el form se submitea con campos vacíos y no hace nada).
-        # El setter nativo bypasea el property descriptor de React y el evento
-        # 'input' con bubbles sincroniza el state del componente controlado.
-        logger.info("[amex] do_login: campo usuario encontrado, ingresando datos vía React setter")
-        self._react_set_input(driver, "eliloUserID", config["usuario"])
-        time.sleep(0.3)
+            raise TimeoutException(f"Página de login no cargó.\n{diag}")
 
-        # ── Botón «Continuar» (si el flow separa usuario y contraseña) ────────
-        pwd_visible = self._find_visible(
-            driver,
-            "input#eliloPassword, input[name='eliloPassword'], "
-            "input[type='password']",
-        )
-        logger.info("[amex] do_login: contraseña visible en pantalla inicial = %s", pwd_visible is not None)
-        if not pwd_visible:
-            cont_btn = self._find_visible(
-                driver,
-                "button#loginSubmit, button[type='submit']",
-            )
-            if cont_btn:
-                logger.info("[amex] do_login: haciendo click en Continuar (flow 2 pantallas)")
-                self._click_el(driver, cont_btn)
-                time.sleep(2)
+        # Dar tiempo a que los scripts se inicialicen (cookies de sesión, etc.)
+        time.sleep(3)
 
-        # ── Contraseña ────────────────────────────────────────────────────────
-        _pwd_sel = (
-            "input#eliloPassword, input[name='eliloPassword'], "
-            "input[type='password']"
-        )
-        logger.info("[amex] do_login: esperando campo de contraseña…")
-        try:
-            pass_el = self.wait_visible(driver, _pwd_sel, timeout=15)
-        except TimeoutException:
-            diag = self._login_diag(driver)
-            logger.error("[amex] do_login: campo contraseña no encontrado\n%s", diag)
-            raise TimeoutException(
-                f"Campo contraseña no encontrado tras 15s.\n{diag}"
-            )
-        logger.info("[amex] do_login: campo contraseña encontrado, ingresando vía React setter")
-        self._react_set_input(driver, "eliloPassword", config["password"])
-        time.sleep(0.3)
+        # ── POST directo al endpoint de login ─────────────────────────────────
+        logger.info("[amex] do_login: haciendo POST directo al endpoint de login")
+        driver.set_script_timeout(30)
+        login_result = driver.execute_async_script("""
+            var userId   = arguments[0];
+            var password = arguments[1];
+            var cb       = arguments[arguments.length - 1];
 
-        # ── Verificar valores ─────────────────────────────────────────────────
-        typed_user, typed_pwd = driver.execute_script(
-            "return [document.getElementById('eliloUserID')?.value||'',"
-            "document.getElementById('eliloPassword')?.value||''];"
-        )
+            var params = new URLSearchParams();
+            params.set('request_type', 'login');
+            params.set('Face', 'es_AR');
+            params.set('Logon', 'Logon');
+            params.set('version', '4');
+            params.set('DestPage', 'https://global.americanexpress.com/dashboard');
+            params.set('UserID', userId);
+            params.set('Password', password);
+            params.set('channel', 'Web');
+            params.set('REMEMBERME', 'off');
+
+            var now = new Date();
+            params.set('b_hour',      String(now.getHours()));
+            params.set('b_minute',    String(now.getMinutes()));
+            params.set('b_second',    String(now.getSeconds()));
+            params.set('b_dayNumber', String(now.getDate()));
+            params.set('b_month',     String(now.getMonth() + 1));
+            params.set('b_year',      String(now.getFullYear()));
+            params.set('b_timeZone',  String(-now.getTimezoneOffset() / 60));
+
+            fetch('https://global.americanexpress.com/myca/logon/us/action/login', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
+                    'Origin': 'https://www.americanexpress.com'
+                },
+                body: params.toString()
+            })
+            .then(function(r) {
+                return r.text().then(function(t) {
+                    cb({status: r.status, body: t.substring(0, 500), ok: r.ok});
+                });
+            })
+            .catch(function(e) { cb({status: 0, error: String(e)}); });
+        """, config["usuario"], config["password"]) or {}
+
+        status = login_result.get("status", 0)
         logger.info(
-            "[amex] do_login: valores en campos — usuario=%d chars, password=%d chars",
-            len(typed_user), len(typed_pwd),
+            "[amex] do_login: POST login status=%s, body=%s",
+            status, str(login_result.get("body", ""))[:200],
         )
 
-        # ── Submit ────────────────────────────────────────────────────────────
-        _submit_sel = "button#loginSubmit, button[type='submit'], input[type='submit']"
-        try:
-            submit = self.wait_visible(driver, _submit_sel, timeout=10)
-        except TimeoutException:
-            diag = self._login_diag(driver)
-            logger.error("[amex] do_login: botón submit no encontrado\n%s", diag)
-            raise TimeoutException(
-                f"Botón submit no encontrado tras 10s.\n{diag}"
+        if login_result.get("error"):
+            raise RuntimeError(
+                f"Login POST falló: {login_result['error']}"
             )
-        logger.info("[amex] do_login: haciendo click en Submit…")
-        self._click_el(driver, submit)
+        if status not in (200, 201, 302):
+            raise RuntimeError(
+                f"Login POST status {status}: {str(login_result.get('body', ''))[:300]}"
+            )
 
-        # ── Chequeo intermedio post-submit ────────────────────────────────────
-        time.sleep(8)
-        post_url = driver.current_url
-        logger.info("[amex] do_login: URL 8s post-submit = %s", post_url[:120])
-        _post_submit_info = ""
-        if "login" in post_url.lower():
-            post_diag = driver.execute_script("""
-                var out = {};
-                var errs = document.querySelectorAll(
-                    '[class*="error"], [class*="Error"], [data-testid*="error"], '
-                    + '[role="alert"], .alert, .notification'
-                );
-                var msgs = [];
-                for (var i = 0; i < errs.length; i++) {
-                    var t = (errs[i].textContent || '').trim();
-                    if (t && t.length < 200) msgs.push(t);
-                }
-                out.errors = msgs.slice(0, 5);
-                var iframes = document.querySelectorAll('iframe');
-                var ifs = [];
-                for (var j = 0; j < iframes.length; j++) {
-                    ifs.push((iframes[j].src || iframes[j].getAttribute('src') || '(sin src)').substring(0, 120));
-                }
-                out.iframes = ifs;
-                var btn = document.getElementById('loginSubmit');
-                if (btn) {
-                    out.btn_busy = btn.getAttribute('aria-busy');
-                    out.btn_disabled = btn.getAttribute('aria-disabled');
-                    out.btn_text = (btn.textContent || '').trim().substring(0, 40);
-                }
-                out.title = document.title;
-                out.body_text_snippet = (document.body.innerText || '').substring(0, 500);
-                return out;
-            """) or {}
-            logger.info("[amex] do_login: diagnóstico post-submit = %s", post_diag)
-            _post_submit_info = f"\nPost-submit (8s): {post_diag}"
+        # ── Navegar al portal ─────────────────────────────────────────────────
+        logger.info("[amex] do_login: login POST OK, navegando al portal")
+        driver.get(_ACCOUNT_SUMMARY)
 
-        # ── Esperar portal post-login ─────────────────────────────────────────
         _portal_sel = (
             "div#middleContentHeader, div#leftNav, select#cardAccount, "
             "div[data-module-name='axp-account-summary'], "
             "[data-testid='account-summary']"
         )
         try:
-            self.wait_for(driver, _portal_sel, timeout=45)
+            self.wait_for(driver, _portal_sel, timeout=30)
         except TimeoutException:
             diag = self._login_diag(driver)
-            logger.error("[amex] do_login: portal post-login no cargó\n%s", diag)
             raise TimeoutException(
-                f"Portal post-login no cargó tras 45s.{_post_submit_info}\n{diag}"
+                f"Portal post-login no cargó tras 30s (login POST fue {status}).\n{diag}"
             )
         logger.info("[amex] do_login: portal cargado, URL = %s", driver.current_url[:100])
         logger.info("[amex] Login exitoso")
