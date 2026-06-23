@@ -263,6 +263,16 @@ class BaseScraper(ABC):
                     // 8. hardwareConcurrency / deviceMemory — valores plausibles de desktop
                     try { Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8}); } catch(e) {}
                     try { Object.defineProperty(navigator, 'deviceMemory', {get: () => 8}); } catch(e) {}
+                    // 9. Codecs propietarios (H.264/AAC) — el Chromium "puro" de Alpine
+                    //    NO los trae; Google Chrome sí. Akamai prueba canPlayType para
+                    //    distinguir Chromium de Chrome. Lo spoofeamos a 'probably'.
+                    try {
+                        var _origCPT = HTMLMediaElement.prototype.canPlayType;
+                        HTMLMediaElement.prototype.canPlayType = function(t) {
+                            if (t && /avc1|h264|mp4a|mpeg|aac|m4a|\\.mp4/i.test(t)) return 'probably';
+                            return _origCPT.call(this, t);
+                        };
+                    } catch(e) {}
                 """
             })
         except Exception as _cdp_err:

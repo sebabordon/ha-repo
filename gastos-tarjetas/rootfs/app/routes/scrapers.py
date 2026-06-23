@@ -160,6 +160,87 @@ async def scheduler_reload(request: Request):
     return {"ok": True}
 
 
+# ── Debug: lanzar un browser en el display virtual (noVNC) ─────────────────────
+# Para probar a mano el login de un banco (ej. AMEX/Akamai) con distintos browsers
+# y ver si el fingerprint pasa. El browser abre en el display :99 (Xvfb), visible
+# por noVNC (puerto 6080). GET para poder dispararlo desde el navegador logueado.
+
+_DEBUG_BROWSER_PROC: dict = {}
+
+_DEBUG_DEFAULT_URL = "https://www.americanexpress.com/es-ar/account/login"
+
+
+@router.get("/scrapers/debug/launch")
+async def debug_launch_browser(request: Request, browser: str = "firefox",
+                               url: Optional[str] = None):
+    """
+    Lanza Firefox o Chromium en el display virtual (visible por noVNC) navegando
+    a `url` (default: login de AMEX). Sirve para probar el login a mano con otro
+    motor de browser y ver si Akamai lo deja pasar. Mata la instancia previa.
+    """
+    require_auth(request)
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+
+    browser = (browser or "firefox").lower()
+    target = url or _DEBUG_DEFAULT_URL
+    env = dict(os.environ)
+    env.setdefault("DISPLAY", ":99")
+
+    prev = _DEBUG_BROWSER_PROC.pop("proc", None)
+    if prev:
+        try:
+            prev.terminate()
+        except Exception:
+            pass
+
+    if browser == "firefox":
+        binario = shutil.which("firefox-esr") or shutil.which("firefox")
+        if not binario:
+            raise HTTPException(500, "Firefox no está instalado en la imagen")
+        profile = tempfile.mkdtemp(prefix="ff-debug-")
+        cmd = [binario, "--no-remote", "--profile", profile, target]
+    elif browser == "chromium":
+        binario = os.environ.get("CHROMIUM_BIN", "/usr/bin/chromium-browser")
+        profile = tempfile.mkdtemp(prefix="cr-debug-")
+        cmd = [
+            binario, "--no-sandbox", "--no-first-run", "--no-default-browser-check",
+            f"--user-data-dir={profile}", "--window-size=1280,800", target,
+        ]
+    else:
+        raise HTTPException(400, "browser inválido (firefox|chromium)")
+
+    try:
+        proc = subprocess.Popen(
+            cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"No se pudo lanzar {browser}: {exc}")
+
+    _DEBUG_BROWSER_PROC["proc"] = proc
+    logger.info("[debug] browser %s lanzado (pid=%s) → %s", browser, proc.pid, target)
+    return {
+        "ok": True, "browser": browser, "pid": proc.pid, "url": target,
+        "hint": "Abrí el visor noVNC (puerto 6080, /vnc.html) para ver e interactuar.",
+    }
+
+
+@router.get("/scrapers/debug/kill")
+async def debug_kill_browser(request: Request):
+    """Cierra el browser de debug lanzado por /scrapers/debug/launch."""
+    require_auth(request)
+    proc = _DEBUG_BROWSER_PROC.pop("proc", None)
+    if proc:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        return {"ok": True, "killed": True}
+    return {"ok": True, "killed": False}
+
+
 # ── Trigger manual ─────────────────────────────────────────────────────────────
 
 @router.post("/scrapers/{banco}/run")
