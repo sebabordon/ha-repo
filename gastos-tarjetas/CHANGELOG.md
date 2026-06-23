@@ -1,3 +1,7 @@
+## 1.2.26
+
+- **Logs de la app visibles en el tab Log del add-on** (`log_config.json`): los `logger.info/warning/error` de los módulos de la app (scrapers, DB, scheduler, etc.) no aparecían en el output del add-on porque el `log_config.json` de uvicorn solo definía handlers para los loggers de uvicorn. Se agregó un handler `console` al root logger para que todos los logs de la app salgan por stderr con formato `[nombre_módulo]`, igual que los de uvicorn. Los access logs siguen por stdout sin cambios.
+
 ## 1.2.25
 
 - **Scraper AMEX: fix login — usar React native setter en vez de send_keys** (`scrapers/amex.py`): el form de login de AMEX dejó de funcionar con `send_keys` de Selenium: el valor quedaba en el DOM pero React no lo registraba en su state interno, causando que el submit no hiciera nada. Se reemplazó por `_react_set_input` que usa `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set` + evento `input` con `bubbles:true`, que sí sincroniza el state del componente controlado de React.
