@@ -54,13 +54,6 @@ BANKS: dict[str, dict] = {
                 "placeholder": "1",
                 "hint":        "Cuántos meses hacia atrás bajar resúmenes PDF cuando 'Descargar resúmenes' está activo. 1 = solo el último (default). 3 = los de los últimos 3 meses. Los ya importados se saltean. Útil para backfill.",
             },
-            {
-                "key":      "login_manual",
-                "label":    "Login manual (debug)",
-                "type":     "checkbox",
-                "required": False,
-                "hint":     "Modo debug: el scraper NO completa el login automáticamente. Abre el browser, navega una sola vez a la página de login, y espera hasta 5 min a que ingreses usuario y contraseña a mano por el visor noVNC (puerto 6080). Sirve para aislar si el bloqueo de AMEX (403 de Akamai) es por el fingerprint del browser o por la navegación automática. Una vez logueado a mano, el scraper sigue con la extracción normal.",
-            },
         ],
     },
     "bbva": {

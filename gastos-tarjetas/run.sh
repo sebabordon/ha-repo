@@ -13,25 +13,6 @@ export RULES_FILE="/data/rules.yaml"
 
 mkdir -p "${DATA_DIR}"
 
-# ── Display virtual (Xvfb) ────────────────────────────────────────────────────
-# Algunos bancos (AMEX/InAuth) detectan Chromium headless y bloquean el login.
-# El scraper de AMEX corre Chromium NO-headless (headful) bajo este display
-# virtual para pasar el anti-bot. Los demás scrapers siguen en modo headless e
-# ignoran DISPLAY.
-Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 &
-export DISPLAY=:99
-bashio::log.info "Xvfb iniciado en DISPLAY=:99"
-
-# ── Visor web del display virtual (x11vnc + noVNC) ────────────────────────────
-# Permite observar el browser headful en vivo desde el navegador (debug del
-# anti-bot de AMEX). El display :99 existe siempre; cuando el scraper lanza
-# Chromium, se ve en la sesión VNC. Sin password porque se asume red interna.
-# noVNC sirve en el puerto 6080: http://<ip-de-HA>:6080/vnc.html
-sleep 1   # dar tiempo a que Xvfb levante el socket del display
-x11vnc -display :99 -forever -shared -nopw -rfbport 5900 -bg -quiet >/dev/null 2>&1
-websockify --web /usr/share/novnc 6080 localhost:5900 >/dev/null 2>&1 &
-bashio::log.info "Visor noVNC en http://<ip-de-HA>:6080/vnc.html"
-
 # Generar SESSION_SECRET al primer arranque y persistirlo para que las
 # sesiones sobrevivan reinicios del add-on.
 SESSION_SECRET_FILE="${DATA_DIR}/session_secret"

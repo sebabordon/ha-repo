@@ -1,50 +1,6 @@
-## 1.2.38
+## 1.2.39
 
-- **Fix: BBVA/scrapers crasheaban + Chromium de debug crasheaba** (`scrapers/base.py`, `scrapers/amex.py`, `routes/scrapers.py`): el `performance logging "ALL"` agregado en 1.2.34 se aplicaba a TODOS los scrapers y en sesiones pesadas (BBVA) bufferea cada request en memoria, tumbando el browser. Ahora es opt-in por scraper vía `capture_perf_log` (default False); solo AMEX lo activa. Además, el Chromium lanzado por el endpoint debug crasheaba por falta de `--disable-dev-shm-usage`/`--disable-gpu` (en contenedor el `/dev/shm` es chico); se agregaron. Reiniciar el add-on para aplicar y limpiar procesos de browser huérfanos de pruebas previas.
-
-## 1.2.37
-
-- **Ronda de stealth + Firefox para probar a mano** (`Dockerfile`, `scrapers/base.py`, `routes/scrapers.py`): siguiendo que Akamai rechaza el fingerprint del Chromium de Alpine (BBVA anda, AMEX no, ni a mano), se atacan los tells que faltaban y se suma Firefox como motor alternativo para testear. (1) **Fuentes**: Alpine traía casi ninguna (tell de datacenter) — se agregaron `font-dejavu`, `font-liberation`, `font-noto`. (2) **Codecs**: spoof de `HTMLMediaElement.canPlayType` para H.264/AAC → 'probably' (el Chromium puro no trae codecs propietarios, Chrome sí; Akamai lo usa para distinguirlos). (3) **Firefox** (`firefox-esr`) instalado como motor alternativo (Gecko, otra pila TLS/NSS, otro fingerprint). (4) **Endpoints debug** `GET /api/scrapers/debug/launch?browser=firefox|chromium` y `/api/scrapers/debug/kill`: lanzan el browser elegido en el display virtual (visible por noVNC, puerto 6080) navegando al login de AMEX, para probar el login a mano con cada motor y ver cuál pasa Akamai. **Requiere rebuild.**
-
-## 1.2.36
-
-- **Scraper AMEX: purgada la validación de sesión — siempre login fresco** (`scrapers/amex.py`): la sesión de AMEX nunca revalidaba entre runs y el `check_session` navegaba a `global.americanexpress.com` antes del login, ensuciando el estado de Akamai (`_abck`). Se setea `save_session = False`: el base ahora limpia la sesión al arrancar, no restaura cookies, no llama a `check_session` y va directo a `do_login` (siempre login fresco), sin persistir nada. `check_session` quedó como no-op. Se eliminó el override de `run()` que limpiaba sesión en modo manual (ahora redundante). Esto borra toda la navegación de validación de sesión, que era en vano.
-
-## 1.2.35
-
-- **Scraper AMEX: modo "Login manual (debug)"** (`scraper_credentials.py`, `scrapers/amex.py`): nuevo checkbox en la config de AMEX para aislar la causa del 403 de Akamai. Con él activo, el scraper NO completa el login automáticamente: limpia la sesión guardada (para no restaurar cookies viejas ni navegar a `global.americanexpress.com` en `check_session`), abre el browser, navega **una sola vez** a la página de login, y espera hasta 5 min a que el usuario ingrese a mano por el visor noVNC (puerto 6080). Detecta el login exitoso (URL del portal o elemento del portal) y sigue con la extracción normal. Reduce la navegación al mínimo (un solo hit, como abrir una pestaña a mano) para distinguir si el bloqueo es por el fingerprint del browser o por la navegación automática previa.
-
-## 1.2.34
-
-- **Scraper: spoof de fingerprint anti-Akamai + diagnóstico de 403** (`scrapers/base.py`, `scrapers/amex.py`): confirmado que el login manual desde el browser del contenedor también da 403 (mientras Safari en la Mac, misma IP, anda) → Akamai marca el fingerprint del Chromium de Alpine como bot. Se agregaron dos spoofs clave: (1) **WebGL vendor/renderer** — sin GPU, Chromium reporta "SwiftShader" (render por software), señal fuerte de datacenter/bot; ahora reporta una GPU Intel/ANGLE plausible; (2) **Client Hints coherentes** vía `Network.setUserAgentOverride` — el UA decía Windows pero `navigator.userAgentData`/`sec-ch-ua-platform` filtraban Linux (inconsistencia que Akamai detecta). También se agregó `hardwareConcurrency`/`deviceMemory` plausibles. Para diagnóstico: `log_fingerprint()` loguea el fingerprint real al cargar la página, y `capture_4xx_responses()` (vía performance log) lista las requests 403/4xx en los errores de login, para confirmar qué bloquea Akamai.
-
-## 1.2.33
-
-- **Visor noVNC del browser del scraper en vivo** (`Dockerfile`, `run.sh`, `config.yaml`): para poder observar en tiempo real qué hace el Chromium headful durante el login de AMEX (y entender por qué InAuth bloquea el submit), se agregó `x11vnc` + `novnc` + `websockify` al Dockerfile. `run.sh` arranca `x11vnc` sobre el display `:99` y sirve noVNC en el puerto `6080`. Se expone `6080/tcp` en `config.yaml`. Se accede desde `http://<ip-de-HA>:6080/vnc.html` — sin password (se asume red interna). El display existe siempre; cuando el scraper lanza Chromium se ve la sesión en vivo. **Requiere rebuild de la imagen.**
-
-## 1.2.32
-
-- **Scraper AMEX: Chromium headful bajo Xvfb para pasar InAuth** (`Dockerfile`, `run.sh`, `scrapers/base.py`, `scrapers/amex.py`): el diagnóstico confirmó que InAuth (anti-bot de AMEX) detecta el Chromium headless y no completa el handshake de device profile, por lo que el submit del login no dispara nada (sin error, sin navegación). Solución estándar para muros tipo InAuth/Akamai: correr el browser NO-headless bajo un display virtual. Se agregó `xvfb` al Dockerfile, `run.sh` arranca `Xvfb :99` y exporta `DISPLAY`, y `BaseScraper` ahora tiene un flag `headless` (default True) que AMEX setea en False. Solo AMEX corre headful; BBVA y MercadoPago siguen headless e ignoran el display virtual. **Requiere rebuild de la imagen del add-on** (no alcanza con reiniciar).
-
-## 1.2.31
-
-- **Scraper AMEX: login vía form real con send_keys + espera de InAuth** (`scrapers/amex.py`): el fetch directo al endpoint no funciona porque la respuesta del login NO trae `Set-Cookie` — el JS de la página orquesta un handshake (InAuth device profile + ReadUserSession + UpdateUserSession) con el token devuelto, imposible de replicar con un POST crudo. Se volvió a manejar el form real: (1) se espera 8s a que InAuth (cc.js de cdn-path.com) calcule el device profile antes de tocar nada; (2) se llena usuario/contraseña con `send_keys` (eventos de teclado reales que React e InAuth aceptan, a diferencia del setter JS que InAuth marca como bot); (3) se clickea el botón real; (4) se espera hasta 60s a que el login progrese (URL deja la página de login o aparece el portal), con diagnóstico de errores visibles si no progresa.
-
-## 1.2.30
-
-- **Scraper AMEX: login POST robusto + diagnóstico de la respuesta JSON** (`scrapers/amex.py`): tras analizar `amex-ar.har` en detalle, el login real es un POST a `/myca/logon/canlac/action/login` cuya respuesta es JSON (no un redirect) y el flujo sigue con `GET /dashboard` → 302 → `accountSummary.do`. Ahora se captura y parsea la respuesta JSON completa: se loguean sus claves, se detecta `statusCode`/`redirectUrl`, se aborta con mensaje claro si AMEX rechaza el login, y se navega al `redirectUrl` devuelto (con fallback a accountSummary directo). El POST sigue sin enviar `encryptedData`/`signature` (los genera InAuth en el browser real); si AMEX los exige, la respuesta JSON lo dirá en el log para el próximo paso.
-
-## 1.2.29
-
-- **Scraper AMEX: fix CORS en login POST** (`scrapers/amex.py`): el `fetch()` fallaba con `TypeError: Failed to fetch` porque se seteaba `Origin` manualmente (header prohibido en fetch). Se eliminaron los headers custom — `fetch` con `URLSearchParams` como body setea `Content-Type: application/x-www-form-urlencoded` automáticamente, y el browser pone `Origin` solo.
-
-## 1.2.28
-
-- **Scraper AMEX: fix endpoint de login — usar canlac en vez de us** (`scrapers/amex.py`): el HAR de AR muestra que el endpoint correcto es `/myca/logon/canlac/action/login` (región CANLAC = Canada/Latin America/Caribbean), no `/myca/logon/us/action/login` que era del HAR de US.
-
-## 1.2.27
-
-- **Scraper AMEX: fix login — POST directo bypaseando InAuth** (`scrapers/amex.py`): el device fingerprinting de AMEX (InAuth/cdn-path.com) bloquea el submit del form React en Chromium headless. Analizando el HAR del login real, el form hace un POST XHR a `global.americanexpress.com/myca/logon/us/action/login` con las credenciales en `application/x-www-form-urlencoded`. Se reemplazó todo el flujo de llenado de form (send_keys, React setter, click submit) por un `fetch()` directo al mismo endpoint desde el browser, que bypasea la verificación de InAuth manteniendo las cookies de sesión.
+- **Revert del experimento AMEX/Akamai — vuelta al estado 1.2.26** (imagen liviana de nuevo): se revirtió todo el trabajo de las versiones 1.2.27–1.2.38 (login POST directo, Xvfb headful, visor noVNC, x11vnc/websockify, Firefox, spoofs de fingerprint anti-Akamai, modo login manual, performance logging) porque Akamai bloquea el fingerprint del Chromium de Alpine de raíz (probado: ni el login manual en el contenedor pasa, mientras Safari en la Mac con la misma IP sí) y el camino no era viable. Además ese stack engordaba la imagen (xvfb + novnc + firefox + fuentes) y el performance logging tumbaba el scraper de BBVA. El código de scrapers, Dockerfile, run.sh y rutas vuelven exactamente al estado 1.2.26. Queda pendiente decidir el enfoque para AMEX (Chrome real en base Debian si el HA es amd64, u otra vía).
 
 ## 1.2.26
 

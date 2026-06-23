@@ -15,16 +15,7 @@ RUN apk add --no-cache \
     ttf-freefont \
     dbus \
     eudev \
-    udev \
-    xvfb \
-    xvfb-run \
-    x11vnc \
-    novnc \
-    websockify \
-    firefox-esr \
-    font-dejavu \
-    font-liberation \
-    font-noto
+    udev
 
 # Rutas de los binarios del sistema para Selenium
 ENV CHROMIUM_BIN=/usr/bin/chromium-browser
