@@ -62,6 +62,50 @@ class AmexScraper(BaseScraper):
     nombre       = "AMEX Argentina"
     login_origin = "https://www.americanexpress.com"
 
+    # ── WebDriver remoto (Mac) ────────────────────────────────────────────────
+    # AMEX usa Akamai Bot Manager, que rechaza el fingerprint del Chromium de
+    # Alpine del contenedor (probado: ni el login manual pasa). Si se configura
+    # `webdriver_remote_url` (un Selenium server corriendo en una Mac de la LAN
+    # con Chrome real), el browser corre EN LA MAC con su fingerprint genuino,
+    # manejado por red — toda la lógica de scraping sigue acá. Aislado a AMEX:
+    # BBVA y MP siguen con el Chromium local. Sin la URL, comportamiento normal.
+
+    async def run(self, config: dict):
+        # Stash de la config del driver remoto para _create_driver (que no recibe
+        # config). Solo afecta a AMEX.
+        self._remote_url     = (config.get("webdriver_remote_url") or "").strip()
+        self._remote_profile = (config.get("webdriver_profile_dir") or "").strip()
+        return await super().run(config)
+
+    def _create_driver(self):
+        remote_url = getattr(self, "_remote_url", "")
+        if not remote_url:
+            return super()._create_driver()   # Chromium local (comportamiento normal)
+
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+
+        opts = Options()
+        opts.add_argument("--window-size=1280,800")
+        # Quitar el cartel de automatización (navigator.webdriver) — el resto del
+        # fingerprint es el del Chrome real de macOS, que sí pasa Akamai.
+        opts.add_argument("--disable-blink-features=AutomationControlled")
+        opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+        opts.add_experimental_option("useAutomationExtension", False)
+        profile = getattr(self, "_remote_profile", "")
+        if profile:
+            # Perfil persistente en la Mac (logueado a mano una vez = "tibio").
+            opts.add_argument(f"--user-data-dir={profile}")
+
+        logger.info(
+            "[amex] WebDriver REMOTO: %s (perfil=%s)",
+            remote_url, profile or "(temporal)",
+        )
+        driver = webdriver.Remote(command_executor=remote_url, options=opts)
+        driver.set_page_load_timeout(60)
+        driver.implicitly_wait(0)
+        return driver
+
     # ── Verificación de sesión ────────────────────────────────────────────────
 
     def check_session(self, driver) -> bool:
@@ -217,13 +261,17 @@ class AmexScraper(BaseScraper):
             raise TimeoutException(
                 f"Campo usuario no encontrado tras 20s.\n{diag}"
             )
-        # ── Ingresar credenciales vía setter nativo de React ─────────────────
-        # send_keys pone el valor en el DOM pero React no lo registra en su
-        # state interno (el form se submitea con campos vacíos y no hace nada).
-        # El setter nativo bypasea el property descriptor de React y el evento
-        # 'input' con bubbles sincroniza el state del componente controlado.
-        logger.info("[amex] do_login: campo usuario encontrado, ingresando datos vía React setter")
-        self._react_set_input(driver, "eliloUserID", config["usuario"])
+        # ── Ingresar usuario con eventos de teclado reales ────────────────────
+        # send_keys dispara keydown/input reales que React e InAuth detectan
+        # (el setter JS de React no genera eventos de teclado → InAuth lo marca
+        # como bot). En el Chrome real (driver remoto) esto es lo que pasa.
+        logger.info("[amex] do_login: campo usuario encontrado, ingresando con send_keys")
+        try:
+            user_el.click()
+        except Exception:
+            pass
+        user_el.clear()
+        user_el.send_keys(config["usuario"])
         time.sleep(0.3)
 
         # ── Botón «Continuar» (si el flow separa usuario y contraseña) ────────
@@ -257,8 +305,13 @@ class AmexScraper(BaseScraper):
             raise TimeoutException(
                 f"Campo contraseña no encontrado tras 15s.\n{diag}"
             )
-        logger.info("[amex] do_login: campo contraseña encontrado, ingresando vía React setter")
-        self._react_set_input(driver, "eliloPassword", config["password"])
+        logger.info("[amex] do_login: campo contraseña encontrado, ingresando con send_keys")
+        try:
+            pass_el.click()
+        except Exception:
+            pass
+        pass_el.clear()
+        pass_el.send_keys(config["password"])
         time.sleep(0.3)
 
         # ── Verificar valores ─────────────────────────────────────────────────

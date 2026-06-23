@@ -54,6 +54,22 @@ BANKS: dict[str, dict] = {
                 "placeholder": "1",
                 "hint":        "Cuántos meses hacia atrás bajar resúmenes PDF cuando 'Descargar resúmenes' está activo. 1 = solo el último (default). 3 = los de los últimos 3 meses. Los ya importados se saltean. Útil para backfill.",
             },
+            {
+                "key":         "webdriver_remote_url",
+                "label":       "WebDriver remoto (Mac) — URL",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "http://192.168.0.x:4444",
+                "hint":        "AMEX usa Akamai que bloquea el Chromium del contenedor. Si ponés la URL de un Selenium server corriendo en una Mac de la red (con Chrome real), el browser corre EN LA MAC (fingerprint genuino que sí pasa Akamai) y el scraper lo maneja por red. Vacío = usa el Chromium local de siempre. Solo afecta a AMEX. La URL es la del Selenium server (ej. http://IP-de-la-Mac:4444).",
+            },
+            {
+                "key":         "webdriver_profile_dir",
+                "label":       "WebDriver remoto — Perfil Chrome (Mac)",
+                "type":        "text",
+                "required":    False,
+                "placeholder": "/Users/seba/amex-chrome-profile",
+                "hint":        "Opcional. Ruta EN LA MAC de un perfil de Chrome dedicado. Si lo logueás a AMEX una vez a mano, el perfil queda 'tibio' (cookies/sesión) y a Akamai le gusta más. Vacío = perfil temporal nuevo cada vez. Solo aplica si configuraste el WebDriver remoto.",
+            },
         ],
     },
     "bbva": {
