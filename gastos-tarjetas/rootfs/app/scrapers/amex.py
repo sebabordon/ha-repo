@@ -69,6 +69,12 @@ class AmexScraper(BaseScraper):
     # submit del login no dispara el handshake de device profile. Corremos
     # headful bajo Xvfb (DISPLAY=:99, ver run.sh) para pasar la detección.
     headless     = False
+    # La sesión de AMEX nunca revalida entre runs (cookies cortas + Akamai), y el
+    # check_session navegaba a global.americanexpress.com antes del login, lo que
+    # ensuciaba el estado de Akamai (_abck). Con save_session=False el base NO
+    # restaura ni valida sesión: limpia, va directo a do_login (siempre login) y
+    # no persiste nada. Esto elimina toda la navegación de validación.
+    save_session = False
 
     @staticmethod
     def _is_manual(config: dict) -> bool:
@@ -76,47 +82,12 @@ class AmexScraper(BaseScraper):
             "1", "true", "on", "yes", "sí", "si",
         )
 
-    async def run(self, config: dict):
-        """
-        En modo login_manual (debug) limpiamos la sesión guardada ANTES del run
-        para que el browser no restaure cookies viejas ni navegue a
-        global.americanexpress.com en check_session — así el único hit es la
-        página de login, lo más parecido a abrir una pestaña a mano.
-        """
-        if self._is_manual(config):
-            try:
-                self.clear_session()
-            except Exception:
-                pass
-        return await super().run(config)
-
     # ── Verificación de sesión ────────────────────────────────────────────────
 
     def check_session(self, driver) -> bool:
-        """
-        Navega al portal legacy. Si hay sesión activa llega a la página de
-        account summary (div#middleContentHeader). Si no, redirige al login.
-        """
-        try:
-            logger.info("[amex] check_session: navegando al portal legacy")
-            driver.get(_ACCOUNT_SUMMARY)
-            time.sleep(3)
-            current_url = driver.current_url
-            logger.info("[amex] check_session: URL tras navegación = %s", current_url[:100])
-            el = self.find(
-                driver,
-                "div#middleContentHeader, div#summaryWrap, "
-                "select#cardAccount, div#leftNav",
-            )
-            logger.info(
-                "[amex] check_session: elemento portal encontrado = %s%s",
-                el is not None,
-                f" (title={driver.title[:60]!r})" if not el else "",
-            )
-            return el is not None
-        except Exception as exc:
-            logger.debug("[amex] check_session error: %s", exc)
-            return False
+        # No-op: con save_session=False el base nunca llama a check_session.
+        # AMEX siempre hace login fresco (ver save_session arriba).
+        return False
 
     # ── Login ─────────────────────────────────────────────────────────────────
 

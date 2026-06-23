@@ -1,3 +1,7 @@
+## 1.2.36
+
+- **Scraper AMEX: purgada la validación de sesión — siempre login fresco** (`scrapers/amex.py`): la sesión de AMEX nunca revalidaba entre runs y el `check_session` navegaba a `global.americanexpress.com` antes del login, ensuciando el estado de Akamai (`_abck`). Se setea `save_session = False`: el base ahora limpia la sesión al arrancar, no restaura cookies, no llama a `check_session` y va directo a `do_login` (siempre login fresco), sin persistir nada. `check_session` quedó como no-op. Se eliminó el override de `run()` que limpiaba sesión en modo manual (ahora redundante). Esto borra toda la navegación de validación de sesión, que era en vano.
+
 ## 1.2.35
 
 - **Scraper AMEX: modo "Login manual (debug)"** (`scraper_credentials.py`, `scrapers/amex.py`): nuevo checkbox en la config de AMEX para aislar la causa del 403 de Akamai. Con él activo, el scraper NO completa el login automáticamente: limpia la sesión guardada (para no restaurar cookies viejas ni navegar a `global.americanexpress.com` en `check_session`), abre el browser, navega **una sola vez** a la página de login, y espera hasta 5 min a que el usuario ingrese a mano por el visor noVNC (puerto 6080). Detecta el login exitoso (URL del portal o elemento del portal) y sigue con la extracción normal. Reduce la navegación al mínimo (un solo hit, como abrir una pestaña a mano) para distinguir si el bloqueo es por el fingerprint del browser o por la navegación automática previa.
