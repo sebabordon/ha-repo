@@ -206,7 +206,10 @@ async def debug_launch_browser(request: Request, browser: str = "firefox",
         binario = os.environ.get("CHROMIUM_BIN", "/usr/bin/chromium-browser")
         profile = tempfile.mkdtemp(prefix="cr-debug-")
         cmd = [
-            binario, "--no-sandbox", "--no-first-run", "--no-default-browser-check",
+            binario, "--no-sandbox",
+            # Sin estos flags Chromium crashea en contenedor (/dev/shm chico, sin GPU)
+            "--disable-dev-shm-usage", "--disable-gpu",
+            "--no-first-run", "--no-default-browser-check",
             f"--user-data-dir={profile}", "--window-size=1280,800", target,
         ]
     else:

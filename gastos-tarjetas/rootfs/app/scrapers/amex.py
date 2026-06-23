@@ -75,6 +75,8 @@ class AmexScraper(BaseScraper):
     # restaura ni valida sesión: limpia, va directo a do_login (siempre login) y
     # no persiste nada. Esto elimina toda la navegación de validación.
     save_session = False
+    # Habilita el performance log (captura 403 de Akamai) solo para AMEX.
+    capture_perf_log = True
 
     @staticmethod
     def _is_manual(config: dict) -> bool:

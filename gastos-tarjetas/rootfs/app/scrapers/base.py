@@ -126,6 +126,10 @@ class BaseScraper(ABC):
     # (DISPLAY=:99, ver run.sh).  Necesario para bancos cuyo anti-bot (InAuth,
     # Akamai) detecta y bloquea headless — ej. AMEX.  Default True (headless).
     headless:            bool = True
+    # Si True, habilita el performance log de Chrome para capturar respuestas
+    # 4xx/5xx (debug anti-bot).  Default False: en sesiones con muchas requests
+    # (BBVA) el buffer en memoria puede tumbar el browser.  Solo AMEX lo usa.
+    capture_perf_log:    bool = False
 
     def __init__(self):
         os.makedirs(_sessions_dir(), exist_ok=True)
@@ -184,8 +188,11 @@ class BaseScraper(ABC):
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
         opts.add_experimental_option("useAutomationExtension", False)
         # Performance logging: permite capturar respuestas 4xx/5xx (ej. 403 de
-        # Akamai) vía driver.get_log('performance'). Ver capture_4xx_responses().
-        opts.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+        # Akamai) vía driver.get_log('performance'). Solo se activa por scraper
+        # (capture_perf_log=True) porque en sesiones pesadas (ej. BBVA) bufferea
+        # cada request en memoria y puede tumbar el browser.
+        if self.capture_perf_log:
+            opts.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
         if os.path.exists(_CHROMIUM_BIN):
             opts.binary_location = _CHROMIUM_BIN
@@ -351,7 +358,7 @@ class BaseScraper(ABC):
         import json as _json
         out: list[str] = []
         try:
-            for entry in driver.get_log("performance"):
+            for entry in (driver.get_log("performance") or []):
                 try:
                     msg = _json.loads(entry["message"])["message"]
                 except Exception:
