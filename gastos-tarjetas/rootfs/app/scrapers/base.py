@@ -122,6 +122,10 @@ class BaseScraper(ABC):
     # timeouts de sesión muy cortos (ej. BBVA 5 min) donde guardar cookies stale
     # solo genera redirects a /desconexion.html en el siguiente run.
     save_session:        bool = True
+    # Si False, Chromium corre NO-headless (headful) bajo el display virtual Xvfb
+    # (DISPLAY=:99, ver run.sh).  Necesario para bancos cuyo anti-bot (InAuth,
+    # Akamai) detecta y bloquea headless — ej. AMEX.  Default True (headless).
+    headless:            bool = True
 
     def __init__(self):
         os.makedirs(_sessions_dir(), exist_ok=True)
@@ -163,7 +167,14 @@ class BaseScraper(ABC):
         from selenium.webdriver.chrome.service import Service
 
         opts = Options()
-        opts.add_argument("--headless=new")
+        if self.headless:
+            opts.add_argument("--headless=new")
+        else:
+            # Headful bajo Xvfb: el anti-bot (InAuth de AMEX) detecta headless.
+            # Requiere DISPLAY=:99 (Xvfb, ver run.sh). Sin headless, --no-sandbox
+            # y el resto de flags siguen aplicando.
+            logger.info("[%s] Chromium en modo headful (Xvfb DISPLAY=%s)",
+                        self.fuente, os.environ.get("DISPLAY", "(no seteado)"))
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")

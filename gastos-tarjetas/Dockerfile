@@ -15,7 +15,9 @@ RUN apk add --no-cache \
     ttf-freefont \
     dbus \
     eudev \
-    udev
+    udev \
+    xvfb \
+    xvfb-run
 
 # Rutas de los binarios del sistema para Selenium
 ENV CHROMIUM_BIN=/usr/bin/chromium-browser

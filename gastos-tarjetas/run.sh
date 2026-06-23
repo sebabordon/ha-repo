@@ -13,6 +13,15 @@ export RULES_FILE="/data/rules.yaml"
 
 mkdir -p "${DATA_DIR}"
 
+# ── Display virtual (Xvfb) ────────────────────────────────────────────────────
+# Algunos bancos (AMEX/InAuth) detectan Chromium headless y bloquean el login.
+# El scraper de AMEX corre Chromium NO-headless (headful) bajo este display
+# virtual para pasar el anti-bot. Los demás scrapers siguen en modo headless e
+# ignoran DISPLAY.
+Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 &
+export DISPLAY=:99
+bashio::log.info "Xvfb iniciado en DISPLAY=:99"
+
 # Generar SESSION_SECRET al primer arranque y persistirlo para que las
 # sesiones sobrevivan reinicios del add-on.
 SESSION_SECRET_FILE="${DATA_DIR}/session_secret"

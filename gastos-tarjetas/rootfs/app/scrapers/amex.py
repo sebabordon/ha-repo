@@ -65,6 +65,10 @@ class AmexScraper(BaseScraper):
     fuente       = "amex"
     nombre       = "AMEX Argentina"
     login_origin = "https://www.americanexpress.com"
+    # AMEX usa InAuth (anti-bot) que detecta y bloquea Chromium headless: el
+    # submit del login no dispara el handshake de device profile. Corremos
+    # headful bajo Xvfb (DISPLAY=:99, ver run.sh) para pasar la detección.
+    headless     = False
 
     # ── Verificación de sesión ────────────────────────────────────────────────
 
