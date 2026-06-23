@@ -1,3 +1,7 @@
+## 1.2.30
+
+- **Scraper AMEX: login POST robusto + diagnóstico de la respuesta JSON** (`scrapers/amex.py`): tras analizar `amex-ar.har` en detalle, el login real es un POST a `/myca/logon/canlac/action/login` cuya respuesta es JSON (no un redirect) y el flujo sigue con `GET /dashboard` → 302 → `accountSummary.do`. Ahora se captura y parsea la respuesta JSON completa: se loguean sus claves, se detecta `statusCode`/`redirectUrl`, se aborta con mensaje claro si AMEX rechaza el login, y se navega al `redirectUrl` devuelto (con fallback a accountSummary directo). El POST sigue sin enviar `encryptedData`/`signature` (los genera InAuth en el browser real); si AMEX los exige, la respuesta JSON lo dirá en el log para el próximo paso.
+
 ## 1.2.29
 
 - **Scraper AMEX: fix CORS en login POST** (`scrapers/amex.py`): el `fetch()` fallaba con `TypeError: Failed to fetch` porque se seteaba `Origin` manualmente (header prohibido en fetch). Se eliminaron los headers custom — `fetch` con `URLSearchParams` como body setea `Content-Type: application/x-www-form-urlencoded` automáticamente, y el browser pone `Origin` solo.

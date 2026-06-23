@@ -218,11 +218,14 @@ class AmexScraper(BaseScraper):
         time.sleep(3)
 
         # ── POST directo al endpoint de login ─────────────────────────────────
+        # El form React hace este mismo POST tras el dance de InAuth; lo hacemos
+        # directo. La respuesta es JSON e indica el resultado (statusCode / redirect).
         logger.info("[amex] do_login: haciendo POST directo al endpoint de login")
-        driver.set_script_timeout(30)
+        driver.set_script_timeout(40)
         login_result = driver.execute_async_script("""
             var userId   = arguments[0];
             var password = arguments[1];
+            var loginUrl = arguments[2];
             var cb       = arguments[arguments.length - 1];
 
             var params = new URLSearchParams();
@@ -245,37 +248,63 @@ class AmexScraper(BaseScraper):
             params.set('b_year',      String(now.getFullYear()));
             params.set('b_timeZone',  String(-now.getTimezoneOffset() / 60));
 
-            fetch(arguments[2], {
+            fetch(loginUrl, {
                 method: 'POST',
                 credentials: 'include',
                 body: params
             })
             .then(function(r) {
                 return r.text().then(function(t) {
-                    cb({status: r.status, body: t.substring(0, 500), ok: r.ok});
+                    cb({status: r.status, body: t, ok: r.ok, url: r.url});
                 });
             })
             .catch(function(e) { cb({status: 0, error: String(e)}); });
         """, config["usuario"], config["password"], _LOGIN_POST_URL) or {}
 
         status = login_result.get("status", 0)
-        logger.info(
-            "[amex] do_login: POST login status=%s, body=%s",
-            status, str(login_result.get("body", ""))[:200],
-        )
+        raw_body = str(login_result.get("body", "") or "")
+        logger.info("[amex] do_login: POST login status=%s, body=%s", status, raw_body[:500])
 
         if login_result.get("error"):
-            raise RuntimeError(
-                f"Login POST falló: {login_result['error']}"
-            )
+            raise RuntimeError(f"Login POST falló (CORS/red): {login_result['error']}")
+
+        # Parsear la respuesta JSON para entender el resultado
+        import json as _json
+        parsed = {}
+        try:
+            parsed = _json.loads(raw_body) if raw_body else {}
+        except Exception:
+            parsed = {}
+
+        # AMEX devuelve campos tipo statusCode / status / redirectUrl según el caso.
+        # Un login OK suele traer un redirectUrl al dashboard; un error trae un
+        # código/mensaje. Logueamos las claves para diagnóstico.
+        if parsed:
+            logger.info("[amex] do_login: respuesta JSON claves=%s", list(parsed.keys()))
+
+        status_code = str(parsed.get("statusCode") or parsed.get("status") or "")
+        redirect_url = (
+            parsed.get("redirectUrl")
+            or parsed.get("redirect")
+            or parsed.get("location")
+            or ""
+        )
+
         if status not in (200, 201, 302):
+            raise RuntimeError(f"Login POST status HTTP {status}: {raw_body[:400]}")
+
+        # Si el JSON trae un statusCode de error explícito, abortar con el mensaje.
+        if status_code and status_code.upper() not in ("0", "SUCCESS", "OK", "200"):
+            msg = parsed.get("message") or parsed.get("statusMessage") or raw_body[:300]
             raise RuntimeError(
-                f"Login POST status {status}: {str(login_result.get('body', ''))[:300]}"
+                f"Login rechazado por AMEX (statusCode={status_code}): {msg}"
             )
 
-        # ── Navegar al portal ─────────────────────────────────────────────────
-        logger.info("[amex] do_login: login POST OK, navegando al portal")
-        driver.get(_ACCOUNT_SUMMARY)
+        # ── Navegar al portal (replica el GET /dashboard → 302 accountSummary) ─
+        dest = redirect_url or "https://global.americanexpress.com/dashboard"
+        logger.info("[amex] do_login: login POST OK, navegando a %s", dest[:100])
+        driver.get(dest)
+        time.sleep(2)
 
         _portal_sel = (
             "div#middleContentHeader, div#leftNav, select#cardAccount, "
@@ -285,10 +314,17 @@ class AmexScraper(BaseScraper):
         try:
             self.wait_for(driver, _portal_sel, timeout=30)
         except TimeoutException:
-            diag = self._login_diag(driver)
-            raise TimeoutException(
-                f"Portal post-login no cargó tras 30s (login POST fue {status}).\n{diag}"
-            )
+            # Segundo intento: ir directo al accountSummary canlac
+            logger.info("[amex] do_login: portal no apareció, probando accountSummary directo")
+            driver.get(_ACCOUNT_SUMMARY)
+            try:
+                self.wait_for(driver, _portal_sel, timeout=20)
+            except TimeoutException:
+                diag = self._login_diag(driver)
+                raise TimeoutException(
+                    f"Portal post-login no cargó (login POST HTTP {status}, "
+                    f"statusCode={status_code or 'n/a'}).\n{diag}"
+                )
         logger.info("[amex] do_login: portal cargado, URL = %s", driver.current_url[:100])
         logger.info("[amex] Login exitoso")
 
