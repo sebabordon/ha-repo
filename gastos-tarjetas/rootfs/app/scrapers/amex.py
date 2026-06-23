@@ -32,6 +32,10 @@ logger = logging.getLogger(__name__)
 
 _LOGIN_URL = "https://www.americanexpress.com/es-ar/account/login"
 
+_LOGIN_POST_URL = (
+    "https://global.americanexpress.com/myca/logon/canlac/action/login"
+)
+
 _ACCOUNT_SUMMARY = (
     "https://global.americanexpress.com/myca/intl/acctsumm/canlac/"
     "accountSummary.do?request_type=&Face=es_AR"
@@ -241,7 +245,7 @@ class AmexScraper(BaseScraper):
             params.set('b_year',      String(now.getFullYear()));
             params.set('b_timeZone',  String(-now.getTimezoneOffset() / 60));
 
-            fetch('https://global.americanexpress.com/myca/logon/us/action/login', {
+            fetch(arguments[2], {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -256,7 +260,7 @@ class AmexScraper(BaseScraper):
                 });
             })
             .catch(function(e) { cb({status: 0, error: String(e)}); });
-        """, config["usuario"], config["password"]) or {}
+        """, config["usuario"], config["password"], _LOGIN_POST_URL) or {}
 
         status = login_result.get("status", 0)
         logger.info(

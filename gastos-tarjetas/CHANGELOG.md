@@ -1,3 +1,7 @@
+## 1.2.28
+
+- **Scraper AMEX: fix endpoint de login — usar canlac en vez de us** (`scrapers/amex.py`): el HAR de AR muestra que el endpoint correcto es `/myca/logon/canlac/action/login` (región CANLAC = Canada/Latin America/Caribbean), no `/myca/logon/us/action/login` que era del HAR de US.
+
 ## 1.2.27
 
 - **Scraper AMEX: fix login — POST directo bypaseando InAuth** (`scrapers/amex.py`): el device fingerprinting de AMEX (InAuth/cdn-path.com) bloquea el submit del form React en Chromium headless. Analizando el HAR del login real, el form hace un POST XHR a `global.americanexpress.com/myca/logon/us/action/login` con las credenciales en `application/x-www-form-urlencoded`. Se reemplazó todo el flujo de llenado de form (send_keys, React setter, click submit) por un `fetch()` directo al mismo endpoint desde el browser, que bypasea la verificación de InAuth manteniendo las cookies de sesión.
