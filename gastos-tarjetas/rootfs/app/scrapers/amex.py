@@ -248,11 +248,7 @@ class AmexScraper(BaseScraper):
             fetch(arguments[2], {
                 method: 'POST',
                 credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
-                    'Origin': 'https://www.americanexpress.com'
-                },
-                body: params.toString()
+                body: params
             })
             .then(function(r) {
                 return r.text().then(function(t) {

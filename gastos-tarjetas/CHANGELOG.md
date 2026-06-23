@@ -1,3 +1,7 @@
+## 1.2.29
+
+- **Scraper AMEX: fix CORS en login POST** (`scrapers/amex.py`): el `fetch()` fallaba con `TypeError: Failed to fetch` porque se seteaba `Origin` manualmente (header prohibido en fetch). Se eliminaron los headers custom — `fetch` con `URLSearchParams` como body setea `Content-Type: application/x-www-form-urlencoded` automáticamente, y el browser pone `Origin` solo.
+
 ## 1.2.28
 
 - **Scraper AMEX: fix endpoint de login — usar canlac en vez de us** (`scrapers/amex.py`): el HAR de AR muestra que el endpoint correcto es `/myca/logon/canlac/action/login` (región CANLAC = Canada/Latin America/Caribbean), no `/myca/logon/us/action/login` que era del HAR de US.
