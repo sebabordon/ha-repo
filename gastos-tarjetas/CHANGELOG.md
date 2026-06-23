@@ -1,3 +1,7 @@
+## 1.2.31
+
+- **Scraper AMEX: login vía form real con send_keys + espera de InAuth** (`scrapers/amex.py`): el fetch directo al endpoint no funciona porque la respuesta del login NO trae `Set-Cookie` — el JS de la página orquesta un handshake (InAuth device profile + ReadUserSession + UpdateUserSession) con el token devuelto, imposible de replicar con un POST crudo. Se volvió a manejar el form real: (1) se espera 8s a que InAuth (cc.js de cdn-path.com) calcule el device profile antes de tocar nada; (2) se llena usuario/contraseña con `send_keys` (eventos de teclado reales que React e InAuth aceptan, a diferencia del setter JS que InAuth marca como bot); (3) se clickea el botón real; (4) se espera hasta 60s a que el login progrese (URL deja la página de login o aparece el portal), con diagnóstico de errores visibles si no progresa.
+
 ## 1.2.30
 
 - **Scraper AMEX: login POST robusto + diagnóstico de la respuesta JSON** (`scrapers/amex.py`): tras analizar `amex-ar.har` en detalle, el login real es un POST a `/myca/logon/canlac/action/login` cuya respuesta es JSON (no un redirect) y el flujo sigue con `GET /dashboard` → 302 → `accountSummary.do`. Ahora se captura y parsea la respuesta JSON completa: se loguean sus claves, se detecta `statusCode`/`redirectUrl`, se aborta con mensaje claro si AMEX rechaza el login, y se navega al `redirectUrl` devuelto (con fallback a accountSummary directo). El POST sigue sin enviar `encryptedData`/`signature` (los genera InAuth en el browser real); si AMEX los exige, la respuesta JSON lo dirá en el log para el próximo paso.

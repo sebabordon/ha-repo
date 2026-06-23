@@ -196,135 +196,127 @@ class AmexScraper(BaseScraper):
 
     def do_login(self, driver, config: dict) -> None:
         """
-        Login en AMEX AR via POST directo al endpoint de login.
+        Login en AMEX AR manejando el form real de la página.
 
-        InAuth (device fingerprinting de AMEX) bloquea el submit del form React
-        en Chromium headless. Se bypasea haciendo el POST directamente con
-        fetch(), que es la misma request que el form haría si InAuth lo dejara.
+        El login NO es un simple POST con cookie: la respuesta del endpoint
+        (myca/logon/canlac/action/login) NO trae Set-Cookie; el JS de la página
+        orquesta un handshake (InAuth device profile + ReadUserSession +
+        UpdateUserSession) usando el token devuelto. Por eso hay que dejar que el
+        JS de la página haga su trabajo: llenamos el form con send_keys (eventos
+        de teclado reales que React e InAuth detectan — el setter JS los marca
+        como bot) y clickeamos el botón real, dándole tiempo a InAuth a iniciar.
         """
         from selenium.common.exceptions import TimeoutException
+        from selenium.webdriver.common.by import By
 
         logger.info("[amex] do_login: navegando a %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
 
-        # Esperar a que la página cargue (establece cookies necesarias)
+        # ── Campo usuario ─────────────────────────────────────────────────────
         try:
-            self.wait_visible(driver, "input#eliloUserID", timeout=20)
+            user_el = self.wait_visible(driver, "input#eliloUserID", timeout=20)
         except TimeoutException:
             diag = self._login_diag(driver)
             raise TimeoutException(f"Página de login no cargó.\n{diag}")
 
-        # Dar tiempo a que los scripts se inicialicen (cookies de sesión, etc.)
-        time.sleep(3)
+        # Dar tiempo a InAuth (cc.js de cdn-path.com) a calcular el device profile.
+        # Sin esto, el submit dispara antes de que InAuth esté listo y el handshake
+        # falla silenciosamente (el form queda intacto, sin navegación).
+        logger.info("[amex] do_login: esperando init de InAuth (8s)…")
+        time.sleep(8)
 
-        # ── POST directo al endpoint de login ─────────────────────────────────
-        # El form React hace este mismo POST tras el dance de InAuth; lo hacemos
-        # directo. La respuesta es JSON e indica el resultado (statusCode / redirect).
-        logger.info("[amex] do_login: haciendo POST directo al endpoint de login")
-        driver.set_script_timeout(40)
-        login_result = driver.execute_async_script("""
-            var userId   = arguments[0];
-            var password = arguments[1];
-            var loginUrl = arguments[2];
-            var cb       = arguments[arguments.length - 1];
-
-            var params = new URLSearchParams();
-            params.set('request_type', 'login');
-            params.set('Face', 'es_AR');
-            params.set('Logon', 'Logon');
-            params.set('version', '4');
-            params.set('DestPage', 'https://global.americanexpress.com/dashboard');
-            params.set('UserID', userId);
-            params.set('Password', password);
-            params.set('channel', 'Web');
-            params.set('REMEMBERME', 'off');
-
-            var now = new Date();
-            params.set('b_hour',      String(now.getHours()));
-            params.set('b_minute',    String(now.getMinutes()));
-            params.set('b_second',    String(now.getSeconds()));
-            params.set('b_dayNumber', String(now.getDate()));
-            params.set('b_month',     String(now.getMonth() + 1));
-            params.set('b_year',      String(now.getFullYear()));
-            params.set('b_timeZone',  String(-now.getTimezoneOffset() / 60));
-
-            fetch(loginUrl, {
-                method: 'POST',
-                credentials: 'include',
-                body: params
-            })
-            .then(function(r) {
-                return r.text().then(function(t) {
-                    cb({status: r.status, body: t, ok: r.ok, url: r.url});
-                });
-            })
-            .catch(function(e) { cb({status: 0, error: String(e)}); });
-        """, config["usuario"], config["password"], _LOGIN_POST_URL) or {}
-
-        status = login_result.get("status", 0)
-        raw_body = str(login_result.get("body", "") or "")
-        logger.info("[amex] do_login: POST login status=%s, body=%s", status, raw_body[:500])
-
-        if login_result.get("error"):
-            raise RuntimeError(f"Login POST falló (CORS/red): {login_result['error']}")
-
-        # Parsear la respuesta JSON para entender el resultado
-        import json as _json
-        parsed = {}
+        # ── Llenar usuario con eventos de teclado reales ──────────────────────
+        logger.info("[amex] do_login: ingresando usuario con send_keys")
         try:
-            parsed = _json.loads(raw_body) if raw_body else {}
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", user_el)
         except Exception:
-            parsed = {}
+            pass
+        user_el.click()
+        user_el.clear()
+        user_el.send_keys(config["usuario"])
+        time.sleep(0.6)
 
-        # AMEX devuelve campos tipo statusCode / status / redirectUrl según el caso.
-        # Un login OK suele traer un redirectUrl al dashboard; un error trae un
-        # código/mensaje. Logueamos las claves para diagnóstico.
-        if parsed:
-            logger.info("[amex] do_login: respuesta JSON claves=%s", list(parsed.keys()))
+        # ── Llenar contraseña ─────────────────────────────────────────────────
+        pass_el = self.wait_visible(driver, "input#eliloPassword", timeout=15)
+        logger.info("[amex] do_login: ingresando contraseña con send_keys")
+        pass_el.click()
+        pass_el.clear()
+        pass_el.send_keys(config["password"])
+        time.sleep(0.6)
 
-        status_code = str(parsed.get("statusCode") or parsed.get("status") or "")
-        redirect_url = (
-            parsed.get("redirectUrl")
-            or parsed.get("redirect")
-            or parsed.get("location")
-            or ""
+        # Verificar que los valores quedaron
+        typed_user, typed_pwd = driver.execute_script(
+            "return [document.getElementById('eliloUserID')?.value||'',"
+            "document.getElementById('eliloPassword')?.value||''];"
+        )
+        logger.info(
+            "[amex] do_login: valores — usuario=%d chars, password=%d chars",
+            len(typed_user or ""), len(typed_pwd or ""),
         )
 
-        if status not in (200, 201, 302):
-            raise RuntimeError(f"Login POST status HTTP {status}: {raw_body[:400]}")
+        # ── Submit con el botón real ──────────────────────────────────────────
+        submit = self.wait_visible(driver, "button#loginSubmit, button[type='submit']", timeout=10)
+        logger.info("[amex] do_login: click en submit (Acceso seguro)")
+        try:
+            submit.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", submit)
 
-        # Si el JSON trae un statusCode de error explícito, abortar con el mensaje.
-        if status_code and status_code.upper() not in ("0", "SUCCESS", "OK", "200"):
-            msg = parsed.get("message") or parsed.get("statusMessage") or raw_body[:300]
-            raise RuntimeError(
-                f"Login rechazado por AMEX (statusCode={status_code}): {msg}"
-            )
-
-        # ── Navegar al portal (replica el GET /dashboard → 302 accountSummary) ─
-        dest = redirect_url or "https://global.americanexpress.com/dashboard"
-        logger.info("[amex] do_login: login POST OK, navegando a %s", dest[:100])
-        driver.get(dest)
-        time.sleep(2)
-
+        # ── Esperar a que el login progrese ───────────────────────────────────
+        # Éxito = la URL deja la página de login (va a global.americanexpress.com)
+        # o aparece un elemento del portal. Damos hasta 60s porque el handshake
+        # (InAuth + session manager) encadena varias llamadas.
         _portal_sel = (
             "div#middleContentHeader, div#leftNav, select#cardAccount, "
             "div[data-module-name='axp-account-summary'], "
             "[data-testid='account-summary']"
         )
+
+        def _login_progressed(d):
+            url = d.current_url
+            if "global.americanexpress.com" in url and "login" not in url.lower():
+                return True
+            try:
+                if d.find_elements(By.CSS_SELECTOR, _portal_sel):
+                    return True
+            except Exception:
+                pass
+            return False
+
+        from selenium.webdriver.support.ui import WebDriverWait
+        try:
+            WebDriverWait(driver, 60).until(_login_progressed)
+            logger.info("[amex] do_login: login progresó, URL = %s", driver.current_url[:100])
+        except TimeoutException:
+            # Capturar diagnóstico detallado: errores visibles, estado del botón
+            post = driver.execute_script("""
+                var out = {url: location.href, title: document.title};
+                var errs = document.querySelectorAll(
+                    '[class*="error"],[class*="Error"],[data-testid*="error"],[role="alert"]'
+                );
+                var msgs = [];
+                for (var i=0;i<errs.length;i++){var t=(errs[i].textContent||'').trim();
+                    if(t && t.length<200) msgs.push(t);}
+                out.errors = msgs.slice(0,5);
+                var btn = document.getElementById('loginSubmit');
+                if (btn){out.btn_busy=btn.getAttribute('aria-busy');
+                    out.btn_disabled=btn.getAttribute('aria-disabled');}
+                out.body = (document.body.innerText||'').substring(0,400);
+                return out;
+            """) or {}
+            logger.error("[amex] do_login: login no progresó tras 60s: %s", post)
+            raise TimeoutException(
+                f"Login no progresó tras 60s (submit no estableció sesión). "
+                f"Estado: {post}"
+            )
+
+        # ── Navegar al portal legacy y confirmar ──────────────────────────────
+        driver.get(_ACCOUNT_SUMMARY)
         try:
             self.wait_for(driver, _portal_sel, timeout=30)
         except TimeoutException:
-            # Segundo intento: ir directo al accountSummary canlac
-            logger.info("[amex] do_login: portal no apareció, probando accountSummary directo")
-            driver.get(_ACCOUNT_SUMMARY)
-            try:
-                self.wait_for(driver, _portal_sel, timeout=20)
-            except TimeoutException:
-                diag = self._login_diag(driver)
-                raise TimeoutException(
-                    f"Portal post-login no cargó (login POST HTTP {status}, "
-                    f"statusCode={status_code or 'n/a'}).\n{diag}"
-                )
+            diag = self._login_diag(driver)
+            raise TimeoutException(f"Portal post-login no cargó.\n{diag}")
         logger.info("[amex] do_login: portal cargado, URL = %s", driver.current_url[:100])
         logger.info("[amex] Login exitoso")
 
