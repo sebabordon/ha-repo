@@ -148,6 +148,33 @@ class AmexScraper(BaseScraper):
         except (ElementNotInteractableException, ElementClickInterceptedException):
             driver.execute_script("arguments[0].click();", el)
 
+    def _login_diag(self, driver) -> str:
+        """Captura diagnóstico del estado del browser para errores de login."""
+        from selenium.webdriver.common.by import By
+        parts = [
+            f"URL: {driver.current_url[:120]}",
+            f"Título: {driver.title[:80]!r}",
+        ]
+        try:
+            inputs = driver.find_elements(By.CSS_SELECTOR, "input")
+            for inp in inputs[:10]:
+                attrs = {a: inp.get_attribute(a) for a in ("id", "name", "type", "autocomplete") if inp.get_attribute(a)}
+                vis = "visible" if inp.is_displayed() else "oculto"
+                parts.append(f"  <input {attrs}> [{vis}]")
+            btns = driver.find_elements(By.CSS_SELECTOR, "button")
+            for btn in btns[:6]:
+                bid = btn.get_attribute("id") or ""
+                btype = btn.get_attribute("type") or ""
+                btxt = (btn.text or "")[:30]
+                vis = "visible" if btn.is_displayed() else "oculto"
+                parts.append(f"  <button id={bid!r} type={btype!r}> {btxt!r} [{vis}]")
+            iframes = driver.find_elements(By.TAG_NAME, "iframe")
+            if iframes:
+                parts.append(f"  iframes: {len(iframes)}")
+        except Exception as exc:
+            parts.append(f"  (error capturando DOM: {exc})")
+        return "\n".join(parts)
+
     def do_login(self, driver, config: dict) -> None:
         """
         Login en la SPA React de AMEX AR.
@@ -156,19 +183,25 @@ class AmexScraper(BaseScraper):
         Algunos flows muestran usuario y contraseña en pantallas separadas
         (botón «Continuar» entre ambas); este código lo maneja.
         """
+        from selenium.common.exceptions import TimeoutException
+
         logger.info("[amex] do_login: navegando a %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
 
         # ── Usuario ───────────────────────────────────────────────────────────
-        # Se usa wait_visible (no wait_for) porque la página puede tener el campo
-        # duplicado entre el form legacy y el SPA; el oculto da 'not interactable'.
-        logger.info("[amex] do_login: esperando campo de usuario…")
-        user_el = self.wait_visible(
-            driver,
+        _user_sel = (
             "input#eliloUserID, input[name='eliloUserID'], "
-            "input[type='email'][autocomplete='username']",
-            timeout=20,
+            "input[type='email'][autocomplete='username']"
         )
+        logger.info("[amex] do_login: esperando campo de usuario…")
+        try:
+            user_el = self.wait_visible(driver, _user_sel, timeout=20)
+        except TimeoutException:
+            diag = self._login_diag(driver)
+            logger.error("[amex] do_login: campo usuario no encontrado\n%s", diag)
+            raise TimeoutException(
+                f"Campo usuario no encontrado tras 20s.\n{diag}"
+            )
         logger.info("[amex] do_login: campo usuario encontrado, ingresando datos")
         self._type_into(driver, user_el, config["usuario"])
         time.sleep(0.5)
@@ -191,37 +224,50 @@ class AmexScraper(BaseScraper):
                 time.sleep(2)
 
         # ── Contraseña ────────────────────────────────────────────────────────
-        logger.info("[amex] do_login: esperando campo de contraseña…")
-        pass_el = self.wait_visible(
-            driver,
+        _pwd_sel = (
             "input#eliloPassword, input[name='eliloPassword'], "
-            "input[type='password']",
-            timeout=15,
+            "input[type='password']"
         )
+        logger.info("[amex] do_login: esperando campo de contraseña…")
+        try:
+            pass_el = self.wait_visible(driver, _pwd_sel, timeout=15)
+        except TimeoutException:
+            diag = self._login_diag(driver)
+            logger.error("[amex] do_login: campo contraseña no encontrado\n%s", diag)
+            raise TimeoutException(
+                f"Campo contraseña no encontrado tras 15s.\n{diag}"
+            )
         logger.info("[amex] do_login: campo contraseña encontrado, ingresando")
         self._type_into(driver, pass_el, config["password"])
         time.sleep(0.5)
 
         # ── Submit ────────────────────────────────────────────────────────────
-        submit = self.wait_visible(
-            driver,
-            "button#loginSubmit, button[type='submit'], input[type='submit']",
-            timeout=10,
-        )
+        _submit_sel = "button#loginSubmit, button[type='submit'], input[type='submit']"
+        try:
+            submit = self.wait_visible(driver, _submit_sel, timeout=10)
+        except TimeoutException:
+            diag = self._login_diag(driver)
+            logger.error("[amex] do_login: botón submit no encontrado\n%s", diag)
+            raise TimeoutException(
+                f"Botón submit no encontrado tras 10s.\n{diag}"
+            )
         logger.info("[amex] do_login: haciendo click en Submit, esperando portal…")
         self._click_el(driver, submit)
 
         # ── Esperar portal post-login ─────────────────────────────────────────
-        # Puede llegar al portal legacy (JSP) o al dashboard moderno (React)
-        self.wait_for(
-            driver,
-            # Portal legacy
+        _portal_sel = (
             "div#middleContentHeader, div#leftNav, select#cardAccount, "
-            # Dashboard moderno (fallback)
             "div[data-module-name='axp-account-summary'], "
-            "[data-testid='account-summary']",
-            timeout=45,
+            "[data-testid='account-summary']"
         )
+        try:
+            self.wait_for(driver, _portal_sel, timeout=45)
+        except TimeoutException:
+            diag = self._login_diag(driver)
+            logger.error("[amex] do_login: portal post-login no cargó\n%s", diag)
+            raise TimeoutException(
+                f"Portal post-login no cargó tras 45s.\n{diag}"
+            )
         logger.info("[amex] do_login: portal cargado, URL = %s", driver.current_url[:100])
         logger.info("[amex] Login exitoso")
 

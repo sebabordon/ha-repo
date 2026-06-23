@@ -1,3 +1,7 @@
+## 1.2.23
+
+- **Scraper AMEX: diagnóstico detallado en errores de login** (`scrapers/amex.py`): cuando falla cualquier paso del login (campo usuario, contraseña, submit, o portal post-login), el error ahora incluye URL actual, título de página, y lista de inputs/buttons visibles en el DOM. Permite identificar si el fallo es por cambio de selectores, bloqueo anti-bot (Akamai), o redirect inesperado — antes solo decía "Message:" vacío.
+
 ## 1.2.22
 
 - **Gráficos: opción "9 meses" en todos los selectores de rango** (`index.html`): se agregó la opción de 9 meses en los tres combos de selección de período — gráfico principal mes a mes (`#monthly-meses`), gráficos personalizados (`#cf-meses`), y configuración de meses por defecto en UI (`#ui-graf-meses`). Ahora las opciones son 3-6-9-12 (y 24 donde ya existía).
