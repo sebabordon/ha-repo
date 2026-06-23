@@ -148,6 +148,21 @@ class AmexScraper(BaseScraper):
         except (ElementNotInteractableException, ElementClickInterceptedException):
             driver.execute_script("arguments[0].click();", el)
 
+    @staticmethod
+    def _react_set_input(driver, element_id: str, value: str) -> None:
+        """Escribe en un input controlado por React usando el setter nativo."""
+        driver.execute_script("""
+            var el = document.getElementById(arguments[0]);
+            if (!el) return;
+            el.focus();
+            var setter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            ).set;
+            setter.call(el, arguments[1]);
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+        """, element_id, value)
+
     def _login_diag(self, driver) -> str:
         """Captura diagnóstico del estado del browser para errores de login."""
         from selenium.webdriver.common.by import By
@@ -202,9 +217,14 @@ class AmexScraper(BaseScraper):
             raise TimeoutException(
                 f"Campo usuario no encontrado tras 20s.\n{diag}"
             )
-        logger.info("[amex] do_login: campo usuario encontrado, ingresando datos")
-        self._type_into(driver, user_el, config["usuario"])
-        time.sleep(0.5)
+        # ── Ingresar credenciales vía setter nativo de React ─────────────────
+        # send_keys pone el valor en el DOM pero React no lo registra en su
+        # state interno (el form se submitea con campos vacíos y no hace nada).
+        # El setter nativo bypasea el property descriptor de React y el evento
+        # 'input' con bubbles sincroniza el state del componente controlado.
+        logger.info("[amex] do_login: campo usuario encontrado, ingresando datos vía React setter")
+        self._react_set_input(driver, "eliloUserID", config["usuario"])
+        time.sleep(0.3)
 
         # ── Botón «Continuar» (si el flow separa usuario y contraseña) ────────
         pwd_visible = self._find_visible(
@@ -237,42 +257,19 @@ class AmexScraper(BaseScraper):
             raise TimeoutException(
                 f"Campo contraseña no encontrado tras 15s.\n{diag}"
             )
-        logger.info("[amex] do_login: campo contraseña encontrado, ingresando")
-        self._type_into(driver, pass_el, config["password"])
-        time.sleep(0.5)
+        logger.info("[amex] do_login: campo contraseña encontrado, ingresando vía React setter")
+        self._react_set_input(driver, "eliloPassword", config["password"])
+        time.sleep(0.3)
 
-        # ── Verificar que los valores quedaron en los campos ──────────────────
-        typed_user = driver.execute_script(
-            "return document.getElementById('eliloUserID')?.value || '';"
-        )
-        typed_pwd = driver.execute_script(
-            "return document.getElementById('eliloPassword')?.value || '';"
+        # ── Verificar valores ─────────────────────────────────────────────────
+        typed_user, typed_pwd = driver.execute_script(
+            "return [document.getElementById('eliloUserID')?.value||'',"
+            "document.getElementById('eliloPassword')?.value||''];"
         )
         logger.info(
             "[amex] do_login: valores en campos — usuario=%d chars, password=%d chars",
             len(typed_user), len(typed_pwd),
         )
-        if not typed_user or not typed_pwd:
-            logger.warning("[amex] do_login: campos vacíos tras _type_into — reintentando vía React")
-            if not typed_user:
-                driver.execute_script(
-                    "var el=document.getElementById('eliloUserID');"
-                    "var nativeInputValueSetter=Object.getOwnPropertyDescriptor("
-                    "  window.HTMLInputElement.prototype,'value').set;"
-                    "nativeInputValueSetter.call(el, arguments[0]);"
-                    "el.dispatchEvent(new Event('input',{bubbles:true}));",
-                    config["usuario"],
-                )
-            if not typed_pwd:
-                driver.execute_script(
-                    "var el=document.getElementById('eliloPassword');"
-                    "var nativeInputValueSetter=Object.getOwnPropertyDescriptor("
-                    "  window.HTMLInputElement.prototype,'value').set;"
-                    "nativeInputValueSetter.call(el, arguments[0]);"
-                    "el.dispatchEvent(new Event('input',{bubbles:true}));",
-                    config["password"],
-                )
-            time.sleep(0.3)
 
         # ── Submit ────────────────────────────────────────────────────────────
         _submit_sel = "button#loginSubmit, button[type='submit'], input[type='submit']"

@@ -1,3 +1,7 @@
+## 1.2.25
+
+- **Scraper AMEX: fix login — usar React native setter en vez de send_keys** (`scrapers/amex.py`): el form de login de AMEX dejó de funcionar con `send_keys` de Selenium: el valor quedaba en el DOM pero React no lo registraba en su state interno, causando que el submit no hiciera nada. Se reemplazó por `_react_set_input` que usa `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set` + evento `input` con `bubbles:true`, que sí sincroniza el state del componente controlado de React.
+
 ## 1.2.24
 
 - **Scraper AMEX: diagnóstico post-submit y fallback React para inputs** (`scrapers/amex.py`): después del click en submit, se verifica que los campos realmente contengan los valores escritos (y si están vacíos, se reintenta con el setter nativo de React via `HTMLInputElement.prototype.value`). Se agrega chequeo intermedio 8s post-submit que captura errores visibles, estado del botón, contenido de iframes y snippet de texto de la página — todo incluido en el mensaje de error del panel si el portal no carga.
