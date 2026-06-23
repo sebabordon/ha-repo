@@ -70,6 +70,26 @@ class AmexScraper(BaseScraper):
     # headful bajo Xvfb (DISPLAY=:99, ver run.sh) para pasar la detección.
     headless     = False
 
+    @staticmethod
+    def _is_manual(config: dict) -> bool:
+        return str(config.get("login_manual", "")).strip().lower() in (
+            "1", "true", "on", "yes", "sí", "si",
+        )
+
+    async def run(self, config: dict):
+        """
+        En modo login_manual (debug) limpiamos la sesión guardada ANTES del run
+        para que el browser no restaure cookies viejas ni navegue a
+        global.americanexpress.com en check_session — así el único hit es la
+        página de login, lo más parecido a abrir una pestaña a mano.
+        """
+        if self._is_manual(config):
+            try:
+                self.clear_session()
+            except Exception:
+                pass
+        return await super().run(config)
+
     # ── Verificación de sesión ────────────────────────────────────────────────
 
     def check_session(self, driver) -> bool:
@@ -198,6 +218,67 @@ class AmexScraper(BaseScraper):
             parts.append(f"  (error capturando DOM: {exc})")
         return "\n".join(parts)
 
+    def _do_login_manual(self, driver) -> None:
+        """
+        Modo debug: navega UNA sola vez a la página de login y espera a que el
+        usuario ingrese las credenciales a mano por el visor noVNC. Detecta el
+        login exitoso cuando la URL llega al portal (global.americanexpress.com)
+        o aparece un elemento del portal. Hasta 5 minutos.
+
+        Sirve para aislar la causa del 403 de Akamai: si el login MANUAL en este
+        mismo browser funciona, el fingerprint del browser está OK y el problema
+        es la navegación/automatización; si también falla, es el browser.
+        """
+        from selenium.common.exceptions import TimeoutException
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+
+        logger.info("[amex] do_login MANUAL: navegando UNA vez a %s", _LOGIN_URL)
+        driver.get(_LOGIN_URL)
+        self.log_fingerprint(driver)
+        logger.info(
+            "[amex] do_login MANUAL: esperando login a mano por noVNC (puerto 6080), "
+            "hasta 5 min…"
+        )
+
+        _portal_sel = (
+            "div#middleContentHeader, div#leftNav, select#cardAccount, "
+            "div[data-module-name='axp-account-summary'], "
+            "[data-testid='account-summary']"
+        )
+
+        def _logged_in(d):
+            url = d.current_url
+            if "global.americanexpress.com" in url and "login" not in url.lower():
+                return True
+            try:
+                if d.find_elements(By.CSS_SELECTOR, _portal_sel):
+                    return True
+            except Exception:
+                pass
+            return False
+
+        try:
+            WebDriverWait(driver, 300).until(_logged_in)
+            logger.info("[amex] do_login MANUAL: login detectado, URL = %s",
+                        driver.current_url[:100])
+        except TimeoutException:
+            blocked = self.capture_4xx_responses(driver)
+            blocked_str = ("\n4xx/5xx:\n  " + "\n  ".join(blocked)) if blocked else ""
+            raise TimeoutException(
+                f"Login manual no completado en 5 min.{blocked_str}\n"
+                f"{self._login_diag(driver)}"
+            )
+
+        # Asegurar que estamos en el portal legacy para que scrape() funcione
+        driver.get(_ACCOUNT_SUMMARY)
+        try:
+            self.wait_for(driver, _portal_sel, timeout=30)
+        except TimeoutException:
+            diag = self._login_diag(driver)
+            raise TimeoutException(f"Portal post-login (manual) no cargó.\n{diag}")
+        logger.info("[amex] do_login MANUAL: portal cargado, login exitoso")
+
     def do_login(self, driver, config: dict) -> None:
         """
         Login en AMEX AR manejando el form real de la página.
@@ -212,6 +293,11 @@ class AmexScraper(BaseScraper):
         """
         from selenium.common.exceptions import TimeoutException
         from selenium.webdriver.common.by import By
+
+        # ── Modo manual (debug) ───────────────────────────────────────────────
+        if self._is_manual(config):
+            self._do_login_manual(driver)
+            return
 
         logger.info("[amex] do_login: navegando a %s", _LOGIN_URL)
         driver.get(_LOGIN_URL)
