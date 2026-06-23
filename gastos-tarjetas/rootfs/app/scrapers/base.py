@@ -183,6 +183,9 @@ class BaseScraper(ABC):
         opts.add_argument("--disable-blink-features=AutomationControlled")
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
         opts.add_experimental_option("useAutomationExtension", False)
+        # Performance logging: permite capturar respuestas 4xx/5xx (ej. 403 de
+        # Akamai) vía driver.get_log('performance'). Ver capture_4xx_responses().
+        opts.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
         if os.path.exists(_CHROMIUM_BIN):
             opts.binary_location = _CHROMIUM_BIN
@@ -243,12 +246,118 @@ class BaseScraper(ABC):
                     Object.defineProperty(navigator, 'platform', {
                         get: () => 'Win32'
                     });
+                    // 7. WebGL vendor/renderer — sin GPU, Chromium usa SwiftShader
+                    //    (render por software), señal fuerte de bot/datacenter para
+                    //    Akamai. Lo spoofeamos a una GPU real plausible (Intel/ANGLE).
+                    var _spoofGL = function(proto) {
+                        if (!proto) return;
+                        var orig = proto.getParameter;
+                        proto.getParameter = function(p) {
+                            if (p === 37445) return 'Google Inc. (Intel)';            // UNMASKED_VENDOR_WEBGL
+                            if (p === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)'; // UNMASKED_RENDERER_WEBGL
+                            return orig.call(this, p);
+                        };
+                    };
+                    try { _spoofGL(window.WebGLRenderingContext && WebGLRenderingContext.prototype); } catch(e) {}
+                    try { _spoofGL(window.WebGL2RenderingContext && WebGL2RenderingContext.prototype); } catch(e) {}
+                    // 8. hardwareConcurrency / deviceMemory — valores plausibles de desktop
+                    try { Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8}); } catch(e) {}
+                    try { Object.defineProperty(navigator, 'deviceMemory', {get: () => 8}); } catch(e) {}
                 """
             })
         except Exception as _cdp_err:
             pass   # si la versión de chromedriver no soporta CDP, ignoramos
 
+        # ── Client Hints coherentes con el User-Agent (Windows Chrome) ─────────
+        # El UA dice Windows pero los Client Hints (sec-ch-ua-platform,
+        # navigator.userAgentData) filtran Linux por defecto → inconsistencia que
+        # Akamai marca como bot. setUserAgentOverride sincroniza ambos.
+        try:
+            driver.execute_cdp_cmd("Network.setUserAgentOverride", {
+                "userAgent": _UA,
+                "acceptLanguage": "es-AR,es;q=0.9,en;q=0.8",
+                "platform": "Win32",
+                "userAgentMetadata": {
+                    "brands": [
+                        {"brand": "Chromium", "version": "124"},
+                        {"brand": "Google Chrome", "version": "124"},
+                        {"brand": "Not-A.Brand", "version": "99"},
+                    ],
+                    "fullVersionList": [
+                        {"brand": "Chromium", "version": "124.0.6367.91"},
+                        {"brand": "Google Chrome", "version": "124.0.6367.91"},
+                        {"brand": "Not-A.Brand", "version": "99.0.0.0"},
+                    ],
+                    "fullVersion": "124.0.6367.91",
+                    "platform": "Windows",
+                    "platformVersion": "10.0.0",
+                    "architecture": "x86",
+                    "model": "",
+                    "mobile": False,
+                },
+            })
+        except Exception:
+            pass   # versión de chromedriver sin soporte; no es fatal
+
         return driver
+
+    @staticmethod
+    def log_fingerprint(driver) -> None:
+        """Loguea el fingerprint real del browser (para debug anti-bot)."""
+        try:
+            fp = driver.execute_script("""
+                var gl = null, vendor = '', renderer = '';
+                try {
+                    var c = document.createElement('canvas');
+                    gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+                    if (gl) {
+                        vendor = gl.getParameter(37445);
+                        renderer = gl.getParameter(37446);
+                    }
+                } catch(e) {}
+                var ch = (navigator.userAgentData && navigator.userAgentData.platform) || '(sin UA-CH)';
+                return {
+                    ua: navigator.userAgent,
+                    webdriver: navigator.webdriver,
+                    platform: navigator.platform,
+                    uaCHPlatform: ch,
+                    languages: (navigator.languages || []).join(','),
+                    hardwareConcurrency: navigator.hardwareConcurrency,
+                    webglVendor: vendor,
+                    webglRenderer: renderer
+                };
+            """) or {}
+            logger.info("[fingerprint] %s", fp)
+        except Exception as exc:
+            logger.info("[fingerprint] error: %s", exc)
+
+    @staticmethod
+    def capture_4xx_responses(driver, limit: int = 15) -> list[str]:
+        """
+        Extrae las respuestas HTTP 4xx/5xx del performance log (requiere el
+        capability goog:loggingPrefs performance). Útil para ver qué requests
+        bloquea Akamai (403). Devuelve líneas legibles 'STATUS METHOD url'.
+        """
+        import json as _json
+        out: list[str] = []
+        try:
+            for entry in driver.get_log("performance"):
+                try:
+                    msg = _json.loads(entry["message"])["message"]
+                except Exception:
+                    continue
+                if msg.get("method") != "Network.responseReceived":
+                    continue
+                resp = msg.get("params", {}).get("response", {})
+                status = resp.get("status", 0)
+                if status >= 400:
+                    url = (resp.get("url") or "")[:120]
+                    out.append(f"{status} {url}")
+                    if len(out) >= limit:
+                        break
+        except Exception as exc:
+            out.append(f"(error leyendo performance log: {exc})")
+        return out
 
     # ── Sesión (cookies + localStorage) ──────────────────────────────────────
 

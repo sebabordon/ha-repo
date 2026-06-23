@@ -221,7 +221,14 @@ class AmexScraper(BaseScraper):
             user_el = self.wait_visible(driver, "input#eliloUserID", timeout=20)
         except TimeoutException:
             diag = self._login_diag(driver)
+            # Akamai puede devolver 403 y no renderizar el form; mostrar los 4xx.
+            blocked = self.capture_4xx_responses(driver)
+            if blocked:
+                diag += "\nRespuestas 4xx/5xx:\n  " + "\n  ".join(blocked)
             raise TimeoutException(f"Página de login no cargó.\n{diag}")
+
+        # Loguear el fingerprint real para verificar que el spoof anti-bot aplicó
+        self.log_fingerprint(driver)
 
         # Dar tiempo a InAuth (cc.js de cdn-path.com) a calcular el device profile.
         # Sin esto, el submit dispara antes de que InAuth esté listo y el handshake
@@ -309,9 +316,14 @@ class AmexScraper(BaseScraper):
                 return out;
             """) or {}
             logger.error("[amex] do_login: login no progresó tras 60s: %s", post)
+            # Capturar los 4xx/5xx (403 de Akamai bloqueando el sensor/login)
+            blocked = self.capture_4xx_responses(driver)
+            blocked_str = ("\nRespuestas 4xx/5xx:\n  " + "\n  ".join(blocked)) if blocked else ""
+            if blocked:
+                logger.error("[amex] do_login: requests bloqueadas:\n  %s", "\n  ".join(blocked))
             raise TimeoutException(
                 f"Login no progresó tras 60s (submit no estableció sesión). "
-                f"Estado: {post}"
+                f"Estado: {post}{blocked_str}"
             )
 
         # ── Navegar al portal legacy y confirmar ──────────────────────────────
