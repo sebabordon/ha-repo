@@ -241,6 +241,39 @@ class AmexScraper(BaseScraper):
         self._type_into(driver, pass_el, config["password"])
         time.sleep(0.5)
 
+        # ── Verificar que los valores quedaron en los campos ──────────────────
+        typed_user = driver.execute_script(
+            "return document.getElementById('eliloUserID')?.value || '';"
+        )
+        typed_pwd = driver.execute_script(
+            "return document.getElementById('eliloPassword')?.value || '';"
+        )
+        logger.info(
+            "[amex] do_login: valores en campos — usuario=%d chars, password=%d chars",
+            len(typed_user), len(typed_pwd),
+        )
+        if not typed_user or not typed_pwd:
+            logger.warning("[amex] do_login: campos vacíos tras _type_into — reintentando vía React")
+            if not typed_user:
+                driver.execute_script(
+                    "var el=document.getElementById('eliloUserID');"
+                    "var nativeInputValueSetter=Object.getOwnPropertyDescriptor("
+                    "  window.HTMLInputElement.prototype,'value').set;"
+                    "nativeInputValueSetter.call(el, arguments[0]);"
+                    "el.dispatchEvent(new Event('input',{bubbles:true}));",
+                    config["usuario"],
+                )
+            if not typed_pwd:
+                driver.execute_script(
+                    "var el=document.getElementById('eliloPassword');"
+                    "var nativeInputValueSetter=Object.getOwnPropertyDescriptor("
+                    "  window.HTMLInputElement.prototype,'value').set;"
+                    "nativeInputValueSetter.call(el, arguments[0]);"
+                    "el.dispatchEvent(new Event('input',{bubbles:true}));",
+                    config["password"],
+                )
+            time.sleep(0.3)
+
         # ── Submit ────────────────────────────────────────────────────────────
         _submit_sel = "button#loginSubmit, button[type='submit'], input[type='submit']"
         try:
@@ -251,8 +284,45 @@ class AmexScraper(BaseScraper):
             raise TimeoutException(
                 f"Botón submit no encontrado tras 10s.\n{diag}"
             )
-        logger.info("[amex] do_login: haciendo click en Submit, esperando portal…")
+        logger.info("[amex] do_login: haciendo click en Submit…")
         self._click_el(driver, submit)
+
+        # ── Chequeo intermedio post-submit ────────────────────────────────────
+        time.sleep(8)
+        post_url = driver.current_url
+        logger.info("[amex] do_login: URL 8s post-submit = %s", post_url[:120])
+        _post_submit_info = ""
+        if "login" in post_url.lower():
+            post_diag = driver.execute_script("""
+                var out = {};
+                var errs = document.querySelectorAll(
+                    '[class*="error"], [class*="Error"], [data-testid*="error"], '
+                    + '[role="alert"], .alert, .notification'
+                );
+                var msgs = [];
+                for (var i = 0; i < errs.length; i++) {
+                    var t = (errs[i].textContent || '').trim();
+                    if (t && t.length < 200) msgs.push(t);
+                }
+                out.errors = msgs.slice(0, 5);
+                var iframes = document.querySelectorAll('iframe');
+                var ifs = [];
+                for (var j = 0; j < iframes.length; j++) {
+                    ifs.push((iframes[j].src || iframes[j].getAttribute('src') || '(sin src)').substring(0, 120));
+                }
+                out.iframes = ifs;
+                var btn = document.getElementById('loginSubmit');
+                if (btn) {
+                    out.btn_busy = btn.getAttribute('aria-busy');
+                    out.btn_disabled = btn.getAttribute('aria-disabled');
+                    out.btn_text = (btn.textContent || '').trim().substring(0, 40);
+                }
+                out.title = document.title;
+                out.body_text_snippet = (document.body.innerText || '').substring(0, 500);
+                return out;
+            """) or {}
+            logger.info("[amex] do_login: diagnóstico post-submit = %s", post_diag)
+            _post_submit_info = f"\nPost-submit (8s): {post_diag}"
 
         # ── Esperar portal post-login ─────────────────────────────────────────
         _portal_sel = (
@@ -266,7 +336,7 @@ class AmexScraper(BaseScraper):
             diag = self._login_diag(driver)
             logger.error("[amex] do_login: portal post-login no cargó\n%s", diag)
             raise TimeoutException(
-                f"Portal post-login no cargó tras 45s.\n{diag}"
+                f"Portal post-login no cargó tras 45s.{_post_submit_info}\n{diag}"
             )
         logger.info("[amex] do_login: portal cargado, URL = %s", driver.current_url[:100])
         logger.info("[amex] Login exitoso")

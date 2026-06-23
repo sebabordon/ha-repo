@@ -1,3 +1,7 @@
+## 1.2.24
+
+- **Scraper AMEX: diagnóstico post-submit y fallback React para inputs** (`scrapers/amex.py`): después del click en submit, se verifica que los campos realmente contengan los valores escritos (y si están vacíos, se reintenta con el setter nativo de React via `HTMLInputElement.prototype.value`). Se agrega chequeo intermedio 8s post-submit que captura errores visibles, estado del botón, contenido de iframes y snippet de texto de la página — todo incluido en el mensaje de error del panel si el portal no carga.
+
 ## 1.2.23
 
 - **Scraper AMEX: diagnóstico detallado en errores de login** (`scrapers/amex.py`): cuando falla cualquier paso del login (campo usuario, contraseña, submit, o portal post-login), el error ahora incluye URL actual, título de página, y lista de inputs/buttons visibles en el DOM. Permite identificar si el fallo es por cambio de selectores, bloqueo anti-bot (Akamai), o redirect inesperado — antes solo decía "Message:" vacío.
