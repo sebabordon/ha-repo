@@ -61,6 +61,13 @@ class AmexScraper(BaseScraper):
     fuente       = "amex"
     nombre       = "AMEX Argentina"
     login_origin = "https://www.americanexpress.com"
+    # La sesión de AMEX no revalida de forma confiable entre runs, y el viejo
+    # check_session navegaba a global.americanexpress.com ANTES del login —
+    # navegación de más que además pega al dominio de Akamai con cookies/estado
+    # sucio antes de un login limpio. Con save_session=False el base NO restaura
+    # ni valida sesión: limpia, va directo a do_login (siempre login fresco) y
+    # no persiste. Una sola navegación: la del login.
+    save_session = False
 
     # ── WebDriver remoto (Mac) ────────────────────────────────────────────────
     # AMEX usa Akamai Bot Manager, que rechaza el fingerprint del Chromium de
@@ -123,30 +130,10 @@ class AmexScraper(BaseScraper):
     # ── Verificación de sesión ────────────────────────────────────────────────
 
     def check_session(self, driver) -> bool:
-        """
-        Navega al portal legacy. Si hay sesión activa llega a la página de
-        account summary (div#middleContentHeader). Si no, redirige al login.
-        """
-        try:
-            logger.info("[amex] check_session: navegando al portal legacy")
-            driver.get(_ACCOUNT_SUMMARY)
-            time.sleep(3)
-            current_url = driver.current_url
-            logger.info("[amex] check_session: URL tras navegación = %s", current_url[:100])
-            el = self.find(
-                driver,
-                "div#middleContentHeader, div#summaryWrap, "
-                "select#cardAccount, div#leftNav",
-            )
-            logger.info(
-                "[amex] check_session: elemento portal encontrado = %s%s",
-                el is not None,
-                f" (title={driver.title[:60]!r})" if not el else "",
-            )
-            return el is not None
-        except Exception as exc:
-            logger.debug("[amex] check_session error: %s", exc)
-            return False
+        # No-op: con save_session=False el base nunca llama a check_session.
+        # AMEX siempre hace login fresco, sin la navegación previa a
+        # global.americanexpress.com (que era la "navegación de más").
+        return False
 
     # ── Login ─────────────────────────────────────────────────────────────────
 

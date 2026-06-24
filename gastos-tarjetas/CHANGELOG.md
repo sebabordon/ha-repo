@@ -1,3 +1,7 @@
+## 1.2.43
+
+- **Scraper AMEX: elimina la doble navegación previa al login** (`scrapers/amex.py`): el `check_session` navegaba a `global.americanexpress.com` (que redirige al login) ANTES de que `do_login` navegara al login de nuevo — navegación de más que además pegaba al dominio de Akamai con estado sucio antes de un login limpio. Se setea `save_session = False` (como en la 1.2.36, que se había perdido en el revert a 1.2.26): el base ya no restaura ni valida sesión, va directo a `do_login` con una sola navegación. `check_session` queda como no-op.
+
 ## 1.2.42
 
 - **Scraper AMEX: login con interacción humana (mouse + cadencia de tipeo) para pasar Akamai** (`scrapers/amex.py`): se descubrió (probando en el Chrome real de la Mac) que Akamai bloquea el login automático aunque sea Chrome real, porque su sensor (bmak) mide actividad de mouse/teclado y el llenado instantáneo sin mover el puntero = entropía cero = bot. Confirmado: moviendo el mouse a mano y clickeando, el login pasaba solo. Ahora el `do_login` simula interacción humana: `_wiggle_mouse` (pasea el puntero por los campos con pausas vía ActionChains), `_human_click` (mueve el puntero al elemento + hover + click), y `_human_type` (tipea carácter por carácter con delays variables 50–160ms) para usuario, contraseña y submit. Esto genera la entropía de comportamiento que Akamai espera, sin intervención manual. Headless sigue sin pasar (destildar el checkbox); headful + esta humanización es lo que funciona.
