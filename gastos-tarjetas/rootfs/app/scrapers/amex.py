@@ -100,11 +100,16 @@ class AmexScraper(BaseScraper):
         opts.add_argument("--disable-blink-features=AutomationControlled")
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
         opts.add_experimental_option("useAutomationExtension", False)
+        # Headless solo sirve con sesión tibia (check_session saltea el login).
+        # En login FRÍO (sin sesión cacheada) Akamai detecta el headless y bloquea,
+        # así que para ese run usamos headful aunque esté pedido headless: loguea,
+        # cachea la sesión, y los próximos runs ya pueden ir headless.
         headless = getattr(self, "_remote_headless", False)
+        if headless and not self._has_session():
+            logger.info("[amex] headless pedido pero SIN sesión cacheada (login frío) "
+                        "→ uso headful este run para loguear y cachear; los próximos van headless")
+            headless = False
         if headless:
-            # Chrome real de macOS en headless conserva casi todo el fingerprint
-            # (fuentes/GPU/codecs reales) y suele pasar Akamai igual. Si lo
-            # desafía, destildar el checkbox y vuelve a headful.
             opts.add_argument("--headless=new")
         profile = getattr(self, "_remote_profile", "")
         if profile:
@@ -150,7 +155,17 @@ class AmexScraper(BaseScraper):
                 el is not None,
                 f" (title={driver.title[:60]!r})" if not el else "",
             )
-            return el is not None
+            ok = el is not None
+            if not ok:
+                # Sesión cacheada vencida/inválida → limpiarla para que el próximo
+                # run vaya frío (headful) y re-loguee, en vez de reintentar headless
+                # contra un login que Akamai bloquea.
+                try:
+                    self.clear_session()
+                    logger.info("[amex] check_session: sesión cacheada inválida — limpiada")
+                except Exception:
+                    pass
+            return ok
         except Exception as exc:
             logger.debug("[amex] check_session error: %s", exc)
             return False
