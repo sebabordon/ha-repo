@@ -1,3 +1,7 @@
+## 1.2.46
+
+- **Scraper AMEX: ventana del Chrome remoto fuera de pantalla** (`scrapers/amex.py`): se agregó `--window-position=-3000,-3000` a las opciones del Chrome remoto (Mac) para que la ventana se abra fuera del área visible en los login fríos (headful), sin tapar la pantalla. Renderiza igual, así que Akamai no se entera. Nota: la sesión de AMEX vence en <5 min, así que entre runs (cada 4h) el login casi siempre es frío→headful; por eso la ventana aparecía casi siempre. macOS puede clampear la posición; si igual se ve, la alternativa es un Space dedicado.
+
 ## 1.2.45
 
 - **Scraper AMEX: headless "set and forget" con fallback automático a headful en login frío** (`scrapers/amex.py`): se confirmó que headless solo pasa Akamai con sesión tibia (cuando `check_session` saltea el login); en login frío Akamai detecta el headless y bloquea. Para que el checkbox headless no deje el scraper trabado en frío: si se pide headless pero NO hay sesión cacheada, el run usa headful automáticamente (loguea con la interacción humana y cachea la sesión); los runs siguientes, ya tibios, van headless. Además `check_session` ahora limpia la sesión cacheada cuando está vencida, para que el próximo run vuelva a frío→headful y re-loguee en vez de reintentar headless contra un login bloqueado. Resultado: dejás headless tildado y el scraper alterna solo (headful para loguear/cachear, headless mientras la sesión viva).

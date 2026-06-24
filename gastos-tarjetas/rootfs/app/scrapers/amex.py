@@ -95,6 +95,11 @@ class AmexScraper(BaseScraper):
 
         opts = Options()
         opts.add_argument("--window-size=1280,800")
+        # Abrir la ventana FUERA del área visible (en headful, para no tapar la
+        # pantalla de la Mac en los login fríos). Renderiza igual → Akamai no se
+        # entera. macOS puede clampear la posición; si igual la ves, la alternativa
+        # es mandar Chrome a un Space dedicado desde la Mac.
+        opts.add_argument("--window-position=-3000,-3000")
         # Quitar el cartel de automatización (navigator.webdriver) — el resto del
         # fingerprint es el del Chrome real de macOS, que sí pasa Akamai.
         opts.add_argument("--disable-blink-features=AutomationControlled")
