@@ -172,6 +172,16 @@ class BaseScraper(ABC):
         opts.add_argument("--disable-blink-features=AutomationControlled")
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
         opts.add_experimental_option("useAutomationExtension", False)
+        # ── Flags de estabilidad (anti "tab crashed" en RPi/ARM) ──────────────
+        # El renderer de Chromium crashea a veces en páginas pesadas (BBVA) con
+        # render por software. Estos flags bajan el consumo y la superficie de
+        # crash. No cambian el fingerprint visible por JS.
+        opts.add_argument("--disable-software-rasterizer")
+        opts.add_argument("--disable-extensions")
+        opts.add_argument("--disable-background-networking")
+        opts.add_argument("--disable-renderer-backgrounding")
+        opts.add_argument("--disable-backgrounding-occluded-windows")
+        opts.add_argument("--js-flags=--max-old-space-size=512")
 
         if os.path.exists(_CHROMIUM_BIN):
             opts.binary_location = _CHROMIUM_BIN
@@ -184,6 +194,16 @@ class BaseScraper(ABC):
         driver = webdriver.Chrome(service=service, options=opts)
         driver.set_page_load_timeout(30)
         driver.implicitly_wait(0)   # usamos waits explícitos
+
+        # Loguear versión de Chromium/chromedriver (para correlacionar crashes
+        # con versiones; el base image :latest la cambia silenciosamente en rebuild).
+        try:
+            caps = driver.capabilities or {}
+            bver = caps.get("browserVersion") or caps.get("version") or "?"
+            cver = str((caps.get("chrome", {}) or {}).get("chromedriverVersion", "?")).split(" ")[0]
+            logger.info("[%s] Chromium %s | chromedriver %s", self.fuente, bver, cver)
+        except Exception:
+            pass
 
         # ── Parches de fingerprint via CDP ─────────────────────────────────────
         # Akamai BotManager detecta automatización verificando propiedades del

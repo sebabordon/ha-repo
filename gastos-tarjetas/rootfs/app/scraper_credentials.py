@@ -70,6 +70,13 @@ BANKS: dict[str, dict] = {
                 "placeholder": "/Users/seba/amex-chrome-profile",
                 "hint":        "Opcional. Ruta EN LA MAC de un perfil de Chrome dedicado. Si lo logueás a AMEX una vez a mano, el perfil queda 'tibio' (cookies/sesión) y a Akamai le gusta más. Vacío = perfil temporal nuevo cada vez. Solo aplica si configuraste el WebDriver remoto.",
             },
+            {
+                "key":      "webdriver_headless",
+                "label":    "WebDriver remoto — Headless",
+                "type":     "checkbox",
+                "required": False,
+                "hint":     "Si está activo, el Chrome de la Mac corre headless (sin ventana visible, no te tapa la pantalla). El Chrome real de macOS en headless conserva casi todo el fingerprint y suele pasar Akamai igual; si te lo desafía, destildá y vuelve a headful. Solo aplica con el WebDriver remoto configurado.",
+            },
         ],
     },
     "bbva": {

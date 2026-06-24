@@ -75,6 +75,9 @@ class AmexScraper(BaseScraper):
         # config). Solo afecta a AMEX.
         self._remote_url     = (config.get("webdriver_remote_url") or "").strip()
         self._remote_profile = (config.get("webdriver_profile_dir") or "").strip()
+        self._remote_headless = str(config.get("webdriver_headless", "")).strip().lower() in (
+            "1", "true", "on", "yes", "sí", "si",
+        )
         return await super().run(config)
 
     def _create_driver(self):
@@ -92,18 +95,29 @@ class AmexScraper(BaseScraper):
         opts.add_argument("--disable-blink-features=AutomationControlled")
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
         opts.add_experimental_option("useAutomationExtension", False)
+        headless = getattr(self, "_remote_headless", False)
+        if headless:
+            # Chrome real de macOS en headless conserva casi todo el fingerprint
+            # (fuentes/GPU/codecs reales) y suele pasar Akamai igual. Si lo
+            # desafía, destildar el checkbox y vuelve a headful.
+            opts.add_argument("--headless=new")
         profile = getattr(self, "_remote_profile", "")
         if profile:
             # Perfil persistente en la Mac (logueado a mano una vez = "tibio").
             opts.add_argument(f"--user-data-dir={profile}")
 
         logger.info(
-            "[amex] WebDriver REMOTO: %s (perfil=%s)",
-            remote_url, profile or "(temporal)",
+            "[amex] WebDriver REMOTO: %s (perfil=%s, headless=%s)",
+            remote_url, profile or "(temporal)", headless,
         )
         driver = webdriver.Remote(command_executor=remote_url, options=opts)
         driver.set_page_load_timeout(60)
         driver.implicitly_wait(0)
+        try:
+            bver = (driver.capabilities or {}).get("browserVersion", "?")
+            logger.info("[amex] Chrome remoto (Mac) versión %s", bver)
+        except Exception:
+            pass
         return driver
 
     # ── Verificación de sesión ────────────────────────────────────────────────
