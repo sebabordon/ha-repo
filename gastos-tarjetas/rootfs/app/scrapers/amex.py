@@ -207,6 +207,59 @@ class AmexScraper(BaseScraper):
             driver.execute_script("arguments[0].click();", el)
 
     @staticmethod
+    def _human_type(el, text: str) -> None:
+        """Tipea carácter por carácter con delays variables (humano). Akamai
+        mide la cadencia de tipeo; el send_keys de golpe es señal de bot."""
+        import random
+        for ch in text:
+            el.send_keys(ch)
+            time.sleep(random.uniform(0.05, 0.16))
+
+    @staticmethod
+    def _human_click(driver, el) -> None:
+        """Mueve el puntero al elemento, pausa (hover) y clickea. Genera la
+        entropía de mouse que el sensor de Akamai (bmak) espera de un humano —
+        sin esto, el login automático queda trabado aunque sea Chrome real."""
+        import random
+        from selenium.webdriver.common.action_chains import ActionChains
+        try:
+            ActionChains(driver).move_to_element(el).pause(
+                random.uniform(0.25, 0.7)
+            ).perform()
+        except Exception:
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+            except Exception:
+                pass
+        time.sleep(random.uniform(0.1, 0.3))
+        try:
+            el.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", el)
+
+    @staticmethod
+    def _wiggle_mouse(driver, elements) -> None:
+        """Pasea el puntero por varios elementos con pausas para alimentar el
+        sensor de comportamiento de Akamai antes de interactuar."""
+        import random
+        from selenium.webdriver.common.action_chains import ActionChains
+        a = ActionChains(driver)
+        moved = False
+        for el in elements:
+            if el is None:
+                continue
+            try:
+                a.move_to_element(el).pause(random.uniform(0.2, 0.6))
+                moved = True
+            except Exception:
+                pass
+        if moved:
+            try:
+                a.perform()
+            except Exception:
+                pass
+
+    @staticmethod
     def _react_set_input(driver, element_id: str, value: str) -> None:
         """Escribe en un input controlado por React usando el setter nativo."""
         driver.execute_script("""
@@ -279,14 +332,12 @@ class AmexScraper(BaseScraper):
         # send_keys dispara keydown/input reales que React e InAuth detectan
         # (el setter JS de React no genera eventos de teclado → InAuth lo marca
         # como bot). En el Chrome real (driver remoto) esto es lo que pasa.
-        logger.info("[amex] do_login: campo usuario encontrado, ingresando con send_keys")
-        try:
-            user_el.click()
-        except Exception:
-            pass
+        logger.info("[amex] do_login: campo usuario — mouse humano + tipeo con cadencia")
+        self._wiggle_mouse(driver, [user_el])
+        self._human_click(driver, user_el)
         user_el.clear()
-        user_el.send_keys(config["usuario"])
-        time.sleep(0.3)
+        self._human_type(user_el, config["usuario"])
+        time.sleep(0.4)
 
         # ── Botón «Continuar» (si el flow separa usuario y contraseña) ────────
         pwd_visible = self._find_visible(
@@ -319,14 +370,11 @@ class AmexScraper(BaseScraper):
             raise TimeoutException(
                 f"Campo contraseña no encontrado tras 15s.\n{diag}"
             )
-        logger.info("[amex] do_login: campo contraseña encontrado, ingresando con send_keys")
-        try:
-            pass_el.click()
-        except Exception:
-            pass
+        logger.info("[amex] do_login: campo contraseña — mouse humano + tipeo con cadencia")
+        self._human_click(driver, pass_el)
         pass_el.clear()
-        pass_el.send_keys(config["password"])
-        time.sleep(0.3)
+        self._human_type(pass_el, config["password"])
+        time.sleep(0.4)
 
         # ── Verificar valores ─────────────────────────────────────────────────
         typed_user, typed_pwd = driver.execute_script(
@@ -348,8 +396,9 @@ class AmexScraper(BaseScraper):
             raise TimeoutException(
                 f"Botón submit no encontrado tras 10s.\n{diag}"
             )
-        logger.info("[amex] do_login: haciendo click en Submit…")
-        self._click_el(driver, submit)
+        logger.info("[amex] do_login: hover + click humano en Submit…")
+        self._wiggle_mouse(driver, [submit])
+        self._human_click(driver, submit)
 
         # ── Chequeo intermedio post-submit ────────────────────────────────────
         time.sleep(8)
