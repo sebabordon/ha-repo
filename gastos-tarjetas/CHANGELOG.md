@@ -1,3 +1,7 @@
+## 1.2.44
+
+- **Scraper AMEX: corrige 1.2.43 — mantiene el cacheo de sesión y elimina solo la navegación redundante** (`scrapers/amex.py`): 1.2.43 había puesto `save_session=False`, pero eso apagaba el cacheo de cookies entre runs — y justamente la sesión cacheada es lo que hace andar el headless (con sesión tibia, `check_session` detecta que ya estás logueado y se saltea el login, que es el paso que Akamai escudriña). Se revierte a `save_session=True` (default) y se restaura `check_session`. La doble navegación que se quería evitar se resuelve distinto: `do_login` ahora **reusa** la página de login si `check_session` ya dejó el browser ahí (no re-navega). Así: sesión tibia → una navegación al account summary, sin login; sesión fría → check_session cae en login y do_login lo reusa, sin doble navegación.
+
 ## 1.2.43
 
 - **Scraper AMEX: elimina la doble navegación previa al login** (`scrapers/amex.py`): el `check_session` navegaba a `global.americanexpress.com` (que redirige al login) ANTES de que `do_login` navegara al login de nuevo — navegación de más que además pegaba al dominio de Akamai con estado sucio antes de un login limpio. Se setea `save_session = False` (como en la 1.2.36, que se había perdido en el revert a 1.2.26): el base ya no restaura ni valida sesión, va directo a `do_login` con una sola navegación. `check_session` queda como no-op.

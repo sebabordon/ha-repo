@@ -61,13 +61,11 @@ class AmexScraper(BaseScraper):
     fuente       = "amex"
     nombre       = "AMEX Argentina"
     login_origin = "https://www.americanexpress.com"
-    # La sesión de AMEX no revalida de forma confiable entre runs, y el viejo
-    # check_session navegaba a global.americanexpress.com ANTES del login —
-    # navegación de más que además pega al dominio de Akamai con cookies/estado
-    # sucio antes de un login limpio. Con save_session=False el base NO restaura
-    # ni valida sesión: limpia, va directo a do_login (siempre login fresco) y
-    # no persiste. Una sola navegación: la del login.
-    save_session = False
+    # save_session = True (default): se cachean las cookies entre runs. Si la
+    # sesión sigue viva, check_session la detecta y se SALTEA el login entero
+    # (camino "tibio") — esto es lo que hace que headless funcione, porque no hay
+    # challenge de login que resolver. La doble navegación se evita en do_login
+    # (no re-navega si check_session ya dejó el browser en la página de login).
 
     # ── WebDriver remoto (Mac) ────────────────────────────────────────────────
     # AMEX usa Akamai Bot Manager, que rechaza el fingerprint del Chromium de
@@ -130,10 +128,32 @@ class AmexScraper(BaseScraper):
     # ── Verificación de sesión ────────────────────────────────────────────────
 
     def check_session(self, driver) -> bool:
-        # No-op: con save_session=False el base nunca llama a check_session.
-        # AMEX siempre hace login fresco, sin la navegación previa a
-        # global.americanexpress.com (que era la "navegación de más").
-        return False
+        """
+        Navega al portal legacy. Si la sesión cacheada sigue viva, llega al
+        account summary (div#middleContentHeader) y devolvemos True → se saltea
+        el login. Si no, redirige al login (y do_login reusa esa página sin
+        re-navegar). Esto es lo que permite que headless funcione con sesión tibia.
+        """
+        try:
+            logger.info("[amex] check_session: navegando al portal legacy")
+            driver.get(_ACCOUNT_SUMMARY)
+            time.sleep(3)
+            current_url = driver.current_url
+            logger.info("[amex] check_session: URL tras navegación = %s", current_url[:100])
+            el = self.find(
+                driver,
+                "div#middleContentHeader, div#summaryWrap, "
+                "select#cardAccount, div#leftNav",
+            )
+            logger.info(
+                "[amex] check_session: elemento portal encontrado = %s%s",
+                el is not None,
+                f" (title={driver.title[:60]!r})" if not el else "",
+            )
+            return el is not None
+        except Exception as exc:
+            logger.debug("[amex] check_session error: %s", exc)
+            return False
 
     # ── Login ─────────────────────────────────────────────────────────────────
 
@@ -298,8 +318,15 @@ class AmexScraper(BaseScraper):
         """
         from selenium.common.exceptions import TimeoutException
 
-        logger.info("[amex] do_login: navegando a %s", _LOGIN_URL)
-        driver.get(_LOGIN_URL)
+        # Evitar la navegación redundante: check_session (cuando no hay sesión
+        # tibia) ya redirige el browser a la página de login. Si ya estamos ahí,
+        # no re-navegamos (esa era la "doble navegación").
+        cur_url = (driver.current_url or "")
+        if "account/login" in cur_url:
+            logger.info("[amex] do_login: ya en login (%s) — no re-navego", cur_url[:80])
+        else:
+            logger.info("[amex] do_login: navegando a %s", _LOGIN_URL)
+            driver.get(_LOGIN_URL)
 
         # ── Usuario ───────────────────────────────────────────────────────────
         _user_sel = (
