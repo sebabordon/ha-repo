@@ -331,6 +331,18 @@ class MercadoPagoScraper(BaseScraper):
                 if pay_type == "credit_card":
                     cc_skipped += 1
                     _dbg("OMITIDO-CC")
+                    if debug:
+                        card = payment.get("card") or {}
+                        log_fn(
+                            f"           card: method={payment.get('payment_method_id')}"
+                            f" last4={card.get('last_four_digits')}"
+                            f" first6={card.get('first_six_digits')}"
+                            f" holder={card.get('cardholder', {}).get('name')}"
+                            f" cuotas={payment.get('installments')}"
+                            f" desc={payment.get('description', '')[:60]}"
+                            f" stmt={payment.get('statement_descriptor')}"
+                            f" approved={payment.get('date_approved', '')[:19]}"
+                        )
                     continue
 
                 # partition_transfer: aparece en ambas queries (payer=user, collector=user).

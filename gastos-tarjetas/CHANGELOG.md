@@ -1,3 +1,7 @@
+## 1.2.49
+
+- **MP scraper: loguear datos de tarjeta en pagos credit_card omitidos** (`scrapers/mercadopago.py`): cuando `debug=True`, los pagos con tarjeta de crédito que se excluyen ahora muestran en el log: `payment_method_id` (amex/visa/master), `last_four_digits`, `first_six_digits`, `cardholder.name`, cuotas, descripción, `statement_descriptor` y `date_approved`. Permite evaluar si la data de la API puede reemplazar la importación por PDF sin importar los movimientos.
+
 ## 1.2.48
 
 - **Scraper Cocos: headers faltantes y anon key actualizada** (`scrapers/cocos.py`): Cocos ahora requiere `x-supabase-api-version: 2024-01-01` en los requests de auth (sin él devuelve HTTP 426 `APP_VERSION_HEADER_MISSING`). Se actualizó la anon key de Supabase a la versión actual y se agregaron los headers `x-client-info` y `x-platform` para emular la app web fielmente.
