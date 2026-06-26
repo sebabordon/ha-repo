@@ -1,3 +1,7 @@
+## 1.2.47
+
+- **Scraper Cocos: adaptación a nueva API v2** (`scrapers/cocos.py`): Cocos Capital migró el auth a `auth.cocos.capital` (antes `api.cocos.capital`), cambió el endpoint de factores 2FA de `/factors/default` a `/factors` (devuelve array con todos los factores), y movió `/api/v1/users/me` a `/api/v2/users/me`. El scraper ahora usa los nuevos endpoints y respeta el flag `requireChallenge` del factor TOTP (si es `false`, salta el paso de challenge y va directo a verify).
+
 ## 1.2.46
 
 - **Scraper AMEX: ventana del Chrome remoto fuera de pantalla** (`scrapers/amex.py`): se agregó `--window-position=-3000,-3000` a las opciones del Chrome remoto (Mac) para que la ventana se abra fuera del área visible en los login fríos (headful), sin tapar la pantalla. Renderiza igual, así que Akamai no se entera. Nota: la sesión de AMEX vence en <5 min, así que entre runs (cada 4h) el login casi siempre es frío→headful; por eso la ventana aparecía casi siempre. macOS puede clampear la posición; si igual se ve, la alternativa es un Space dedicado.

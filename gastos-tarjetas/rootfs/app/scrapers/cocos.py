@@ -11,13 +11,13 @@ Cómo obtener el TOTP secret:
      URI ejemplo: otpauth://totp/app.cocos.capital:tu@mail.com?...&secret=ABCDEFGHIJKLMNOP&...
   4. Copiar el valor del parámetro `secret=` → pegarlo en la UI del add-on.
 
-Endpoints usados:
+Endpoints usados (auth en auth.cocos.capital, API en api.cocos.capital):
   POST auth/v1/token?grant_type=password        → login inicial (email+password)
-  GET  auth/v1/factors/default                  → obtener factor 2FA disponible
-  POST auth/v1/factors/{factor_id}/challenge    → iniciar challenge TOTP
+  GET  auth/v1/factors                          → listar factores 2FA (totp, sms, mail)
+  POST auth/v1/factors/{factor_id}/challenge    → iniciar challenge TOTP (si requireChallenge=true)
   POST auth/v1/factors/{factor_id}/verify       → verificar código TOTP → token final
   POST auth/v1/token?grant_type=refresh_token   → refresh de sesión (evita re-login)
-  GET  api/v1/users/me                          → account_id (id_accounts[0])
+  GET  api/v2/users/me                          → account_id (id_accounts[0])
   GET  api/v1/wallet/cash_movements             → movimientos de cuenta (paginado, limit/offset)
                                                    Respuesta: {data:[{executionDate, balance,
                                                    cashMovements:[...]}]}. data[0].balance = saldo ARS.
@@ -47,7 +47,8 @@ from scrapers_db import upsert_scraper_status
 
 logger = logging.getLogger(__name__)
 
-_BASE         = "https://api.cocos.capital"
+_BASE_API     = "https://api.cocos.capital"
+_BASE_AUTH    = "https://auth.cocos.capital"
 _DIAS_DEFAULT = 60
 _ART          = timezone(timedelta(hours=-3))
 
@@ -203,7 +204,7 @@ class CocosScraper(BaseScraper):
             log_fn("Token Cocos expirado — intentando refresh…")
             try:
                 resp = session.post(
-                    f"{_BASE}/auth/v1/token",
+                    f"{_BASE_AUTH}/auth/v1/token",
                     params={"grant_type": "refresh_token"},
                     json={"refresh_token": saved["refresh_token"]},
                     headers=_anon_headers(),
@@ -236,7 +237,7 @@ class CocosScraper(BaseScraper):
         # 1. Login email+password
         log_fn("Autenticando en Cocos Capital…")
         resp = session.post(
-            f"{_BASE}/auth/v1/token",
+            f"{_BASE_AUTH}/auth/v1/token",
             params={"grant_type": "password"},
             json={"email": email, "password": password, "gotrue_meta_security": {}},
             headers=_anon_headers(),
@@ -251,30 +252,39 @@ class CocosScraper(BaseScraper):
 
         auth_hdrs = {**_anon_headers(), "Authorization": f"Bearer {phase1_token}"}
 
-        # 2. Obtener factor 2FA
-        resp = session.get(f"{_BASE}/auth/v1/factors/default", headers=auth_hdrs, timeout=15)
+        # 2. Obtener factores 2FA
+        resp = session.get(f"{_BASE_AUTH}/auth/v1/factors", headers=auth_hdrs, timeout=15)
         if resp.status_code != 200:
             raise ValueError(f"Cocos 2FA factors falló — HTTP {resp.status_code}: {resp.text[:200]}")
-        factor_data = resp.json()
-        factor_id   = factor_data.get("id")
-        if not factor_id:
-            raise ValueError(f"Cocos 2FA: factor_id no encontrado. Respuesta: {resp.text[:200]}")
+        factors_resp = resp.json()
+        totp_factors = factors_resp.get("totp") or []
+        if not totp_factors:
+            all_factors = factors_resp.get("all") or []
+            totp_factors = [f for f in all_factors if f.get("factor_type") == "totp"]
+        if not totp_factors:
+            raise ValueError(f"Cocos 2FA: no se encontró factor TOTP. Respuesta: {resp.text[:300]}")
+        factor = totp_factors[0]
+        factor_id = factor["id"]
+        needs_challenge = factor.get("requireChallenge", True)
 
-        # 3. Iniciar challenge
-        resp = session.post(
-            f"{_BASE}/auth/v1/factors/{factor_id}/challenge",
-            headers=auth_hdrs,
-            timeout=15,
-        )
-        if resp.status_code not in (200, 201):
-            raise ValueError(f"Cocos 2FA challenge falló — HTTP {resp.status_code}: {resp.text[:200]}")
+        # 3. Challenge (si el factor lo requiere)
+        challenge_id = "_"
+        if needs_challenge:
+            resp = session.post(
+                f"{_BASE_AUTH}/auth/v1/factors/{factor_id}/challenge",
+                headers=auth_hdrs,
+                timeout=15,
+            )
+            if resp.status_code not in (200, 201):
+                raise ValueError(f"Cocos 2FA challenge falló — HTTP {resp.status_code}: {resp.text[:200]}")
+            challenge_id = resp.json().get("id", "_")
 
         # 4. Verificar con código TOTP
         totp_code = _pyotp.TOTP(totp_secret).now()
         log_fn("Verificando 2FA TOTP…")
         resp = session.post(
-            f"{_BASE}/auth/v1/factors/{factor_id}/verify",
-            json={"challenge_id": "_", "code": totp_code},
+            f"{_BASE_AUTH}/auth/v1/factors/{factor_id}/verify",
+            json={"challenge_id": challenge_id, "code": totp_code},
             headers=auth_hdrs,
             timeout=15,
         )
@@ -295,7 +305,7 @@ class CocosScraper(BaseScraper):
     def _fetch_account_id_sync(self, session, token: str, log_fn) -> str:
         try:
             resp = session.get(
-                f"{_BASE}/api/v1/users/me",
+                f"{_BASE_API}/api/v2/users/me",
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                 timeout=15,
             )
@@ -327,7 +337,7 @@ class CocosScraper(BaseScraper):
 
         while True:
             resp = session.get(
-                f"{_BASE}/api/v1/wallet/cash_movements",
+                f"{_BASE_API}/api/v1/wallet/cash_movements",
                 params={"currency": "ARS", "date_from": "", "date_to": "", "limit": _LIMIT, "offset": offset},
                 headers=hdrs,
                 timeout=30,
