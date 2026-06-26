@@ -55,8 +55,8 @@ _ART          = timezone(timedelta(hours=-3))
 # Anon/API key de Supabase de la app Cocos Capital (clave pública embebida en el JS).
 _ANON_KEY = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-    ".ewogICJyb2xlIjogImFub24iLAogICJpc3MiOiAic3VwYWJhc2UiLAogICJpYXQiOiAxNzA0NjgyODAwLAogICJleHAiOiAxODYyNTM1NjAwCn0"
-    ".f0w62k0q0eyyGBDkAP7vUUEg_Ingb9YbOlhsGCC4R3c"
+    ".ewogICJyb2xlIjogImFub24iLAogICJpc3MiOiAic3VwYWJhc2UiLAogICJpYXQiOiAxNzI0NzA5NjAwLAogICJleHAiOiAxODgyNDc2MDAwCn0"
+    ".GieFvIDlSbRw6-KvFX8xPEzqzhXgIQ0Hc-ELKvrVirs"
 )
 
 _LIMIT = 50  # registros por página en cash_movements
@@ -486,7 +486,10 @@ class CocosScraper(BaseScraper):
 
 def _anon_headers() -> dict:
     return {
-        "Apikey":        _ANON_KEY,
-        "Authorization": f"Bearer {_ANON_KEY}",
-        "Content-Type":  "application/json",
+        "Apikey":                   _ANON_KEY,
+        "Authorization":           f"Bearer {_ANON_KEY}",
+        "Content-Type":            "application/json;charset=UTF-8",
+        "x-supabase-api-version":  "2024-01-01",
+        "x-client-info":           "supabase-js-web/2.49.9",
+        "x-platform":             "web",
     }

@@ -1,3 +1,7 @@
+## 1.2.48
+
+- **Scraper Cocos: headers faltantes y anon key actualizada** (`scrapers/cocos.py`): Cocos ahora requiere `x-supabase-api-version: 2024-01-01` en los requests de auth (sin él devuelve HTTP 426 `APP_VERSION_HEADER_MISSING`). Se actualizó la anon key de Supabase a la versión actual y se agregaron los headers `x-client-info` y `x-platform` para emular la app web fielmente.
+
 ## 1.2.47
 
 - **Scraper Cocos: adaptación a nueva API v2** (`scrapers/cocos.py`): Cocos Capital migró el auth a `auth.cocos.capital` (antes `api.cocos.capital`), cambió el endpoint de factores 2FA de `/factors/default` a `/factors` (devuelve array con todos los factores), y movió `/api/v1/users/me` a `/api/v2/users/me`. El scraper ahora usa los nuevos endpoints y respeta el flag `requireChallenge` del factor TOTP (si es `false`, salta el paso de challenge y va directo a verify).
