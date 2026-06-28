@@ -337,11 +337,11 @@ class MercadoPagoScraper(BaseScraper):
                             f"           card: method={payment.get('payment_method_id')}"
                             f" last4={card.get('last_four_digits')}"
                             f" first6={card.get('first_six_digits')}"
-                            f" holder={card.get('cardholder', {}).get('name')}"
+                            f" holder={(card.get('cardholder') or {}).get('name')}"
                             f" cuotas={payment.get('installments')}"
-                            f" desc={payment.get('description', '')[:60]}"
+                            f" desc={(payment.get('description') or '')[:60]}"
                             f" stmt={payment.get('statement_descriptor')}"
-                            f" approved={payment.get('date_approved', '')[:19]}"
+                            f" approved={(payment.get('date_approved') or '')[:19]}"
                         )
                     continue
 

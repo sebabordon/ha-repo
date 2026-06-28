@@ -1,3 +1,7 @@
+## 1.2.50
+
+- **Fix crash en log de pagos CC omitidos** (`scrapers/mercadopago.py`): cuando la API devuelve `description`, `date_approved` o `cardholder` como `None` (key presente con valor null), `.get('field', '')` devuelve `None` en vez de `''` y el slice `[:60]` crashea con `'NoneType' object is not subscriptable`. Se usa `(x or '')` en vez de default de `.get()` para los tres campos.
+
 ## 1.2.49
 
 - **MP scraper: loguear datos de tarjeta en pagos credit_card omitidos** (`scrapers/mercadopago.py`): cuando `debug=True`, los pagos con tarjeta de crédito que se excluyen ahora muestran en el log: `payment_method_id` (amex/visa/master), `last_four_digits`, `first_six_digits`, `cardholder.name`, cuotas, descripción, `statement_descriptor` y `date_approved`. Permite evaluar si la data de la API puede reemplazar la importación por PDF sin importar los movimientos.
