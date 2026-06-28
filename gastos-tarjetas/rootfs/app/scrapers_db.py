@@ -977,6 +977,98 @@ def delete_movimiento_raw(raw_id: int) -> dict:
     return {"deleted_raw": True, "deleted_gasto": deleted_gasto, "gasto_id": gasto_id}
 
 
+def append_resumen_credit_adjustments(
+    records: list[dict],
+    *,
+    stmt_ars,
+    stmt_usd,
+    fuente: str,
+    mes_resumen: Optional[str],
+    fecha_venc,
+    archivo_origen: str,
+    usuario: Optional[str],
+    tc_ars: Optional[float] = None,
+) -> dict:
+    """
+    Inserta renglones sintéticos "Créditos del resumen" para que el NET por moneda
+    de los gastos importados coincida con el SALDO ACTUAL / TOTAL A PAGAR del
+    resumen (stmt_ars / stmt_usd).
+
+    Por qué hace falta: el PDF lista "SU PAGO EN PESOS/DOLARES" (el pago del período
+    anterior) como un renglón más, y el parser lo importa como egreso positivo. Si
+    sumás todos los renglones obtenés consumos + pago, que NO es lo que debés. El
+    SALDO ACTUAL del PDF sí es el monto real a pagar; este ajuste cierra la brecha
+    con un crédito sintético, de modo que `net == stmt` en el widget de vencimientos.
+
+    La base del delta replica exactamente la definición de net_ars/net_usd de
+    `list_vencimientos` (db.py):
+      · ARS: suma de montos ARS, excluyendo créditos RG 5617 (descripción con
+             '5617' y monto < 0), que el widget descuenta aparte.
+      · USD: suma de todos los montos USD (ambos signos).
+
+    Solo se inserta para delta NEGATIVO (el resumen cobra MENOS que la suma de
+    renglones → hay un crédito/sobrepago real sin renglón propio, típicamente el
+    pago del período anterior). Un delta positivo = arrastre de saldo anterior que
+    no se puede expresar como una transacción y no se agrega.
+
+    Muta `records` in-place. Devuelve {'ars': delta_ars|None, 'usd': delta_usd|None}
+    con los deltas efectivamente insertados (para logging).
+    """
+    adj_fecha = (mes_resumen + "-01") if mes_resumen else str(fecha_venc or "")
+    result = {"ars": None, "usd": None}
+
+    def _f(x) -> float:
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if stmt_ars is not None:
+        net_ars = sum(
+            _f(r.get("monto")) for r in records
+            if r.get("moneda") == "ARS"
+            and not ("5617" in (r.get("descripcion") or "") and _f(r.get("monto")) < 0)
+        )
+        delta = round(float(stmt_ars) - net_ars, 2)
+        if delta < -0.5:
+            records.append({
+                "fecha":            adj_fecha,
+                "descripcion":      "Créditos del resumen",
+                "monto":            str(delta),   # negativo = ingreso (crédito/sobrepago)
+                "moneda":           "ARS",
+                "fuente":           fuente,
+                "categoria":        "Créditos tarjeta",
+                "categoria_fuente": "auto",
+                "archivo_origen":   archivo_origen,
+                "usuario":          usuario,
+            })
+            result["ars"] = delta
+
+    if stmt_usd is not None:
+        net_usd = sum(
+            _f(r.get("monto")) for r in records if r.get("moneda") == "USD"
+        )
+        delta = round(float(stmt_usd) - net_usd, 2)
+        if delta < -0.5:
+            row = {
+                "fecha":            adj_fecha,
+                "descripcion":      "Créditos del resumen",
+                "monto":            str(delta),
+                "moneda":           "USD",
+                "fuente":           fuente,
+                "categoria":        "Créditos tarjeta",
+                "categoria_fuente": "auto",
+                "archivo_origen":   archivo_origen,
+                "usuario":          usuario,
+            }
+            if tc_ars:
+                row["tc_ars"] = tc_ars
+            records.append(row)
+            result["usd"] = delta
+
+    return result
+
+
 def consolidate_scraper_duplicates(fuente: str, pdf_records: list[dict]) -> int:
     """
     Concilia gastos del scraper contra los gastos recién insertados desde un PDF.

@@ -1,3 +1,9 @@
+## 1.2.51
+
+- **Fix: el resumen auto-descargado mostraba un "total a pagar" inflado** (BBVA Master/Visa y todos los resúmenes que bajan por el scraper). El parser importa "SU PAGO EN PESOS/DOLARES" (el pago del período anterior) como egreso positivo, así que la suma de renglones del widget de vencimientos quedaba en `consumos + pago` en vez del `SALDO ACTUAL` real. Ej.: USD `4,74 + 736,56 = 741,30` y ARS `573.979,14 + 288.740,48 = 862.719,62`. La subida manual (`routes/upload.py`) ya corregía esto en ARS con un renglón sintético "Créditos del resumen", pero el camino de auto-descarga (`scrapers/bbva.py::_import_resumen`) no tenía esa reconciliación.
+- **Reconciliación net↔SALDO ACTUAL ahora compartida y por moneda**: se extrae la lógica a `scrapers_db.append_resumen_credit_adjustments(...)`, se usa tanto en la subida manual como en la auto-descarga, y se extiende a **USD** (antes la subida manual solo reconciliaba ARS, dejando la columna de dólares inflada por el pago en USD). El crédito sintético baja el net hasta el total real a pagar en cada moneda; solo se inserta para delta negativo (sobrepago/pago real sin renglón propio).
+- Aplica a importaciones nuevas. Para corregir un resumen ya importado con el monto inflado, borrar la importación y dejar que el scraper la vuelva a bajar (o resubirla a mano).
+
 ## 1.2.50
 
 - **Fix crash en log de pagos CC omitidos** (`scrapers/mercadopago.py`): cuando la API devuelve `description`, `date_approved` o `cardholder` como `None` (key presente con valor null), `.get('field', '')` devuelve `None` en vez de `''` y el slice `[:60]` crashea con `'NoneType' object is not subscriptable`. Se usa `(x or '')` en vez de default de `.get()` para los tres campos.

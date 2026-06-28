@@ -1472,6 +1472,7 @@ class BbvaScraper(BaseScraper):
             mes_resumen = str(fecha_cierre)[:7]
 
         # Enriquecer gastos USD con TC del momento (fecha_cierre como proxy)
+        _tc = None
         if any(r.get("moneda") == "USD" for r in records):
             from user_config import read_user_config, config_default
             from tc import fetch_tc_dolar
@@ -1483,6 +1484,27 @@ class BbvaScraper(BaseScraper):
                     if r.get("moneda") == "USD":
                         r["tc_ars"] = _tc
                 log_fn(f"  [import] TC USD ({_tipo}): ${_tc:.2f}")
+
+        # Reconciliación net vs SALDO ACTUAL del PDF (ARS y USD). El parser importa
+        # "SU PAGO EN PESOS/DOLARES" como egreso positivo, lo que infla la suma de
+        # renglones; este ajuste inserta el crédito sintético que la baja al total
+        # real a pagar. Mismo mecanismo que routes/upload.py (subida manual).
+        from scrapers_db import append_resumen_credit_adjustments
+        _adj = append_resumen_credit_adjustments(
+            records,
+            stmt_ars      = stmt_ars,
+            stmt_usd      = stmt_usd,
+            fuente        = fuente_target,
+            mes_resumen   = mes_resumen,
+            fecha_venc    = fecha_venc,
+            archivo_origen = filename,
+            usuario       = usuario_default,
+            tc_ars        = _tc,
+        )
+        if _adj["ars"] is not None:
+            log_fn(f"  [import] ajuste Créditos del resumen ARS: {_adj['ars']:.2f}")
+        if _adj["usd"] is not None:
+            log_fn(f"  [import] ajuste Créditos del resumen USD: {_adj['usd']:.2f}")
 
         import_info = {
             "fuente":         fuente_target,

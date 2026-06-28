@@ -121,50 +121,25 @@ async def upload_file(
     proximo_cierre  = getattr(PARSERS[fuente], "proximo_cierre",    None)
     proximo_venc    = getattr(PARSERS[fuente], "proximo_venc",      None)
 
-    # ── Synthetic "Créditos del resumen" adjustment ─────────────────────────────
+    # ── Synthetic "Créditos del resumen" adjustment (ARS + USD) ────────────────
     # When the parser detected the statement's TOTAL A PAGAR / SALDO ACTUAL,
-    # insert a balancing row so that net(all ARS transactions) == statement total.
-    #
-    # Use the NET (positive egresos + negative ingresos already imported) so that
-    # credits already present as individual rows (BONIF, ML returns, CR.RG …)
-    # are NOT double-counted.  If they already close the gap the delta is ~0 and
-    # no synthetic row is inserted.  A residual delta arises only from factors
-    # outside the current-period transactions (e.g. a BBVA overpayment carry-over
-    # from the previous billing cycle that isn't a line item in "Nuevos Cargos").
-    ajuste_ars: float | None = None
-    if stmt_ars is not None:
-        # Exclude RG 5617 credit rows from the delta base so that importing
-        # DEV PERCEPCION / CR.RG entries doesn't inflate the net and suppress
-        # the synthetic adjustment row.  The widget uses the same exclusion so
-        # "total to pay" is consistent regardless of whether 5617 credits were
-        # imported.
-        net_ars_imported = sum(
-            float(r["monto"]) for r in records
-            if r.get("moneda") == "ARS"
-            and not ("5617" in (r.get("descripcion") or "") and float(r.get("monto", 0)) < 0)
-        )
-        delta = round(float(stmt_ars) - net_ars_imported, 2)
-        # Only insert the synthetic row for NEGATIVE deltas (the statement charges
-        # you LESS than the sum of all imported transactions, meaning there is a
-        # genuine credit/overpayment applied by the card company that has no
-        # individual transaction row).
-        # Positive delta = statement charges MORE than net transactions = previous-
-        # period balance carryover that cannot be expressed as a single transaction;
-        # adding it as an egreso row would be misleading.
-        if delta < -0.5:
-            adj_fecha = (mes_resumen + "-01") if mes_resumen else str(fecha_venc or "")
-            records.append({
-                "fecha":           adj_fecha,
-                "descripcion":     "Créditos del resumen",
-                "monto":           str(delta),   # negative = ingreso (credit/overpayment)
-                "moneda":          "ARS",
-                "fuente":          effective_fuente,
-                "categoria":       "Créditos tarjeta",
-                "categoria_fuente": "auto",
-                "archivo_origen":  file.filename or effective_fuente,
-                "usuario":         usuario_default,
-            })
-            ajuste_ars = delta
+    # insert a balancing row per currency so that net(transactions) == statement
+    # total.  The parser imports "SU PAGO EN PESOS/DOLARES" as a positive egreso,
+    # which inflates the line-item sum; this credit row brings it back down to the
+    # real amount owed.  Shared with the scraper auto-import path
+    # (scrapers_db.append_resumen_credit_adjustments).
+    from scrapers_db import append_resumen_credit_adjustments
+    _adj = append_resumen_credit_adjustments(
+        records,
+        stmt_ars       = stmt_ars,
+        stmt_usd       = stmt_usd,
+        fuente         = effective_fuente,
+        mes_resumen    = mes_resumen,
+        fecha_venc     = fecha_venc,
+        archivo_origen = file.filename or effective_fuente,
+        usuario        = usuario_default,
+    )
+    ajuste_ars = _adj["ars"]
 
     import_info = {
         "fuente":          effective_fuente,
