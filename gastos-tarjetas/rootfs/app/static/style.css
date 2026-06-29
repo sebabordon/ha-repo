@@ -1460,10 +1460,9 @@ tbody tr:hover { background: #fafbff; }
 }
 .presup-table thead th {
   background: #f7f8fa;
-  padding: .5rem .75rem;
+  padding: .6rem .75rem;
   text-align: left;
   border-bottom: 2px solid #e0e0e0;
-  font-size: .82rem;
   white-space: nowrap;
 }
 .presup-table tbody td {
@@ -1471,13 +1470,37 @@ tbody tr:hover { background: #fafbff; }
   border-bottom: 1px solid #f0f0f0;
   vertical-align: middle;
 }
+/* Budget tables: numeric columns (Presupuesto · Gastado · Diferencia) right-aligned */
+.presup-budget thead th:nth-child(2),
+.presup-budget thead th:nth-child(3),
+.presup-budget thead th:nth-child(4),
+.presup-budget tbody td:nth-child(2),
+.presup-budget tbody td:nth-child(3),
+.presup-budget tbody td:nth-child(4),
+.presup-budget tfoot td:nth-child(2),
+.presup-budget tfoot td:nth-child(3),
+.presup-budget tfoot td:nth-child(4) { text-align: right; }
+/* Actions column: two fixed slots so 🔍 / ✕ stay aligned regardless of which exist */
+.presup-actions { text-align: right; white-space: nowrap; }
+.presup-actions .btn-sm,
+.presup-act-spacer {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; min-width: 2rem; box-sizing: border-box;
+  padding-left: 0; padding-right: 0;
+  vertical-align: middle;
+}
+.presup-actions .btn-sm + .btn-sm,
+.presup-act-spacer + .btn-sm,
+.presup-actions .btn-sm + .presup-act-spacer,
+.presup-act-spacer + .presup-act-spacer { margin-left: .3rem; }
 /* All columns except Categoría shrink to content; Categoría takes the rest */
 .presup-table th:not(:first-child),
 .presup-table td:not(:first-child) {
   width: 1%;
   white-space: nowrap;
 }
-.presup-input {
+.presup-input,
+.presup-u-input {
   width: 120px;
   padding: .25rem .4rem;
   border: 1px solid #ddd;
@@ -1515,10 +1538,6 @@ tbody tr:hover { background: #fafbff; }
 
 /* Parent budget: auto-derived from children — read-only display */
 .presup-auto-val  { font-variant-numeric: tabular-nums; color: #374151; }
-.presup-auto-badge {
-  font-size: .7em; color: #94a3b8; margin-left: .35rem;
-  text-transform: uppercase; letter-spacing: .04em; vertical-align: middle;
-}
 
 /* USD budget rows */
 .presup-usd-badge {
@@ -1647,7 +1666,7 @@ tbody tr:hover { background: #fafbff; }
 
   .presup-header { gap: .4rem; }
   .presup-table thead th, .presup-table tbody td { padding: .35rem .4rem; font-size: .8rem; }
-  .presup-input { width: 90px; }
+  .presup-input, .presup-u-input { width: 90px; }
   .progress-bar-wrap { width: 60px; }
 
   /* ── Config → Categorías: filas como tarjetas (la tabla era muy ancha) ── */

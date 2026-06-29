@@ -1,4 +1,11 @@
-## 1.2.51
+## 1.2.52
+
+- **Presupuesto — encabezados consistentes con la hoja de Gastos**: los `<th>` de `.presup-table` (presupuesto por categoría, por persona y config de Categorías) ahora usan el mismo padding/font que el encabezado de `#gastos-table` (`.6rem .75rem`, 14px) en vez de la versión más chica (`.5rem`, `.82rem`).
+- **Presupuesto — columnas numéricas alineadas a la derecha**: nueva clase `.presup-budget` alinea a la derecha las columnas Presupuesto, Gastado y Diferencia (incluido el `tfoot` Total) en ambas tablas de presupuesto. Las celdas de presupuesto con input (ARS/USD) usan `justify-content:flex-end` para que el input quede pegado al borde derecho como los montos.
+- **Presupuesto — se quita el badge "Σ hijos"** de las filas padre (confuso): ahora se muestra solo el monto sumado, con `title` "Suma de los presupuestos de las subcategorías".
+- **Presupuesto — botones de acción alineados**: la columna de acciones (`.presup-actions`) usa dos slots fijos de 2rem; cuando falta 🔍 o ✕ se inserta un `.presup-act-spacer` para que los botones no se corran entre filas.
+- **Presupuesto por persona — input unificado**: `.presup-u-input` ahora comparte el estilo de `.presup-input` (ancho, borde, alineado a la derecha, tabular-nums) en vez de quedar como input crudo.
+
 
 - **Fix: el resumen auto-descargado mostraba un "total a pagar" inflado** (BBVA Master/Visa y todos los resúmenes que bajan por el scraper). El parser importa "SU PAGO EN PESOS/DOLARES" (el pago del período anterior) como egreso positivo, así que la suma de renglones del widget de vencimientos quedaba en `consumos + pago` en vez del `SALDO ACTUAL` real. Ej.: USD `4,74 + 736,56 = 741,30` y ARS `573.979,14 + 288.740,48 = 862.719,62`. La subida manual (`routes/upload.py`) ya corregía esto en ARS con un renglón sintético "Créditos del resumen", pero el camino de auto-descarga (`scrapers/bbva.py::_import_resumen`) no tenía esa reconciliación.
 - **Reconciliación net↔SALDO ACTUAL ahora compartida y por moneda**: se extrae la lógica a `scrapers_db.append_resumen_credit_adjustments(...)`, se usa tanto en la subida manual como en la auto-descarga, y se extiende a **USD** (antes la subida manual solo reconciliaba ARS, dejando la columna de dólares inflada por el pago en USD). El crédito sintético baja el net hasta el total real a pagar en cada moneda; solo se inserta para delta negativo (sobrepago/pago real sin renglón propio).

@@ -4606,7 +4606,7 @@ function renderPresupuesto() {
   const _psi = col => _presupSort.col === col ? (_presupSort.dir > 0 ? "▲" : "▼") : "";
   wrap.innerHTML = summaryHtml + `
     <div class="table-wrap">
-    <table class="presup-table">
+    <table class="presup-table presup-budget">
       <thead>
         <tr>
           <th class="th-sort" onclick="sortPresup('categoria')">Categoría <span class="sort-ind">${_psi("categoria")}</span></th>
@@ -4651,10 +4651,10 @@ function renderPresupuesto() {
           // Budget cell: for USD rows show USD amount + ARS equiv hint
           let budgetCell;
           if (r.tiene_hijos) {
-            budgetCell = `<span class="presup-auto-val">${budget > 0 ? _fmtNum2(budget) : "—"}</span><span class="presup-auto-badge">Σ hijos</span>${usdBadge}`;
+            budgetCell = `<span class="presup-auto-val" title="Suma de los presupuestos de las subcategorías">${budget > 0 ? _fmtNum2(budget) : "—"}</span>${usdBadge}`;
           } else if (isUsd) {
             const usdVal = r.monto_usd || 0;
-            budgetCell = `<span style="display:flex;align-items:center;gap:.3rem;flex-wrap:wrap">
+            budgetCell = `<span style="display:flex;align-items:center;gap:.3rem;flex-wrap:wrap;justify-content:flex-end">
               <input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
                      value="${_fmtNum2(usdVal)}"
                      onfocus="this.select()"
@@ -4663,7 +4663,7 @@ function renderPresupuesto() {
               ${budget > 0 && _presupTcActual ? `<span class="presup-usd-hint">≈ $${_fmtNum2(budget)}</span>` : ""}
             </span>`;
           } else {
-            budgetCell = `<span style="display:flex;align-items:center;gap:.3rem">
+            budgetCell = `<span style="display:flex;align-items:center;gap:.3rem;justify-content:flex-end">
               <input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
                      value="${_fmtNum2(budget)}"
                      onfocus="this.select()"
@@ -4689,11 +4689,11 @@ function renderPresupuesto() {
                 <span class="presup-pct">${pct}%</span>
               ` : "—"}
             </td>
-            <td style="white-space:nowrap">
+            <td class="presup-actions">
               ${r.gastado ? `<button class="btn btn-sm presup-jump-btn" title="Ver gastos de esta categoría en la tab Gastos"
-                      data-presup-jump="${escHtml(r.categoria)}">🔍</button>` : ""}
+                      data-presup-jump="${escHtml(r.categoria)}">🔍</button>` : `<span class="presup-act-spacer"></span>`}
               ${!r.tiene_hijos ? `<button class="btn btn-sm btn-danger"
-                      onclick="removePresupItem('${escHtml(r.categoria)}')">✕</button>` : ""}
+                      onclick="removePresupItem('${escHtml(r.categoria)}')">✕</button>` : `<span class="presup-act-spacer"></span>`}
             </td>
           </tr>`;
         }).join("")}
@@ -4916,7 +4916,7 @@ function renderPresupuestoUsuario() {
   const _psi = col => _presupUSort.col === col ? (_presupUSort.dir > 0 ? "▲" : "▼") : "";
   wrap.innerHTML = summaryHtml + `
     <div class="table-wrap">
-    <table class="presup-table">
+    <table class="presup-table presup-budget">
       <thead>
         <tr>
           <th class="th-sort" onclick="sortPresupU('usuario')">Persona <span class="sort-ind">${_psi("usuario")}</span></th>
@@ -4952,7 +4952,7 @@ function renderPresupuestoUsuario() {
                 <span class="presup-pct">${pct}%</span>
               ` : "—"}
             </td>
-            <td>
+            <td class="presup-actions">
               <button class="btn btn-sm btn-danger"
                       onclick="removePresupUItem('${escHtml(r.usuario)}')">✕</button>
             </td>
