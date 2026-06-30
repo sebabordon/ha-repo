@@ -1,4 +1,8 @@
-## 1.2.52
+## 1.2.53
+
+- **Presupuesto — % de progreso alineado a la derecha**: `.presup-pct` ahora usa `text-align:right` + `tabular-nums`, así los porcentajes alinean por la derecha en vez de quedar pegados a la barra.
+- **Presupuesto — monto sumado de los padres alineado con los inputs**: las filas hoja tienen un selector de moneda (ARS/USD) a la derecha del input que desplazaba el número; ahora el selector tiene ancho fijo (`.presup-moneda-sel` 3.4rem) y las filas padre + la fila Total reservan ese mismo ancho con un `.presup-moneda-spacer`, de modo que todos los montos de la columna Presupuesto quedan alineados.
+- **Config → Preferencias — nuevo flag "Decimales en montos"** (0 por defecto, o 2): controla cuántos decimales muestra `_fmtNum2` en todos los importes. Se aplica al instante (re-render de Gastos, Presupuesto y saldos al guardar). Es solo de visualización: los inputs editables de presupuesto usan `_fmtAmountInput` (sin redondeo) para no perder el valor guardado.
 
 - **Presupuesto — encabezados consistentes con la hoja de Gastos**: los `<th>` de `.presup-table` (presupuesto por categoría, por persona y config de Categorías) ahora usan el mismo padding/font que el encabezado de `#gastos-table` (`.6rem .75rem`, 14px) en vez de la versión más chica (`.5rem`, `.82rem`).
 - **Presupuesto — columnas numéricas alineadas a la derecha**: nueva clase `.presup-budget` alinea a la derecha las columnas Presupuesto, Gastado y Diferencia (incluido el `tfoot` Total) en ambas tablas de presupuesto. Las celdas de presupuesto con input (ARS/USD) usan `justify-content:flex-end` para que el input quede pegado al borde derecho como los montos.

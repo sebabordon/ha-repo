@@ -1532,6 +1532,8 @@ tbody tr:hover { background: #fafbff; }
   margin-left: .35rem;
   min-width: 2.5rem;
   display: inline-block;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .presup-diff-pos { color: #16a34a; font-variant-numeric: tabular-nums; }
 .presup-diff-neg { color: #dc2626; font-variant-numeric: tabular-nums; }
@@ -1555,7 +1557,11 @@ tbody tr:hover { background: #fafbff; }
   font-size: .75rem; padding: 1px 3px; border: 1px solid #d1d5db;
   border-radius: 3px; background: transparent; color: inherit;
   cursor: pointer;
+  width: 3.4rem; flex: 0 0 auto; box-sizing: border-box;
 }
+/* Reserva el ancho del selector de moneda en filas sin selector (padres y Total),
+   para que el monto sumado quede alineado con los inputs de las filas hoja. */
+.presup-moneda-spacer { display: inline-block; width: 3.4rem; flex: 0 0 auto; }
 
 .presup-summary {
   display: flex;

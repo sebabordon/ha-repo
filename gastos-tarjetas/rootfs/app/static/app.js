@@ -33,7 +33,11 @@ const UI_PREF_DEFAULTS = {
   tab_icon_mode:         "icons_text", // "icons_text" | "icons" | "text"
   pago_btn_mode:         "icons_text", // botones de acción de Pagos: "icons_text" | "icons" | "text"
   widget_refresh_mins:   "5",          // intervalo de refresco automático de widgets ("0" = desactivado)
+  decimals:              0,            // decimales a mostrar en los montos (0 | 2)
 };
+
+// Cache de decimales para los montos (lo lee _fmtNum2 en caliente). Se refresca en applyUiPrefs().
+let _montoDecimals = UI_PREF_DEFAULTS.decimals;
 
 function getUiPref(key) {
   const stored = JSON.parse(localStorage.getItem("ui_prefs") || "{}");
@@ -60,6 +64,8 @@ function applyUiColors() {
 }
 
 function applyUiPrefs() {
+  // Decimales en montos (lo lee _fmtNum2)
+  _montoDecimals = parseInt(getUiPref("decimals"), 10) || 0;
   // Font size
   const fs = getUiPref("font_size");
   document.documentElement.style.fontSize = fs + "px";
@@ -657,6 +663,7 @@ function renderUiSettings() {
   setVal("ui-tab-icon-mode",      p.tab_icon_mode);
   setVal("ui-pago-btn-mode",      p.pago_btn_mode);
   setVal("ui-widget-refresh",     p.widget_refresh_mins);
+  setVal("ui-decimals",           String(p.decimals));
   _updateUiPreview();
 }
 
@@ -711,6 +718,7 @@ function _getUiPrefInputs() {
     tab_icon_mode:         sel("ui-tab-icon-mode",      UI_PREF_DEFAULTS.tab_icon_mode),
     pago_btn_mode:         sel("ui-pago-btn-mode",      UI_PREF_DEFAULTS.pago_btn_mode),
     widget_refresh_mins:   sel("ui-widget-refresh",     UI_PREF_DEFAULTS.widget_refresh_mins),
+    decimals:              num("ui-decimals",            UI_PREF_DEFAULTS.decimals),
   };
 }
 
@@ -736,6 +744,10 @@ function saveUiSettings() {
   loadMonthlyChart();   // re-render con los colores nuevos (egreso/ingreso)
   loadBudgetChart();    // ídem (presupuesto/real)
   _restartBgRefresh();  // aplica el nuevo intervalo de refresco de widgets
+  // Re-render de vistas con datos cacheados para que los decimales se apliquen al instante
+  try { _renderGastos(); } catch (_) {}
+  try { renderPresupuesto(); renderPresupuestoUsuario(); } catch (_) {}
+  try { loadSaldos(); } catch (_) {}
   showToast("Configuración guardada.", "ok", 2500);
 }
 
@@ -1307,7 +1319,12 @@ function _fmtNum(n) {
   return (+n||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:0});
 }
 function _fmtNum2(n) {
-  return (+n||0).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  return (+n||0).toLocaleString("es-AR",{minimumFractionDigits:_montoDecimals,maximumFractionDigits:_montoDecimals});
+}
+// Para inputs editables de montos: nunca redondea (preserva el valor guardado),
+// pero tampoco fuerza decimales si el número es entero. Independiente del pref.
+function _fmtAmountInput(n) {
+  return (+n||0).toLocaleString("es-AR",{minimumFractionDigits:0,maximumFractionDigits:2});
 }
 function _fmtSaldo(n) {
   const v = +n || 0;
@@ -4651,12 +4668,15 @@ function renderPresupuesto() {
           // Budget cell: for USD rows show USD amount + ARS equiv hint
           let budgetCell;
           if (r.tiene_hijos) {
-            budgetCell = `<span class="presup-auto-val" title="Suma de los presupuestos de las subcategorías">${budget > 0 ? _fmtNum2(budget) : "—"}</span>${usdBadge}`;
+            budgetCell = `<span style="display:flex;align-items:center;gap:.3rem;justify-content:flex-end">
+              <span class="presup-auto-val" title="Suma de los presupuestos de las subcategorías">${budget > 0 ? _fmtNum2(budget) : "—"}</span>${usdBadge}
+              <span class="presup-moneda-spacer" aria-hidden="true"></span>
+            </span>`;
           } else if (isUsd) {
             const usdVal = r.monto_usd || 0;
             budgetCell = `<span style="display:flex;align-items:center;gap:.3rem;flex-wrap:wrap;justify-content:flex-end">
               <input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
-                     value="${_fmtNum2(usdVal)}"
+                     value="${_fmtAmountInput(usdVal)}"
                      onfocus="this.select()"
                      onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />
               ${monedaSel}
@@ -4665,7 +4685,7 @@ function renderPresupuesto() {
           } else {
             budgetCell = `<span style="display:flex;align-items:center;gap:.3rem;justify-content:flex-end">
               <input type="text" inputmode="decimal" class="presup-input" data-cat="${escHtml(r.categoria)}"
-                     value="${_fmtNum2(budget)}"
+                     value="${_fmtAmountInput(budget)}"
                      onfocus="this.select()"
                      onchange="updatePresupItem('${escHtml(r.categoria)}',this.value)" />
               ${monedaSel}
@@ -4701,7 +4721,7 @@ function renderPresupuesto() {
       <tfoot>
         <tr class="presup-total-row">
           <td><strong>Total</strong></td>
-          <td><strong style="font-variant-numeric:tabular-nums">${_fmtNum2(totalPresup)}</strong></td>
+          <td><span style="display:flex;align-items:center;gap:.3rem;justify-content:flex-end"><strong style="font-variant-numeric:tabular-nums">${_fmtNum2(totalPresup)}</strong><span class="presup-moneda-spacer" aria-hidden="true"></span></span></td>
           <td><strong style="font-variant-numeric:tabular-nums">${_fmtNum2(totalGastado)}</strong></td>
           <td class="${totalPresup > 0 ? (totalDiff >= 0 ? "presup-diff-pos" : "presup-diff-neg") : ""}">
             <strong>${totalPresup > 0 ? (totalDiff >= 0 ? "+" : "") + _fmtNum2(totalDiff) : "—"}</strong>
@@ -4938,7 +4958,7 @@ function renderPresupuestoUsuario() {
             <td>${escHtml(r.usuario)}</td>
             <td>
               <input type="text" inputmode="decimal" class="presup-u-input" data-usr="${escHtml(r.usuario)}"
-                     value="${_fmtNum2(budget)}"
+                     value="${_fmtAmountInput(budget)}"
                      onfocus="this.select()"
                      onchange="updatePresupUItem('${escHtml(r.usuario)}',this.value)" />
             </td>
