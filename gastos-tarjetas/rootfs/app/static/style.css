@@ -130,6 +130,7 @@ body {
 .tab {
   display: inline-flex;
   align-items: center;
+  gap: .45rem;
   padding: .6rem 1.4rem;
   border: 1px solid #ddd;
   border-bottom: none;
@@ -189,6 +190,7 @@ body {
 .cfg-tab {
   display: inline-flex;
   align-items: center;
+  gap: .4rem;
   padding: .42rem 1rem;
   border: 1px solid transparent;
   border-bottom: none;
@@ -1647,10 +1649,13 @@ tbody tr:hover { background: #fafbff; }
   #gastos-table td.desc-cell   { order: 4; flex: 1 1 100%; max-width: none; font-weight: 500; line-height: 1.3; flex-wrap: wrap; gap: .25rem; }
   #gastos-table td.desc-cell .desc-input { flex: 1 1 60%; width: auto; }
   #gastos-table td.col-fuente  { order: 5; }
-  #gastos-table td.col-persona { order: 6; }
-  #gastos-table td.col-cat     { order: 7; flex: 1 1 60%; }
+  /* Persona crece y llena su fila, empujando Categoría a la línea siguiente,
+     así Categoría y los tildes (✓/✕) comparten una fila propia con espacio. */
+  #gastos-table td.col-persona { order: 6; flex: 1 1 auto; }
+  #gastos-table td.col-persona .usuario-select { width: 100%; }
+  #gastos-table td.col-cat     { order: 7; flex: 1 1 auto; }
   #gastos-table td.col-cat .cat-input { width: 100%; }
-  #gastos-table td.col-act     { order: 8; gap: .25rem; }
+  #gastos-table td.col-act     { order: 8; gap: .35rem; flex: 0 0 auto; margin-left: auto; }
   /* Fila de estado vacío (colspan) ocupa toda la tarjeta */
   #gastos-table td[colspan] { flex: 1 1 100%; justify-content: center; }
 

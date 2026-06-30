@@ -1,4 +1,7 @@
-## 1.2.53
+## 1.2.54
+
+- **Gastos en mobile (iOS) — tildes ✓/✕ al lado del input de Categoría**: en la tarjeta de cada movimiento, Persona ahora crece y llena su fila (`flex:1 1 auto`, select al 100%), empujando Categoría a la línea siguiente; así el input de Categoría y los botones de acción comparten una fila propia (los botones alineados a la derecha con `margin-left:auto`) en vez de quedar los tildes solos en una fila aparte.
+- **Tabs principales — más aire entre ícono y nombre**: `.tab` ahora usa `gap:.45rem` (y `.cfg-tab` `gap:.4rem` por consistencia) en vez de depender del único espacio del texto, que los dejaba muy pegados en Mac.
 
 - **Presupuesto — % de progreso alineado a la derecha**: `.presup-pct` ahora usa `text-align:right` + `tabular-nums`, así los porcentajes alinean por la derecha en vez de quedar pegados a la barra.
 - **Presupuesto — monto sumado de los padres alineado con los inputs**: las filas hoja tienen un selector de moneda (ARS/USD) a la derecha del input que desplazaba el número; ahora el selector tiene ancho fijo (`.presup-moneda-sel` 3.4rem) y las filas padre + la fila Total reservan ese mismo ancho con un `.presup-moneda-spacer`, de modo que todos los montos de la columna Presupuesto quedan alineados.
