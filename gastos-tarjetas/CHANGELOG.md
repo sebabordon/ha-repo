@@ -1,4 +1,6 @@
-## 1.2.54
+## 1.2.55
+
+- **Config → Categorías — edición de keywords in-place (doble clic)**: se restaura la posibilidad de editar una palabra clave con doble clic sobre el chip (se había perdido al fusionar el viejo tab "Reglas" dentro de Categorías en 0.8.x, donde el chip quedó solo con agregar/quitar). Ahora el chip se convierte en un input; Enter/blur guarda, Escape cancela. Nuevo helper `renameKeywordInCat()` reemplaza la palabra en su mismo lugar preservando el orden (vacío → la quita; duplicado en la misma categoría → solo quita la vieja). Wireado con `addEventListener` + data-attrs (no `onclick` inline, por si el keyword tiene comillas).
 
 - **Gastos en mobile (iOS) — tildes ✓/✕ al lado del input de Categoría**: en la tarjeta de cada movimiento, Persona ahora crece y llena su fila (`flex:1 1 auto`, select al 100%), empujando Categoría a la línea siguiente; así el input de Categoría y los botones de acción comparten una fila propia (los botones alineados a la derecha con `margin-left:auto`) en vez de quedar los tildes solos en una fila aparte.
 - **Tabs principales — más aire entre ícono y nombre**: `.tab` ahora usa `gap:.45rem` (y `.cfg-tab` `gap:.4rem` por consistencia) en vez de depender del único espacio del texto, que los dejaba muy pegados en Mac.

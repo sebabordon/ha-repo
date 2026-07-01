@@ -7776,6 +7776,27 @@ function removeKeywordFromCat(nombre, kw) {
   renderCategoriasManaged();
 }
 
+// Edición in-place de un keyword (doble clic en el chip): reemplaza la palabra
+// en su mismo lugar, preservando el orden. Vacío → quita; duplicado en la misma
+// categoría → solo quita la vieja; sin cambios → no hace nada.
+function renameKeywordInCat(nombre, oldKw, newKw) {
+  newKw = (newKw || "").trim();
+  const rule = _rules.find(r => r.categoria === nombre);
+  if (!rule) { renderCategoriasManaged(); return; }
+  const idx = rule.palabras.indexOf(oldKw);
+  if (idx === -1) { renderCategoriasManaged(); return; }
+  if (newKw === oldKw) { renderCategoriasManaged(); return; }
+  if (!newKw) {
+    rule.palabras.splice(idx, 1);
+  } else if (rule.palabras.some((p, i) => i !== idx && p.toLowerCase() === newKw.toLowerCase())) {
+    rule.palabras.splice(idx, 1);
+  } else {
+    rule.palabras[idx] = newKw;
+  }
+  _doSaveRules();
+  renderCategoriasManaged();
+}
+
 function renderCategoriasManaged() {
   const wrap = document.getElementById("categorias-managed-list");
   if (!wrap) return;
@@ -7865,7 +7886,7 @@ function renderCategoriasManaged() {
         const owners = kwOwners.get(kw.toLowerCase());
         const isDup  = owners && (owners.size > 1 || !owners.has(c.nombre));
         return `<span class="tag${isDup ? " tag-dup" : ""}" title="${isDup ? "Esta palabra ya está en otra categoría" : ""}">
-          <span class="tag-label">${escHtml(kw)}</span>
+          <span class="tag-label cat-kw-label" title="Doble clic para editar" data-nombre="${escHtml(c.nombre)}" data-kw="${escHtml(kw)}">${escHtml(kw)}</span>
           <button class="tag-x cat-kw-remove" type="button" data-nombre="${escHtml(c.nombre)}" data-kw="${escHtml(kw)}">×</button>
         </span>`;
       }).join("");
@@ -7935,6 +7956,31 @@ function renderCategoriasManaged() {
   // Remove keyword chip
   wrap.querySelectorAll(".cat-kw-remove").forEach(btn => {
     btn.addEventListener("click", () => removeKeywordFromCat(btn.dataset.nombre, btn.dataset.kw));
+  });
+  // Editar keyword in-place (doble clic en el chip)
+  wrap.querySelectorAll(".cat-kw-label").forEach(label => {
+    label.addEventListener("dblclick", () => {
+      const nombre = label.dataset.nombre;
+      const oldKw  = label.dataset.kw;
+      const inp = document.createElement("input");
+      inp.className = "tag-input";
+      inp.value = oldKw;
+      inp.style.cssText = "width:" + Math.max(60, oldKw.length * 8 + 22) +
+        "px;border:1px solid #ccc;border-radius:4px;padding:.15rem .4rem;font-size:.85rem;box-sizing:border-box";
+      let done = false;
+      const finish = (save) => {
+        if (done) return; done = true;
+        if (save) renameKeywordInCat(nombre, oldKw, inp.value);
+        else renderCategoriasManaged();
+      };
+      inp.addEventListener("keydown", e => {
+        if (e.key === "Enter")  { e.preventDefault(); finish(true); }
+        if (e.key === "Escape") { e.preventDefault(); finish(false); }
+      });
+      inp.addEventListener("blur", () => finish(true));
+      label.replaceWith(inp);
+      inp.focus(); inp.select();
+    });
   });
   // Add keyword on Enter
   wrap.querySelectorAll(".cat-kw-input").forEach(inp => {
