@@ -4822,10 +4822,11 @@ async function savePresupuesto() {
   // Persistir sólo categorías sin hijos: las que tienen hijos derivan su
   // presupuesto automáticamente de los hijos y no se almacenan en la tabla.
   const items = _presupItems.filter(it => !(_catHierarchy[it.categoria] || []).length);
+  const mes = document.getElementById("presup-mes").value;
   const res = await fetch(`${BASE}/api/presupuesto`, {
     method: "PUT",
     headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({items}),
+    body: JSON.stringify({items, mes}),
   });
   if (res.ok) { showToast("✓ Presupuesto guardado", "ok"); loadPresupuesto(); }
   else showToast("Error al guardar presupuesto", "err", 0);
@@ -5025,10 +5026,11 @@ async function savePresupuestoUsuario() {
     updatePresupUItem(inp.dataset.usr, inp.value);
   });
   const items = _presupUItems.filter(it => it.monto_mensual > 0);
+  const mes = document.getElementById("presup-mes").value;
   const res = await fetch(`${BASE}/api/presupuesto/usuario`, {
     method: "PUT",
     headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({items}),
+    body: JSON.stringify({items, mes}),
   });
   if (res.ok) { showToast("✓ Presupuesto por persona guardado", "ok"); loadPresupuestoUsuario(); }
   else showToast("Error al guardar presupuesto por persona", "err", 0);

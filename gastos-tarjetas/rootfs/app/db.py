@@ -398,6 +398,30 @@ def init_db():
             )
         """)
 
+        # Presupuesto temporal (effective-dated / vigencias): cada cambio se guarda
+        # con el mes desde el que rige. La resolución para un mes M toma, por
+        # categoría/usuario, la fila con el mayor desde_mes <= M. monto_mensual NULL
+        # es un "tombstone" (baja): la categoría deja de tener presupuesto desde ese
+        # mes en adelante, sin borrar la historia anterior.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS presupuesto_vigencia (
+                categoria     TEXT NOT NULL,
+                desde_mes     TEXT NOT NULL,
+                monto_mensual REAL,
+                moneda        TEXT DEFAULT 'ARS',
+                PRIMARY KEY (categoria, desde_mes)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS presupuesto_usuario_vigencia (
+                usuario       TEXT NOT NULL,
+                desde_mes     TEXT NOT NULL,
+                monto_mensual REAL,
+                moneda        TEXT DEFAULT 'ARS',
+                PRIMARY KEY (usuario, desde_mes)
+            )
+        """)
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS categorias (
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -490,6 +514,37 @@ def _run_migrations(conn):
               AND CAST(monto AS REAL) != 0
         """)
         conn.execute("INSERT INTO db_migrations (name) VALUES ('normalize_signs_v1')")
+
+    if "presupuesto_vigencia_v1" not in done:
+        # Presupuesto effective-dated. Sembramos las tablas legacy
+        # (presupuestos / presupuestos_usuario) en desde_mes='0000-00' —un
+        # centinela base <= a cualquier 'YYYY-MM'— para que TODO el histórico
+        # existente resuelva al valor actual (cero cambio de comportamiento el
+        # día 1). A partir de acá, editar un mes crea/actualiza su propia vigencia
+        # sin tocar la historia anterior.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS presupuesto_vigencia (
+                categoria TEXT NOT NULL, desde_mes TEXT NOT NULL,
+                monto_mensual REAL, moneda TEXT DEFAULT 'ARS',
+                PRIMARY KEY (categoria, desde_mes)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS presupuesto_usuario_vigencia (
+                usuario TEXT NOT NULL, desde_mes TEXT NOT NULL,
+                monto_mensual REAL, moneda TEXT DEFAULT 'ARS',
+                PRIMARY KEY (usuario, desde_mes)
+            )
+        """)
+        conn.execute("""
+            INSERT OR IGNORE INTO presupuesto_vigencia (categoria, desde_mes, monto_mensual, moneda)
+            SELECT categoria, '0000-00', monto_mensual, moneda FROM presupuestos
+        """)
+        conn.execute("""
+            INSERT OR IGNORE INTO presupuesto_usuario_vigencia (usuario, desde_mes, monto_mensual, moneda)
+            SELECT usuario, '0000-00', monto_mensual, moneda FROM presupuestos_usuario
+        """)
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('presupuesto_vigencia_v1')")
 
     if "quick_form_archivo_origen_v1" not in done:
         # v0.3.12: gastos insertados por el formulario rápido (/quick) quedaban con
@@ -2707,19 +2762,99 @@ def delete_movimiento_manual(gasto_id: int, fuente: str) -> bool:
 
 # ── Presupuestos ───────────────────────────────────────────────────────────────
 
-def get_presupuestos() -> list[dict]:
-    with _conn() as conn:
-        rows = conn.execute("SELECT * FROM presupuestos ORDER BY categoria").fetchall()
-    return [dict(r) for r in rows]
+def _current_month() -> str:
+    from datetime import datetime
+    return datetime.now().strftime("%Y-%m")
 
 
-def save_presupuestos(items: list[dict]):
+def _resolve_presup_rows(conn, table: str, key_col: str, mes: str | None,
+                         strict_before: bool = False) -> dict[str, dict]:
+    """Presupuesto effective-dated: devuelve {clave: {monto_mensual, moneda}}
+    vigente en `mes`. Por clave, toma la fila con el mayor desde_mes <= mes
+    (o < mes si strict_before). Las bajas (monto_mensual IS NULL, tombstone) se
+    excluyen del resultado. mes=None → la última vigencia por clave (el "default").
+    `table`/`key_col` son constantes internas (no input de usuario)."""
+    if mes:
+        op = "<" if strict_before else "<="
+        q = f"""
+            SELECT v.{key_col} AS k, v.monto_mensual AS m, v.moneda AS mo
+            FROM {table} v
+            WHERE v.desde_mes {op} ?
+              AND v.desde_mes = (
+                  SELECT MAX(v2.desde_mes) FROM {table} v2
+                  WHERE v2.{key_col} = v.{key_col} AND v2.desde_mes {op} ?
+              )
+        """
+        rows = conn.execute(q, (mes, mes)).fetchall()
+    else:
+        q = f"""
+            SELECT v.{key_col} AS k, v.monto_mensual AS m, v.moneda AS mo
+            FROM {table} v
+            WHERE v.desde_mes = (
+                SELECT MAX(v2.desde_mes) FROM {table} v2
+                WHERE v2.{key_col} = v.{key_col}
+            )
+        """
+        rows = conn.execute(q).fetchall()
+    out: dict[str, dict] = {}
+    for r in rows:
+        if r["m"] is None:          # tombstone → sin presupuesto desde ese mes
+            continue
+        out[r["k"]] = {"monto_mensual": float(r["m"]), "moneda": (r["mo"] or "ARS")}
+    return out
+
+
+def _save_presup_vigencia(conn, table: str, key_col: str, incoming: dict, mes: str):
+    """Guarda `incoming` ({clave: (monto, moneda)}) como vigencia en `mes`,
+    delta-aware: sólo persiste una fila cuando el valor difiere del heredado
+    (desde_mes < mes); si iguala al heredado, borra la fila redundante. Las claves
+    que estaban vigentes en `mes` y ya no vienen en `incoming` se dan de baja con
+    un tombstone (monto NULL) desde `mes` en adelante, preservando la historia."""
+    prior = _resolve_presup_rows(conn, table, key_col, mes, strict_before=True)
+    shown = _resolve_presup_rows(conn, table, key_col, mes)  # lo que el usuario veía en M
+    for k, (monto, moneda) in incoming.items():
+        inh = prior.get(k)
+        if inh is not None and abs(inh["monto_mensual"] - monto) < 1e-9 and inh["moneda"] == moneda:
+            conn.execute(f"DELETE FROM {table} WHERE {key_col}=? AND desde_mes=?", (k, mes))
+        else:
+            conn.execute(
+                f"""INSERT INTO {table} ({key_col}, desde_mes, monto_mensual, moneda)
+                    VALUES (?,?,?,?)
+                    ON CONFLICT({key_col}, desde_mes)
+                    DO UPDATE SET monto_mensual=excluded.monto_mensual, moneda=excluded.moneda""",
+                (k, mes, monto, moneda),
+            )
+    for k in shown:
+        if k in incoming:
+            continue
+        if k in prior:              # heredaba un valor de antes de M → tombstone en M
+            conn.execute(
+                f"""INSERT INTO {table} ({key_col}, desde_mes, monto_mensual, moneda)
+                    VALUES (?,?,NULL,'ARS')
+                    ON CONFLICT({key_col}, desde_mes) DO UPDATE SET monto_mensual=NULL""",
+                (k, mes),
+            )
+        else:                        # sólo existía desde M → borrar la fila de M
+            conn.execute(f"DELETE FROM {table} WHERE {key_col}=? AND desde_mes=?", (k, mes))
+
+
+def get_presupuestos(mes: str | None = None) -> list[dict]:
     with _conn() as conn:
-        conn.execute("DELETE FROM presupuestos")
-        conn.executemany(
-            "INSERT INTO presupuestos (categoria, monto_mensual, moneda) VALUES (?,?,?)",
-            [(it["categoria"], it["monto_mensual"], it.get("moneda","ARS")) for it in items if it.get("categoria")],
-        )
+        m = _resolve_presup_rows(conn, "presupuesto_vigencia", "categoria", mes)
+    return [{"categoria": k, "monto_mensual": v["monto_mensual"], "moneda": v["moneda"]}
+            for k, v in sorted(m.items())]
+
+
+def save_presupuestos(items: list[dict], mes: str | None = None):
+    mes = mes or _current_month()
+    incoming: dict[str, tuple] = {}
+    for it in items:
+        cat = it.get("categoria")
+        if not cat:
+            continue
+        incoming[cat] = (float(it.get("monto_mensual") or 0), it.get("moneda") or "ARS")
+    with _conn() as conn:
+        _save_presup_vigencia(conn, "presupuesto_vigencia", "categoria", incoming, mes)
 
 
 def stats_presupuesto_vs_actual(mes: str, tc_actual: float | None = None) -> list[dict]:
@@ -2742,11 +2877,11 @@ def stats_presupuesto_vs_actual(mes: str, tc_actual: float | None = None) -> lis
     """
     with _conn() as conn:
         actual_rows = conn.execute(q_actual, params_ars).fetchall()
-        budget_rows = conn.execute("SELECT categoria, monto_mensual, moneda FROM presupuestos").fetchall()
+        budget_map  = _resolve_presup_rows(conn, "presupuesto_vigencia", "categoria", mes)
 
-    # Split budgets by currency
-    budget_ars = {r["categoria"]: float(r["monto_mensual"]) for r in budget_rows if (r["moneda"] or "ARS") == "ARS"}
-    budget_usd = {r["categoria"]: float(r["monto_mensual"]) for r in budget_rows if (r["moneda"] or "ARS") == "USD"}
+    # Split budgets by currency (presupuesto vigente en `mes`)
+    budget_ars = {k: v["monto_mensual"] for k, v in budget_map.items() if v["moneda"] == "ARS"}
+    budget_usd = {k: v["monto_mensual"] for k, v in budget_map.items() if v["moneda"] == "USD"}
     budget = {**budget_ars}  # ARS budget for the tree logic (presupuesto column = ARS value)
     # USD budgets contribute their ARS-equivalent to budget (tc_actual required)
     if budget_usd and tc_actual:
@@ -2868,19 +3003,23 @@ def stats_presupuesto_vs_actual(mes: str, tc_actual: float | None = None) -> lis
     return ordered
 
 
-def get_presupuestos_usuario() -> list[dict]:
+def get_presupuestos_usuario(mes: str | None = None) -> list[dict]:
     with _conn() as conn:
-        rows = conn.execute("SELECT * FROM presupuestos_usuario ORDER BY usuario").fetchall()
-    return [dict(r) for r in rows]
+        m = _resolve_presup_rows(conn, "presupuesto_usuario_vigencia", "usuario", mes)
+    return [{"usuario": k, "monto_mensual": v["monto_mensual"], "moneda": v["moneda"]}
+            for k, v in sorted(m.items())]
 
 
-def save_presupuestos_usuario(items: list[dict]):
+def save_presupuestos_usuario(items: list[dict], mes: str | None = None):
+    mes = mes or _current_month()
+    incoming: dict[str, tuple] = {}
+    for it in items:
+        usr = it.get("usuario")
+        if not usr:
+            continue
+        incoming[usr] = (float(it.get("monto_mensual") or 0), it.get("moneda") or "ARS")
     with _conn() as conn:
-        conn.execute("DELETE FROM presupuestos_usuario")
-        conn.executemany(
-            "INSERT INTO presupuestos_usuario (usuario, monto_mensual, moneda) VALUES (?,?,?)",
-            [(it["usuario"], it["monto_mensual"], it.get("moneda","ARS")) for it in items if it.get("usuario")],
-        )
+        _save_presup_vigencia(conn, "presupuesto_usuario_vigencia", "usuario", incoming, mes)
 
 
 _DEFAULT_LAYOUT = ["category", "top_desc", "monthly_cat", "fuente", "usuario", "forecast"]
@@ -2978,10 +3117,10 @@ def stats_presupuesto_usuario_vs_actual(mes: str) -> list[dict]:
     """
     with _conn() as conn:
         actual_rows = conn.execute(q_actual, params).fetchall()
-        budget_rows = conn.execute("SELECT usuario, monto_mensual FROM presupuestos_usuario").fetchall()
+        budget_map  = _resolve_presup_rows(conn, "presupuesto_usuario_vigencia", "usuario", mes)
 
     actual = {r["usr"]: float(r["gastado"]) for r in actual_rows if float(r["gastado"]) > 0}
-    budget = {r["usuario"]: float(r["monto_mensual"]) for r in budget_rows}
+    budget = {k: v["monto_mensual"] for k, v in budget_map.items()}
 
     users = sorted(set(list(actual) + list(budget)))
     result = []

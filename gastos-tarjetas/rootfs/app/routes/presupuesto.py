@@ -27,7 +27,7 @@ def get_presupuesto(
     mes: Optional[str] = Query(None),
 ):
     require_auth(request)
-    items     = get_presupuestos()
+    items     = get_presupuestos(mes)
     tc_actual = _get_tc_actual()
     if mes:
         vs_actual = stats_presupuesto_vs_actual(mes, tc_actual=tc_actual)
@@ -39,7 +39,7 @@ def get_presupuesto(
 def put_presupuesto(body: dict, request: Request):
     require_auth(request)
     items = body.get("items", [])
-    save_presupuestos(items)
+    save_presupuestos(items, body.get("mes") or None)
     return {"ok": True, "guardados": len(items)}
 
 
@@ -49,7 +49,7 @@ def get_presupuesto_usuario(
     mes: Optional[str] = Query(None),
 ):
     require_auth(request)
-    items = get_presupuestos_usuario()
+    items = get_presupuestos_usuario(mes)
     if mes:
         vs_actual = stats_presupuesto_usuario_vs_actual(mes)
         return {"items": items, "vs_actual": vs_actual}
@@ -60,5 +60,5 @@ def get_presupuesto_usuario(
 def put_presupuesto_usuario(body: dict, request: Request):
     require_auth(request)
     items = body.get("items", [])
-    save_presupuestos_usuario(items)
+    save_presupuestos_usuario(items, body.get("mes") or None)
     return {"ok": True, "guardados": len(items)}

@@ -1,4 +1,11 @@
-## 1.2.55
+## 1.2.56
+
+- **Presupuesto temporal (effective-dated / vigencias)**: hasta ahora el presupuesto era un único valor global por categoría/persona, sin dimensión de mes — el selector de mes sólo filtraba el gasto real, así que editar un presupuesto reescribía la comparación de TODOS los meses (pasado incluido). Ahora cada cambio se guarda con el mes desde el que rige y la historia queda intacta por construcción.
+  - Nuevas tablas `presupuesto_vigencia` y `presupuesto_usuario_vigencia` (`clave, desde_mes, monto_mensual, moneda`, PK `(clave, desde_mes)`). La resolución para un mes M toma, por clave, la fila con el mayor `desde_mes <= M`; sin mes seleccionado usa la última vigencia (el "default"). Un `monto_mensual` NULL es un tombstone (baja): la categoría deja de tener presupuesto desde ese mes en adelante sin borrar los meses previos.
+  - Migración `presupuesto_vigencia_v1`: siembra las tablas legacy (`presupuestos`/`presupuestos_usuario`) en `desde_mes='0000-00'` (centinela base ≤ a cualquier `YYYY-MM`), de modo que todo el histórico existente resuelve al valor actual → cero cambio de comportamiento el día de la actualización.
+  - Guardado **delta-aware**: al guardar un mes M sólo se persiste una vigencia para las claves cuyo valor difiere del heredado (`desde_mes < M`); si igualás el heredado, se borra la fila redundante. Editar una categoría en un mes pasado se propaga hacia los meses futuros que no la hayan redefinido (a diferencia de guardar snapshots del mes completo). Editar el último mes mueve el "default" que heredan los meses futuros; editar un mes pasado no toca el default.
+  - `get_presupuestos`, `save_presupuestos`, `stats_presupuesto_vs_actual` y sus equivalentes por usuario ahora resuelven/persisten por mes; el forecast (`get_presupuestos()` sin mes) toma la última vigencia. Las rutas GET/PUT y el frontend (`savePresupuesto`/`savePresupuestoUsuario`) propagan el mes del selector.
+
 
 - **Config → Categorías — edición de keywords in-place (doble clic)**: se restaura la posibilidad de editar una palabra clave con doble clic sobre el chip (se había perdido al fusionar el viejo tab "Reglas" dentro de Categorías en 0.8.x, donde el chip quedó solo con agregar/quitar). Ahora el chip se convierte en un input; Enter/blur guarda, Escape cancela. Nuevo helper `renameKeywordInCat()` reemplaza la palabra en su mismo lugar preservando el orden (vacío → la quita; duplicado en la misma categoría → solo quita la vieja). Wireado con `addEventListener` + data-attrs (no `onclick` inline, por si el keyword tiene comillas).
 
