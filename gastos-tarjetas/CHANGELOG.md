@@ -1,3 +1,7 @@
+## 1.2.57
+
+- **Gastos — búsqueda de texto por descripción**: nuevo campo `filter-desc` en la barra de filtros de Gastos, filtra por sustring (case-insensitive) contra `descripcion_editada || descripcion` a medida que se escribe (client-side, sin round-trip al backend). El filtro de mes (`filter-mes`) ahora arranca en "Todos los meses" en vez del mes activo, para que la búsqueda por defecto abarque todo el historial.
+
 ## 1.2.56
 
 - **Presupuesto temporal (effective-dated / vigencias)**: hasta ahora el presupuesto era un único valor global por categoría/persona, sin dimensión de mes — el selector de mes sólo filtraba el gasto real, así que editar un presupuesto reescribía la comparación de TODOS los meses (pasado incluido). Ahora cada cambio se guarda con el mes desde el que rige y la historia queda intacta por construcción.

@@ -1613,7 +1613,7 @@ tbody tr:hover { background: #fafbff; }
   .filter-bar { flex-direction: column; align-items: flex-start; gap: .4rem; }
 
   .filters { gap: .4rem; }
-  .filters select { font-size: .82rem; padding: .32rem .5rem; flex: 1 1 calc(50% - .4rem); min-width: 0; }
+  .filters select, .filters input[type=text] { font-size: .82rem; padding: .32rem .5rem; flex: 1 1 calc(50% - .4rem); min-width: 0; }
   #btn-load, #btn-export { flex: 1 1 calc(50% - .4rem); text-align: center; }
 
   .cat-slicer { gap: .35rem; }

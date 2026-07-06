@@ -1377,8 +1377,10 @@ function _populateMonthFilter(meses) {
     });
     // After first load: always restore whatever the user had (including "" = Todos).
     // On first load only: auto-select the appropriate default per selector.
+    // filter-mes arranca en "Todos los meses" (""); cf-mes/presup-mes conservan su default de mes activo/cerrado.
     if (_monthFilterReady) sel.value = current;
     else if (current)      sel.value = current;
+    else if (id === "filter-mes") sel.value = "";
     else                   sel.value = initialDefaults[id] || defaultActive;
   });
 
@@ -2345,6 +2347,10 @@ function _renderGastos() {
   if (tipo === "egreso")  gastos = gastos.filter(g => _isEgreso(g.monto));
   else if (tipo === "ingreso") gastos = gastos.filter(g => !_isEgreso(g.monto));
 
+  // Filter by descripción (texto libre) client-side
+  const q = document.getElementById("filter-desc").value.trim().toLowerCase();
+  if (q) gastos = gastos.filter(g => (g.descripcion_editada || g.descripcion || "").toLowerCase().includes(q));
+
   // Sort client-side
   if (_gastosSort.col) {
     const col = _gastosSort.col, dir = _gastosSort.dir;
@@ -2748,6 +2754,7 @@ async function _saveDescripcion(cell, gastoId, newValue, original) {
 ["filter-fuente","filter-usuario","filter-mes","filter-moneda","filter-import"].forEach(id =>
   document.getElementById(id).addEventListener("change", function() { this.blur(); loadGastos(); }));
 document.getElementById("filter-tipo").addEventListener("change", function() { this.blur(); _renderGastos(); });
+document.getElementById("filter-desc").addEventListener("input", () => _renderGastos());
 document.getElementById("chk-excluir-especiales").addEventListener("change", loadGastos);
 document.getElementById("chk-excluir-especiales-graf").addEventListener("change", loadCharts);
 document.getElementById("btn-load").addEventListener("click", loadGastos);
