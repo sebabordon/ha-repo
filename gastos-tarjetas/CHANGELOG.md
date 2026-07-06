@@ -1,3 +1,7 @@
+## 1.2.58
+
+- **Fix: vencimiento marcado "✓ pagada" sin estar pagado** (badge verde falso positivo en el widget de vencimientos). El chequeo de `pago_confirmado` vía `transfer_pairs` (camino (a) en `list_vencimientos`) buscaba cualquier transferencia banco→TC ya emparejada para esa fuente dentro de una ventana de -90/+10 días respecto al `fecha_venc`, sin comparar el monto emparejado contra el saldo/total de ESE resumen puntual. Con vencimientos mensuales (~30 días de cadencia), el pago del mes anterior caía dentro de la ventana de 100 días del vencimiento del mes siguiente y lo marcaba como pagado aunque no lo estuviera (ej.: Amex vencía hoy por $5.010.157 sin pagar, pero se mostraba "✓ pagada" por un pago de un mes previo ya conciliado). Ahora el camino (a) exige además que `ABS(monto emparejado)` coincida (±`tol_ars`) con el `net_ars` o `total_ars` de ese import específico, igual que ya hacían el camino (b) y `pago_probable`.
+
 ## 1.2.57
 
 - **Gastos — búsqueda de texto por descripción**: nuevo campo `filter-desc` en la barra de filtros de Gastos, filtra por sustring (case-insensitive) contra `descripcion_editada || descripcion` a medida que se escribe (client-side, sin round-trip al backend). El filtro de mes (`filter-mes`) ahora arranca en "Todos los meses" en vez del mes activo, para que la búsqueda por defecto abarque todo el historial.

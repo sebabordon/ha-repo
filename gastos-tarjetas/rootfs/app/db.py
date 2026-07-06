@@ -1361,7 +1361,10 @@ def list_vencimientos() -> list[dict]:
                                           THEN CAST(g.monto AS REAL) ELSE 0 END), 2), 0) AS rg5617_ars,
                    -- pago_confirmado = 1: tilde VERDE. Dos casos:
                    -- (a) vínculo explícito banco→TC (transfer_pairs): el egreso del banco
-                   --     y el crédito de la TC están emparejados en la misma fuente.
+                   --     y el crédito de la TC están emparejados en la misma fuente, Y el
+                   --     monto emparejado coincide (±tol_ars) con el saldo/total de ESTE
+                   --     resumen (sin esto, un pago viejo de la misma fuente "confirmaba"
+                   --     cualquier resumen posterior dentro de la ventana de 100 días).
                    -- (b) pago importado desde los propios movimientos de la TC (scraper o
                    --     parser PDF de esa fuente): la TC misma registró el pago recibido
                    --     y el gasto tiene fuente = i.fuente + categoría "Pago de Tarjeta"
@@ -1376,6 +1379,21 @@ def list_vencimientos() -> list[dict]:
                            WHERE gp.fuente = i.fuente
                              AND gp.fecha >= date(i.fecha_venc, '-90 days')
                              AND gp.fecha <= date(i.fecha_venc, '+10 days')
+                             -- El monto emparejado debe corresponder a ESTE resumen:
+                             -- sin este chequeo, un transfer_pair de un vencimiento
+                             -- anterior (mismo fuente, dentro de la ventana de 100
+                             -- días) confirmaba como pagado un resumen posterior
+                             -- distinto todavía impago.
+                             AND (
+                                 ABS(ABS(CAST(gp.monto AS REAL)) - (
+                                     SELECT COALESCE(SUM(CASE WHEN ga.moneda='ARS'
+                                                                   AND UPPER(ga.descripcion) NOT LIKE '%5617%'
+                                                              THEN CAST(ga.monto AS REAL) ELSE 0 END), 0)
+                                       FROM gastos ga WHERE ga.import_id = i.id)
+                                     ) <= :tol_ars
+                                 OR (i.total_ars IS NOT NULL
+                                     AND ABS(ABS(CAST(gp.monto AS REAL)) - i.total_ars) <= :tol_ars)
+                             )
                        )
                        OR (:match_activo = 1 AND EXISTS (
                            SELECT 1 FROM gastos pa
