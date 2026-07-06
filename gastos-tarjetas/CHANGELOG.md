@@ -1,3 +1,13 @@
+## 1.2.59
+
+- **Nueva sección "📅 Vencimientos del mes"** en el tab Pagos/Cuotas, arriba de
+  la tabla de pagos manuales: fusiona los vencimientos de tarjeta (widget de
+  arriba) con los pagos manuales (`pagos`) que caen en el mes calendario en
+  curso (hora ART), ordenados por fecha, con el mismo check ✓ verde/amarillo
+  de pago confirmado/probable. Nueva `list_vencimientos_mes()` en `db.py` y
+  endpoint `GET /api/vencimientos-mes`. Se refresca junto con `loadPagos()` en
+  cada alta/edición/pago/borrado y en `refreshAfterDataChange()`.
+
 ## 1.2.58
 
 - **Fix: vencimiento marcado "✓ pagada" sin estar pagado** (badge verde falso positivo en el widget de vencimientos). El chequeo de `pago_confirmado` vía `transfer_pairs` (camino (a) en `list_vencimientos`) buscaba cualquier transferencia banco→TC ya emparejada para esa fuente dentro de una ventana de -90/+10 días respecto al `fecha_venc`, sin comparar el monto emparejado contra el saldo/total de ESE resumen puntual. Con vencimientos mensuales (~30 días de cadencia), el pago del mes anterior caía dentro de la ventana de 100 días del vencimiento del mes siguiente y lo marcaba como pagado aunque no lo estuviera (ej.: Amex vencía hoy por $5.010.157 sin pagar, pero se mostraba "✓ pagada" por un pago de un mes previo ya conciliado). Ahora el camino (a) exige además que `ABS(monto emparejado)` coincida (±`tol_ars`) con el `net_ars` o `total_ars` de ese import específico, igual que ya hacían el camino (b) y `pago_probable`.

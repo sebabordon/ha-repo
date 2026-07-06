@@ -21,6 +21,14 @@ def _valid_fecha(s: str) -> str:
         raise HTTPException(400, "fecha_vencimiento inválida (usá YYYY-MM-DD)")
 
 
+@router.get("/vencimientos-mes")
+def get_vencimientos_mes(request: Request):
+    """Tarjetas + pagos manuales que vencen en el mes calendario en curso."""
+    require_auth(request)
+    from db import list_vencimientos_mes
+    return {"items": list_vencimientos_mes()}
+
+
 @router.get("/pagos")
 def get_pagos(request: Request, estado: str = ""):
     require_auth(request)

@@ -1499,6 +1499,57 @@ def list_vencimientos() -> list[dict]:
     return result
 
 
+def list_vencimientos_mes() -> list[dict]:
+    """
+    Vencimientos del mes calendario en curso (hora ART), fusionando tarjetas
+    (list_vencimientos, deduplicado al más reciente por fuente) y pagos
+    manuales (list_pagos, pendientes y pagados) en una sola lista ordenada por
+    fecha. Pensado para la sección "Vencimientos del mes" del tab Pagos/Cuotas.
+    """
+    from datetime import datetime, timezone, timedelta
+    art     = timezone(timedelta(hours=-3))
+    mes_act = datetime.now(timezone.utc).astimezone(art).strftime("%Y-%m")
+
+    items: list[dict] = []
+
+    seen = set()
+    for v in list_vencimientos():
+        if v["fuente"] in seen:
+            continue
+        seen.add(v["fuente"])
+        fecha = str(v.get("fecha_venc") or "")[:10]
+        if fecha[:7] != mes_act:
+            continue
+        items.append({
+            "tipo":            "tarjeta",
+            "fuente":          v["fuente"],
+            "fecha":           fecha,
+            "monto_ars":       v["net_ars"] if v.get("net_ars") is not None else v.get("sum_ars", 0),
+            "monto_usd":       v["net_usd"] if v.get("net_usd") is not None else v.get("sum_usd", 0),
+            "pagado":          bool(v.get("pago_confirmado") or v.get("pago_probable")),
+            "pago_confirmado": bool(v.get("pago_confirmado")),
+        })
+
+    for p in list_pagos():
+        fecha = str(p.get("fecha_vencimiento") or "")[:10]
+        if fecha[:7] != mes_act:
+            continue
+        moneda = (p.get("moneda") or "ARS").upper()
+        monto  = float(p["monto"]) if p.get("monto") is not None else 0.0
+        items.append({
+            "tipo":        "pago",
+            "id":          p["id"],
+            "descripcion": p.get("descripcion", ""),
+            "fecha":       fecha,
+            "monto_ars":   monto if moneda == "ARS" else 0.0,
+            "monto_usd":   monto if moneda == "USD" else 0.0,
+            "pagado":      p.get("estado") == "pagado",
+        })
+
+    items.sort(key=lambda x: x["fecha"])
+    return items
+
+
 def list_gastos(
     fuente: Optional[str] = None,
     categorias: Optional[list] = None,

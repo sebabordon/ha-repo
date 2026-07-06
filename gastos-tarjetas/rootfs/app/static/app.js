@@ -243,7 +243,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     tab.classList.add("active");
     document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "graficos")    { loadCharts(); loadBudgetChart(); _monthlyChart?.resize(); }
-    if (tab.dataset.tab === "cuotas")      { loadCuotas(); loadPagos(); }
+    if (tab.dataset.tab === "cuotas")      { loadCuotas(); loadPagos(); loadVencimientosMes(); }
     if (tab.dataset.tab === "presupuesto") { loadTcConfig(); loadPresupuesto(); loadPresupuestoUsuario(); }
     if (tab.dataset.tab === "config")      { _restoreCfgSections(); renderUsuarios(); renderUserRules(); loadCuentas(); loadImportaciones(); renderUiSettings(); renderPwaShortcuts(); loadCategoriasManaged(); loadDedupConfig(); loadPeriodoConfig(); loadVencMatchConfig(); loadCategorizacionConfig(); loadEspecialesConfig(); loadIconosConfig(); }
   });
@@ -925,6 +925,58 @@ document.querySelector('.cfg-tab[data-cfgtab="ui"]')?.addEventListener("click", 
   loadVencNotifConfig();
 });
 
+// ── Vencimientos del mes (tarjetas + pagos manuales fusionados) ─────────────
+async function loadVencimientosMes() {
+  const tb = document.getElementById("venc-mes-tbody");
+  if (!tb) return;
+  let items = [];
+  try { items = (await (await fetch(`${BASE}/api/vencimientos-mes`)).json()).items || []; }
+  catch (_) {}
+  tb.replaceChildren();
+  if (!items.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5; td.className = "empty"; td.textContent = "Nada vence este mes.";
+    tr.appendChild(td); tb.appendChild(tr); return;
+  }
+  for (const it of items) {
+    const tr = document.createElement("tr");
+    if (it.pagado) tr.style.opacity = ".5";
+
+    const tdFecha = document.createElement("td");
+    tdFecha.textContent = String(it.fecha || "").slice(0, 10);
+    tr.appendChild(tdFecha);
+
+    const tdTipo = document.createElement("td");
+    tdTipo.textContent = it.tipo === "tarjeta" ? "💳 Tarjeta" : "💰 Pago";
+    tr.appendChild(tdTipo);
+
+    const tdDesc = document.createElement("td");
+    tdDesc.textContent = it.tipo === "tarjeta" ? _cuentaNombre(it.fuente) : it.descripcion;
+    tr.appendChild(tdDesc);
+
+    const tdMonto = document.createElement("td");
+    const arsStr = it.monto_ars ? `<span class="venc-ars">$ ${_fmtNum2(it.monto_ars)}</span>` : "";
+    const usdStr = it.monto_usd ? `<span class="venc-usd"> · U$S ${_fmtNum2(it.monto_usd)}</span>` : "";
+    tdMonto.innerHTML = arsStr + usdStr;
+    tr.appendChild(tdMonto);
+
+    const tdEstado = document.createElement("td");
+    if (it.pagado) {
+      const chip = document.createElement("span");
+      chip.className = (it.tipo === "tarjeta" && !it.pago_confirmado) ? "venc-pago-probable" : "venc-pago-ok";
+      chip.textContent = "✓";
+      tdEstado.appendChild(chip);
+    } else {
+      tdEstado.textContent = "Pendiente";
+    }
+    tr.appendChild(tdEstado);
+
+    tb.appendChild(tr);
+  }
+}
+document.getElementById("btn-reload-venc-mes")?.addEventListener("click", loadVencimientosMes);
+
 // ── Pagos / vencimientos manuales (b2) ───────────────────────────────────────
 let _editingPagoId = null;
 
@@ -1119,7 +1171,7 @@ async function savePago() {
     if (!r.ok) throw new Error();
     showToast(editing ? "Pago actualizado" : "Pago agregado");
     resetPagoForm();
-    loadPagos();
+    loadPagos(); loadVencimientosMes();
   } catch (_) { showToast("Error al guardar el pago", "err"); }
 }
 
@@ -1131,7 +1183,7 @@ async function markPagoPaid(id) {
     showToast(siguiente
       ? `Pagado — próximo: ${siguiente.fecha_vencimiento}`
       : "Marcado como pagado");
-    loadPagos();
+    loadPagos(); loadVencimientosMes();
   } catch (_) { showToast("Error", "err"); }
 }
 
@@ -1142,7 +1194,7 @@ async function reabrirPago(id) {
       body: JSON.stringify({ estado: "pendiente" }),
     });
     if (!r.ok) throw new Error();
-    showToast("Reabierto como pendiente"); loadPagos();
+    showToast("Reabierto como pendiente"); loadPagos(); loadVencimientosMes();
   } catch (_) { showToast("No se pudo reabrir", "err"); }
 }
 
@@ -1151,7 +1203,7 @@ async function finalizarPago(id, desc) {
   try {
     const r = await fetch(`${BASE}/api/pagos/${id}/finalizar`, { method: "POST" });
     if (!r.ok) throw new Error();
-    showToast("Serie finalizada"); loadPagos();
+    showToast("Serie finalizada"); loadPagos(); loadVencimientosMes();
   } catch (_) { showToast("Error", "err"); }
 }
 
@@ -1162,7 +1214,7 @@ async function deletePago(id, desc) {
     if (!r.ok) throw new Error();
     showToast("Pago eliminado");
     if (_editingPagoId === id) resetPagoForm();
-    loadPagos();
+    loadPagos(); loadVencimientosMes();
   } catch (_) { showToast("Error al eliminar", "err"); }
 }
 
@@ -2330,6 +2382,7 @@ function refreshAfterDataChange() {
   loadHierarchy().then(loadCategorias);
   loadImportaciones();
   loadVencimientos?.();
+  loadVencimientosMes?.();
   loadCuentas();
 }
 

@@ -437,6 +437,24 @@
     <!-- ── Tab: Cuotas ───────────────────────────────────────────────────── -->
     <section id="tab-cuotas" class="tab-content">
 
+      <!-- ── Vencimientos del mes (tarjetas + pagos manuales) ─────────── -->
+      <div class="rules-header">
+        <h2>📅 Vencimientos del mes</h2>
+        <button id="btn-reload-venc-mes" class="btn" title="Recargar">↺</button>
+      </div>
+      <p class="rules-hint">
+        Todo lo que vence este mes, tarjetas y pagos manuales juntos, ordenado
+        por fecha.
+      </p>
+      <div class="table-wrap">
+        <table id="venc-mes-table">
+          <thead><tr><th>Vence</th><th>Tipo</th><th>Descripción</th><th>Monto</th><th>Estado</th></tr></thead>
+          <tbody id="venc-mes-tbody"></tbody>
+        </table>
+      </div>
+
+      <hr style="margin:1.6rem 0;border:none;border-top:1px solid #eee">
+
       <!-- ── Pagos / vencimientos manuales (b2) ──────────────────────── -->
       <div class="rules-header">
         <h2>💰 Pagos / vencimientos manuales</h2>
