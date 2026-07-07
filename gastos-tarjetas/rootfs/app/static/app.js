@@ -5286,22 +5286,23 @@ function _renderCuentaCard(c, idx = 0) {
     ? `<span class="cuenta-badge cuenta-badge-manual">Manual</span>`
     : `<span class="cuenta-badge cuenta-badge-auto">Auto</span>`;
 
-  // Saldo display
+  // Saldo display — color por moneda (--color-ars/--color-usd, configurable en
+  // Config → UI); negativo pisa ese color con rojo de alerta.
   let saldoDisplay;
   if (isMulti) {
     const ars = c.saldo     || 0;
     const usd = c.saldo_usd || 0;
-    const aC  = ars < 0 ? "negativo" : ars > 0 ? "positivo" : "";
-    const uC  = usd < 0 ? "negativo" : usd > 0 ? "positivo" : "";
+    const aC  = "ars" + (ars < 0 ? " negativo" : "");
+    const uC  = "usd" + (usd < 0 ? " negativo" : "");
     saldoDisplay = `<span class="cuenta-saldo ${aC}">${_fmtSaldo(ars)} ARS</span>
                     <span class="cuenta-saldo ${uC}" style="margin-left:.4rem">${_fmtSaldo(usd)} USD</span>`;
   } else if (isUsd) {
     const usd = c.saldo_usd || 0;
-    const cls = usd < 0 ? "negativo" : usd > 0 ? "positivo" : "";
+    const cls = "usd" + (usd < 0 ? " negativo" : "");
     saldoDisplay = `<span class="cuenta-saldo ${cls}">${_fmtSaldo(usd)} USD</span>`;
   } else {
     const ars = c.saldo || 0;
-    const cls = ars < 0 ? "negativo" : ars > 0 ? "positivo" : "";
+    const cls = "ars" + (ars < 0 ? " negativo" : "");
     saldoDisplay = `<span class="cuenta-saldo ${cls}">${_fmtSaldo(ars)} ARS</span>`;
   }
 
@@ -5393,9 +5394,9 @@ function _renderCuentaCard(c, idx = 0) {
       <span class="cuenta-nombre" title="Click para renombrar"
             onclick="event.stopPropagation();startRenameCuenta('${c.fuente}')">${escHtml(c.nombre)}</span>
       ${badge}
+      ${saldoDisplay}
       <span onclick="event.stopPropagation()">${monedaSel}</span>
       <span onclick="event.stopPropagation()" title="Tipo de cuenta (banco o tarjeta de crédito)">${tipoSel}</span>
-      ${saldoDisplay}
     </div>
     <div class="cuenta-body" id="cuenta-body-${c.fuente}" style="display:${expanded ? 'block' : 'none'}">
       <div class="cuenta-meta">

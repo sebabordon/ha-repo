@@ -1335,7 +1335,8 @@ tbody tr:hover { background: #fafbff; }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.cuenta-saldo.positivo { color: #16a34a; }
+.cuenta-saldo.ars { color: var(--color-ars); }
+.cuenta-saldo.usd { color: var(--color-usd); }
 .cuenta-saldo.negativo { color: #dc2626; }
 .cuenta-meta {
   font-size: .75rem;

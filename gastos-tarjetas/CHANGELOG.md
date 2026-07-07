@@ -1,3 +1,13 @@
+## 1.2.60
+
+- **Estilo del tab Config → Cuentas**: el monto ahora se muestra pegado al
+  nombre/badge, con los selectores de moneda y tipo de cuenta (metadata de
+  config) empujados a la derecha — antes el monto quedaba al final, después de
+  esos selectores. Además, el color del saldo ahora respeta la moneda
+  (`--color-ars`/`--color-usd`, configurables en Config → Interfaz) en vez de
+  verde fijo para todo saldo positivo; el rojo de alerta por saldo negativo se
+  mantiene y pisa el color de moneda.
+
 ## 1.2.59
 
 - **Nueva sección "📅 Vencimientos del mes"** en el tab Pagos/Cuotas, arriba de
