@@ -1,3 +1,17 @@
+## 1.2.62
+
+- **Fix: "Créditos tarjeta" invisible en la solapa Categorías**: la categoría
+  sintética que `append_resumen_credit_adjustments` asigna a los renglones de
+  ajuste "Créditos del resumen" (cuando el SALDO ACTUAL del resumen de tarjeta
+  es menor a la suma de renglones importados) nunca se registraba en la tabla
+  `categorias` — solo se escribía como string en `gastos.categoria`, por lo que
+  aparecía como chip de filtro en Movimientos pero no en Config → Categorías, y
+  sin keywords porque nunca tuvo una regla asociada (se asigna por código, no
+  por matching de texto). Ahora se registra como categoría normal (no
+  "especial") tanto para ajustes nuevos (`scrapers_db.py`) como, vía migración
+  (`categorias_creditos_tarjeta_v1`), para los gastos ya existentes con esa
+  categoría.
+
 ## 1.2.61
 
 - **Fix: falta la moneda en "Ingresos" del resumen de Movimientos**: el

@@ -1066,6 +1066,15 @@ def append_resumen_credit_adjustments(
             records.append(row)
             result["usd"] = delta
 
+    if result["ars"] is not None or result["usd"] is not None:
+        # Registrar la categoría sintética en la tabla managed para que aparezca
+        # en la solapa Categorías (ver migración categorias_creditos_tarjeta_v1
+        # en db.py para el backfill de gastos ya existentes).
+        with _conn() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO categorias (nombre) VALUES ('Créditos tarjeta')"
+            )
+
     return result
 
 

@@ -1024,6 +1024,20 @@ def _run_migrations(conn):
             )
         conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_bbva_saldo_v1')")
 
+    if "categorias_creditos_tarjeta_v1" not in done:
+        # "Créditos tarjeta" es una categoría sintética que append_resumen_credit_
+        # adjustments() (scrapers_db.py) asigna directo por código a los renglones
+        # de ajuste "Créditos del resumen" — nunca pasó por rules.yaml ni por la
+        # tabla categorias, así que quedaba invisible en la solapa Categorías
+        # aunque ya existieran gastos con esa categoría. La registramos acá para
+        # los gastos existentes; de acá en más la registra el propio código que
+        # la asigna (ver scrapers_db.py).
+        conn.execute(
+            "INSERT OR IGNORE INTO categorias (nombre) "
+            "SELECT DISTINCT categoria FROM gastos WHERE categoria = 'Créditos tarjeta'"
+        )
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('categorias_creditos_tarjeta_v1')")
+
     # app_log table — creada directamente con el conn existente para evitar
     # el conflicto de lock que ocurriría si abriéramos una segunda conexión
     # mientras _run_migrations ya tiene una transacción activa.
