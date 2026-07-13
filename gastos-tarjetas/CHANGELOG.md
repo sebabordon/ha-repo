@@ -1,3 +1,13 @@
+## 1.2.61
+
+- **Fix: falta la moneda en "Ingresos" del resumen de Movimientos**: el
+  resumen (`"N movimientos · Egresos ARS ... · Ingresos ..."`) mostraba la
+  moneda en las líneas de Egresos pero no en las de Ingresos, al punto de
+  mostrar dos cifras "Ingresos" seguidas (una ARS, otra USD) sin ninguna
+  etiqueta que las distinga — parecía un dato duplicado y podía inducir a
+  sumarlas por error. Ahora dice "Ingresos ARS" / "Ingresos USD" igual que
+  Egresos.
+
 ## 1.2.60
 
 - **Estilo del tab Config → Cuentas**: el monto ahora se muestra pegado al

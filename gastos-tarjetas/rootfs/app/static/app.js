@@ -2446,9 +2446,9 @@ function _renderGastos() {
   });
   let summary = `${gastos.length} movimientos`;
   if (egARS)  summary += ` — Egresos ARS ${_fmtNum2(egARS)}`;
-  if (inARS)  summary += ` · Ingresos +${_fmtNum2(inARS)}`;
+  if (inARS)  summary += ` · Ingresos ARS +${_fmtNum2(inARS)}`;
   if (egUSD)  summary += ` — Egresos USD ${_fmtNum2(egUSD)}`;
-  if (inUSD)  summary += ` · Ingresos +${_fmtNum2(inUSD)}`;
+  if (inUSD)  summary += ` · Ingresos USD +${_fmtNum2(inUSD)}`;
   document.getElementById("gastos-summary").textContent = summary;
 
   gastos.forEach(g => {
