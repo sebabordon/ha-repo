@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import sqlite3
+import threading
 from contextlib import contextmanager
 from typing import Optional
 
@@ -10,6 +11,30 @@ import yaml
 from userctx import get_db_path, get_rules_file
 
 logger = logging.getLogger(__name__)
+
+# ── Lock de escritura por archivo de DB ───────────────────────────────────────
+# SQLite solo permite un writer a la vez: si dos threads del proceso (requests
+# de la API + jobs del scheduler de scrapers) escriben al mismo tiempo, uno
+# espera el busy_timeout y puede terminar en "database is locked". Serializando
+# el acceso acá (mismo path de DB → mismo Lock) los writes se hacen cola en vez
+# de competir, así ese error deja de poder ocurrir por contención interna.
+# scrapers_db.py reusa este mismo registro (mismo archivo, otro módulo) para que
+# ambos queden mutuamente excluidos. RLock (no Lock): con ~95 usos de `with
+# _conn()` en este archivo, es inevitable que alguna función que ya tiene una
+# conexión abierta llame a otra que también abre la suya (mismo thread) — un
+# Lock plano haría deadlock ahí; el RLock permite que el mismo thread lo
+# reentre sin trabarse, y sigue bloqueando a los demás threads igual.
+_db_locks: dict[str, threading.RLock] = {}
+_db_locks_meta = threading.Lock()
+
+
+def _get_db_lock(path: str) -> threading.RLock:
+    with _db_locks_meta:
+        lock = _db_locks.get(path)
+        if lock is None:
+            lock = threading.RLock()
+            _db_locks[path] = lock
+        return lock
 
 # After the sign-normalization migration (v0.2.35), ALL sources use the same
 # convention: positive monto = egreso (money going out), negative = ingreso.
@@ -1058,19 +1083,23 @@ def _run_migrations(conn):
 
 @contextmanager
 def _conn():
-    conn = sqlite3.connect(get_db_path(), timeout=15.0)
-    conn.row_factory = sqlite3.Row
-    # Espera hasta 15 s si la DB está bloqueada (scheduler de scrapers escribiendo
-    # mientras llega un request) en vez de tirar "database is locked" de inmediato.
-    # Subido de 5s: un backfill grande (ej. cientos de resúmenes AMEX consolidándose
-    # uno por uno) corriendo en paralelo con otros scrapers/requests puede mantener
-    # el writer ocupado más de 5s seguidos.
-    conn.execute("PRAGMA busy_timeout=15000")
+    path = get_db_path()
+    lock = _get_db_lock(path)
+    lock.acquire()
     try:
-        yield conn
-        conn.commit()
+        conn = sqlite3.connect(path, timeout=15.0)
+        conn.row_factory = sqlite3.Row
+        # Con el lock de arriba serializando los writes del proceso, este
+        # busy_timeout ya es solo un colchón para lo que no controlamos
+        # (checkpoints de WAL, procesos externos) — no debería llegar a usarse.
+        conn.execute("PRAGMA busy_timeout=15000")
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
     finally:
-        conn.close()
+        lock.release()
 
 
 def insert_gastos(gastos: list[dict], import_info: dict = None) -> int:

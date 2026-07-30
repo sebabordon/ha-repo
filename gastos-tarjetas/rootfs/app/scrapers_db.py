@@ -14,6 +14,8 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
 
+from db import _get_db_lock
+
 logger = logging.getLogger(__name__)
 
 _DATA_DIR = os.environ.get("DATA_DIR", "/data")
@@ -156,19 +158,26 @@ def _ensure_scraper_tables(conn: sqlite3.Connection) -> None:
 
 @contextmanager
 def _conn():
+    # Mismo registro de locks que db.py (misma clave = mismo archivo gastos.db):
+    # serializa los writes de este módulo contra los de db.py, no solo entre sí.
     path = _find_db_path()
-    conn = sqlite3.connect(path, timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=10000")
+    lock = _get_db_lock(path)
+    lock.acquire()
     try:
-        if path not in _initialized_dbs:
-            _ensure_scraper_tables(conn)
-            _initialized_dbs.add(path)
-        yield conn
-        conn.commit()
+        conn = sqlite3.connect(path, timeout=15)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=15000")
+        try:
+            if path not in _initialized_dbs:
+                _ensure_scraper_tables(conn)
+                _initialized_dbs.add(path)
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
     finally:
-        conn.close()
+        lock.release()
 
 
 # ── scraper_status ────────────────────────────────────────────────────────────
