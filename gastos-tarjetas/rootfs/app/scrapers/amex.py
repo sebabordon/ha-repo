@@ -301,6 +301,58 @@ class AmexScraper(BaseScraper):
             el.dispatchEvent(new Event('change', {bubbles: true}));
         """, element_id, value)
 
+    # ── Detección de captcha (Akamai/reCAPTCHA) ───────────────────────────────
+    # No se automatiza la resolución (fuera de alcance): sólo se detecta y se
+    # avisa por push para que el usuario lo resuelva a mano en la Mac del
+    # WebDriver remoto, donde la ventana headful es visible.
+    _CAPTCHA_SEL = (
+        "iframe[src*='recaptcha' i], iframe[title*='recaptcha' i], "
+        "iframe[title*='robot' i], iframe[src*='hcaptcha' i]"
+    )
+
+    def _captcha_present(self, driver) -> bool:
+        from selenium.webdriver.common.by import By
+        try:
+            for el in driver.find_elements(By.CSS_SELECTOR, self._CAPTCHA_SEL):
+                if el.is_displayed():
+                    return True
+        except Exception:
+            pass
+        try:
+            body_text = (driver.execute_script("return document.body.innerText || '';") or "").lower()
+            if any(p in body_text for p in ("no soy un robot", "i'm not a robot", "i am not a robot")):
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _notify_captcha_manual(self) -> None:
+        """Avisa por push que AMEX pidió un captcha en el login — sólo tiene
+        sentido cuando el login corre headful en la Mac (WebDriver remoto),
+        donde el usuario puede ver la ventana y clickearlo a mano."""
+        if not getattr(self, "_remote_url", ""):
+            return
+        try:
+            from routes.push import list_subscriptions, send_push
+            subs = list_subscriptions()
+            if not subs:
+                logger.warning("[amex] captcha detectado pero sin suscripciones push — no se pudo avisar")
+                return
+            ok, dead = send_push(
+                subs,
+                "🔒 AMEX pide verificación",
+                "Apareció un captcha \"no soy un robot\" en el login — andá a la Mac y resolvelo a mano.",
+                "/",
+            )
+            logger.info("[amex] aviso de captcha enviado a %d suscripción(es)", ok)
+            if dead:
+                from db import _conn
+                with _conn() as conn:
+                    for ep in dead:
+                        conn.execute("DELETE FROM push_subscriptions WHERE endpoint=?", (ep,))
+        except Exception as exc:
+            logger.warning("[amex] error notificando captcha: %s", exc)
+
     def _login_diag(self, driver) -> str:
         """Captura diagnóstico del estado del browser para errores de login."""
         from selenium.webdriver.common.by import By
@@ -477,13 +529,37 @@ class AmexScraper(BaseScraper):
             "div[data-module-name='axp-account-summary'], "
             "[data-testid='account-summary']"
         )
-        try:
-            self.wait_for(driver, _portal_sel, timeout=45)
-        except TimeoutException:
+        # Poll manual (en vez de wait_for) para poder distinguir un captcha
+        # REALMENTE visible (challenge activo) de un iframe de reCAPTCHA oculto
+        # (badge inerte que puede estar siempre presente en el DOM aunque no
+        # haya challenge) — un simple "presence_of_element_located" daría falso
+        # positivo en cada login y dispararía el push de más.
+        deadline = time.time() + 45
+        captcha_notified = False
+        portal_ok = False
+        while time.time() < deadline:
+            if self.find(driver, _portal_sel) is not None:
+                portal_ok = True
+                break
+            if not captcha_notified and self._captcha_present(driver):
+                captcha_notified = True
+                logger.warning(
+                    "[amex] do_login: captcha visible detectado tras el login — "
+                    "avisando por push y esperando resolución manual (hasta 4 min)"
+                )
+                self._notify_captcha_manual()
+                deadline = time.time() + 240   # dar tiempo a resolverlo a mano
+            time.sleep(1)
+
+        if not portal_ok:
             diag = self._login_diag(driver)
             logger.error("[amex] do_login: portal post-login no cargó\n%s", diag)
+            extra = (
+                "\nCaptcha detectado y notificado, pero no se resolvió a tiempo."
+                if captcha_notified else ""
+            )
             raise TimeoutException(
-                f"Portal post-login no cargó tras 45s.{_post_submit_info}\n{diag}"
+                f"Portal post-login no cargó.{extra}{_post_submit_info}\n{diag}"
             )
         logger.info("[amex] do_login: portal cargado, URL = %s", driver.current_url[:100])
         logger.info("[amex] Login exitoso")

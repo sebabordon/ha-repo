@@ -1,3 +1,7 @@
+## 1.2.63
+
+- **Scraper AMEX: detección de captcha + aviso push (WebDriver remoto)** (`scrapers/amex.py`): Akamai empezó a mostrar un checkbox reCAPTCHA ("no soy un robot") en algunos logins fríos, incluso con Chrome real headful + interacción humana — un desafío interactivo que no se automatiza (resolver captchas está fuera de alcance). La espera del portal post-login ahora es un poll manual (antes `wait_for` simple) que en cada iteración también chequea si hay un iframe de reCAPTCHA/hCaptcha VISIBLE (o el texto "no soy un robot" en la página; se descarta a propósito la sola presencia en el DOM, porque un badge de reCAPTCHA invisible puede estar siempre presente y daría falso positivo en cada login). Si detecta el challenge activo, manda un push ("🔒 AMEX pide verificación") avisando que hay que ir a la Mac a resolverlo a mano, y extiende la espera del portal a 4 minutos en vez de fallar a los 45s. Solo notifica cuando corre en el WebDriver remoto (Mac, ventana visible) — en el Chromium local no tiene sentido avisar porque nadie puede ver ni resolver el challenge.
+
 ## 1.2.62
 
 - **Fix: "Créditos tarjeta" invisible en la solapa Categorías**: la categoría
