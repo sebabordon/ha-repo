@@ -25,6 +25,36 @@ _DATA_DIR = os.environ.get("DATA_DIR", "/data")
 # Solo metadatos de UI: nombre visible, campos del formulario, schedule default.
 # Los valores reales (credenciales, enabled, schedule) están en scraper_instances.
 
+# Campos de "WebDriver remoto" (Chrome real en una Mac de la LAN) — reusados
+# por cualquier banco cuyo Akamai Bot Manager rechace el fingerprint del
+# Chromium de Alpine del contenedor (confirmado en AMEX y BBVA). Ver
+# `BaseScraper._create_remote_driver` en scrapers/base.py.
+_WEBDRIVER_REMOTO_CAMPOS: list[dict] = [
+    {
+        "key":         "webdriver_remote_url",
+        "label":       "WebDriver remoto (Mac) — URL",
+        "type":        "text",
+        "required":    False,
+        "placeholder": "http://192.168.0.x:4444",
+        "hint":        "Si el banco bloquea el Chromium del contenedor (Akamai), poné acá la URL de un Selenium server corriendo en una Mac de la red (con Chrome real): el browser corre EN LA MAC (fingerprint genuino) y el scraper lo maneja por red. Vacío = usa el Chromium local de siempre. La URL es la del Selenium server (ej. http://IP-de-la-Mac:4444).",
+    },
+    {
+        "key":         "webdriver_profile_dir",
+        "label":       "WebDriver remoto — Perfil Chrome (Mac)",
+        "type":        "text",
+        "required":    False,
+        "placeholder": "/Users/seba/scraper-chrome-profile",
+        "hint":        "Opcional. Ruta EN LA MAC de un perfil de Chrome dedicado. Si lo logueás una vez a mano, el perfil queda 'tibio' (cookies/sesión) y el banco lo acepta más fácil. Vacío = perfil temporal nuevo cada vez. Solo aplica si configuraste el WebDriver remoto.",
+    },
+    {
+        "key":      "webdriver_headless",
+        "label":    "WebDriver remoto — Headless",
+        "type":     "checkbox",
+        "required": False,
+        "hint":     "Si está activo, el Chrome de la Mac corre headless (sin ventana visible, no te tapa la pantalla). Suele pasar igual porque conserva casi todo el fingerprint real; si el banco lo desafía, destildá y volvé a headful. Solo aplica con el WebDriver remoto configurado.",
+    },
+]
+
 BANKS: dict[str, dict] = {
     "amex": {
         "nombre":   "AMEX Argentina",
@@ -54,29 +84,7 @@ BANKS: dict[str, dict] = {
                 "placeholder": "1",
                 "hint":        "Cuántos meses hacia atrás bajar resúmenes PDF cuando 'Descargar resúmenes' está activo. 1 = solo el último (default). 3 = los de los últimos 3 meses. Los ya importados se saltean. Útil para backfill.",
             },
-            {
-                "key":         "webdriver_remote_url",
-                "label":       "WebDriver remoto (Mac) — URL",
-                "type":        "text",
-                "required":    False,
-                "placeholder": "http://192.168.0.x:4444",
-                "hint":        "AMEX usa Akamai que bloquea el Chromium del contenedor. Si ponés la URL de un Selenium server corriendo en una Mac de la red (con Chrome real), el browser corre EN LA MAC (fingerprint genuino que sí pasa Akamai) y el scraper lo maneja por red. Vacío = usa el Chromium local de siempre. Solo afecta a AMEX. La URL es la del Selenium server (ej. http://IP-de-la-Mac:4444).",
-            },
-            {
-                "key":         "webdriver_profile_dir",
-                "label":       "WebDriver remoto — Perfil Chrome (Mac)",
-                "type":        "text",
-                "required":    False,
-                "placeholder": "/Users/seba/amex-chrome-profile",
-                "hint":        "Opcional. Ruta EN LA MAC de un perfil de Chrome dedicado. Si lo logueás a AMEX una vez a mano, el perfil queda 'tibio' (cookies/sesión) y a Akamai le gusta más. Vacío = perfil temporal nuevo cada vez. Solo aplica si configuraste el WebDriver remoto.",
-            },
-            {
-                "key":      "webdriver_headless",
-                "label":    "WebDriver remoto — Headless",
-                "type":     "checkbox",
-                "required": False,
-                "hint":     "Si está activo, el Chrome de la Mac corre headless (sin ventana visible, no te tapa la pantalla). El Chrome real de macOS en headless conserva casi todo el fingerprint y suele pasar Akamai igual; si te lo desafía, destildá y vuelve a headful. Solo aplica con el WebDriver remoto configurado.",
-            },
+            *_WEBDRIVER_REMOTO_CAMPOS,
         ],
     },
     "bbva": {
@@ -135,6 +143,7 @@ BANKS: dict[str, dict] = {
                 "placeholder": "1",
                 "hint":        "Cuántos meses hacia atrás bajar resúmenes PDF cuando 'Descargar resúmenes' está activo. 1 = solo el último (default). 3 = los de los últimos 3 meses. Los ya importados se saltean. Útil para backfill tras un reset de la cuenta.",
             },
+            *_WEBDRIVER_REMOTO_CAMPOS,
         ],
     },
     "bbva_tarjetas": {
@@ -169,6 +178,7 @@ BANKS: dict[str, dict] = {
                 "placeholder": "1",
                 "hint":        "Cuántos meses hacia atrás bajar resúmenes PDF de VISA/Mastercard cuando 'Descargar resúmenes' está activo. 1 = solo el último (default). 3 = los de los últimos 3 meses. Los ya importados se saltean.",
             },
+            *_WEBDRIVER_REMOTO_CAMPOS,
         ],
     },
     "galicia": {

@@ -72,68 +72,9 @@ class AmexScraper(BaseScraper):
     # Alpine del contenedor (probado: ni el login manual pasa). Si se configura
     # `webdriver_remote_url` (un Selenium server corriendo en una Mac de la LAN
     # con Chrome real), el browser corre EN LA MAC con su fingerprint genuino,
-    # manejado por red — toda la lógica de scraping sigue acá. Aislado a AMEX:
-    # BBVA y MP siguen con el Chromium local. Sin la URL, comportamiento normal.
-
-    async def run(self, config: dict):
-        # Stash de la config del driver remoto para _create_driver (que no recibe
-        # config). Solo afecta a AMEX.
-        self._remote_url     = (config.get("webdriver_remote_url") or "").strip()
-        self._remote_profile = (config.get("webdriver_profile_dir") or "").strip()
-        self._remote_headless = str(config.get("webdriver_headless", "")).strip().lower() in (
-            "1", "true", "on", "yes", "sí", "si",
-        )
-        return await super().run(config)
-
-    def _create_driver(self):
-        remote_url = getattr(self, "_remote_url", "")
-        if not remote_url:
-            return super()._create_driver()   # Chromium local (comportamiento normal)
-
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-
-        opts = Options()
-        opts.add_argument("--window-size=1280,800")
-        # Abrir la ventana FUERA del área visible (en headful, para no tapar la
-        # pantalla de la Mac en los login fríos). Renderiza igual → Akamai no se
-        # entera. macOS puede clampear la posición; si igual la ves, la alternativa
-        # es mandar Chrome a un Space dedicado desde la Mac.
-        opts.add_argument("--window-position=-3000,-3000")
-        # Quitar el cartel de automatización (navigator.webdriver) — el resto del
-        # fingerprint es el del Chrome real de macOS, que sí pasa Akamai.
-        opts.add_argument("--disable-blink-features=AutomationControlled")
-        opts.add_experimental_option("excludeSwitches", ["enable-automation"])
-        opts.add_experimental_option("useAutomationExtension", False)
-        # Headless solo sirve con sesión tibia (check_session saltea el login).
-        # En login FRÍO (sin sesión cacheada) Akamai detecta el headless y bloquea,
-        # así que para ese run usamos headful aunque esté pedido headless: loguea,
-        # cachea la sesión, y los próximos runs ya pueden ir headless.
-        headless = getattr(self, "_remote_headless", False)
-        if headless and not self._has_session():
-            logger.info("[amex] headless pedido pero SIN sesión cacheada (login frío) "
-                        "→ uso headful este run para loguear y cachear; los próximos van headless")
-            headless = False
-        if headless:
-            opts.add_argument("--headless=new")
-        profile = getattr(self, "_remote_profile", "")
-        if profile:
-            # Perfil persistente en la Mac (logueado a mano una vez = "tibio").
-            opts.add_argument(f"--user-data-dir={profile}")
-
-        logger.info(
-            "[amex] WebDriver REMOTO: %s (perfil=%s, headless=%s)",
-            remote_url, profile or "(temporal)", headless,
-        )
-        driver = webdriver.Remote(command_executor=remote_url, options=opts)
-        driver.set_page_load_timeout(60)
-        driver.implicitly_wait(0)
-        try:
-            bver = (driver.capabilities or {}).get("browserVersion", "?")
-            logger.info("[amex] Chrome remoto (Mac) versión %s", bver)
-        except Exception:
-            pass
-        return driver
+    # manejado por red — toda la lógica de scraping sigue acá. La creación del
+    # driver (remoto vs. Chromium local) vive en BaseScraper — la comparte con
+    # BBVA, que tiene el mismo problema de Akamai.
 
     # ── Verificación de sesión ────────────────────────────────────────────────
 

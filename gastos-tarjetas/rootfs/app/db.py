@@ -1058,11 +1058,14 @@ def _run_migrations(conn):
 
 @contextmanager
 def _conn():
-    conn = sqlite3.connect(get_db_path(), timeout=10.0)
+    conn = sqlite3.connect(get_db_path(), timeout=15.0)
     conn.row_factory = sqlite3.Row
-    # Espera hasta 5 s si la DB está bloqueada (scheduler de scrapers escribiendo
+    # Espera hasta 15 s si la DB está bloqueada (scheduler de scrapers escribiendo
     # mientras llega un request) en vez de tirar "database is locked" de inmediato.
-    conn.execute("PRAGMA busy_timeout=5000")
+    # Subido de 5s: un backfill grande (ej. cientos de resúmenes AMEX consolidándose
+    # uno por uno) corriendo en paralelo con otros scrapers/requests puede mantener
+    # el writer ocupado más de 5s seguidos.
+    conn.execute("PRAGMA busy_timeout=15000")
     try:
         yield conn
         conn.commit()

@@ -157,6 +157,76 @@ class BaseScraper(ABC):
     # ── WebDriver factory ─────────────────────────────────────────────────────
 
     def _create_driver(self):
+        """
+        Crea el WebDriver: remoto (Chrome real en una Mac de la LAN) si el
+        scraper fue configurado con `webdriver_remote_url` (ver `run()`), o el
+        Chromium local del contenedor en caso contrario.
+        """
+        if getattr(self, "_remote_url", ""):
+            return self._create_remote_driver()
+        return self._create_local_driver()
+
+    def _create_remote_driver(self):
+        """
+        Crea un WebDriver.Remote contra un Selenium server corriendo en una Mac
+        de la LAN, con Chrome real (fingerprint genuino). Pensado para bancos
+        cuyo Akamai Bot Manager rechaza el fingerprint del Chromium de Alpine
+        del contenedor (confirmado con AMEX: ni el login manual pasa ahí).
+        Config (por scraper, en scraper_credentials.py):
+          webdriver_remote_url    — URL del Selenium server (ej. http://IP:4444)
+          webdriver_profile_dir   — opcional, perfil Chrome persistente en la Mac
+          webdriver_headless      — opcional, corre sin ventana visible
+        """
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+
+        remote_url = self._remote_url
+        opts = Options()
+        opts.add_argument("--window-size=1280,800")
+        # Abrir la ventana FUERA del área visible (en headful, para no tapar la
+        # pantalla de la Mac en los login fríos). Renderiza igual → Akamai no se
+        # entera. macOS puede clampear la posición; si igual se ve, la alternativa
+        # es mandar Chrome a un Space dedicado desde la Mac.
+        opts.add_argument("--window-position=-3000,-3000")
+        # Quitar el cartel de automatización (navigator.webdriver) — el resto del
+        # fingerprint es el del Chrome real de macOS, que sí pasa Akamai.
+        opts.add_argument("--disable-blink-features=AutomationControlled")
+        opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+        opts.add_experimental_option("useAutomationExtension", False)
+        # Headless solo sirve con sesión tibia (check_session saltea el login).
+        # En login FRÍO (sin sesión cacheada) Akamai detecta el headless y bloquea,
+        # así que para ese run usamos headful aunque esté pedido headless: loguea,
+        # cachea la sesión, y los próximos runs ya pueden ir headless.
+        headless = getattr(self, "_remote_headless", False)
+        if headless and not self._has_session():
+            logger.info(
+                "[%s] headless pedido pero SIN sesión cacheada (login frío) → "
+                "uso headful este run para loguear y cachear; los próximos van headless",
+                self.fuente,
+            )
+            headless = False
+        if headless:
+            opts.add_argument("--headless=new")
+        profile = getattr(self, "_remote_profile", "")
+        if profile:
+            # Perfil persistente en la Mac (logueado a mano una vez = "tibio").
+            opts.add_argument(f"--user-data-dir={profile}")
+
+        logger.info(
+            "[%s] WebDriver REMOTO: %s (perfil=%s, headless=%s)",
+            self.fuente, remote_url, profile or "(temporal)", headless,
+        )
+        driver = webdriver.Remote(command_executor=remote_url, options=opts)
+        driver.set_page_load_timeout(60)
+        driver.implicitly_wait(0)
+        try:
+            bver = (driver.capabilities or {}).get("browserVersion", "?")
+            logger.info("[%s] Chrome remoto (Mac) versión %s", self.fuente, bver)
+        except Exception:
+            pass
+        return driver
+
+    def _create_local_driver(self):
         """Crea y devuelve un WebDriver configurado con Chromium headless."""
         from selenium import webdriver
         from selenium.webdriver.chrome.options import Options
@@ -323,6 +393,15 @@ class BaseScraper(ABC):
         el event loop de FastAPI/APScheduler.
         """
         from scrapers_db import upsert_scraper_status
+
+        # WebDriver remoto (opcional): stash para _create_driver, que no recibe
+        # `config`. Sin efecto si el banco no expone estos campos en su config
+        # (scraper_credentials.py) — quedan como string/False vacíos.
+        self._remote_url      = (config.get("webdriver_remote_url") or "").strip()
+        self._remote_profile  = (config.get("webdriver_profile_dir") or "").strip()
+        self._remote_headless = str(config.get("webdriver_headless", "")).strip().lower() in (
+            "1", "true", "on", "yes", "sí", "si",
+        )
 
         now_iso = datetime.utcnow().isoformat()
         upsert_scraper_status(self.fuente, estado="running", ultimo_run=now_iso)
