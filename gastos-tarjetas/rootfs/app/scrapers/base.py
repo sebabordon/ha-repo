@@ -1,10 +1,11 @@
 """
-Clase base para scrapers bancarios — usa Selenium + Chromium del sistema.
+Clase base para scrapers bancarios — usa Selenium + Chrome del sistema.
 
-Por qué Selenium en lugar de Playwright:
-  Playwright solo publica wheels para manylinux (glibc). La imagen base de HA
-  usa Alpine Linux (musl libc), que es incompatible con manylinux. Selenium es
-  py3-none-any (pure Python); el browser lo provee chromium-chromedriver via apk.
+Por qué Selenium (histórico): con la imagen base Alpine (musl libc) que usaba
+este add-on, Playwright no era viable porque solo publica wheels manylinux
+(glibc). Desde que la base pasó a Debian (para poder instalar Chrome real vía
+.deb — ver Dockerfile/build.yaml) esa restricción ya no aplica, pero Selenium
+se mantiene por ser lo que ya está integrado y probado.
 
 Flujo de cada run():
   1. Crear WebDriver con Chromium headless
