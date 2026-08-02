@@ -8229,7 +8229,7 @@ function _renderCuotas(data) {
 
     let th = `<tr><th>Mes</th>`;
     fuentes.forEach(f => { th += `<th>${f.replace(/_/g, " ")}</th>`; });
-    if (hasPagMan) th += `<th style="border-left:2px solid #e5e7eb">💰 Pagos</th>`;
+    if (hasPagMan) th += `<th style="border-left:2px solid #e5e7eb">otros pagos</th>`;
     th += `<th>Total ARS</th>`;
     if (hasUsd) th += `<th>Total USD</th>`;
     th += `</tr>`;
