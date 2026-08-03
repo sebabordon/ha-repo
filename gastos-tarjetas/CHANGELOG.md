@@ -1,3 +1,7 @@
+## 1.2.68
+
+- **UI: botón ↺ para forzar el scraper desde el chip de saldos** (`static/app.js`, `static/style.css`, `DESIGN.md`): antes, forzar un refresh de una cuenta AUTO requería ir a Config → Cuentas y tocar "▶ Ejecutar ahora". Ahora cada `saldo-chip` con `scraper_instance_id` asignado (y `tipo` distinto de `manual`) muestra un ícono ↺ en la esquina superior derecha que dispara `/api/scraper-instances/{id}/run` directo desde la home. Se extrajo `_runScraperInstanceAndToast()` para compartir el fetch+toast entre el botón nuevo (`runCuentaFromChip`) y el existente de Config (`runCuentaInstance`), sin duplicar lógica. El ícono es un `<button>` hermano (no anidado) de `saldo-chip-btn` con `event.stopPropagation()` para no disparar el toggle de edición de saldo del chip; mientras corre, gira con `.running` (azul, mismo color que `scrape-run`) en vez de cambiar texto — no hay espacio para texto en un icono-solo de 20px. Documentado en `DESIGN.md` como patrón nuevo ("Refresh manual sobre un chip").
+
 ## 1.2.67
 
 - **UI: columna "💰 Pagos" de la tabla por mes en Cuotas ahora dice "otros pagos"** (`static/app.js`): tras revisar un reporte de doble conteo en esa tabla (dos series activas de un mismo pago manual recurrente, no un bug de agregación), quedó claro que el nombre "Pagos" generaba confusión con los resúmenes de tarjeta que se muestran en las columnas de al lado. Se renombra el header a "otros pagos" (sin emoji) para dejar explícito que esa columna es pagos manuales (alquiler, colegio, viajes, etc.) y no tiene relación con las tarjetas.

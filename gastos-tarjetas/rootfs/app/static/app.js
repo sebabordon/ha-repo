@@ -4157,8 +4157,18 @@ function renderSaldos(cuentas) {
     const scrape     = _scraperStatusColor(c);
     const scrapeCls  = scrape ? ` scrape-${scrape}` : "";
     const scrapeTtl  = scrape ? ` · ${_scraperStatusTitle(c)}` : "";
+
+    // Cuentas AUTO con scraper asignado pueden forzar un refresh desde el chip
+    // (sin ir a Config → Cuentas). Manual no aplica: su saldo sale de movimientos.
+    const canForceRun = (c.tipo || "auto") !== "manual" && !!c.scraper_instance_id;
+    const refreshBtn = canForceRun
+      ? `<button class="saldo-chip-refresh" title="Forzar actualización ahora"
+           onclick="event.stopPropagation();runCuentaFromChip('${c.fuente}',${c.scraper_instance_id},this)">↺</button>`
+      : "";
+
     return `
       <div class="saldo-chip" id="saldo-card-${c.fuente}">
+        ${refreshBtn}
         <button class="saldo-chip-btn${scrapeCls}" onclick="toggleSaldoEdit('${c.fuente}')" title="${escHtml(fechaTitle)} — tap para editar${escHtml(scrapeTtl)}">
           <span class="saldo-chip-name">${escHtml(c.nombre)}</span>
           <span class="saldo-chip-monto">${montoHtml}</span>
@@ -4169,6 +4179,23 @@ function renderSaldos(cuentas) {
         </div>
       </div>`;
   }).join("");
+}
+
+// Fuerza el scraper de una cuenta desde el chip de saldos (sin pasar por
+// Config → Cuentas). Comparte el fetch+toast con runCuentaInstance.
+async function runCuentaFromChip(fuente, instanceId, btnEl) {
+  if (btnEl.disabled) return;
+  btnEl.disabled = true;
+  btnEl.classList.add("running");
+  try {
+    await _runScraperInstanceAndToast(instanceId);
+  } catch (e) {
+    showToast("✗ " + e.message, "err");
+  } finally {
+    btnEl.disabled = false;
+    btnEl.classList.remove("running");
+    refreshAfterDataChange();
+  }
 }
 
 function toggleSaldoEdit(fuente) {
@@ -6026,15 +6053,22 @@ async function saveCuentaInstance(fuente, instanceId) {
   }
 }
 
+// Dispara /run de una instancia de scraper y muestra el toast de resultado.
+// Compartido por el botón "▶ Ejecutar ahora" (Config → Cuentas) y el ↺ del chip.
+async function _runScraperInstanceAndToast(instanceId) {
+  const res = await fetch(`${BASE}/api/scraper-instances/${instanceId}/run`, { method: "POST" });
+  const data = await res.json().catch(() => ({}));
+  if (!data.ok) throw new Error(data.error || "Error");
+  const imp = data.auto_imported ?? 0;
+  showToast(`✓ ${data.movimientos || 0} movimientos · ${imp} importados a Gastos`, "ok");
+  return data;
+}
+
 async function runCuentaInstance(fuente, instanceId) {
   const btn = document.getElementById(`btn-cuenta-run-${fuente}`);
   if (btn) { btn.disabled = true; btn.textContent = "⟳ Corriendo…"; }
   try {
-    const res = await fetch(`${BASE}/api/scraper-instances/${instanceId}/run`, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    if (!data.ok) throw new Error(data.error || "Error");
-    const imp = data.auto_imported ?? 0;
-    showToast(`✓ ${data.movimientos || 0} movimientos · ${imp} importados a Gastos`, "ok");
+    await _runScraperInstanceAndToast(instanceId);
   } catch (e) {
     showToast("✗ " + e.message, "err");
   } finally {

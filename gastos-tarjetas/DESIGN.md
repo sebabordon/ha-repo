@@ -65,6 +65,21 @@ En los chips de saldo/vencimiento (`_scraperStatusColor` en `app.js`):
 - 🔴 rojo (`scrape-err`) — último scrape falló / sesión expirada.
 - 🔵 azul pulsante (`scrape-run`) — corriendo ahora (auto-refresh hasta terminar).
 
+## Refresh manual sobre un chip (icono-solo, esquina superior)
+Cuando una acción puntual (forzar un scraper) necesita vivir sobre un chip que
+ya es clickeable para otra cosa (ej. `saldo-chip-btn` abre edición de saldo), no
+se anida un `<button>` dentro de otro botón. En vez de eso:
+- El contenedor del chip (`.saldo-chip`) es `position: relative`.
+- El botón de acción (`.saldo-chip-refresh`, icono ↺ solo — ver vocabulario de
+  emojis) es un `<button>` hermano, `position: absolute` en la esquina superior
+  derecha, con `onclick="event.stopPropagation();…"` para no disparar el click
+  del chip de abajo.
+- Mientras corre, la clase `.running` lo pone en azul (`#2563eb`, mismo color
+  que `scrape-run`) y gira el icono (`@keyframes …-refresh-spin`) en vez de
+  cambiar texto — no hay espacio para texto en un icono-solo de 20px.
+Aplica a cuentas AUTO con `scraper_instance_id` asignado (`saldo-chip` en el
+widget de saldos); manual no aplica, su saldo sale de movimientos, no de scraper.
+
 ## Colores
 Variables CSS en `:root` (configurables en Config → UI): `--color-ars`,
 `--color-usd`, `--color-rg5617`, `--color-accent`, `--color-cat-parent`,
