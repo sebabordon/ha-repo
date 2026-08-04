@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- Fix build: el Dockerfile fallaba en el paso de invertir los symlinks de
+  `/media`/`/certs` (`exit code: 1`). La imagen base ya trae `/data/media`
+  como symlink hacia `/media`; había que borrar ese symlink viejo antes del
+  `mkdir -p /data/media`, si no `mkdir` se chocaba con el symlink roto
+  (`/media` ya borrado) y fallaba.
+
 ## 0.1.0
 
 - Add-on inicial: Authentik (`ghcr.io/goauthentik/server:2026.5.6`) con PostgreSQL

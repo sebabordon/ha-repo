@@ -16,11 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         jq \
     && rm -rf /var/lib/apt/lists/*
 
-# `ak` crea /media y /certs como directorios sueltos (no bajo /data) y los
-# enlaza desde /data/media y /data/certs — es decir, al revés de lo que
-# necesitamos para persistir. Los invertimos para que todo lo que suba el
-# usuario (logos, certificados custom) sobreviva a un reinicio del add-on.
-RUN rm -rf /media /certs \
+# La imagen base crea /media como directorio real y /data/media como symlink
+# hacia él (al revés de lo que necesitamos para persistir en /data). Hay que
+# borrar también el symlink viejo /data/media antes del mkdir: si no, mkdir -p
+# se choca con ese symlink (ahora roto, porque ya borramos /media) y falla.
+RUN rm -rf /media /certs /data/media /data/certs \
     && mkdir -p /data/media /data/certs \
     && ln -s /data/media /media \
     && ln -s /data/certs /certs

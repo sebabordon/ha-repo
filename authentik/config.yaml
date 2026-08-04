@@ -1,7 +1,7 @@
 ---
 name: "Authentik"
 description: "Identity Provider / SSO self-hosted, pensado como frontend de autenticación para Nginx Proxy Manager"
-version: "0.1.0"
+version: "0.1.1"
 slug: "authentik"
 url: "https://github.com/sebabordon/ha-repo/tree/main/authentik"
 stage: experimental
