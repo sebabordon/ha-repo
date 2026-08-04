@@ -7,7 +7,7 @@ from datetime import datetime, date
 from functools import wraps
 from flask import Flask, render_template, redirect, request, session, url_for, jsonify, Response
 import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+from spotipy.oauth2 import SpotifyOAuth, SpotifyOauthError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -107,7 +107,13 @@ def get_spotify_client():
     if not token_info:
         return None
     if oauth.is_token_expired(token_info):
-        token_info = oauth.refresh_access_token(token_info["refresh_token"])
+        try:
+            token_info = oauth.refresh_access_token(token_info["refresh_token"])
+        except SpotifyOauthError:
+            logger.warning("Refresh token expired or revoked — discarding cached token")
+            if os.path.exists(TOKEN_PATH):
+                os.remove(TOKEN_PATH)
+            return None
     return spotipy.Spotify(auth=token_info["access_token"])
 
 # ─── Core Tracker Logic ───────────────────────────────────────────────────────

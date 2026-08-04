@@ -24,6 +24,14 @@ Runs a CUPS print server inside Home Assistant, allowing you to share a USB prin
 
 ---
 
+### 🔐 Authentik
+
+Self-hosted Identity Provider / SSO, packaged as a single add-on with an embedded PostgreSQL (no Redis needed, no other add-ons required). Meant to run as the authentication frontend in front of Nginx Proxy Manager (also installed as an add-on) via forward-auth.
+
+[View add-on →](./authentik)
+
+---
+
 ## Installation
 
 In Home Assistant go to **Settings → Add-ons → Add-on Store → ⋮ → Repositories** and add:

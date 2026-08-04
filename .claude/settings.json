@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "mcp__Home_Assistant__ha_get_logs",
+      "mcp__Home_Assistant__ha_get_addon",
+      "mcp__Claude_Preview__preview_screenshot",
+      "mcp__Claude_Preview__preview_inspect",
+      "Bash(git *)",
+      "Bash(python3 *)",
+      "Bash(python *)",
+      "mcp__visualize__read_me",
+      "mcp__computer-use__screenshot",
+      "Bash(node --check *)",
+      "WebFetch",
+      "WebSearch",
+      "Bash(sed -n *)"
+    ]
+  }
+}

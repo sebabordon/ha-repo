@@ -1,0 +1,9 @@
+.env
+.ev
+sync.log
+*.plist
+!com.sebastian.applespotifysync.plist.template
+venv/
+source/
+__pycache__/
+*.pyc

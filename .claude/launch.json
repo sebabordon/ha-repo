@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "snapbudget",
+      "runtimeExecutable": "/private/tmp/claude-501/-Users-seba-Code-ha-repo/a6d99ed6-e48c-42dc-8948-f9576588e3ca/scratchpad/run_snapbudget.sh",
+      "runtimeArgs": [],
+      "port": 8099
+    }
+  ]
+}
