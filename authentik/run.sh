@@ -13,7 +13,11 @@ AK_UID=1000
 AK_GID=1000
 
 log() { printf '[authentik-addon] %s\n' "$*"; }
-cfg() { jq -r ".$1 // empty" "$OPTIONS_FILE"; }
+# OJO: NO usar `.campo // empty` — en jq el operador `//` trata `false` (y 0,
+# "") como "vacío" igual que null, así que un booleano en false (ej:
+# error_reporting, que además es el default) se leía como string vacío en vez
+# de "false", y Authentik rechaza AUTHENTIK_ERROR_REPORTING__ENABLED="".
+cfg() { jq -r --arg k "$1" '.[$k] as $v | if $v == null then "" else $v end' "$OPTIONS_FILE"; }
 
 AUTHENTIK_HOST_CFG="$(cfg authentik_host)"
 COOKIE_DOMAIN="$(cfg cookie_domain)"

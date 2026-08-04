@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.3
+
+- Fix crash al arrancar Authentik (`provided string was not \`true\` or
+  \`false\``): el helper `cfg()` leía las opciones con `jq '.campo // empty'`,
+  y en jq `//` trata `false` igual que `null` ("vacío"). Como
+  `error_reporting` es booleano y su default es `false`, se exportaba
+  `AUTHENTIK_ERROR_REPORTING__ENABLED=""` en vez de `"false"`, y el binario
+  Rust de Authentik rechaza cualquier valor que no sea exactamente `true`/
+  `false`. `cfg()` ahora usa `.[$k] as $v | if $v == null then "" else $v end`,
+  que no colapsa `false`/`0`/`""` como si faltaran.
+
 ## 0.1.2
 
 - Fix arranque: `pg_ctl -l` escribía el log en `/data/postgres.log`, pero
