@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2
+
+- Fix arranque: `pg_ctl -l` escribía el log en `/data/postgres.log`, pero
+  `/data` es de root y solo `/data/postgres` quedó con permisos para el uid
+  1000 (con el que corre Postgres). `pg_ctl` fallaba con "Permission denied"
+  al crear ese archivo. Ahora el log va dentro de `/data/postgres/`.
+
 ## 0.1.1
 
 - Fix build: el Dockerfile fallaba en el paso de invertir los symlinks de

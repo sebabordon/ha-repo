@@ -69,7 +69,9 @@ if [ ! -s "${PGDATA}/PG_VERSION" ]; then
     as_ak initdb -D "${PGDATA}" -U authentik --auth=trust --encoding=UTF8 >/dev/null
 fi
 
-as_ak pg_ctl -D "${PGDATA}" -l "${DATA_DIR}/postgres.log" \
+# El log va DENTRO de PGDATA (no en /data directo): /data es de root, solo
+# /data/postgres quedó con permisos para uid 1000 (ver chown de arriba).
+as_ak pg_ctl -D "${PGDATA}" -l "${PGDATA}/postgres.log" \
     -o "-c listen_addresses=127.0.0.1 -c unix_socket_directories=/run/postgresql" \
     -w start
 
