@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4
+
+- Suma `icon.png` (128×128) y `logo.png` (512×512) con el logo oficial de
+  Authentik (avatar de la org `goauthentik` en GitHub), para que se vea
+  correctamente en el store de add-ons y en la página de info del add-on.
+
 ## 0.1.3
 
 - Fix crash al arrancar Authentik (`provided string was not \`true\` or
