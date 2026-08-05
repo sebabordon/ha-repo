@@ -1,6 +1,6 @@
 name: "SnapBudget"
 description: "Parsea y categoriza gastos de AMEX, Mastercard, Visa y MercadoLibre Argentina"
-version: "1.2.68"
+version: "1.2.69"
 slug: "gastos_tarjetas"
 url: "https://github.com/sebabordon/ha-repo/tree/main/gastos-tarjetas"
 stage: stable
@@ -20,6 +20,10 @@ options:
   admin_password: ""
   titular2_name: ""
   scraper_encryption_key: ""
+  oidc_enabled: false
+  oidc_issuer: ""
+  oidc_client_id: ""
+  oidc_client_secret: ""
 schema:
   claude_api_key: str?
   groq_api_key: str?
@@ -29,6 +33,10 @@ schema:
   admin_password: str?
   titular2_name: str?
   scraper_encryption_key: str?
+  oidc_enabled: bool
+  oidc_issuer: str?
+  oidc_client_id: str?
+  oidc_client_secret: str?
 ports:
   8000/tcp: 8000
 ports_description:

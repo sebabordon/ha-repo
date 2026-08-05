@@ -10,6 +10,8 @@ from collections import defaultdict
 from fastapi import APIRouter, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from sso_config import SSO_ENABLED
+
 ALLOWED_DOMAIN = os.environ.get("ALLOWED_DOMAIN", "example.com")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
 _reg_env = os.environ.get("REGISTRATION_ENABLED", "false").lower()
@@ -155,6 +157,25 @@ def create_user(email: str, password: str, skip_checks: bool = False) -> tuple[b
     _save_users(users)
     return True, ""
 
+def ensure_sso_user(email: str) -> None:
+    """Auto-provisiona un usuario local en su primer login SSO.
+
+    El password guardado es aleatorio y nunca se muestra: el login local
+    queda inutilizable para estos usuarios, que siguen entrando por SSO.
+    Aparecen igual en el panel de admin para poder gestionarlos/borrarlos.
+    """
+    email = email.lower()
+    if email == ADMIN_EMAIL:
+        return
+    users = _load_users()
+    if email in users:
+        return
+    salt = os.urandom(16).hex()
+    unusable_pw = secrets.token_urlsafe(32)
+    users[email] = {"hash": _hash(unusable_pw, salt), "salt": salt}
+    _save_users(users)
+
+
 def list_users() -> list[str]:
     return sorted(_load_users().keys())
 
@@ -221,6 +242,7 @@ _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
     <div class="field"><input type="password" name="password" placeholder="Contraseña" required></div>
     <button class="btn" type="submit">Ingresar</button>
   </form>
+  {sso_html}
   {register_link}
 </div></body></html>"""
 
@@ -239,6 +261,11 @@ _REGISTER_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
   <div class="link"><a href="{prefix}/auth/login">Ya tengo cuenta</a></div>
 </div></body></html>"""
 
+
+_SSO_ERRORS = {
+    "sso": "No se pudo completar el inicio de sesión con SSO.",
+    "sso_domain": "Tu cuenta no está autorizada para esta app.",
+}
 
 def _safe_prefix(request: Request) -> str:
     prefix = request.headers.get("X-Ingress-Path", "")
@@ -261,9 +288,15 @@ def _render(template: str, error: str = "", ingress_prefix: str = "", **kwargs) 
         f'<div class="link"><a href="{ingress_prefix}/auth/register">Crear cuenta</a></div>'
         if get_registration_enabled() else ""
     )
+    sso_html = (
+        f'<a class="btn" style="display:block;text-align:center;text-decoration:none;'
+        f'background:#fff;color:#16213e;border:1px solid #16213e;margin-top:.5rem" '
+        f'href="{ingress_prefix}/auth/sso/login">Iniciar sesión con SSO</a>'
+        if SSO_ENABLED else ""
+    )
     return HTMLResponse(template.format(
         style=_STYLE, error=err_html, domain=ALLOWED_DOMAIN,
-        prefix=ingress_prefix, register_link=register_link, **kwargs
+        prefix=ingress_prefix, register_link=register_link, sso_html=sso_html, **kwargs
     ))
 
 def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectResponse:
@@ -275,7 +308,8 @@ def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectRe
 async def login_get(request: Request):
     if request.session.get("user"):
         return _redirect(request, "/")
-    return _render(_LOGIN_HTML, ingress_prefix=_safe_prefix(request))
+    error = _SSO_ERRORS.get(request.query_params.get("error", ""), "")
+    return _render(_LOGIN_HTML, error, ingress_prefix=_safe_prefix(request))
 
 @router.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, email: str = Form(...), password: str = Form(...)):

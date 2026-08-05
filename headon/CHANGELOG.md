@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.2
+- SSO/OIDC opcional vía authentik: agrega login single sign-on con
+  Authorization Code flow (Authlib), pensado como frontend de auth con el
+  add-on `authentik` de este repo. Convive con el login local
+  (email/password + `admin_password`) — con `oidc_enabled` prendido y
+  `oidc_issuer`/`oidc_client_id`/`oidc_client_secret` completos aparece un
+  botón "Iniciar sesión con SSO" en `/auth/login`; el form local sigue
+  funcionando como fallback. El callback exige email `@allowed_domain` (o
+  admin), auto-provisiona el usuario local en el primer login y arma la
+  misma sesión que el login local, así que el resto de la app no distingue
+  el origen del login. El rol admin usa el mismo criterio de siempre:
+  `email == admin@<allowed_domain>`.
+
 ## 0.3.1
 - Calendario: reemplazar dots por barras horizontales proporcionales a la
   duración del episodio. Posición = hora inicio, largo = duración, color =

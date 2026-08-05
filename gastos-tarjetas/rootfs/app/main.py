@@ -13,6 +13,7 @@ from routes import categorias_route
 from routes import logs as logs_route
 from routes import push as push_route
 from routes import pagos as pagos_route
+import oidc
 from db import init_db
 from config import APP_VERSION
 from scraper_scheduler import start_scheduler
@@ -119,6 +120,7 @@ app.add_middleware(
 # cliente externo, agregar CORS acotado a orígenes explícitos (nunca "*").
 
 app.include_router(auth.router,       prefix="/auth", tags=["auth"])
+app.include_router(oidc.router,       prefix="/auth/sso", tags=["auth"])
 app.include_router(upload.router,     prefix="/api",  tags=["upload"])
 app.include_router(gastos.router,     prefix="/api",  tags=["gastos"])
 app.include_router(rules.router,      prefix="/api",  tags=["rules"])

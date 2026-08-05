@@ -8,6 +8,10 @@ export REGISTRATION_ENABLED=$(bashio::config 'registration_enabled')
 export ADMIN_PASSWORD=$(bashio::config 'admin_password')
 export TITULAR2_NAME=$(bashio::config 'titular2_name')
 export SCRAPER_ENCRYPTION_KEY=$(bashio::config 'scraper_encryption_key')
+export OIDC_ENABLED=$(bashio::config 'oidc_enabled')
+export OIDC_ISSUER=$(bashio::config 'oidc_issuer')
+export OIDC_CLIENT_ID=$(bashio::config 'oidc_client_id')
+export OIDC_CLIENT_SECRET=$(bashio::config 'oidc_client_secret')
 export DATA_DIR="/data"
 export RULES_FILE="/data/rules.yaml"
 

@@ -3,6 +3,10 @@
 export ALLOWED_DOMAIN=$(bashio::config 'allowed_domain')
 export REGISTRATION_ENABLED=$(bashio::config 'registration_enabled')
 export ADMIN_PASSWORD=$(bashio::config 'admin_password')
+export OIDC_ENABLED=$(bashio::config 'oidc_enabled')
+export OIDC_ISSUER=$(bashio::config 'oidc_issuer')
+export OIDC_CLIENT_ID=$(bashio::config 'oidc_client_id')
+export OIDC_CLIENT_SECRET=$(bashio::config 'oidc_client_secret')
 export DATA_DIR="/data"
 
 mkdir -p "${DATA_DIR}"

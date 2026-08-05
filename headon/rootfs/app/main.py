@@ -11,9 +11,10 @@ from starlette.middleware.sessions import SessionMiddleware
 
 import db
 from auth import router as auth_router, admin_router, is_session_token_valid
+from oidc import router as sso_router
 from openpyxl import Workbook
 
-APP_VERSION = "0.3.1"
+APP_VERSION = "0.3.2"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 
@@ -82,6 +83,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(sso_router, prefix="/auth/sso", tags=["auth"])
 app.include_router(admin_router, prefix="/admin", tags=["admin"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

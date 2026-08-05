@@ -1,6 +1,6 @@
 name: "HeadOn"
 description: "Registro y seguimiento de episodios de migraña"
-version: "0.3.1"
+version: "0.3.2"
 slug: "headon"
 url: "https://github.com/sebabordon/ha-repo/tree/main/headon"
 stage: experimental
@@ -15,10 +15,18 @@ options:
   allowed_domain: "example.com"
   registration_enabled: false
   admin_password: ""
+  oidc_enabled: false
+  oidc_issuer: ""
+  oidc_client_id: ""
+  oidc_client_secret: ""
 schema:
   allowed_domain: str
   registration_enabled: bool
   admin_password: str?
+  oidc_enabled: bool
+  oidc_issuer: str?
+  oidc_client_id: str?
+  oidc_client_secret: str?
 ports:
   8100/tcp: 8100
 ports_description:

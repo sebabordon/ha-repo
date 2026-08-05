@@ -182,6 +182,25 @@ def create_user(email: str, password: str) -> tuple[bool, str]:
     return True, ""
 
 
+def ensure_sso_user(email: str) -> None:
+    """Auto-provisiona un usuario local en su primer login SSO.
+
+    El password guardado es aleatorio y nunca se muestra: el login local
+    queda inutilizable para estos usuarios, que siguen entrando por SSO.
+    Aparecen igual en el panel de admin para poder gestionarlos/borrarlos.
+    """
+    email = email.lower()
+    if email == ADMIN_EMAIL:
+        return
+    users = _load_users()
+    if email in users:
+        return
+    salt = os.urandom(16).hex()
+    unusable_pw = secrets.token_urlsafe(32)
+    users[email] = {"hash": _hash(unusable_pw, salt), "salt": salt}
+    _save_users(users)
+
+
 def list_users() -> list[str]:
     return sorted(_load_users().keys())
 

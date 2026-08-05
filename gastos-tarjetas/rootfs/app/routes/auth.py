@@ -10,6 +10,12 @@ from auth import (
     ADMIN_EMAIL, issue_session_token, revoke_session_token,
 )
 from config import ALLOWED_DOMAIN
+from sso_config import SSO_ENABLED
+
+_SSO_ERRORS = {
+    "sso": "No se pudo completar el inicio de sesión con SSO.",
+    "sso_domain": "Tu cuenta no está autorizada para esta app.",
+}
 
 # ── Rate limiting (in-memory, por IP) ─────────────────────────────────────────
 _login_failures: dict[str, list[float]] = defaultdict(list)
@@ -81,6 +87,7 @@ _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
     <div class="field"><input type="password" name="password" placeholder="Contraseña" required></div>
     <button class="btn" type="submit">Ingresar</button>
   </form>
+  {sso_html}
   {register_link}
 </div></body></html>"""
 
@@ -106,9 +113,15 @@ def _render(template: str, error: str = "", ingress_prefix: str = "", **kwargs) 
         f'<div class="link"><a href="{ingress_prefix}/auth/register">Crear cuenta</a></div>'
         if get_registration_enabled() else ""
     )
+    sso_html = (
+        f'<a class="btn" style="display:block;text-align:center;text-decoration:none;'
+        f'background:#fff;color:#16213e;border:1px solid #16213e;margin-top:.5rem" '
+        f'href="{ingress_prefix}/auth/sso/login">Iniciar sesión con SSO</a>'
+        if SSO_ENABLED else ""
+    )
     return HTMLResponse(template.format(
         style=_STYLE, error=err_html, domain=ALLOWED_DOMAIN,
-        prefix=ingress_prefix, register_link=register_link, **kwargs
+        prefix=ingress_prefix, register_link=register_link, sso_html=sso_html, **kwargs
     ))
 
 
@@ -122,7 +135,8 @@ async def login_get(request: Request):
     if request.session.get("user"):
         return _redirect(request, "/")
     prefix = _safe_prefix(request)
-    return _render(_LOGIN_HTML, ingress_prefix=prefix)
+    error = _SSO_ERRORS.get(request.query_params.get("error", ""), "")
+    return _render(_LOGIN_HTML, error, ingress_prefix=prefix)
 
 
 @router.post("/login", response_class=HTMLResponse)
