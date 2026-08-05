@@ -10,7 +10,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from sso_config import SSO_ENABLED
+from sso_config import SSO_ENABLED, LOCAL_LOGIN_DISABLED
 
 ALLOWED_DOMAIN = os.environ.get("ALLOWED_DOMAIN", "example.com")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
@@ -246,6 +246,16 @@ _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
   {register_link}
 </div></body></html>"""
 
+_SSO_ONLY_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HeadOn</title>{style}</head><body>
+<div class="card">
+  <h2>🧠 HeadOn</h2>
+  {error}
+  <a class="btn" style="display:block;text-align:center;text-decoration:none"
+     href="{prefix}/auth/sso/login">Iniciar sesión con SSO</a>
+</div></body></html>"""
+
 _REGISTER_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HeadOn — Registro</title>{style}</head><body>
@@ -308,12 +318,18 @@ def _redirect(request: Request, path: str, status_code: int = 307) -> RedirectRe
 async def login_get(request: Request):
     if request.session.get("user"):
         return _redirect(request, "/")
+    prefix = _safe_prefix(request)
     error = _SSO_ERRORS.get(request.query_params.get("error", ""), "")
-    return _render(_LOGIN_HTML, error, ingress_prefix=_safe_prefix(request))
+    if LOCAL_LOGIN_DISABLED:
+        err_html = f'<div class="err">{error}</div>' if error else ""
+        return HTMLResponse(_SSO_ONLY_HTML.format(style=_STYLE, error=err_html, prefix=prefix))
+    return _render(_LOGIN_HTML, error, ingress_prefix=prefix)
 
 @router.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, email: str = Form(...), password: str = Form(...)):
     prefix = _safe_prefix(request)
+    if LOCAL_LOGIN_DISABLED:
+        return _redirect(request, "/auth/login")
     ip = _client_ip(request)
     if _is_rate_limited(ip):
         return _render(_LOGIN_HTML, "Demasiados intentos fallidos. Intentá de nuevo en 15 minutos.",
@@ -332,6 +348,8 @@ async def login_post(request: Request, email: str = Form(...), password: str = F
 @router.get("/register", response_class=HTMLResponse)
 async def register_get(request: Request):
     prefix = _safe_prefix(request)
+    if LOCAL_LOGIN_DISABLED:
+        return _redirect(request, "/auth/login")
     if not get_registration_enabled():
         return _render(_LOGIN_HTML, "El registro de nuevos usuarios está deshabilitado.", ingress_prefix=prefix)
     return _render(_REGISTER_HTML, ingress_prefix=prefix)
@@ -340,6 +358,8 @@ async def register_get(request: Request):
 async def register_post(request: Request, email: str = Form(...),
                         password: str = Form(...), password2: str = Form(...)):
     prefix = _safe_prefix(request)
+    if LOCAL_LOGIN_DISABLED:
+        return _redirect(request, "/auth/login")
     if not get_registration_enabled():
         return _render(_LOGIN_HTML, "El registro de nuevos usuarios está deshabilitado.", ingress_prefix=prefix)
     if password != password2:

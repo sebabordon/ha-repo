@@ -10,6 +10,8 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth, SpotifyOauthError
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from authlib.integrations.flask_client import OAuth as AuthlibOAuth
+from authlib.integrations.base_client.errors import OAuthError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,12 +33,46 @@ INGRESS_ENTRY = os.environ.get("INGRESS_ENTRY", "")
 AUTH_USER = os.environ.get("AUTH_USER", "")
 AUTH_PASS = os.environ.get("AUTH_PASS", "")
 
+# ─── SSO/OIDC (authentik) ───────────────────────────────────────────────────
+# Convive con el login local (AUTH_USER/AUTH_PASS): si SSO_ENABLED, se agrega
+# el botón "Iniciar sesión con SSO" en /login. LOCAL_LOGIN_DISABLED apaga por
+# completo el login local (form + el bypass histórico de "sin credenciales
+# configuradas = acceso libre") — solo tiene efecto si SSO está configurado,
+# para no dejar la app sin ninguna forma de entrar por una config a medias.
+OIDC_ENABLED = os.environ.get("OIDC_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+OIDC_ISSUER = os.environ.get("OIDC_ISSUER", "").strip().rstrip("/")
+OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID", "").strip()
+OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET", "").strip()
+SSO_ENABLED = bool(OIDC_ENABLED and OIDC_ISSUER and OIDC_CLIENT_ID and OIDC_CLIENT_SECRET)
+
+_disable_local_login_raw = os.environ.get("DISABLE_LOCAL_LOGIN", "false").strip().lower() in ("1", "true", "yes")
+LOCAL_LOGIN_DISABLED = bool(_disable_local_login_raw and SSO_ENABLED)
+
+sso_oauth = None
+if SSO_ENABLED:
+    sso_oauth = AuthlibOAuth(app)
+    sso_oauth.register(
+        name="authentik",
+        server_metadata_url=f"{OIDC_ISSUER}/.well-known/openid-configuration",
+        client_id=OIDC_CLIENT_ID,
+        client_secret=OIDC_CLIENT_SECRET,
+        client_kwargs={"scope": "openid email profile"},
+    )
+
+def _external_base():
+    # Detrás de un reverse proxy (Nginx Proxy Manager): confiar en los headers
+    # X-Forwarded-* para armar una redirect_uri https, no la que ve Flask
+    # directamente (que sin esos headers sería http).
+    proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or request.host
+    return f"{proto}://{host}"
+
 SCOPE = "user-library-read user-library-modify user-read-private"
 
 def auth_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not AUTH_USER and not AUTH_PASS:
+        if not LOCAL_LOGIN_DISABLED and not AUTH_USER and not AUTH_PASS:
             return f(*args, **kwargs)
         if not session.get("logged_in"):
             return redirect(url_for("login_page", next=request.path))
@@ -297,16 +333,44 @@ def login():
 
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
-    if not AUTH_USER and not AUTH_PASS:
+    if not LOCAL_LOGIN_DISABLED and not AUTH_USER and not AUTH_PASS:
         return redirect(url_for("index"))
     error = None
     next_url = request.args.get("next", "/")
-    if request.method == "POST":
+    if not LOCAL_LOGIN_DISABLED and request.method == "POST":
         if request.form.get("username") == AUTH_USER and request.form.get("password") == AUTH_PASS:
             session["logged_in"] = True
             return redirect(next_url)
         error = "Invalid credentials"
-    return render_template("login.html", error=error, next_url=next_url)
+    elif request.args.get("error") == "sso":
+        error = "No se pudo completar el login con SSO."
+    return render_template(
+        "login.html", error=error, next_url=next_url,
+        sso_enabled=SSO_ENABLED, local_login_disabled=LOCAL_LOGIN_DISABLED,
+    )
+
+@app.route("/auth/sso/login")
+def sso_login():
+    if not SSO_ENABLED:
+        return redirect(url_for("login_page"))
+    session["sso_next"] = request.args.get("next", "/")
+    redirect_uri = f"{_external_base()}/auth/sso/callback"
+    return sso_oauth.authentik.authorize_redirect(redirect_uri)
+
+@app.route("/auth/sso/callback")
+def sso_callback():
+    if not SSO_ENABLED:
+        return redirect(url_for("login_page"))
+    try:
+        token = sso_oauth.authentik.authorize_access_token()
+    except OAuthError:
+        return redirect(url_for("login_page", error="sso"))
+    userinfo = token.get("userinfo") or {}
+    if not userinfo.get("email"):
+        return redirect(url_for("login_page", error="sso"))
+    session["logged_in"] = True
+    next_url = session.pop("sso_next", "/")
+    return redirect(next_url)
 
 @app.route("/logout")
 def logout():

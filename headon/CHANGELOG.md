@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.3
+- SSO: admin por grupo de authentik. El rol admin en login SSO ahora es
+  `email == admin@<allowed_domain>` **o** que el claim `groups` del token
+  incluya el grupo configurado en `oidc_admin_group` (default `"admins"`) —
+  antes solo el email fijo calificaba, lo que impedía que un email real
+  (el tuyo) fuera admin salvo que literalmente fuera `admin@dominio`.
+- Nuevo flag `disable_local_login`: apaga por completo el form de
+  email/password y `admin_password` (sin excepción), dejando el login
+  únicamente vía SSO. Solo tiene efecto si SSO está configurado — evita
+  quedar sin ninguna forma de entrar por una config a medias.
+
 ## 0.3.2
 - SSO/OIDC opcional vía authentik: agrega login single sign-on con
   Authorization Code flow (Authlib), pensado como frontend de auth con el

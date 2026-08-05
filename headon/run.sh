@@ -7,6 +7,8 @@ export OIDC_ENABLED=$(bashio::config 'oidc_enabled')
 export OIDC_ISSUER=$(bashio::config 'oidc_issuer')
 export OIDC_CLIENT_ID=$(bashio::config 'oidc_client_id')
 export OIDC_CLIENT_SECRET=$(bashio::config 'oidc_client_secret')
+export OIDC_ADMIN_GROUP=$(bashio::config 'oidc_admin_group')
+export DISABLE_LOCAL_LOGIN=$(bashio::config 'disable_local_login')
 export DATA_DIR="/data"
 
 mkdir -p "${DATA_DIR}"

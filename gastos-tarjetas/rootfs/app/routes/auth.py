@@ -10,7 +10,7 @@ from auth import (
     ADMIN_EMAIL, issue_session_token, revoke_session_token,
 )
 from config import ALLOWED_DOMAIN
-from sso_config import SSO_ENABLED
+from sso_config import SSO_ENABLED, LOCAL_LOGIN_DISABLED
 
 _SSO_ERRORS = {
     "sso": "No se pudo completar el inicio de sesión con SSO.",
@@ -91,6 +91,16 @@ _LOGIN_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
   {register_link}
 </div></body></html>"""
 
+_SSO_ONLY_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SnapBudget</title>{style}</head><body>
+<div class="card">
+  <h2>SnapBudget</h2>
+  {error}
+  <a class="btn" style="display:block;text-align:center;text-decoration:none"
+     href="{prefix}/auth/sso/login">Iniciar sesión con SSO</a>
+</div></body></html>"""
+
 _REGISTER_HTML = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SnapBudget — Registro</title>{style}</head><body>
@@ -136,6 +146,9 @@ async def login_get(request: Request):
         return _redirect(request, "/")
     prefix = _safe_prefix(request)
     error = _SSO_ERRORS.get(request.query_params.get("error", ""), "")
+    if LOCAL_LOGIN_DISABLED:
+        err_html = f'<div class="err">{error}</div>' if error else ""
+        return HTMLResponse(_SSO_ONLY_HTML.format(style=_STYLE, error=err_html, prefix=prefix))
     return _render(_LOGIN_HTML, error, ingress_prefix=prefix)
 
 
@@ -146,6 +159,8 @@ async def login_post(
     password: str = Form(...),
 ):
     prefix = _safe_prefix(request)
+    if LOCAL_LOGIN_DISABLED:
+        return _redirect(request, "/auth/login")
     ip = _client_ip(request)
     if _is_rate_limited(ip):
         return _render(_LOGIN_HTML, "Demasiados intentos fallidos. Intentá de nuevo en 15 minutos.",
@@ -165,6 +180,8 @@ async def login_post(
 @router.get("/register", response_class=HTMLResponse)
 async def register_get(request: Request):
     prefix = _safe_prefix(request)
+    if LOCAL_LOGIN_DISABLED:
+        return _redirect(request, "/auth/login")
     if not get_registration_enabled():
         return _render(_LOGIN_HTML, "El registro de nuevos usuarios está deshabilitado.", ingress_prefix=prefix)
     return _render(_REGISTER_HTML, ingress_prefix=prefix)
@@ -178,6 +195,8 @@ async def register_post(
     password2: str = Form(...),
 ):
     prefix = _safe_prefix(request)
+    if LOCAL_LOGIN_DISABLED:
+        return _redirect(request, "/auth/login")
     if not get_registration_enabled():
         return _render(_LOGIN_HTML, "El registro de nuevos usuarios está deshabilitado.", ingress_prefix=prefix)
     if password != password2:

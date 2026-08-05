@@ -14,7 +14,7 @@ from fastapi.responses import RedirectResponse
 
 from auth import ADMIN_EMAIL, ensure_sso_user, issue_session_token
 from config import ALLOWED_DOMAIN
-from sso_config import SSO_ENABLED, OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET
+from sso_config import SSO_ENABLED, OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_ADMIN_GROUP
 
 router = APIRouter()
 
@@ -75,7 +75,8 @@ async def sso_callback(request: Request):
         return RedirectResponse(f"{prefix}/auth/login?error=sso_domain")
 
     ensure_sso_user(email)
-    is_admin = email == ADMIN_EMAIL
+    groups = userinfo.get("groups") or []
+    is_admin = email == ADMIN_EMAIL or (OIDC_ADMIN_GROUP and OIDC_ADMIN_GROUP in groups)
     request.session["user"] = {
         "email": email, "is_admin": is_admin,
         "stoken": issue_session_token(email),

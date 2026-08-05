@@ -1,6 +1,6 @@
 name: "Spotify Liked Songs Tracker"
 description: "Tracks your Spotify liked songs weekly and shows what disappeared"
-version: "1.1.11"
+version: "1.2.0"
 slug: "spotify-tracker"
 init: false
 arch:
@@ -15,6 +15,11 @@ options:
   scan_hour: 0
   auth_user: ""
   auth_pass: ""
+  oidc_enabled: false
+  oidc_issuer: ""
+  oidc_client_id: ""
+  oidc_client_secret: ""
+  disable_local_login: false
 schema:
   spotify_client_id: str
   spotify_client_secret: str
@@ -23,6 +28,11 @@ schema:
   scan_hour: int(0,23)
   auth_user: str?
   auth_pass: password?
+  oidc_enabled: bool
+  oidc_issuer: str?
+  oidc_client_id: str?
+  oidc_client_secret: str?
+  disable_local_login: bool
 map:
   - data:rw
 ports:

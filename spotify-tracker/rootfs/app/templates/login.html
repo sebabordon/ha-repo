@@ -104,6 +104,7 @@
   <div class="error">{{ error }}</div>
   {% endif %}
 
+  {% if not local_login_disabled %}
   <form method="POST" action="/login?next={{ next_url }}">
     <label>Username</label>
     <input type="text" name="username" autocomplete="username" autofocus>
@@ -111,6 +112,14 @@
     <input type="password" name="password" autocomplete="current-password">
     <button type="submit" class="btn">Sign in</button>
   </form>
+  {% endif %}
+
+  {% if sso_enabled %}
+  <a href="/auth/sso/login?next={{ next_url }}" class="btn"
+     style="display:block;text-align:center;text-decoration:none;{% if not local_login_disabled %}background:transparent;color:var(--text);border:1px solid var(--border);margin-top:.75rem;{% endif %}">
+    Iniciar sesión con SSO
+  </a>
+  {% endif %}
 </div>
 </body>
 </html>
