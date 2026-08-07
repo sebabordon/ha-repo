@@ -1,7 +1,7 @@
 ---
 name: "Authentik"
 description: "Identity Provider / SSO self-hosted, pensado como frontend de autenticación para Nginx Proxy Manager"
-version: "0.1.4"
+version: "0.2.0"
 slug: "authentik"
 url: "https://github.com/sebabordon/ha-repo/tree/main/authentik"
 stage: experimental
@@ -15,6 +15,7 @@ watchdog: "tcp://[HOST]:[PORT:9000]"
 documentation: true
 options:
   authentik_host: "auth.example.com"
+  additional_domains: ""
   cookie_domain: ""
   bootstrap_email: "admin@example.com"
   bootstrap_password: ""
@@ -29,6 +30,7 @@ options:
   smtp_from: ""
 schema:
   authentik_host: str
+  additional_domains: str?
   cookie_domain: str?
   bootstrap_email: str
   bootstrap_password: password

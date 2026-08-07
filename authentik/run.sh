@@ -20,6 +20,7 @@ log() { printf '[authentik-addon] %s\n' "$*"; }
 cfg() { jq -r --arg k "$1" '.[$k] as $v | if $v == null then "" else $v end' "$OPTIONS_FILE"; }
 
 AUTHENTIK_HOST_CFG="$(cfg authentik_host)"
+ADDITIONAL_DOMAINS="$(cfg additional_domains)"
 COOKIE_DOMAIN="$(cfg cookie_domain)"
 BOOTSTRAP_EMAIL="$(cfg bootstrap_email)"
 BOOTSTRAP_PASSWORD="$(cfg bootstrap_password)"
@@ -43,6 +44,30 @@ if [ -z "${BOOTSTRAP_PASSWORD}" ]; then
 fi
 
 mkdir -p "${PGDATA}" "${DATA_DIR}/media" "${DATA_DIR}/certs" /run/postgresql
+
+# ---- CSRF_TRUSTED_ORIGINS para multi-dominio (authentik_host + additional_domains) ----
+# Authentik no expone esto como env var, pero en authentik/root/settings.py hace
+# `_update_settings("data.user_settings")`, que importa /data/user_settings.py como
+# módulo de settings de Django en cada arranque y pisa cualquier variable que defina
+# (ver https://github.com/goauthentik/authentik/issues/4209). Regeneramos este archivo
+# en cada arranque a partir de la config del add-on — no editar a mano, se pierde.
+CSRF_ORIGINS_JSON="$(
+    { printf '%s\n' "${AUTHENTIK_HOST_CFG}"; printf '%s' "${ADDITIONAL_DOMAINS}" | tr ',' '\n'; } \
+        | jq -R -s '
+            split("\n")
+            | map(gsub("^[ \t]+|[ \t]+$";""))
+            | map(select(length > 0))
+            | unique
+            | map(if test("^https?://") then . else "https://" + . end)
+          '
+)"
+cat > "${DATA_DIR}/user_settings.py" <<PYEOF
+# Generado por run.sh a partir de authentik_host + additional_domains.
+# Se sobreescribe en cada arranque del add-on — no editar a mano.
+CSRF_TRUSTED_ORIGINS = ${CSRF_ORIGINS_JSON}
+PYEOF
+chmod 644 "${DATA_DIR}/user_settings.py"
+log "CSRF_TRUSTED_ORIGINS: $(printf '%s' "${CSRF_ORIGINS_JSON}" | tr -d '\n ')"
 
 PGBIN="$(find /usr/lib/postgresql -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)/bin"
 export PATH="${PGBIN}:${PATH}"

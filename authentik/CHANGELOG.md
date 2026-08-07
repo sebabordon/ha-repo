@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0
+
+- Soporte multi-dominio para CSRF: nueva opción `additional_domains`
+  (lista separada por coma, ej `apps.sbsoft.com.ar`) para dominios extra
+  que hablan con Authentik además de `authentik_host` — típico en setups de
+  forward-auth con NPM donde las apps protegidas viven en otro dominio.
+- `run.sh` genera `/data/user_settings.py` en cada arranque con
+  `CSRF_TRUSTED_ORIGINS = [...]` a partir de `authentik_host` +
+  `additional_domains`. Aprovecha que Authentik importa ese archivo solo
+  (`data.user_settings`, ver `authentik/root/settings.py` y
+  [goauthentik/authentik#4209](https://github.com/goauthentik/authentik/issues/4209)) —
+  sin esto, loguearse desde un dominio distinto a `authentik_host` tira 403
+  CSRF. Soporta wildcards estilo Django (`*.sbsoft.com.ar`).
+
 ## 0.1.4
 
 - Suma `icon.png` (128×128) y `logo.png` (512×512) con el logo oficial de

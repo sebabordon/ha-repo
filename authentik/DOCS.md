@@ -24,6 +24,7 @@ pasar el tráfico a cada sitio.
 | Opción | Default | Descripción |
 |--------|---------|-------------|
 | `bootstrap_email` | `admin@example.com` | Email del usuario admin inicial (`akadmin`). |
+| `additional_domains` | _(vacío)_ | Dominios adicionales, separados por coma, que también van a hablar con Authentik (ej: `apps.sbsoft.com.ar`) — típicamente los dominios de las apps protegidas por forward-auth vía NPM. Se usan para armar `CSRF_TRUSTED_ORIGINS` (ver más abajo); si no lo completás, solo `authentik_host` queda confiado y vas a ver errores 403 CSRF al loguearte desde otro dominio. Acepta wildcards estilo Django, ej `*.sbsoft.com.ar`. |
 | `cookie_domain` | _(vacío)_ | Dominio para la cookie de sesión, ej `sbsoft.com.ar`, si querés SSO entre varios subdominios (`auth.sbsoft.com.ar`, `app1.sbsoft.com.ar`, etc). Si lo dejás vacío, la cookie queda atada solo al dominio exacto de `authentik_host`. |
 | `trusted_proxy_cidrs` | `172.30.32.0/23` | CIDRs desde los que Authentik acepta headers `X-Forwarded-*` (necesario para que detecte bien el host/proto real detrás de NPM). `172.30.32.0/23` es la red interna default del Supervisor de HA; si tu instalación usa otra, ajustala (`docker network inspect hassio` desde el host, o Configuración → Sistema → Red en HA). |
 | `log_level` | `info` | `debug`, `info`, `warning` o `error`. |
@@ -85,6 +86,38 @@ El patrón habitual es "forward-auth" con el outpost embebido de Authentik:
    Host* en NPM simplemente apunta a `http://<IP-de-HA>:9000` sin
    forward-auth (necesitás poder llegar a Authentik sin estar ya
    autenticado).
+
+### Multi-dominio (CSRF) — `additional_domains`
+
+Si protegés apps que viven en un dominio distinto al de `authentik_host` (ej:
+`auth.sbsoft.com.ar` para Authentik y `apps.sbsoft.com.ar` para las apps
+protegidas por forward-auth), Authentik va a rechazar los POST/login con un
+403 de CSRF apenas el flujo cruce de un dominio al otro — Django solo confía
+en el dominio "propio" por default.
+
+Authentik no expone esto como variable de entorno, pero sí soporta un archivo
+`user_settings.py` que Django importa automáticamente en cada arranque (ver
+[goauthentik/authentik#4209](https://github.com/goauthentik/authentik/issues/4209)
+y `authentik/root/settings.py`, que hace
+`_update_settings("data.user_settings")` — es decir, importa
+`/data/user_settings.py` como módulo de settings). Este add-on genera ese
+archivo solo, en cada arranque, con:
+
+```python
+CSRF_TRUSTED_ORIGINS = ["https://<authentik_host>", "https://<cada dominio de additional_domains>"]
+```
+
+Para el ejemplo de arriba, en `additional_domains` poné:
+
+```
+apps.sbsoft.com.ar
+```
+
+(no hace falta repetir `authentik_host`, ya se agrega solo). Podés poner
+varios separados por coma, y también wildcards estilo Django
+(`*.sbsoft.com.ar`) para cubrir cualquier subdominio sin listarlos todos.
+El archivo se regenera en cada arranque a partir de la config del add-on —
+si lo editás a mano dentro del contenedor, se pierde en el próximo restart.
 
 ## Limitaciones conocidas
 
