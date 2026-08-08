@@ -32,6 +32,14 @@ Self-hosted Identity Provider / SSO, packaged as a single add-on with an embedde
 
 ---
 
+### 🖥️ Authentik RAC Outpost
+
+Companion add-on for Authentik: runs the RAC outpost (`ghcr.io/goauthentik/rac`, bundles guacd) for browser-based RDP/VNC/SSH access. RAC never runs embedded in the main Authentik server, so it needs this separate process. Requires the `authentik` add-on above.
+
+[View add-on →](./authentik-rac)
+
+---
+
 ## Installation
 
 In Home Assistant go to **Settings → Add-ons → Add-on Store → ⋮ → Repositories** and add:

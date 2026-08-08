@@ -128,7 +128,11 @@ si lo editás a mano dentro del contenedor, se pierde en el próximo restart.
 - **Sin outposts vía Docker socket**: este add-on no monta
   `/var/run/docker.sock`, así que no vas a poder crear outposts
   "Docker"-managed desde la UI de Authentik. El outpost embebido (proxy
-  forward-auth de arriba) no lo necesita.
+  forward-auth de arriba) no lo necesita, pero **LDAP, RADIUS y RAC sí
+  requieren su propio contenedor** — nunca corren embebidos en el server
+  principal, sin importar la config. Para RAC ya existe el add-on
+  [`authentik-rac`](../authentik-rac); para LDAP/RADIUS habría que armar algo
+  similar (no incluido todavía).
 - **PostgreSQL sin backup automático**: vive en `/data/postgres`, dentro del
   volumen persistente del add-on. Los backups de Home Assistant (Settings →
   System → Backups) lo incluyen si el add-on está incluido en el backup,

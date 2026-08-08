@@ -1,0 +1,24 @@
+---
+name: "Authentik RAC Outpost"
+description: "Outpost RAC (Remote Access Control / RDP-VNC-SSH en el navegador) para el add-on Authentik"
+version: "0.1.0"
+slug: "authentik_rac"
+url: "https://github.com/sebabordon/ha-repo/tree/main/authentik-rac"
+stage: experimental
+init: false
+arch:
+  - aarch64
+  - amd64
+homeassistant_api: false
+startup: services
+boot: auto
+documentation: true
+options:
+  authentik_host: "https://auth.example.com"
+  authentik_token: ""
+  authentik_insecure: false
+schema:
+  authentik_host: url
+  authentik_token: password
+  authentik_insecure: bool
+ingress: false
