@@ -32,6 +32,18 @@ export AUTHENTIK_HOST="${AUTHENTIK_HOST_CFG}"
 export AUTHENTIK_TOKEN="${AUTHENTIK_TOKEN_CFG}"
 export AUTHENTIK_INSECURE="${AUTHENTIK_INSECURE_CFG}"
 
+# setpriv cambia uid/gid pero NO toca $HOME — se arrastra el "/root" heredado
+# de cuando este script corría como root, y ese directorio no es escribible
+# para uid 1000. FreeRDP necesita un $HOME escribible para guardar certs/caché
+# durante el handshake RDP (NLA/CredSSP incluido); si no puede escribir ahí,
+# guacd tira "Security negotiation failed (wrong security type?)" aunque el
+# modo de seguridad esté bien configurado — no es un problema del servidor
+# Windows, es este bug. Le damos un $HOME propio, escribible, antes de bajar
+# privilegios.
+export HOME=/tmp/rac-home
+mkdir -p "${HOME}"
+chown 1000:1000 "${HOME}"
+
 log "Conectando outpost RAC a ${AUTHENTIK_HOST_CFG} ..."
 # run.sh corre como root (necesario para leer /data/options.json — ver
 # Dockerfile); acá recién bajamos privilegios al uid no-root de la imagen

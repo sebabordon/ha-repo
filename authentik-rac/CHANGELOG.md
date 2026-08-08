@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.2
+
+- Fix RDP: `setpriv --reuid=1000` cambia uid/gid pero no `$HOME`, que quedaba
+  en `/root` (heredado de cuando run.sh corría como root) — no escribible
+  para uid 1000. FreeRDP necesita `$HOME` escribible para certs/caché durante
+  el handshake (incluido NLA/CredSSP); sin eso, guacd tiraba "Security
+  negotiation failed (wrong security type?)" aunque `security: nla` estuviera
+  bien configurado en el provider/endpoint — no era un problema del servidor
+  Windows. `run.sh` ahora exporta `HOME=/tmp/rac-home` (creado y con dueño
+  uid 1000) antes de bajar privilegios.
+
 ## 0.1.1
 
 - Fix `jq: error: Could not open file /data/options.json: Permission denied`:
