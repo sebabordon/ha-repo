@@ -14,9 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
-# El outpost es un cliente saliente sin estado: no necesita root ni /data
-# persistente, corre con el mismo uid no-root que trae la imagen base.
-USER 1000
+# OJO: no bajar a USER 1000 acá. run.sh necesita leer /data/options.json
+# (lo escribe el Supervisor como root, con permisos que uid 1000 no puede
+# abrir — "Permission denied" con jq). run.sh se queda como root para leer
+# la config y recién al final baja privilegios (setpriv) para ejecutar /rac.
 
 ENTRYPOINT []
 CMD ["/run.sh"]

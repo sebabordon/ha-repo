@@ -33,4 +33,8 @@ export AUTHENTIK_TOKEN="${AUTHENTIK_TOKEN_CFG}"
 export AUTHENTIK_INSECURE="${AUTHENTIK_INSECURE_CFG}"
 
 log "Conectando outpost RAC a ${AUTHENTIK_HOST_CFG} ..."
-exec /rac
+# run.sh corre como root (necesario para leer /data/options.json — ver
+# Dockerfile); acá recién bajamos privilegios al uid no-root de la imagen
+# base para el proceso real. setpriv es de util-linux, paquete esencial de
+# Debian, siempre presente.
+exec setpriv --reuid=1000 --regid=1000 --init-groups -- /rac
