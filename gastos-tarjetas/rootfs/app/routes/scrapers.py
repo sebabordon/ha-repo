@@ -2,6 +2,7 @@
 Endpoints de scrapers y conciliación.
 
 GET  /api/scrapers/status                 → estado de todos los scrapers
+GET  /api/scrapers/{banco}/error-screenshot → captura del último error (Akamai/captcha)
 GET  /api/scrapers/jobs                   → jobs programados del scheduler
 POST /api/scrapers/{banco}/run            → trigger manual de un scraper
 GET  /api/scrapers/pendientes             → movimientos_raw 'unmatched'
@@ -68,6 +69,28 @@ def scrapers_status(request: Request):
             pendientes.get(f, 0) for f in fuentes_for_banco(s["fuente"])
         )
     return statuses
+
+
+@router.get("/scrapers/{banco}/error-screenshot")
+def get_error_screenshot(banco: str, request: Request):
+    """
+    Captura de pantalla del último error de scraping (debug de captchas/Akamai).
+    Se guarda un solo PNG por fuente en scrapers/base.py::_save_error_screenshot,
+    sobreescrito en cada falla nueva y borrado cuando el scraper vuelve a andar.
+    """
+    require_auth(request)
+    import os
+    import re
+    from fastapi.responses import FileResponse
+    from userctx import get_data_dir
+
+    if not re.fullmatch(r"[a-z0-9_]+", banco):
+        raise HTTPException(400, "banco inválido")
+
+    path = os.path.join(get_data_dir(), "screenshots", f"{banco}.png")
+    if not os.path.exists(path):
+        raise HTTPException(404, "Sin captura disponible.")
+    return FileResponse(path, media_type="image/png")
 
 
 @router.get("/scrapers/jobs")

@@ -50,6 +50,17 @@ def _sessions_dir() -> str:
         base = _DATA_DIR
     return os.path.join(base, "sessions")
 
+
+def _screenshots_dir() -> str:
+    """Dir de capturas de pantalla de errores de scraper, por usuario (mismo
+    patrón que _sessions_dir)."""
+    try:
+        from userctx import get_data_dir
+        base = get_data_dir()
+    except Exception:
+        base = _DATA_DIR
+    return os.path.join(base, "screenshots")
+
 # Binarios del sistema (seteados como ENV en el Dockerfile)
 _CHROMIUM_BIN    = os.environ.get("CHROMIUM_BIN",    "/usr/bin/chromium-browser")
 _CHROMEDRIVER_BIN = os.environ.get("CHROMEDRIVER_BIN", "/usr/bin/chromedriver")
@@ -430,6 +441,34 @@ class BaseScraper(ABC):
 
         return result
 
+    def _save_error_screenshot(self, driver) -> None:
+        """
+        Guarda un PNG de la pantalla al momento de un error de scraping — pensado
+        para debuggear prompts de Akamai/captcha que a veces bloquean el login
+        (AMEX/BBVA). get_screenshot_as_png() funciona igual en el driver local
+        (Chrome headless en el container) que en el WebDriver remoto (Mac), sin
+        diferencia de código. Un solo archivo por fuente — se sobreescribe en
+        cada falla nueva, no hay historial.
+        """
+        try:
+            os.makedirs(_screenshots_dir(), exist_ok=True)
+            path = os.path.join(_screenshots_dir(), f"{self.fuente}.png")
+            png = driver.get_screenshot_as_png()
+            with open(path, "wb") as f:
+                f.write(png)
+            logger.info("[%s] Captura de error guardada (%d bytes)", self.fuente, len(png))
+        except Exception as exc:
+            logger.warning("[%s] No se pudo guardar la captura de error: %s", self.fuente, exc)
+
+    def _clear_error_screenshot(self) -> None:
+        """Borra la captura de un error previo tras un run exitoso — ya no aplica."""
+        try:
+            path = os.path.join(_screenshots_dir(), f"{self.fuente}.png")
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+
     def _run_sync(self, config: dict) -> ScraperResult:
         """Núcleo síncrono: crea driver, restaura sesión, loguea si es necesario, scrapea."""
         driver = None
@@ -483,11 +522,14 @@ class BaseScraper(ABC):
                 "[%s] OK — %d movimientos, saldos: %s",
                 self.fuente, len(result.movimientos), result.saldos,
             )
+            self._clear_error_screenshot()
             return result
 
         except Exception as exc:
             logger.exception("[%s] Error en scraper: %s", self.fuente, exc)
             log.append(f"ERROR: {exc}")
+            if driver:
+                self._save_error_screenshot(driver)
             return ScraperResult(fuente=self.fuente, error=str(exc), log_lines=log)
         finally:
             if driver:

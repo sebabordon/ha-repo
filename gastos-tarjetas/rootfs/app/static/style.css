@@ -1977,6 +1977,19 @@ tbody tr:hover { background: #fafbff; }
 }
 .btn-refresh-movs:hover { color: #334155; border-color: #cbd5e1; }
 
+.scraper-shot-wrap { margin-top: .35rem; }
+.scraper-shot-img {
+  display: block;
+  max-width: 100%;
+  border-radius: 5px;
+  border: 1px solid #e2e8f0;
+}
+.scraper-shot-empty {
+  font-size: .78rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
 .scraper-log-pre {
   font-size: .73rem;
   font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;

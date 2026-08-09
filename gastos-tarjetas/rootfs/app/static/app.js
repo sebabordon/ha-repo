@@ -5924,6 +5924,18 @@ function _renderInstanceFullPanel(c, inst) {
       <pre class="scraper-log-pre" id="scraper-log-pre-inst-${inst.id}">${escHtml(inst.last_log)}</pre>
     </details>` : "";
 
+  const shotSection = inst.error_msg ? `
+    <details class="scraper-log-details">
+      <summary onclick="loadErrorScreenshot('${inst.banco}','shot-inst-${inst.id}')">
+        <span>🖼 Captura del error</span>
+      </summary>
+      <div class="scraper-shot-wrap">
+        <img id="shot-inst-${inst.id}" class="scraper-shot-img" alt="Captura del último error"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+        <p class="scraper-shot-empty" style="display:none">Sin captura disponible para este error.</p>
+      </div>
+    </details>` : "";
+
   // Movimientos guardados (reusa el endpoint legacy filtrado por la fuente de esta cuenta)
   const movsSection = `
     <details class="scraper-movs-details" id="movs-details-${c.fuente}">
@@ -5976,6 +5988,7 @@ function _renderInstanceFullPanel(c, inst) {
       ${totpArea}
       ${statusInfo}
       ${logSection}
+      ${shotSection}
       ${movsSection}
     </div>`;
 }
@@ -7208,6 +7221,16 @@ function _buildScraperCard(banco, data) {
         </summary>
         <pre class="scraper-log-pre" id="scraper-log-pre-${banco}">${escHtml(st.last_log)}</pre>
       </details>` : ""}
+      ${st.error_msg ? `<details class="scraper-log-details">
+        <summary onclick="loadErrorScreenshot('${banco}','shot-${banco}')">
+          <span>🖼 Captura del error</span>
+        </summary>
+        <div class="scraper-shot-wrap">
+          <img id="shot-${banco}" class="scraper-shot-img" alt="Captura del último error"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+          <p class="scraper-shot-empty" style="display:none">Sin captura disponible para este error.</p>
+        </div>
+      </details>` : ""}
       <details class="scraper-movs-details" id="movs-details-${banco}">
         <summary onclick="loadScraperMovimientos('${banco}')">
           <span>📦 Registros ingresados</span>
@@ -7345,6 +7368,16 @@ function copyScraperLog(banco) {
       setTimeout(() => { btn.textContent = orig; }, 2000);
     }
   }).catch(() => showToast("No se pudo copiar", "err"));
+}
+
+// ── Captura del último error (Akamai/captcha) ──────────────────────────────────
+// Se carga recién al abrir el <details> — no precargamos la imagen para no
+// pedirla en cada refresh de la página de Config si el usuario no la mira.
+function loadErrorScreenshot(banco, imgId) {
+  const img = document.getElementById(imgId);
+  if (!img || img.dataset.loaded === "1") return;
+  img.dataset.loaded = "1";
+  img.src = `${BASE}/api/scrapers/${banco}/error-screenshot?_=${Date.now()}`;
 }
 
 // ── Registros ingresados (movimientos_raw) ─────────────────────────────────────
