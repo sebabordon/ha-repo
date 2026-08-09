@@ -661,6 +661,42 @@ def insert_movimientos_raw(
                 if existing:
                     existing_check_name = "fallback_descriptor"
 
+            # Cross-run: mismo día + mismo monto pero la descripción cambió de
+            # mayúsculas o le agregaron un sufijo (típico de tarjetas de crédito
+            # BBVA: el consumo llega "HOYTS"/"PERSONAL" recién autorizado y una
+            # corrida posterior lo devuelve "Hoyts"/"PERSONAL PERSFLOW49010001 0"
+            # ya liquidado — sin numero_operacion en el raw_data de bbva_tarjetas.py
+            # para dedupar por UID). Comparamos case-insensitive y por prefijo en
+            # cualquier dirección; solo si el monto es único ese día (misma regla
+            # de seguridad que los demás cross-run de más abajo: 2+ candidatos con
+            # igual importe no se pueden distinguir sin ambigüedad).
+            if not existing and not scraper_uid:
+                _same_day_total = conn.execute(
+                    """SELECT COUNT(*) FROM movimientos_raw
+                       WHERE fuente = ? AND fecha = ? AND moneda = ?
+                         AND CAST(monto AS REAL) = CAST(? AS REAL)""",
+                    (fuente, fecha, moneda, monto),
+                ).fetchone()[0]
+                if _same_day_total == 1:
+                    _cand = conn.execute(
+                        """SELECT id, descripcion FROM movimientos_raw
+                           WHERE fuente = ? AND fecha = ? AND moneda = ?
+                             AND CAST(monto AS REAL) = CAST(? AS REAL)
+                           LIMIT 1""",
+                        (fuente, fecha, moneda, monto),
+                    ).fetchone()
+                    if _cand:
+                        _d_old = (_cand["descripcion"] or "").strip().upper()
+                        _d_new = desc.strip().upper()
+                        if _d_old and _d_new and (_d_old.startswith(_d_new) or _d_new.startswith(_d_old)):
+                            if len(desc) > len(_cand["descripcion"] or ""):
+                                conn.execute(
+                                    "UPDATE movimientos_raw SET descripcion = ? WHERE id = ?",
+                                    (desc, _cand["id"]),
+                                )
+                            existing = _cand
+                            existing_check_name = "desc_normalizada"
+
             # Cross-run: descripción específica que reemplaza una genérica existente.
             # Solo actuamos si el monto aparece exactamente una vez en esa fecha
             # (unicidad), para no fusionar dos movimientos distintos del mismo importe
