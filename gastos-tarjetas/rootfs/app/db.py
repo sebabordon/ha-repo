@@ -1063,6 +1063,108 @@ def _run_migrations(conn):
         )
         conn.execute("INSERT INTO db_migrations (name) VALUES ('categorias_creditos_tarjeta_v1')")
 
+    if "dedup_scraper_gastos_v2" not in done:
+        # v1.2.75: dedup_scraper_gastos_v1 (v0.3.61) fue una limpieza de una sola
+        # vez — no evita que se sigan acumulando duplicados si insert_movimientos_raw
+        # falla en deduplicar en producción. Caso real detectado: un retiro de
+        # $400.000 de bbva_cuenta se reimportó 11 veces entre jul-ago 2026 pese a
+        # que la lógica de dedup por saldo, probada de forma aislada con los mismos
+        # datos reales, sí funciona (causa raíz de la falla en producción no
+        # identificada — posible carrera del scheduler). Repite la limpieza exacta
+        # para lo acumulado desde entonces, y además cubre el caso "la descripción
+        # cambió de mayúsculas o le agregaron un sufijo" (mismo bug corregido en
+        # ingesta para bbva_mc/visa en v1.2.73, ver scrapers_db.py) para gastos ya
+        # importados antes de ese fix. Conserva la fila más informativa; si algún
+        # duplicado tiene categoría y la que se conserva no, la hereda.
+        _total_dedup_v2 = 0
+
+        # 1) Duplicados exactos (misma fuente/fecha/monto/moneda/descripcion).
+        _exact_dups = conn.execute("""
+            SELECT fuente, fecha, monto, descripcion, moneda,
+                   GROUP_CONCAT(id, ',')                           AS ids,
+                   GROUP_CONCAT(COALESCE(categoria,''), ',')       AS cats,
+                   GROUP_CONCAT(COALESCE(categoria_fuente,''), ',') AS cat_srcs
+            FROM gastos
+            WHERE archivo_origen = 'scraper'
+            GROUP BY fuente, fecha, CAST(monto AS REAL), descripcion, moneda
+            HAVING COUNT(*) > 1
+        """).fetchall()
+        for row in _exact_dups:
+            ids      = sorted(int(x) for x in str(row["ids"]).split(",") if x)
+            cats     = str(row["cats"]).split(",")
+            cat_srcs = str(row["cat_srcs"]).split(",")
+            triples  = list(zip(sorted(ids), cats, cat_srcs))
+            keep_id  = ids[0]
+            del_ids  = ids[1:]
+            keep_cat = next(c for i, c, _ in triples if i == keep_id)
+            if not keep_cat:
+                for i, c, cs in triples:
+                    if i != keep_id and c:
+                        conn.execute(
+                            "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE id=?",
+                            (c, cs or None, keep_id),
+                        )
+                        break
+            for did in del_ids:
+                conn.execute("DELETE FROM gastos WHERE id=?", (did,))
+                conn.execute("DELETE FROM movimientos_raw WHERE gasto_id=?", (did,))
+                _total_dedup_v2 += 1
+
+        # 2) Misma fuente/fecha/monto/moneda, descripción distinta pero cada una
+        #    es prefijo (case-insensitive) de la más larga del grupo — el mismo
+        #    heurístico de scrapers_db.py aplicado retroactivamente. Si CUALQUIER
+        #    miembro del grupo no encaja como prefijo, no se toca el grupo entero
+        #    (podrían ser transacciones distintas que coinciden en importe/fecha).
+        _rows = conn.execute("""
+            SELECT id, fuente, fecha, monto, moneda, descripcion,
+                   COALESCE(categoria,'') AS categoria,
+                   COALESCE(categoria_fuente,'') AS categoria_fuente
+            FROM gastos
+            WHERE archivo_origen = 'scraper'
+        """).fetchall()
+        _groups: dict = {}
+        for r in _rows:
+            try:
+                monto_key = round(float(r["monto"]), 2)
+            except (TypeError, ValueError):
+                continue
+            key = (r["fuente"], r["fecha"], monto_key, r["moneda"])
+            _groups.setdefault(key, []).append(r)
+        for members in _groups.values():
+            if len(members) < 2:
+                continue
+            descs = {(m["descripcion"] or "").strip() for m in members}
+            if len(descs) <= 1:
+                continue  # ya cubierto por el paso 1
+            champion   = max(members, key=lambda m: len(m["descripcion"] or ""))
+            champ_desc = (champion["descripcion"] or "").strip().upper()
+            if not champ_desc:
+                continue
+            if not all(
+                (m["descripcion"] or "").strip().upper() and
+                champ_desc.startswith((m["descripcion"] or "").strip().upper())
+                for m in members
+            ):
+                continue
+            keep_id = champion["id"]
+            del_ids = [m["id"] for m in members if m["id"] != keep_id]
+            if not champion["categoria"]:
+                for m in members:
+                    if m["id"] != keep_id and m["categoria"]:
+                        conn.execute(
+                            "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE id=?",
+                            (m["categoria"], m["categoria_fuente"] or None, keep_id),
+                        )
+                        break
+            for did in del_ids:
+                conn.execute("DELETE FROM gastos WHERE id=?", (did,))
+                conn.execute("DELETE FROM movimientos_raw WHERE gasto_id=?", (did,))
+                _total_dedup_v2 += 1
+
+        if _total_dedup_v2:
+            logger.info(f"[dedup_scraper_gastos_v2] eliminados {_total_dedup_v2} gastos duplicados de scraper")
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_scraper_gastos_v2')")
+
     # app_log table — creada directamente con el conn existente para evitar
     # el conflicto de lock que ocurriría si abriéramos una segunda conexión
     # mientras _run_migrations ya tiene una transacción activa.
