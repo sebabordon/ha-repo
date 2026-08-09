@@ -1187,12 +1187,16 @@ def venc_notif_mark_sent(clave: str) -> None:
 
 # ── Pagos / vencimientos manuales (feature b2) ────────────────────────────────
 
-def _add_one_month(iso_date: str) -> str:
-    """Suma un mes a 'YYYY-MM-DD', clampeando el día al último del mes destino."""
+_RECUR_MESES = {"mensual": 1, "bimestral": 2, "trimestral": 3}
+
+
+def _add_months_full_date(iso_date: str, n: int) -> str:
+    """Suma n meses a 'YYYY-MM-DD', clampeando el día al último del mes destino."""
     import calendar
     from datetime import date
     d = date.fromisoformat(str(iso_date)[:10])
-    y, m = (d.year + (d.month // 12)), (d.month % 12) + 1
+    total = d.month - 1 + n
+    y, m = d.year + total // 12, total % 12 + 1
     last = calendar.monthrange(y, m)[1]
     return date(y, m, min(d.day, last)).isoformat()
 
@@ -1217,7 +1221,7 @@ def add_pago(descripcion: str, monto, moneda: str, fecha_vencimiento: str,
             "INSERT INTO pagos (descripcion, monto, moneda, fecha_vencimiento, "
             "recurrencia, categoria, fecha_fin) VALUES (?,?,?,?,?,?,?)",
             (descripcion, monto, moneda or "ARS", fecha_vencimiento,
-             recurrencia if recurrencia in ("unico", "mensual") else "unico",
+             recurrencia if recurrencia in ("unico", *_RECUR_MESES) else "unico",
              categoria or None, fecha_fin or None),
         )
         return cur.lastrowid
@@ -1245,18 +1249,19 @@ def delete_pago(pago_id: int) -> None:
 
 def mark_pago_pagado(pago_id: int, regenerate: bool = True) -> dict | None:
     """
-    Marca un pago como pagado. Si es 'mensual', regenerate=True y todavía no se
-    pasó de fecha_fin, genera la fila del mes siguiente (pendiente). Con
-    regenerate=False ("Finalizar") cierra la serie sin generar la próxima.
-    Devuelve el nuevo pago generado o None.
+    Marca un pago como pagado. Si es 'mensual'/'bimestral'/'trimestral',
+    regenerate=True y todavía no se pasó de fecha_fin, genera la fila del
+    próximo período (pendiente). Con regenerate=False ("Finalizar") cierra la
+    serie sin generar la próxima. Devuelve el nuevo pago generado o None.
     """
     with _conn() as conn:
         row = conn.execute("SELECT * FROM pagos WHERE id = ?", (pago_id,)).fetchone()
         if not row:
             return None
         conn.execute("UPDATE pagos SET estado = 'pagado' WHERE id = ?", (pago_id,))
-        if regenerate and row["recurrencia"] == "mensual":
-            nueva = _add_one_month(row["fecha_vencimiento"])
+        meses = _RECUR_MESES.get(row["recurrencia"])
+        if regenerate and meses:
+            nueva = _add_months_full_date(row["fecha_vencimiento"], meses)
             fin = row["fecha_fin"] if "fecha_fin" in row.keys() else None
             if fin and str(nueva)[:10] > str(fin)[:10]:
                 return None  # la próxima caería después de fecha_fin → fin de serie
@@ -1264,7 +1269,7 @@ def mark_pago_pagado(pago_id: int, regenerate: bool = True) -> dict | None:
                 "INSERT INTO pagos (descripcion, monto, moneda, fecha_vencimiento, "
                 "recurrencia, categoria, fecha_fin) VALUES (?,?,?,?,?,?,?)",
                 (row["descripcion"], row["monto"], row["moneda"], nueva,
-                 "mensual", row["categoria"], fin),
+                 row["recurrencia"], row["categoria"], fin),
             )
             return {"id": cur.lastrowid, "fecha_vencimiento": nueva}
     return None

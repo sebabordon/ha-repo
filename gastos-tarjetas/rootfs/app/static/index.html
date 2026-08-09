@@ -463,8 +463,8 @@
       <p class="rules-hint">
         Servicios, alquiler, expensas… cosas que no se scrapean. Te aviso por push
         con la antelación que configures en <strong>Config → 🔔 Avisos</strong> (el
-        mismo aviso cubre tarjetas y estos pagos). Los <strong>mensuales</strong>
-        se regeneran solos al marcarse pagados.
+        mismo aviso cubre tarjetas y estos pagos). Los <strong>recurrentes</strong>
+        (mensual/bimestral/trimestral) se regeneran solos al marcarse pagados.
       </p>
       <div class="pago-form">
         <label class="pago-field">
@@ -485,10 +485,10 @@
         </label>
         <label class="pago-field">
           <span>Recurrencia</span>
-          <select id="pago-recur"><option value="unico">Único</option><option value="mensual">Mensual</option></select>
+          <select id="pago-recur"><option value="unico">Único</option><option value="mensual">Mensual</option><option value="bimestral">Bimestral</option><option value="trimestral">Trimestral</option></select>
         </label>
         <label class="pago-field">
-          <span>Hasta (mensual)</span>
+          <span>Hasta (recurrente)</span>
           <input id="pago-fin" type="date">
         </label>
         <label class="pago-field">

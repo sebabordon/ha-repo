@@ -1,3 +1,7 @@
+## 1.2.71
+
+- **Pagos manuales: recurrencia Bimestral y Trimestral** (`db.py`, `routes/pagos.py`, `static/index.html`, `static/app.js`): además de "Único" y "Mensual", ahora se puede elegir "Bimestral" (cada 2 meses) o "Trimestral" (cada 3 meses) al cargar un pago/vencimiento manual. `_add_one_month` se generaliza a `_add_months(fecha, n)` y un mapa `_RECUR_MESES = {"mensual": 1, "bimestral": 2, "trimestral": 3}` controla tanto la validación (`add_pago`/`update_pago` en `routes/pagos.py`) como cuántos meses suma `mark_pago_pagado` al regenerar la próxima fila de la serie (antes solo el caso `mensual` regeneraba). El campo "Hasta" (tope de la serie) y el botón "Finalizar" ahora aplican a cualquier recurrencia, no solo mensual.
+
 ## 1.2.70
 
 - **SSO: admin por grupo de authentik y flag para apagar el login local** (`sso_config.py`, `oidc.py`, `routes/auth.py`): el rol admin en login SSO ahora es `email == admin@<allowed_domain>` **o** que el claim `groups` del token incluya el grupo configurado en `oidc_admin_group` (default `"admins"`) — antes solo calificaba el email fijo, lo que impedía que un email real fuera admin salvo que fuera literalmente `admin@dominio`. Nuevo flag `disable_local_login`: apaga por completo el form de email/password y `admin_password` (sin excepción), dejando el login únicamente vía SSO; solo tiene efecto si SSO está configurado, para no dejar la app sin ninguna forma de entrar por una config a medias.

@@ -13,6 +13,8 @@ from auth import require_auth
 
 router = APIRouter()
 
+_RECURRENCIAS = ("unico", "mensual", "bimestral", "trimestral")
+
 
 def _valid_fecha(s: str) -> str:
     try:
@@ -52,7 +54,7 @@ def post_pago(body: dict, request: Request):
     except (TypeError, ValueError):
         raise HTTPException(400, "monto inválido")
     moneda = "USD" if str(body.get("moneda", "ARS")).upper() == "USD" else "ARS"
-    recur  = "mensual" if body.get("recurrencia") == "mensual" else "unico"
+    recur  = body.get("recurrencia") if body.get("recurrencia") in _RECURRENCIAS else "unico"
     fin    = _valid_fecha(body["fecha_fin"]) if body.get("fecha_fin") else ""
     pid = add_pago(desc, monto, moneda, fecha, recur,
                    str(body.get("categoria", "")).strip(), fin)
@@ -79,7 +81,7 @@ def put_pago(pago_id: int, body: dict, request: Request):
     if "fecha_vencimiento" in body:
         fields["fecha_vencimiento"] = _valid_fecha(body["fecha_vencimiento"])
     if "recurrencia" in body:
-        fields["recurrencia"] = "mensual" if body["recurrencia"] == "mensual" else "unico"
+        fields["recurrencia"] = body["recurrencia"] if body["recurrencia"] in _RECURRENCIAS else "unico"
     if "categoria" in body:
         fields["categoria"] = str(body["categoria"]).strip()
     if "fecha_fin" in body:

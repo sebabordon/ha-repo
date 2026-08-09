@@ -1014,7 +1014,7 @@ function editPago(p) {
   f.monto.value  = p.monto != null ? p.monto : "";
   f.moneda.value = p.moneda || "ARS";
   f.fecha.value  = String(p.fecha_vencimiento || "").slice(0, 10);
-  f.recur.value  = p.recurrencia === "mensual" ? "mensual" : "unico";
+  f.recur.value  = ["mensual", "bimestral", "trimestral"].includes(p.recurrencia) ? p.recurrencia : "unico";
   f.fin.value    = String(p.fecha_fin || "").slice(0, 10);
   f.cat.value    = p.categoria || "";
   document.getElementById("btn-add-pago").textContent = "💾 Guardar";
@@ -1050,8 +1050,9 @@ async function loadPagos() {
 
     const tr = document.createElement("tr");
     if (p.estado === "pagado") tr.style.opacity = ".5";
-    let tipo = p.recurrencia === "mensual" ? "Mensual" : "Único";
-    if (p.recurrencia === "mensual" && p.fecha_fin)
+    const _TIPO_LABEL = { mensual: "Mensual", bimestral: "Bimestral", trimestral: "Trimestral" };
+    let tipo = _TIPO_LABEL[p.recurrencia] || "Único";
+    if (_TIPO_LABEL[p.recurrencia] && p.fecha_fin)
       tipo += ` (hasta ${String(p.fecha_fin).slice(0, 10)})`;
 
     const textCells = [
@@ -1134,7 +1135,7 @@ async function loadPagos() {
 
     if (p.estado !== "pagado") {
       tdA.appendChild(mkAction("✓", "Pagado", "btn-pagado", () => markPagoPaid(p.id), "Marcar pagado"));
-      if (p.recurrencia === "mensual")
+      if (p.recurrencia !== "unico")
         tdA.appendChild(mkAction("■", "Finalizar", "", () => finalizarPago(p.id, p.descripcion), "Finalizar serie"));
       tdA.appendChild(mkAction("✎", "Editar", "", () => editPago(p), "Editar"));
     } else {
@@ -1158,7 +1159,7 @@ async function savePago() {
     moneda:            f.moneda.value,
     fecha_vencimiento: fecha,
     recurrencia:       f.recur.value,
-    fecha_fin:         (f.recur.value === "mensual" ? f.fin.value : "") || "",
+    fecha_fin:         (f.recur.value !== "unico" ? f.fin.value : "") || "",
     categoria:         f.cat.value.trim() || "",
   };
   const editing = _editingPagoId != null;
