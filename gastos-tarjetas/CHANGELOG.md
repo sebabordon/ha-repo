@@ -1,3 +1,7 @@
+## 1.2.72
+
+- **Total pendiente en "Vencimientos del mes"** (`static/app.js`, `static/index.html`): la sección 📅 Vencimientos del mes (tarjetas + pagos manuales fusionados) suma un stat-card "Total pendiente (N)" con el total ARS/USD de los ítems no pagados del mes en curso, arriba de la tabla. Reusa el patrón visual `cq-stat-cards`/`cq-stat-card` ya existente en la tabla de Cuotas para mantener consistencia dentro del mismo tab. Se oculta si no hay pendientes.
+
 ## 1.2.71
 
 - **Pagos manuales: recurrencia Bimestral y Trimestral** (`db.py`, `routes/pagos.py`, `static/index.html`, `static/app.js`): además de "Único" y "Mensual", ahora se puede elegir "Bimestral" (cada 2 meses) o "Trimestral" (cada 3 meses) al cargar un pago/vencimiento manual. `_add_one_month` se generaliza a `_add_months(fecha, n)` y un mapa `_RECUR_MESES = {"mensual": 1, "bimestral": 2, "trimestral": 3}` controla tanto la validación (`add_pago`/`update_pago` en `routes/pagos.py`) como cuántos meses suma `mark_pago_pagado` al regenerar la próxima fila de la serie (antes solo el caso `mensual` regeneraba). El campo "Hasta" (tope de la serie) y el botón "Finalizar" ahora aplican a cualquier recurrencia, no solo mensual.

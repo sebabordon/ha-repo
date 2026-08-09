@@ -932,6 +932,23 @@ async function loadVencimientosMes() {
   let items = [];
   try { items = (await (await fetch(`${BASE}/api/vencimientos-mes`)).json()).items || []; }
   catch (_) {}
+
+  const statsEl = document.getElementById("venc-mes-stats");
+  if (statsEl) {
+    const pend = items.filter(it => !it.pagado);
+    const totalArs = pend.reduce((s, it) => s + (it.monto_ars || 0), 0);
+    const totalUsd = pend.reduce((s, it) => s + (it.monto_usd || 0), 0);
+    if (!pend.length) {
+      statsEl.innerHTML = "";
+    } else {
+      let inner = `<div class="cq-stat-label">Total pendiente (${pend.length})</div><div class="cq-stat-val">`;
+      if (totalArs) inner += `<span class="cq-ars">ARS ${_fmtNum2(totalArs)}</span>`;
+      if (totalUsd) inner += `<span class="cq-usd">USD ${_fmtNum2(totalUsd)}</span>`;
+      inner += `</div>`;
+      statsEl.innerHTML = `<div class="cq-stat-cards"><div class="cq-stat-card">${inner}</div></div>`;
+    }
+  }
+
   tb.replaceChildren();
   if (!items.length) {
     const tr = document.createElement("tr");
