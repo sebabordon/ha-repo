@@ -457,6 +457,16 @@ tbody tr:hover { background: #fafbff; }
 .badge-galicia_mc  { background: #ede9fe; color: #5b21b6; }
 .badge-mercadopago { background: #fef9c3; color: #854d0e; }
 
+.origen-icon {
+  display: inline-block;
+  margin-left: .35rem;
+  font-size: .78rem;
+  cursor: help;
+  opacity: .75;
+  vertical-align: middle;
+}
+.origen-icon:hover { opacity: 1; }
+
 .monto { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .monto.egreso  { color: var(--color-egreso, #dc2626); }   /* dinero que sale  */
 .monto.ingreso { color: var(--color-ingreso, #16a34a); }  /* dinero que entra */

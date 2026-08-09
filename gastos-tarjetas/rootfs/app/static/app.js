@@ -2482,7 +2482,7 @@ function _renderGastos() {
       </td>
       <td class="monto ${g.moneda==="USD"?"usd":""} ${egreso?"egreso":"ingreso"}">${displayStr}</td>
       <td class="col-moneda">${g.moneda}</td>
-      <td class="col-fuente">${_fuenteBadge(g.fuente)}</td>
+      <td class="col-fuente">${_fuenteBadge(g.fuente)}${_origenBadge(g.archivo_origen)}</td>
       <td class="col-persona">
         <select class="usuario-select" onchange="saveUsuario(${g.id},this)">
           <option value="" ${!u?"selected":""}>—</option>
@@ -4301,6 +4301,23 @@ function _fuenteBadge(fuente) {
   const label = _cuentaShortName(fuente);
   const style = color ? ` style="background:${escHtml(color)};color:#fff"` : "";
   return `<span class="badge badge-${escHtml(fuente)}"${style}>${escHtml(label)}</span>`;
+}
+
+// Origen del gasto: 'scraper' (día a día, período abierto), 'manual' (carga a
+// mano) o un archivo (resumen PDF — auto-descargado o subido a mano). El
+// resumen tiene prioridad: al importarse consolida y borra el duplicado del
+// scraper (consolidate_scraper_duplicates), así que si ambos existieran para
+// la misma transacción, solo queda el de resumen.
+function _origenBadge(archivoOrigen) {
+  if (!archivoOrigen || archivoOrigen === "manual") {
+    return archivoOrigen === "manual"
+      ? `<span class="origen-icon origen-manual" title="Cargado a mano">🖊</span>`
+      : "";
+  }
+  if (archivoOrigen === "scraper") {
+    return `<span class="origen-icon origen-scraper" title="Scraping (día a día, período abierto)">🤖</span>`;
+  }
+  return `<span class="origen-icon origen-resumen" title="Resumen de cuenta: ${escHtml(archivoOrigen)}">📄</span>`;
 }
 
 let _vencData = [];  // último payload de vencimientos (para re-render al cargar cuentas)
