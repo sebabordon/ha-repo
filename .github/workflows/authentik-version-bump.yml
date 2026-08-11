@@ -1,0 +1,95 @@
+name: Authentik version bump
+
+# Chequea diariamente si hay una release estable nueva de goauthentik/authentik
+# y, si la hay, actualiza el pin (ARG AUTHENTIK_VERSION) en los Dockerfiles de
+# authentik/ y authentik-rac/ — siempre en sync entre los dos, porque server y
+# outpost tienen que matchear versión. Bumpea también la versión del add-on
+# (config.yaml) y agrega una entrada al CHANGELOG.
+#
+# Esto SOLO prepara el commit en el repo. Que Home Assistant efectivamente
+# instale la actualización sigue siendo manual (o automático si tenés el
+# toggle "Auto update" del add-on prendido) — a propósito: Authentik es el
+# frontend de auth, conviene revisar el changelog de la versión antes de
+# aplicar el update.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Chequear última versión estable y actualizar si corresponde
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          LATEST_TAG="$(gh api repos/goauthentik/authentik/releases/latest --jq '.tag_name')"
+          LATEST="${LATEST_TAG#version/}"
+
+          if ! echo "$LATEST" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag de última release '$LATEST_TAG' no tiene el formato esperado (version/X.Y.Z), aborto sin tocar nada."
+            exit 0
+          fi
+
+          CURRENT="$(grep -oP 'ARG AUTHENTIK_VERSION=\K[0-9.]+' authentik/Dockerfile)"
+          echo "Pineado actualmente: $CURRENT — última release estable: $LATEST"
+
+          if [ "$LATEST" = "$CURRENT" ]; then
+            echo "Ya estamos al día. Nada que hacer."
+            exit 0
+          fi
+
+          # Comparación numérica (no lexicográfica: "2026.10.1" < "2026.9.1"
+          # como strings, pero es mayor como versión real).
+          HIGHER="$(printf '%s\n%s\n' "$LATEST" "$CURRENT" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n1)"
+          if [ "$HIGHER" != "$LATEST" ]; then
+            echo "La última release ($LATEST) no es más nueva que la pineada ($CURRENT). Nada que hacer."
+            exit 0
+          fi
+
+          echo "Actualizando pin de $CURRENT a $LATEST en authentik/ y authentik-rac/..."
+
+          for addon in authentik authentik-rac; do
+            sed -i "s/ARG AUTHENTIK_VERSION=${CURRENT}/ARG AUTHENTIK_VERSION=${LATEST}/" "${addon}/Dockerfile"
+
+            ADDON_VERSION="$(grep -oP '^version: "\K[0-9]+\.[0-9]+\.[0-9]+' "${addon}/config.yaml")"
+            MAJOR="$(echo "$ADDON_VERSION" | cut -d. -f1)"
+            MINOR="$(echo "$ADDON_VERSION" | cut -d. -f2)"
+            PATCH="$(echo "$ADDON_VERSION" | cut -d. -f3)"
+            NEW_ADDON_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            sed -i "s/^version: \"${ADDON_VERSION}\"/version: \"${NEW_ADDON_VERSION}\"/" "${addon}/config.yaml"
+
+            TMP="$(mktemp)"
+            {
+              head -n 1 "${addon}/CHANGELOG.md"
+              echo
+              echo "## ${NEW_ADDON_VERSION}"
+              echo
+              echo "- Bump automático de Authentik ${CURRENT} → ${LATEST}. Ver [release notes](https://docs.goauthentik.io/releases/${LATEST%.*}/) antes de aplicar el update desde Home Assistant."
+              echo
+              tail -n +2 "${addon}/CHANGELOG.md"
+            } > "$TMP"
+            mv "$TMP" "${addon}/CHANGELOG.md"
+
+            echo "  - ${addon}: ${ADDON_VERSION} -> ${NEW_ADDON_VERSION} (Authentik ${LATEST})"
+          done
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add authentik/Dockerfile authentik/config.yaml authentik/CHANGELOG.md \
+                  authentik-rac/Dockerfile authentik-rac/config.yaml authentik-rac/CHANGELOG.md
+          git commit \
+            -m "authentik + authentik-rac: bump a Authentik ${LATEST} (auto)" \
+            -m "Nueva release estable de goauthentik/authentik detectada por el workflow authentik-version-bump (${CURRENT} -> ${LATEST}). Actualiza ARG AUTHENTIK_VERSION en ambos Dockerfiles y bumpea la versión de cada add-on." \
+            -m "Revisar el changelog antes de aplicar el update desde Home Assistant: https://docs.goauthentik.io/releases/${LATEST%.*}/"
+          git push
