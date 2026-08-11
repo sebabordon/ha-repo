@@ -16,7 +16,7 @@ pasar el tráfico a cada sitio.
 
 | Opción | Descripción |
 |--------|-------------|
-| `authentik_host` | Dominio público por el que vas a acceder a Authentik detrás de NPM. Ejemplo: `auth.sbsoft.com.ar`. |
+| `authentik_host` | Dominio público por el que vas a acceder a Authentik detrás de NPM. Ejemplo: `auth.example.com`. |
 | `bootstrap_password` | Contraseña inicial del usuario admin (`akadmin`). Solo se aplica en el primer arranque (cluster de Postgres vacío). |
 
 ## Configuración opcional
@@ -24,8 +24,8 @@ pasar el tráfico a cada sitio.
 | Opción | Default | Descripción |
 |--------|---------|-------------|
 | `bootstrap_email` | `admin@example.com` | Email del usuario admin inicial (`akadmin`). |
-| `additional_domains` | _(vacío)_ | Dominios adicionales, separados por coma, que también van a hablar con Authentik (ej: `apps.sbsoft.com.ar`) — típicamente los dominios de las apps protegidas por forward-auth vía NPM. Se usan para armar `CSRF_TRUSTED_ORIGINS` (ver más abajo); si no lo completás, solo `authentik_host` queda confiado y vas a ver errores 403 CSRF al loguearte desde otro dominio. Acepta wildcards estilo Django, ej `*.sbsoft.com.ar`. |
-| `cookie_domain` | _(vacío)_ | Dominio para la cookie de sesión, ej `sbsoft.com.ar`, si querés SSO entre varios subdominios (`auth.sbsoft.com.ar`, `app1.sbsoft.com.ar`, etc). Si lo dejás vacío, la cookie queda atada solo al dominio exacto de `authentik_host`. |
+| `additional_domains` | _(vacío)_ | Dominios adicionales, separados por coma, que también van a hablar con Authentik (ej: `apps.example.com`) — típicamente los dominios de las apps protegidas por forward-auth vía NPM. Se usan para armar `CSRF_TRUSTED_ORIGINS` (ver más abajo); si no lo completás, solo `authentik_host` queda confiado y vas a ver errores 403 CSRF al loguearte desde otro dominio. Acepta wildcards estilo Django, ej `*.example.com`. |
+| `cookie_domain` | _(vacío)_ | Dominio para la cookie de sesión, ej `example.com`, si querés SSO entre varios subdominios (`auth.example.com`, `app1.example.com`, etc). Si lo dejás vacío, la cookie queda atada solo al dominio exacto de `authentik_host`. |
 | `trusted_proxy_cidrs` | `172.30.32.0/23` | CIDRs desde los que Authentik acepta headers `X-Forwarded-*` (necesario para que detecte bien el host/proto real detrás de NPM). `172.30.32.0/23` es la red interna default del Supervisor de HA; si tu instalación usa otra, ajustala (`docker network inspect hassio` desde el host, o Configuración → Sistema → Red en HA). |
 | `log_level` | `info` | `debug`, `info`, `warning` o `error`. |
 | `error_reporting` | `false` | Envío de errores/telemetría anónima a Authentik Security. Desactivado por defecto. |
@@ -52,7 +52,7 @@ El patrón habitual es "forward-auth" con el outpost embebido de Authentik:
    application)* o *(domain level)* si querés protegé varios subdominios con
    un solo login) y una **Application** apuntando a ese provider.
 2. Anotá la URL del outpost embebido, algo como
-   `https://auth.sbsoft.com.ar/outpost.goauthentik.io/...`.
+   `https://auth.example.com/outpost.goauthentik.io/...`.
 3. En NPM, en el *Proxy Host* del sitio que querés proteger, pestaña
    **Advanced**, agregá algo como:
    ```nginx
@@ -76,13 +76,13 @@ El patrón habitual es "forward-auth" con el outpost embebido de Authentik:
    location @goauthentik_proxy_signin {
        internal;
        add_header  Set-Cookie $auth_cookie always;
-       return 302  https://auth.sbsoft.com.ar/outpost.goauthentik.io/start?rd=$scheme://$http_host$request_uri;
+       return 302  https://auth.example.com/outpost.goauthentik.io/start?rd=$scheme://$http_host$request_uri;
    }
    ```
    (snippet base tomado de la [doc oficial de NGINX forward-auth de
    Authentik](https://docs.goauthentik.io/add-secure-apps/providers/proxy/forward_auth) —
-   ajustá `<IP-de-HA>:9000` y `auth.sbsoft.com.ar` a tu entorno).
-4. Para el propio dominio de Authentik (`auth.sbsoft.com.ar`), el *Proxy
+   ajustá `<IP-de-HA>:9000` y `auth.example.com` a tu entorno).
+4. Para el propio dominio de Authentik (`auth.example.com`), el *Proxy
    Host* en NPM simplemente apunta a `http://<IP-de-HA>:9000` sin
    forward-auth (necesitás poder llegar a Authentik sin estar ya
    autenticado).
@@ -90,7 +90,7 @@ El patrón habitual es "forward-auth" con el outpost embebido de Authentik:
 ### Multi-dominio (CSRF) — `additional_domains`
 
 Si protegés apps que viven en un dominio distinto al de `authentik_host` (ej:
-`auth.sbsoft.com.ar` para Authentik y `apps.sbsoft.com.ar` para las apps
+`auth.example.com` para Authentik y `apps.example.com` para las apps
 protegidas por forward-auth), Authentik va a rechazar los POST/login con un
 403 de CSRF apenas el flujo cruce de un dominio al otro — Django solo confía
 en el dominio "propio" por default.
@@ -110,12 +110,12 @@ CSRF_TRUSTED_ORIGINS = ["https://<authentik_host>", "https://<cada dominio de ad
 Para el ejemplo de arriba, en `additional_domains` poné:
 
 ```
-apps.sbsoft.com.ar
+apps.example.com
 ```
 
 (no hace falta repetir `authentik_host`, ya se agrega solo). Podés poner
 varios separados por coma, y también wildcards estilo Django
-(`*.sbsoft.com.ar`) para cubrir cualquier subdominio sin listarlos todos.
+(`*.example.com`) para cubrir cualquier subdominio sin listarlos todos.
 El archivo se regenera en cada arranque a partir de la config del add-on —
 si lo editás a mano dentro del contenedor, se pierde en el próximo restart.
 

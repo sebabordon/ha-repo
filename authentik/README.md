@@ -24,7 +24,7 @@ Nginx Proxy Manager (forward-auth via el outpost embebido).
    ```
 2. Instalá el add-on **Authentik**.
 3. En la pestaña Configuration, completá al menos:
-   - `authentik_host`: el dominio público, ej `auth.sbsoft.com.ar`.
+   - `authentik_host`: el dominio público, ej `auth.example.com`.
    - `bootstrap_password`: contraseña inicial del usuario `akadmin`.
 4. Arrancá el add-on. El primer arranque tarda más (inicializa Postgres + migraciones).
 5. Puerto por defecto: `9000` (HTTP, para apuntar desde Nginx Proxy Manager) y `9443` (HTTPS interno, self-signed).

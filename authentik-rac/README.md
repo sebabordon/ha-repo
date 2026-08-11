@@ -17,6 +17,6 @@ de Authentik y la configuración completa.
 2. En Authentik, creá un **RAC Provider** + un **Outpost** tipo RAC, y sacá el
    token de "View Deployment Info".
 3. Instalá este add-on y completá `authentik_host` (la URL pública de tu
-   Authentik, ej `https://auth.sbsoft.com.ar`) y `authentik_token`.
+   Authentik, ej `https://auth.example.com`) y `authentik_token`.
 4. Arrancalo. La salud del outpost en la UI de Authentik debería pasar a
    verde en unos segundos.

@@ -1,9 +1,16 @@
 # Changelog
 
+## 0.2.1
+
+- Limpieza de docs: los ejemplos usaban mi dominio personal real
+  (`sbsoft.com.ar`) como ilustración — reemplazado por `example.com` en
+  README/DOCS/CHANGELOG/`run.sh` (mensajes de error). Sin cambios de
+  comportamiento.
+
 ## 0.2.0
 
 - Soporte multi-dominio para CSRF: nueva opción `additional_domains`
-  (lista separada por coma, ej `apps.sbsoft.com.ar`) para dominios extra
+  (lista separada por coma, ej `apps.example.com`) para dominios extra
   que hablan con Authentik además de `authentik_host` — típico en setups de
   forward-auth con NPM donde las apps protegidas viven en otro dominio.
 - `run.sh` genera `/data/user_settings.py` en cada arranque con
@@ -12,7 +19,7 @@
   (`data.user_settings`, ver `authentik/root/settings.py` y
   [goauthentik/authentik#4209](https://github.com/goauthentik/authentik/issues/4209)) —
   sin esto, loguearse desde un dominio distinto a `authentik_host` tira 403
-  CSRF. Soporta wildcards estilo Django (`*.sbsoft.com.ar`).
+  CSRF. Soporta wildcards estilo Django (`*.example.com`).
 
 ## 0.1.4
 

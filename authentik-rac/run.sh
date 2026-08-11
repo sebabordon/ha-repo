@@ -19,7 +19,7 @@ AUTHENTIK_TOKEN_CFG="$(cfg authentik_token)"
 AUTHENTIK_INSECURE_CFG="$(cfg authentik_insecure)"
 
 if [ -z "${AUTHENTIK_HOST_CFG}" ] || [ "${AUTHENTIK_HOST_CFG}" = "https://auth.example.com" ]; then
-    log "ERROR: configurá 'authentik_host' (ej: https://auth.sbsoft.com.ar) en la configuración del add-on."
+    log "ERROR: configurá 'authentik_host' (ej: https://auth.example.com) en la configuración del add-on."
     exit 1
 fi
 if [ -z "${AUTHENTIK_TOKEN_CFG}" ]; then

@@ -35,7 +35,7 @@ SMTP_USE_TLS="$(cfg smtp_use_tls)"
 SMTP_FROM="$(cfg smtp_from)"
 
 if [ -z "${AUTHENTIK_HOST_CFG}" ] || [ "${AUTHENTIK_HOST_CFG}" = "auth.example.com" ]; then
-    log "ERROR: configurá 'authentik_host' (ej: auth.sbsoft.com.ar) en la configuración del add-on."
+    log "ERROR: configurá 'authentik_host' (ej: auth.example.com) en la configuración del add-on."
     exit 1
 fi
 if [ -z "${BOOTSTRAP_PASSWORD}" ]; then

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Limpieza de docs: reemplazado mi dominio personal real (`sbsoft.com.ar`)
+  por `example.com` en README/DOCS/`run.sh`. Sin cambios de comportamiento.
+
 ## 0.1.2
 
 - Fix RDP: `setpriv --reuid=1000` cambia uid/gid pero no `$HOME`, que quedaba

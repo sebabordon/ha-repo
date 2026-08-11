@@ -25,7 +25,7 @@ conecta a él — no tiene base de datos ni estado propio.
 
 | Opción | Descripción |
 |--------|-------------|
-| `authentik_host` | URL completa (con `https://`) del add-on Authentik principal. Usá el mismo dominio público que ya tenés en NPM, ej `https://auth.sbsoft.com.ar`. |
+| `authentik_host` | URL completa (con `https://`) del add-on Authentik principal. Usá el mismo dominio público que ya tenés en NPM, ej `https://auth.example.com`. |
 | `authentik_token` | Token del outpost, generado por Authentik al crear el proveedor RAC. Ver abajo cómo conseguirlo. |
 | `authentik_insecure` | `true` para no validar el certificado TLS de `authentik_host` (self-signed, etc). Default `false`. |
 
