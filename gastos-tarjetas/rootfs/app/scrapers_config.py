@@ -3,7 +3,7 @@ Lee /data/scrapers.yaml y expone la configuración de cada scraper.
 
 Formato esperado del archivo:
 
-    owner_email: "seba@sbsoft.com.ar"   # usuario cuya DB se usa
+    owner_email: "usuario@example.com"   # usuario cuya DB se usa
     scrapers:
       amex:
         enabled: true

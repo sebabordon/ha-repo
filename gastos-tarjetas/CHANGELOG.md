@@ -1,3 +1,7 @@
+## 1.2.77
+
+- **Limpieza de privacidad en docs/ejemplos**: sacado mi dominio personal real de tres lugares que no son config funcional — `rootfs/app/scrapers_config.py` (docstring de ejemplo del formato de `scrapers.yaml`: `owner_email` pasa a `usuario@example.com`), y dos entradas históricas del `CHANGELOG.md` (v1.2.15: el appId de ejemplo del rebrand pasa a `ar.com.example.snapbudget`; entrada de la Regla de descripción `money_transfer`: el email de ejemplo del pagador pasa a `juan@example.com`, reemplazando un email real que había quedado expuesto de una transferencia real de prueba). Sin cambios de comportamiento.
+
 ## 1.2.76
 
 - **Captura de pantalla del último error de scraper (debug Akamai/captcha)** (`scrapers/base.py`, `routes/scrapers.py`, `static/app.js`, `static/style.css`): cuando cualquier scraper falla (login, timeout, captcha), `_run_sync()` ahora guarda un PNG de la pantalla en el momento del error — `driver.get_screenshot_as_png()` funciona igual en el Chrome local del container que en el WebDriver remoto (Mac), sin código distinto por caso. Un solo archivo por fuente (se sobreescribe en cada falla nueva, se borra automáticamente si el scraper vuelve a andar — `_clear_error_screenshot()`). Nuevo endpoint `GET /api/scrapers/{banco}/error-screenshot` (auth + whitelist de `banco` contra path traversal) sirve el PNG. En la UI de Config → Cuentas, cuando el último run de un scraper falló aparece un `<details>` "🖼 Captura del error" (mismo patrón visual que "📋 Detalle del último run") que solo pide la imagen al abrirse — no se precarga en cada refresh de la página. Si no hay captura guardada (el driver murió antes de poder sacarla), muestra "Sin captura disponible" en vez de un ícono roto. Pensado para diagnosticar en el momento por qué AMEX/BBVA quedan bloqueados por el prompt de Akamai. Probado end-to-end en preview: captura visible al abrir, y fallback correcto cuando no existe el archivo.
@@ -230,7 +234,7 @@
 
 ## 1.2.15
 
-- **Rebrand a "SnapBudget"** (`config.yaml`, `rootfs/app/main.py`, `static/index.html`, `static/quick.html`, `static/manifest.json`, `static/sw.js`, `routes/auth.py`, `routes/admin.py`, `routes/push.py`, `DOCS.md`, `DESIGN.md`): el nombre visible de la marca pasa de "Finance Me" a "SnapBudget" en todos los puntos de UI: `<title>`, `apple-mobile-web-app-title`, manifest PWA (estático y dinámico), navbar, pantalla de login/registro, nombre del sender en push notifications, y filename del backup `.zip`. También se actualiza el proyecto Capacitor (`snap-budget-mobile/`): `appName`, `appId` (`ar.com.sbsoft.snapbudget`), `package.json` y `README.md`. El slug del add-on (`gastos_tarjetas`), el nombre de la carpeta del add-on y todos los términos de dominio no se tocan.
+- **Rebrand a "SnapBudget"** (`config.yaml`, `rootfs/app/main.py`, `static/index.html`, `static/quick.html`, `static/manifest.json`, `static/sw.js`, `routes/auth.py`, `routes/admin.py`, `routes/push.py`, `DOCS.md`, `DESIGN.md`): el nombre visible de la marca pasa de "Finance Me" a "SnapBudget" en todos los puntos de UI: `<title>`, `apple-mobile-web-app-title`, manifest PWA (estático y dinámico), navbar, pantalla de login/registro, nombre del sender en push notifications, y filename del backup `.zip`. También se actualiza el proyecto Capacitor (`snap-budget-mobile/`): `appName`, `appId` (`ar.com.example.snapbudget`), `package.json` y `README.md`. El slug del add-on (`gastos_tarjetas`), el nombre de la carpeta del add-on y todos los términos de dominio no se tocan.
 
 ## 1.2.14
 
@@ -1800,7 +1804,7 @@ Cuentas; v0.4.2 limpia el código legacy.
 
 - **Scraper MP — fix signo `account_fund`**: los depósitos bancarios (`op=account_fund`, tipo `bank_transfer`) aparecían en ambas queries igual que `partition_transfer`. Se agregan al defer de la query de payer (sign=+1) para capturarlos solo en la de collector (sign=−1), evitando que $8M/$4.5M/etc. queden importados como egresos.
 - **Scraper MP — descripción `account_fund`**: nueva Regla 2 que retorna `"Depósito bancario"` para cualquier pago con `op=account_fund`, en lugar de caer al fallback genérico.
-- **Scraper MP — descripción `money_transfer` ingreso**: para transferencias recibidas (sign=−1), la descripción ahora incluye el nombre/email del pagador: `"fausto@sbsoft.com.ar — Transferencia: Varios"`. Los egresos mantienen `"Transferencia: Varios"`.
+- **Scraper MP — descripción `money_transfer` ingreso**: para transferencias recibidas (sign=−1), la descripción ahora incluye el nombre/email del pagador: `"juan@example.com — Transferencia: Varios"`. Los egresos mantienen `"Transferencia: Varios"`.
 - **Scraper MP — raw_data `payer_email`**: se guarda el email del pagador en `raw_data` para movimientos ingresados como ingresos (sign=−1).
 
 ## 0.3.70
