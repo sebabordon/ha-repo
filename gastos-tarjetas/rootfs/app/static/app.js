@@ -4478,10 +4478,17 @@ function renderVencimientos(items) {
   // (suma de egresos del período abierto scrappeada, guardada en cuentas.saldo/
   // saldo_usd). El detalle del último resumen PDF (fecha de cierre/vencimiento)
   // sigue apareciendo al tocar, cuando existe.
-  const tarjetas = (_widgetCuentas || []).filter(c => c.cuenta_tipo === "credit_card");
+  const tarjetas = (_widgetCuentas || []).filter(c => c.cuenta_tipo === "credit_card" && c.activa);
   const order    = tarjetas.map(c => c.fuente);
   // Fallback: fuentes con vencimiento que no tengan cuenta-tarjeta cacheada.
-  deduped.forEach(v => { if (!order.includes(v.fuente)) order.push(v.fuente); });
+  // Si la cuenta existe pero fue desactivada explícitamente (👁/🚫 Widget), no
+  // la agregamos igual solo porque tiene un resumen PDF viejo.
+  deduped.forEach(v => {
+    if (order.includes(v.fuente)) return;
+    const cta = _cuentaByFuente(v.fuente);
+    if (cta && !cta.activa) return;
+    order.push(v.fuente);
+  });
 
   if (!order.length) { widget.style.display = "none"; return; }
   widget.style.display = "grid";
@@ -4524,8 +4531,17 @@ function renderVencimientos(items) {
       + (scrape ? ` · ${_scraperStatusTitle(cuenta)}` : "")
       + ` — tap para ver el resumen`;
 
+    // Igual que en el widget de saldos: cuentas AUTO con scraper asignado
+    // pueden forzar un refresh desde el chip (ver DESIGN.md).
+    const canForceRun = cuenta && (cuenta.tipo || "auto") !== "manual" && !!cuenta.scraper_instance_id;
+    const refreshBtn = canForceRun
+      ? `<button class="saldo-chip-refresh" title="Forzar actualización ahora"
+           onclick="event.stopPropagation();runCuentaFromChip('${fuente}',${cuenta.scraper_instance_id},this)">↺</button>`
+      : "";
+
     return `
     <div class="venc-chipwrap">
+      ${refreshBtn}
       <button class="venc-chip ${stateCls}${scrapeCls}" onclick="toggleVencDetail('${fuente}')"
               title="${escHtml(ttl)}">
         <span class="venc-chip-head">

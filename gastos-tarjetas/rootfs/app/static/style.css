@@ -1241,7 +1241,7 @@ tbody tr:hover { background: #fafbff; }
 .saldo-chip-monto .usd-val { color: var(--color-usd); }
 
 /* ── Vencimientos como chips (tap para expandir a la card) ───────────────────*/
-.venc-chipwrap { display: block; width: 100%; }
+.venc-chipwrap { position: relative; display: block; width: 100%; }
 .venc-chip {
   width: 100%; box-sizing: border-box; text-align: left;
   cursor: pointer; background: #fff; border: 1px solid #ddd;
