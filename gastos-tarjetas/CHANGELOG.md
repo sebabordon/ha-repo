@@ -1,3 +1,7 @@
+## 1.2.79
+
+- **Fix: tarjetas de crédito duplicadas (fila de saldos + widget de tarjetas)** (`static/app.js`): al arreglar en 1.2.78 que `renderVencimientos()` respetara `activa`, quedó expuesto que `renderSaldos()` (fila superior) también incluye cuentas `credit_card` cuando `activa=1` — con una tarjeta activa, aparecía repetida arriba (chip simple) y abajo (card con vencimiento/badge de pagado). El widget de tarjetas ya es el lugar dedicado para `credit_card` (con más info), así que `loadSaldos()` ahora excluye `cuenta_tipo==='credit_card'` de la fila de saldos — cada cuenta vive en un solo widget. El tooltip del botón 👁/🚫 Widget en Config → Cuentas también se ajustó para decir "widget de tarjetas" cuando corresponde, en vez de siempre "widget de saldos". Verificado en preview: con AMEX activa, ahora aparece una sola vez (abajo); con AMEX inactiva, desaparece de los dos.
+
 ## 1.2.78
 
 - **Fix: el botón 👁/🚫 Widget no ocultaba las tarjetas de crédito** (`static/app.js`): `renderVencimientos()` listaba las cuentas `cuenta_tipo='credit_card'` sin filtrar por `activa` — el toggle de la fila superior de saldos las escondía ahí, pero seguían apareciendo abajo en el widget de tarjetas. Ahora `renderVencimientos()` respeta `activa` tanto en la lista principal como en el fallback (fuentes con vencimiento importado pero sin cuenta activa ya no se cuelan).

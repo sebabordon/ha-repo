@@ -4046,7 +4046,9 @@ async function loadSaldos() {
   // Reuse the same fetch to keep fuente dropdowns up-to-date
   _cuentasData = _widgetCuentas;
   _populateFuenteSelects();
-  renderSaldos(_widgetCuentas.filter(c => c.activa));
+  // Las tarjetas de crédito tienen su propio widget (abajo, con vencimiento y
+  // badge de pagado) — no las repetimos acá o quedan duplicadas.
+  renderSaldos(_widgetCuentas.filter(c => c.activa && c.cuenta_tipo !== "credit_card"));
   // Ya tenemos las cuentas-tarjeta (con su consumo y nombre custom) → render del
   // widget de tarjetas. Se llama siempre, aunque no haya vencimientos PDF: cada
   // tarjeta muestra su consumo scrappeado del período abierto.
@@ -5390,10 +5392,12 @@ function _renderCuentaCard(c, idx = 0) {
   const monedaSel = `<select class="moneda-sel" title="Moneda de la cuenta"
     onchange="saveCuentaMoneda('${c.fuente}',this.value);this.blur()">${monedaOpts}</select>`;
 
-  // "activa" controls visibility in the saldos widget at the top
+  // "activa" controla la visibilidad en el widget de saldos (banco) o en el
+  // widget de tarjetas (credit_card) — cada tipo vive en un solo widget.
+  const widgetLabel = c.cuenta_tipo === "credit_card" ? "widget de tarjetas" : "widget de saldos";
   const widgetBtn = c.activa
-    ? `<button class="btn btn-sm" title="Ocultar del widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',0)">👁 Widget</button>`
-    : `<button class="btn btn-sm" title="Mostrar en el widget de saldos" onclick="toggleCuentaActiva('${c.fuente}',1)">🚫 Widget</button>`;
+    ? `<button class="btn btn-sm" title="Ocultar del ${widgetLabel}" onclick="toggleCuentaActiva('${c.fuente}',0)">👁 Widget</button>`
+    : `<button class="btn btn-sm" title="Mostrar en el ${widgetLabel}" onclick="toggleCuentaActiva('${c.fuente}',1)">🚫 Widget</button>`;
 
   const cuentaTipo = c.cuenta_tipo || "bank";
   const tipoSel = `<select class="moneda-sel" title="Tipo de cuenta (afecta matching de transferencias y pagos)"
