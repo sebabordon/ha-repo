@@ -2,8 +2,8 @@
 
 ## 0.2.1
 
-- Limpieza de docs: los ejemplos usaban mi dominio personal real
-  (`sbsoft.com.ar`) como ilustración — reemplazado por `example.com` en
+- Limpieza de docs: los ejemplos usaban mi dominio personal real como
+  ilustración — reemplazado por el placeholder genérico `example.com` en
   README/DOCS/CHANGELOG/`run.sh` (mensajes de error). Sin cambios de
   comportamiento.
 

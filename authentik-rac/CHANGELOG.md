@@ -2,8 +2,9 @@
 
 ## 0.1.3
 
-- Limpieza de docs: reemplazado mi dominio personal real (`sbsoft.com.ar`)
-  por `example.com` en README/DOCS/`run.sh`. Sin cambios de comportamiento.
+- Limpieza de docs: reemplazado mi dominio personal real por el placeholder
+  genérico `example.com` en README/DOCS/`run.sh`. Sin cambios de
+  comportamiento.
 
 ## 0.1.2
 
