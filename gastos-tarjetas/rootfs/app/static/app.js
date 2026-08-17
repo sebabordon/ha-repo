@@ -7836,6 +7836,23 @@ function _drawBudgetChart() {
     if (children.length > 0) {
       const childSet = new Set(children);
       visible = _budgetAllData.filter(d => childSet.has(d.categoria));
+      // El "gastado" del padre incluye gastos categorizados directamente en
+      // él (sin subcategoría), que no están en ninguna de las barras de
+      // arriba. Se agrega una barra extra con ese monto para que la suma de
+      // lo mostrado en el drill-down cierre con el total del padre.
+      const parentRow = _budgetAllData.find(d => d.categoria === _budgetSelectedCat);
+      if (parentRow) {
+        const childrenGastado = visible.reduce((s, d) => s + (d.gastado || 0), 0);
+        const directo = Math.round((parentRow.gastado - childrenGastado) * 100) / 100;
+        if (directo > 0.5) {
+          visible = [...visible, {
+            categoria: `${_budgetSelectedCat} (sin subcat.)`,
+            presupuesto: 0,
+            gastado: directo,
+            parent: _budgetSelectedCat,
+          }];
+        }
+      }
     } else {
       visible = _budgetAllData.filter(d => d.categoria === _budgetSelectedCat); // hoja: solo ella misma
     }
