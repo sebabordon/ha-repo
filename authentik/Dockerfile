@@ -3,7 +3,7 @@
 # de Redis (caché, tasks, websockets y el outpost embebido corren sobre Postgres),
 # así que este add-on solo bundlea Postgres + Authentik (server+worker en un solo
 # proceso, modo "allinone").
-ARG AUTHENTIK_VERSION=2026.5.6
+ARG AUTHENTIK_VERSION=2026.8.0
 FROM ghcr.io/goauthentik/server:${AUTHENTIK_VERSION}
 
 USER root
