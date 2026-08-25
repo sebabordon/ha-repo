@@ -18,6 +18,9 @@ const INTENSITY_COLORS = [
 const DEFAULT_MEDS = ["Ibuprofeno", "Paracetamol", "Ketorolac", "Triptán", "Ergotamina"];
 const DEFAULT_SINTOMAS = ["Náuseas", "Vómitos", "Fotofobia", "Fonofobia", "Mareos",
   "Visión borrosa", "Rigidez cervical", "Congestión nasal", "Lagrimeo", "Internación"];
+const DEFAULT_COMIDAS = ["Chocolate", "Queso curado", "Vino tinto", "Cafeína",
+  "Embutidos", "Cítricos", "Alcohol", "Edulcorantes", "Frutos secos",
+  "Alimentos fermentados", "Comida procesada"];
 
 let state = {
   migraines: [],
@@ -27,11 +30,13 @@ let state = {
   selectedIntensity: 0,
   selectedMeds: [],
   selectedSintomas: [],
+  selectedComidas: [],
   editingId: null,
   calYear: new Date().getFullYear(),
   calMonth: new Date().getMonth() + 1,
   calData: {},
   meds: [...DEFAULT_MEDS],
+  comidas: [...DEFAULT_COMIDAS],
   accent: "#16213e",
   online: navigator.onLine,
   extrasOpen: false
@@ -133,7 +138,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadConfig();
   buildMedChips();
   buildSintomaChips();
+  buildComidaChips();
   renderMedConfig();
+  renderComidaConfig();
   await loadMigraines();
   loadVersion();
 
@@ -202,6 +209,9 @@ async function loadConfig() {
     r = await fetch("/api/config/meds");
     d = await r.json();
     if (d.value) state.meds = JSON.parse(d.value);
+    r = await fetch("/api/config/comidas");
+    d = await r.json();
+    if (d.value) state.comidas = JSON.parse(d.value);
     r = await fetch("/api/config/extras_open");
     d = await r.json();
     if (d.value === "true") state.extrasOpen = true;
@@ -209,6 +219,8 @@ async function loadConfig() {
   } catch {
     const cached = await cacheGet("meds");
     if (cached) state.meds = JSON.parse(cached);
+    const cachedComidas = await cacheGet("comidas");
+    if (cachedComidas) state.comidas = JSON.parse(cachedComidas);
     const cachedAccent = await cacheGet("accent");
     if (cachedAccent) applyAccent(cachedAccent, false);
   }
@@ -267,6 +279,44 @@ function saveMeds() {
   cacheSet("meds", v);
 }
 
+function renderComidaConfig() {
+  const list = document.getElementById("cfg-comidas-list");
+  list.innerHTML = "";
+  state.comidas.forEach((c, i) => {
+    const row = document.createElement("div");
+    row.className = "cfg-med-item";
+    const span = document.createElement("span");
+    span.textContent = c;
+    const btn = document.createElement("button");
+    btn.className = "cfg-med-del";
+    btn.textContent = "✕";
+    btn.onclick = () => { state.comidas.splice(i, 1); saveComidas(); renderComidaConfig(); buildComidaChips(); };
+    row.appendChild(span);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+}
+
+function addComidaConfig() {
+  const input = document.getElementById("cfg-comida-new");
+  const val = input.value.trim();
+  if (!val || state.comidas.includes(val)) return;
+  state.comidas.push(val);
+  input.value = "";
+  saveComidas();
+  renderComidaConfig();
+  buildComidaChips();
+}
+
+function saveComidas() {
+  const v = JSON.stringify(state.comidas);
+  fetch("/api/config/comidas", {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({value: v})
+  }).catch(() => {});
+  cacheSet("comidas", v);
+}
+
 // ── Form helpers ────────────────────────────────────────────────────────────
 
 function setDefaultDates() {
@@ -287,6 +337,7 @@ function showForm(ep) {
   state.selectedIntensity = 0;
   state.selectedMeds = [];
   state.selectedSintomas = [];
+  state.selectedComidas = [];
 
   const finRow = document.getElementById("f-fin-row");
 
@@ -302,6 +353,7 @@ function showForm(ep) {
     state.selectedAura = ep.aura ? 1 : 0;
     state.selectedMeds = ep.medicacion ? ep.medicacion.split(", ").filter(Boolean) : [];
     state.selectedSintomas = Array.isArray(ep.sintomas) ? [...ep.sintomas] : [];
+    state.selectedComidas = Array.isArray(ep.comidas) ? [...ep.comidas] : [];
     document.getElementById("f-comentarios").value = ep.comentarios || "";
     document.querySelector(".form-title").textContent = "Editar episodio";
   } else {
@@ -323,6 +375,7 @@ function showForm(ep) {
   updateAuraUI();
   buildMedChips();
   buildSintomaChips();
+  buildComidaChips();
 
   document.getElementById("form-wrap").style.display = "block";
   document.getElementById("btn-nuevo").style.display = "none";
@@ -435,6 +488,26 @@ function buildMedChips() {
   });
 }
 
+// ── Comidas del día anterior ────────────────────────────────────────────────
+
+function buildComidaChips() {
+  const wrap = document.getElementById("f-comida-chips");
+  wrap.innerHTML = "";
+  state.comidas.forEach(c => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip" + (state.selectedComidas.includes(c) ? " selected" : "");
+    chip.textContent = c;
+    chip.onclick = () => {
+      const idx = state.selectedComidas.indexOf(c);
+      if (idx >= 0) state.selectedComidas.splice(idx, 1);
+      else state.selectedComidas.push(c);
+      chip.classList.toggle("selected");
+    };
+    wrap.appendChild(chip);
+  });
+}
+
 // ── Save / Load ─────────────────────────────────────────────────────────────
 
 async function saveMigraine() {
@@ -458,6 +531,7 @@ async function saveMigraine() {
     aura: state.selectedAura,
     medicacion: allMeds.join(", "),
     sintomas: state.selectedSintomas,
+    comidas: state.selectedComidas,
     comentarios: document.getElementById("f-comentarios").value.trim()
   };
   if (fin) data.fin = fin;
@@ -590,6 +664,7 @@ function renderEpisodeCard(ep, isActive) {
       ${ep.aura ? "<span>✨ Aura</span>" : ""}
       ${ep.medicacion ? `<span>💊 ${ep.medicacion}</span>` : ""}
       ${(ep.sintomas && ep.sintomas.length) ? `<span>🩺 ${ep.sintomas.join(", ")}</span>` : ""}
+      ${(ep.comidas && ep.comidas.length) ? `<span>🍽 ${ep.comidas.join(", ")}</span>` : ""}
     </div>
     ${zoneChips ? `<div class="ep-zones">${zoneChips}</div>` : ""}
     ${ep.comentarios ? `<div class="ep-details" style="margin-top:.3rem;font-style:italic">${escHtml(ep.comentarios)}</div>` : ""}

@@ -183,6 +183,9 @@
           <div id="f-med-chips" class="chip-row chip-multi"></div>
           <input type="text" id="f-med-extra" class="field-input" placeholder="Otra medicación..." />
 
+          <label class="field-label">Comidas del día anterior</label>
+          <div id="f-comida-chips" class="chip-row chip-multi"></div>
+
           <div class="extra-toggle" onclick="toggleExtras()">
             <span id="extras-arrow" class="extras-arrow">▸</span>
             <span class="field-label" style="margin:0;cursor:pointer">Más síntomas</span>
@@ -251,6 +254,14 @@
         <div class="med-add-row">
           <input type="text" id="cfg-med-new" class="field-input" placeholder="Agregar medicación..." />
           <button class="btn btn-sm btn-primary" onclick="addMedConfig()">+</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <h3 class="form-title">Comidas frecuentes</h3>
+        <div id="cfg-comidas-list"></div>
+        <div class="med-add-row">
+          <input type="text" id="cfg-comida-new" class="field-input" placeholder="Agregar comida..." />
+          <button class="btn btn-sm btn-primary" onclick="addComidaConfig()">+</button>
         </div>
       </div>
       <div class="card" style="margin-top:1rem">

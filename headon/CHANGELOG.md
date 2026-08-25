@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.4
+- Nueva sección "Comidas del día anterior": chips para marcar alimentos
+  disparadores comidos el día previo al episodio, siempre visibles en el
+  formulario (junto a Medicación). Lista editable desde Config →
+  "Comidas frecuentes" (mismo mecanismo que las medicaciones frecuentes),
+  con clásicos disparadores de migraña como default (chocolate, queso
+  curado, vino tinto, cafeína, embutidos, cítricos, alcohol, edulcorantes,
+  frutos secos, fermentados, procesados). No tiene campo de texto libre —
+  para alimentos fuera de la lista se usa el campo de Comentarios. Se
+  guarda por episodio y aparece en el detalle y en la exportación a Excel.
+
 ## 0.3.3
 - SSO: admin por grupo de authentik. El rol admin en login SSO ahora es
   `email == admin@<allowed_domain>` **o** que el claim `groups` del token

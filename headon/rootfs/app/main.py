@@ -14,7 +14,7 @@ from auth import router as auth_router, admin_router, is_session_token_valid
 from oidc import router as sso_router
 from openpyxl import Workbook
 
-APP_VERSION = "0.3.3"
+APP_VERSION = "0.3.4"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 
@@ -136,7 +136,7 @@ async def api_list(limit: int = 50, offset: int = 0,
     db.auto_finalize_past()
     rows = db.list_migraines(limit, offset, fecha_desde, fecha_hasta)
     for r in rows:
-        for field in ("localizacion", "sintomas"):
+        for field in ("localizacion", "sintomas", "comidas"):
             if r.get(field):
                 try:
                     r[field] = json.loads(r[field])
@@ -186,7 +186,8 @@ async def api_export(fecha_desde: str = None, fecha_hasta: str = None):
     ws = wb.active
     ws.title = "Migrañas"
     headers = ["Fecha", "Inicio", "Fin", "Duración", "Intensidad",
-               "Localización", "Tipo Dolor", "Aura", "Medicación", "Síntomas", "Comentarios"]
+               "Localización", "Tipo Dolor", "Aura", "Medicación", "Síntomas",
+               "Comidas día anterior", "Comentarios"]
     ws.append(headers)
     for cell in ws[1]:
         cell.font = cell.font.copy(bold=True)
@@ -214,11 +215,17 @@ async def api_export(fecha_desde: str = None, fecha_hasta: str = None):
                 sint = ", ".join(json.loads(sint))
             except (json.JSONDecodeError, TypeError):
                 pass
+        comidas = r.get("comidas", "")
+        if comidas:
+            try:
+                comidas = ", ".join(json.loads(comidas))
+            except (json.JSONDecodeError, TypeError):
+                pass
         ws.append([
             r.get("fecha", ""), r.get("inicio", ""), r.get("fin", ""), dur,
             r.get("intensidad", ""), loc, r.get("tipo_dolor", ""),
             "Sí" if r.get("aura") else "No",
-            r.get("medicacion", ""), sint, r.get("comentarios", ""),
+            r.get("medicacion", ""), sint, comidas, r.get("comentarios", ""),
         ])
     for col in ws.columns:
         max_len = max(len(str(c.value or "")) for c in col)

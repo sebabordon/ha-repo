@@ -3,9 +3,15 @@
   "configurations": [
     {
       "name": "snapbudget",
-      "runtimeExecutable": "/private/tmp/claude-501/-Users-seba-Code-ha-repo/22a3ba1b-2385-40d7-9655-61d72df33c63/scratchpad/run_snapbudget.sh",
+      "runtimeExecutable": "/private/tmp/claude-501/-Users-seba-Code-ha-repo/1815d101-d568-4da3-b419-d5e8d143ef91/scratchpad/run_snapbudget.sh",
       "runtimeArgs": [],
       "port": 8099
+    },
+    {
+      "name": "headon",
+      "runtimeExecutable": "/private/tmp/claude-501/-Users-seba-Code-ha-repo/1145544f-2956-4f96-a89e-af6383ed1573/scratchpad/run_headon.sh",
+      "runtimeArgs": [],
+      "port": 8101
     }
   ]
 }

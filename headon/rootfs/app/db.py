@@ -47,6 +47,7 @@ def init_db():
             aura        INTEGER DEFAULT 0,
             medicacion  TEXT,
             sintomas    TEXT,
+            comidas     TEXT,
             comentarios TEXT,
             created_at  TEXT DEFAULT (datetime('now','localtime'))
         );
@@ -55,10 +56,12 @@ def init_db():
             value TEXT
         );
     """)
-    # Migración: agregar columna sintomas si no existe
+    # Migración: agregar columnas nuevas si no existen
     cols = [r[1] for r in conn.execute("PRAGMA table_info(migraines)").fetchall()]
     if "sintomas" not in cols:
         conn.execute("ALTER TABLE migraines ADD COLUMN sintomas TEXT")
+    if "comidas" not in cols:
+        conn.execute("ALTER TABLE migraines ADD COLUMN comidas TEXT")
     conn.close()
 
 
@@ -100,8 +103,8 @@ def create_migraine(data):
     conn = get_db()
     cur = conn.execute("""
         INSERT INTO migraines (fecha, inicio, fin, intensidad, localizacion,
-                               tipo_dolor, aura, medicacion, sintomas, comentarios)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
+                               tipo_dolor, aura, medicacion, sintomas, comidas, comentarios)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
     """, (
         data["fecha"], data["inicio"], data.get("fin"),
         data["intensidad"],
@@ -110,6 +113,7 @@ def create_migraine(data):
         1 if data.get("aura") else 0,
         data.get("medicacion", ""),
         json.dumps(data.get("sintomas", [])),
+        json.dumps(data.get("comidas", [])),
         data.get("comentarios", ""),
     ))
     conn.commit()
@@ -135,6 +139,9 @@ def update_migraine(mid, data):
     if "sintomas" in data:
         fields.append("sintomas=?")
         params.append(json.dumps(data["sintomas"]))
+    if "comidas" in data:
+        fields.append("comidas=?")
+        params.append(json.dumps(data["comidas"]))
     if not fields:
         return
     params.append(mid)
