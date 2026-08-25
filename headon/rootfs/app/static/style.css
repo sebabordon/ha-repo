@@ -418,8 +418,8 @@ body {
 .cal-badges {
   position: absolute;
   top: 1px;
-  right: 2px;
-  font-size: 8px;
+  right: 1px;
+  font-size: 11px;
   line-height: 1;
   letter-spacing: -1px;
 }
@@ -455,6 +455,7 @@ body {
   margin-top: .75rem;
 }
 .med-add-row .field-input { flex: 1; }
+.med-add-row .cfg-comida-emoji-input { flex: 0 0 auto; }
 
 .cfg-med-item {
   display: flex;
@@ -471,6 +472,20 @@ body {
   cursor: pointer;
   font-size: 1rem;
   padding: .2rem .4rem;
+}
+
+.cfg-comida-left {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.cfg-comida-emoji-input {
+  width: 2.4rem;
+  text-align: center;
+  padding: .3rem .2rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 1.1rem;
 }
 
 /* ── Toast ───────────────────────────────────────────────────────────────────*/

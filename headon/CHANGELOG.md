@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.8
+- Comidas: ahora cada alimento tiene su propio emoji, editable desde
+  Config → "Comidas frecuentes" (un input chiquito al lado del nombre) y
+  configurable también al agregar uno nuevo. Ese emoji es el que se
+  muestra en los chips del formulario, en el detalle del episodio y en
+  los badges del calendario (en vez del 🍴 genérico fijo). Se agrandó un
+  poco el tamaño de los badges del calendario (8px → 11px) para que se
+  vean mejor. Compatible con listas de comidas guardadas en el formato
+  viejo (array de strings) — se migran solas al abrir la app.
+- Calendario: al hacer click en un día ahora el detalle muestra, por cada
+  episodio, si hubo medicación (o "Sin medicación") y qué comidas se
+  registraron (o "Sin comidas registradas"), además de intensidad y
+  horario.
+
 ## 0.3.7
 - Fix: los chips de comidas no se agregaban desde Config y los emojis del
   calendario no aparecían aunque la app mostrara "v0.3.6" arriba. La causa

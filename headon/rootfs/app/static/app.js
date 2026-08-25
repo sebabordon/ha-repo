@@ -18,9 +18,19 @@ const INTENSITY_COLORS = [
 const DEFAULT_MEDS = ["Ibuprofeno", "Paracetamol", "Ketorolac", "Triptán", "Ergotamina"];
 const DEFAULT_SINTOMAS = ["Náuseas", "Vómitos", "Fotofobia", "Fonofobia", "Mareos",
   "Visión borrosa", "Rigidez cervical", "Congestión nasal", "Lagrimeo", "Internación"];
-const DEFAULT_COMIDAS = ["Chocolate", "Queso curado", "Vino tinto", "Cafeína",
-  "Embutidos", "Cítricos", "Alcohol", "Edulcorantes", "Frutos secos",
-  "Alimentos fermentados", "Comida procesada"];
+const DEFAULT_COMIDAS = [
+  {name: "Chocolate", emoji: "🍫"},
+  {name: "Queso curado", emoji: "🧀"},
+  {name: "Vino tinto", emoji: "🍷"},
+  {name: "Cafeína", emoji: "☕"},
+  {name: "Embutidos", emoji: "🥓"},
+  {name: "Cítricos", emoji: "🍊"},
+  {name: "Alcohol", emoji: "🍺"},
+  {name: "Edulcorantes", emoji: "🍬"},
+  {name: "Frutos secos", emoji: "🥜"},
+  {name: "Alimentos fermentados", emoji: "🫙"},
+  {name: "Comida procesada", emoji: "🍔"}
+];
 
 let state = {
   migraines: [],
@@ -211,7 +221,7 @@ async function loadConfig() {
     if (d.value) state.meds = JSON.parse(d.value);
     r = await fetch("/api/config/comidas");
     d = await r.json();
-    if (d.value) state.comidas = JSON.parse(d.value);
+    if (d.value) state.comidas = _normalizeComidas(JSON.parse(d.value));
     r = await fetch("/api/config/extras_open");
     d = await r.json();
     if (d.value === "true") state.extrasOpen = true;
@@ -220,7 +230,7 @@ async function loadConfig() {
     const cached = await cacheGet("meds");
     if (cached) state.meds = JSON.parse(cached);
     const cachedComidas = await cacheGet("comidas");
-    if (cachedComidas) state.comidas = JSON.parse(cachedComidas);
+    if (cachedComidas) state.comidas = _normalizeComidas(JSON.parse(cachedComidas));
     const cachedAccent = await cacheGet("accent");
     if (cachedAccent) applyAccent(cachedAccent, false);
   }
@@ -279,19 +289,46 @@ function saveMeds() {
   cacheSet("meds", v);
 }
 
+const DEFAULT_COMIDA_EMOJI = "🍴";
+
+function _normalizeComidas(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(c => typeof c === "string" ? {name: c, emoji: DEFAULT_COMIDA_EMOJI} : c);
+}
+
+function comidaEmoji(name) {
+  const c = state.comidas.find(x => x.name === name);
+  return c ? c.emoji : DEFAULT_COMIDA_EMOJI;
+}
+
 function renderComidaConfig() {
   const list = document.getElementById("cfg-comidas-list");
   list.innerHTML = "";
   state.comidas.forEach((c, i) => {
     const row = document.createElement("div");
     row.className = "cfg-med-item";
+    const emojiInput = document.createElement("input");
+    emojiInput.type = "text";
+    emojiInput.className = "cfg-comida-emoji-input";
+    emojiInput.value = c.emoji;
+    emojiInput.maxLength = 4;
+    emojiInput.onchange = () => {
+      c.emoji = emojiInput.value.trim() || DEFAULT_COMIDA_EMOJI;
+      emojiInput.value = c.emoji;
+      saveComidas();
+      buildComidaChips();
+    };
     const span = document.createElement("span");
-    span.textContent = c;
+    span.textContent = c.name;
+    const left = document.createElement("div");
+    left.className = "cfg-comida-left";
+    left.appendChild(emojiInput);
+    left.appendChild(span);
     const btn = document.createElement("button");
     btn.className = "cfg-med-del";
     btn.textContent = "✕";
     btn.onclick = () => { state.comidas.splice(i, 1); saveComidas(); renderComidaConfig(); buildComidaChips(); };
-    row.appendChild(span);
+    row.appendChild(left);
     row.appendChild(btn);
     list.appendChild(row);
   });
@@ -299,10 +336,13 @@ function renderComidaConfig() {
 
 function addComidaConfig() {
   const input = document.getElementById("cfg-comida-new");
+  const emojiInput = document.getElementById("cfg-comida-emoji-new");
   const val = input.value.trim();
-  if (!val || state.comidas.includes(val)) return;
-  state.comidas.push(val);
+  const emoji = emojiInput.value.trim() || DEFAULT_COMIDA_EMOJI;
+  if (!val || state.comidas.some(c => c.name === val)) return;
+  state.comidas.push({name: val, emoji});
   input.value = "";
+  emojiInput.value = "";
   saveComidas();
   renderComidaConfig();
   buildComidaChips();
@@ -496,12 +536,12 @@ function buildComidaChips() {
   state.comidas.forEach(c => {
     const chip = document.createElement("button");
     chip.type = "button";
-    chip.className = "chip" + (state.selectedComidas.includes(c) ? " selected" : "");
-    chip.textContent = c;
+    chip.className = "chip" + (state.selectedComidas.includes(c.name) ? " selected" : "");
+    chip.textContent = `${c.emoji} ${c.name}`;
     chip.onclick = () => {
-      const idx = state.selectedComidas.indexOf(c);
+      const idx = state.selectedComidas.indexOf(c.name);
       if (idx >= 0) state.selectedComidas.splice(idx, 1);
-      else state.selectedComidas.push(c);
+      else state.selectedComidas.push(c.name);
       chip.classList.toggle("selected");
     };
     wrap.appendChild(chip);
@@ -664,7 +704,7 @@ function renderEpisodeCard(ep, isActive) {
       ${ep.aura ? "<span>✨ Aura</span>" : ""}
       ${ep.medicacion ? `<span>💊 ${ep.medicacion}</span>` : ""}
       ${(ep.sintomas && ep.sintomas.length) ? `<span>🩺 ${ep.sintomas.join(", ")}</span>` : ""}
-      ${(ep.comidas && ep.comidas.length) ? `<span>🍴 ${ep.comidas.join(", ")}</span>` : ""}
+      ${(ep.comidas && ep.comidas.length) ? `<span>${ep.comidas.map(n => `${comidaEmoji(n)} ${n}`).join(", ")}</span>` : ""}
     </div>
     ${zoneChips ? `<div class="ep-zones">${zoneChips}</div>` : ""}
     ${ep.comentarios ? `<div class="ep-details" style="margin-top:.3rem;font-style:italic">${escHtml(ep.comentarios)}</div>` : ""}
@@ -759,11 +799,13 @@ async function renderCalendar() {
       cell.appendChild(barsWrap);
 
       const tookMed = entries.some(e => e.medicacion);
-      const hadComida = entries.some(e => e.comidas && e.comidas.length);
-      if (tookMed || hadComida) {
+      const comidaNames = new Set();
+      entries.forEach(e => (e.comidas || []).forEach(n => comidaNames.add(n)));
+      const comidaEmojis = [...new Set([...comidaNames].map(comidaEmoji))].slice(0, 3);
+      if (tookMed || comidaEmojis.length) {
         const badges = document.createElement("div");
         badges.className = "cal-badges";
-        badges.textContent = (tookMed ? "💊" : "") + (hadComida ? "🍴" : "");
+        badges.textContent = (tookMed ? "💊" : "") + comidaEmojis.join("");
         cell.appendChild(badges);
       }
     }
@@ -787,9 +829,17 @@ function showCalDetail(dateStr, entries, cell) {
   let html = `<div class="cal-detail-title">${formatDate(dateStr)} — ${entries.length} episodio${entries.length > 1 ? "s" : ""}</div>`;
   entries.forEach(e => {
     const fin = e.fin || (dateStr < new Date().toISOString().slice(0,10) ? "23:59" : "en curso");
+    const medLine = e.medicacion
+      ? `💊 ${escHtml(e.medicacion)}`
+      : `<span style="color:#aaa">Sin medicación</span>`;
+    const comidasLine = (e.comidas && e.comidas.length)
+      ? e.comidas.map(n => `${comidaEmoji(n)} ${escHtml(n)}`).join(", ")
+      : `<span style="color:#aaa">Sin comidas registradas</span>`;
     html += `<div style="margin-top:.5rem;padding:.4rem .6rem;background:#fff;border-radius:6px;border:1px solid #e5e7eb">
       <span class="ep-intensity" style="background:${INTENSITY_COLORS[e.intensidad]};font-size:.7rem;width:22px;height:22px">${e.intensidad}</span>
       <span style="font-size:.85rem;margin-left:.4rem">${e.inicio} – ${fin}</span>
+      <div style="font-size:.8rem;margin-top:.3rem">${medLine}</div>
+      <div style="font-size:.8rem;margin-top:.2rem">${comidasLine}</div>
     </div>`;
   });
   wrap.innerHTML = html;
