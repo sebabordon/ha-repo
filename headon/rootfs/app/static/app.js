@@ -48,6 +48,7 @@ let state = {
   meds: [...DEFAULT_MEDS],
   comidas: [...DEFAULT_COMIDAS],
   accent: "#16213e",
+  badgeSize: 11,
   online: navigator.onLine,
   extrasOpen: false
 };
@@ -226,6 +227,9 @@ async function loadConfig() {
     d = await r.json();
     if (d.value === "true") state.extrasOpen = true;
     document.getElementById("cfg-extras-open").checked = state.extrasOpen;
+    r = await fetch("/api/config/badge_size");
+    d = await r.json();
+    if (d.value) applyBadgeSize(d.value, false);
   } catch {
     const cached = await cacheGet("meds");
     if (cached) state.meds = JSON.parse(cached);
@@ -233,6 +237,8 @@ async function loadConfig() {
     if (cachedComidas) state.comidas = _normalizeComidas(JSON.parse(cachedComidas));
     const cachedAccent = await cacheGet("accent");
     if (cachedAccent) applyAccent(cachedAccent, false);
+    const cachedBadgeSize = await cacheGet("badge_size");
+    if (cachedBadgeSize) applyBadgeSize(cachedBadgeSize, false);
   }
 }
 
@@ -248,6 +254,21 @@ function applyAccent(color, save) {
       body: JSON.stringify({value: color})
     }).catch(() => {});
     cacheSet("accent", color);
+  }
+}
+
+function applyBadgeSize(px, save) {
+  px = parseInt(px, 10) || 11;
+  state.badgeSize = px;
+  document.documentElement.style.setProperty("--cal-badge-size", px + "px");
+  document.getElementById("cfg-badge-size").value = px;
+  document.getElementById("cfg-badge-size-val").textContent = px + "px";
+  if (save) {
+    fetch("/api/config/badge_size", {
+      method: "PUT", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({value: String(px)})
+    }).catch(() => {});
+    cacheSet("badge_size", String(px));
   }
 }
 

@@ -247,6 +247,12 @@
           <input type="color" id="cfg-accent" value="#16213e" onchange="applyAccent(this.value, true)" />
           <span id="cfg-accent-hex" class="color-hex">#16213e</span>
         </div>
+        <label class="field-label" style="margin-top:1rem">Tamaño de íconos en calendario</label>
+        <div class="color-row">
+          <input type="range" id="cfg-badge-size" min="8" max="22" step="1" value="11"
+                 oninput="applyBadgeSize(this.value, true)" style="flex:1" />
+          <span id="cfg-badge-size-val" class="color-hex">11px</span>
+        </div>
       </div>
       <div class="card" style="margin-top:1rem">
         <h3 class="form-title">Medicaciones frecuentes</h3>

@@ -14,7 +14,7 @@ from auth import router as auth_router, admin_router, is_session_token_valid
 from oidc import router as sso_router
 from openpyxl import Workbook
 
-APP_VERSION = "0.3.8"
+APP_VERSION = "0.3.9"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 

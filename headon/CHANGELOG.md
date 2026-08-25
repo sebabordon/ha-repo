@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.9
+- Config → Interfaz: nuevo slider "Tamaño de íconos en calendario" (8–22px,
+  default 11px) para ajustar el tamaño de los badges 💊/🍴 del calendario
+  a gusto, sin tocar código.
+
 ## 0.3.8
 - Comidas: ahora cada alimento tiene su propio emoji, editable desde
   Config → "Comidas frecuentes" (un input chiquito al lado del nombre) y
