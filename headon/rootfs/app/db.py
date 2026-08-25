@@ -165,7 +165,8 @@ def get_calendar_data(year, month):
         fecha_hasta = f"{year}-{month+1:02d}-01"
     conn = get_db()
     rows = conn.execute(
-        "SELECT fecha, intensidad, inicio, fin FROM migraines WHERE fecha >= ? AND fecha < ? ORDER BY inicio",
+        "SELECT fecha, intensidad, inicio, fin, medicacion, comidas FROM migraines "
+        "WHERE fecha >= ? AND fecha < ? ORDER BY inicio",
         (fecha_desde, fecha_hasta)
     ).fetchall()
     conn.close()

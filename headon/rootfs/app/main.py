@@ -14,7 +14,7 @@ from auth import router as auth_router, admin_router, is_session_token_valid
 from oidc import router as sso_router
 from openpyxl import Workbook
 
-APP_VERSION = "0.3.4"
+APP_VERSION = "0.3.5"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 
@@ -176,7 +176,17 @@ async def api_delete(mid: int):
 
 @app.get("/api/calendar/{year}/{month}")
 async def api_calendar(year: int, month: int):
-    return db.get_calendar_data(year, month)
+    by_day = db.get_calendar_data(year, month)
+    for entries in by_day.values():
+        for e in entries:
+            if e.get("comidas"):
+                try:
+                    e["comidas"] = json.loads(e["comidas"])
+                except (json.JSONDecodeError, TypeError):
+                    e["comidas"] = []
+            else:
+                e["comidas"] = []
+    return by_day
 
 
 @app.get("/api/export")

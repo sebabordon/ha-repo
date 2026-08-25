@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.5
+- Calendario: emoji chiquito en la esquina de cada día que tuvo medicación
+  (💊) y/o comidas disparadoras marcadas (🍽), sin abrir el detalle del día.
+  `/api/calendar` ahora también trae `medicacion` y `comidas` por episodio.
+
 ## 0.3.4
 - Nueva sección "Comidas del día anterior": chips para marcar alimentos
   disparadores comidos el día previo al episodio, siempre visibles en el

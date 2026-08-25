@@ -415,6 +415,14 @@ body {
   position: relative;
   min-width: 3px;
 }
+.cal-badges {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: -1px;
+}
 
 .cal-detail {
   margin-top: 1rem;

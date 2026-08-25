@@ -757,6 +757,15 @@ async function renderCalendar() {
         barsWrap.appendChild(bar);
       });
       cell.appendChild(barsWrap);
+
+      const tookMed = entries.some(e => e.medicacion);
+      const hadComida = entries.some(e => e.comidas && e.comidas.length);
+      if (tookMed || hadComida) {
+        const badges = document.createElement("div");
+        badges.className = "cal-badges";
+        badges.textContent = (tookMed ? "💊" : "") + (hadComida ? "🍽" : "");
+        cell.appendChild(badges);
+      }
     }
 
     cell.onclick = () => showCalDetail(dateStr, entries, cell);
