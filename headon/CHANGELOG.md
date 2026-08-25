@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.10
+- Calendario: separa los badges — comidas a la izquierda, medicación a la
+  derecha de cada día — en vez de apilarlos todos juntos en una esquina,
+  para que no se amontonen al subir el tamaño de íconos.
+
 ## 0.3.9
 - Config → Interfaz: nuevo slider "Tamaño de íconos en calendario" (8–22px,
   default 11px) para ajustar el tamaño de los badges 💊/🍴 del calendario

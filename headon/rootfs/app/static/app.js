@@ -823,11 +823,17 @@ async function renderCalendar() {
       const comidaNames = new Set();
       entries.forEach(e => (e.comidas || []).forEach(n => comidaNames.add(n)));
       const comidaEmojis = [...new Set([...comidaNames].map(comidaEmoji))].slice(0, 3);
-      if (tookMed || comidaEmojis.length) {
-        const badges = document.createElement("div");
-        badges.className = "cal-badges";
-        badges.textContent = (tookMed ? "💊" : "") + comidaEmojis.join("");
-        cell.appendChild(badges);
+      if (comidaEmojis.length) {
+        const badge = document.createElement("div");
+        badge.className = "cal-badges cal-badges-left";
+        badge.textContent = comidaEmojis.join("");
+        cell.appendChild(badge);
+      }
+      if (tookMed) {
+        const badge = document.createElement("div");
+        badge.className = "cal-badges cal-badges-right";
+        badge.textContent = "💊";
+        cell.appendChild(badge);
       }
     }
 

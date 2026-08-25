@@ -418,11 +418,12 @@ body {
 .cal-badges {
   position: absolute;
   top: 1px;
-  right: 1px;
   font-size: var(--cal-badge-size, 11px);
   line-height: 1;
   letter-spacing: -1px;
 }
+.cal-badges-left { left: 1px; }
+.cal-badges-right { right: 1px; }
 
 .cal-detail {
   margin-top: 1rem;
