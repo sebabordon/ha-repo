@@ -664,7 +664,7 @@ function renderEpisodeCard(ep, isActive) {
       ${ep.aura ? "<span>✨ Aura</span>" : ""}
       ${ep.medicacion ? `<span>💊 ${ep.medicacion}</span>` : ""}
       ${(ep.sintomas && ep.sintomas.length) ? `<span>🩺 ${ep.sintomas.join(", ")}</span>` : ""}
-      ${(ep.comidas && ep.comidas.length) ? `<span>🍽 ${ep.comidas.join(", ")}</span>` : ""}
+      ${(ep.comidas && ep.comidas.length) ? `<span>🍴 ${ep.comidas.join(", ")}</span>` : ""}
     </div>
     ${zoneChips ? `<div class="ep-zones">${zoneChips}</div>` : ""}
     ${ep.comentarios ? `<div class="ep-details" style="margin-top:.3rem;font-style:italic">${escHtml(ep.comentarios)}</div>` : ""}
@@ -763,7 +763,7 @@ async function renderCalendar() {
       if (tookMed || hadComida) {
         const badges = document.createElement("div");
         badges.className = "cal-badges";
-        badges.textContent = (tookMed ? "💊" : "") + (hadComida ? "🍽" : "");
+        badges.textContent = (tookMed ? "💊" : "") + (hadComida ? "🍴" : "");
         cell.appendChild(badges);
       }
     }

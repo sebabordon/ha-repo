@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.6
+- Cambia el emoji de comidas de 🍽 (plato, se veía cuadrado) a 🍴
+  (cubiertos), tanto en el detalle del episodio como en el badge del
+  calendario.
+
 ## 0.3.5
 - Calendario: emoji chiquito en la esquina de cada día que tuvo medicación
   (💊) y/o comidas disparadoras marcadas (🍽), sin abrir el detalle del día.
