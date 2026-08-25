@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.7
+- Fix: los chips de comidas no se agregaban desde Config y los emojis del
+  calendario no aparecían aunque la app mostrara "v0.3.6" arriba. La causa
+  era caché: el HTML se actualizaba pero `/static/app.js` quedaba servido
+  desde una copia vieja (navegador, Service Worker de la PWA, o un proxy
+  delante como Nginx Proxy Manager), sin las funciones nuevas.
+  `/static/app.js` y `/static/style.css` ahora se referencian con
+  `?v=<versión>` (calculado server-side a partir de la versión del
+  add-on), así que cada bump de versión invalida el caché automáticamente
+  y no puede volver a pasar. También se bumpeó el nombre del cache interno
+  del Service Worker para forzar una limpieza en los dispositivos que ya
+  tenían la versión vieja cacheada.
+  **Importante:** en dispositivos donde ya se veía este bug, hace falta un
+  refresh forzado una única vez (recargar con caché vacío, o cerrar y
+  reabrir la PWA) para que se descargue el HTML nuevo con las URLs
+  versionadas — a partir de ahí se actualiza solo en cada versión futura.
+
 ## 0.3.6
 - Cambia el emoji de comidas de 🍽 (plato, se veía cuadrado) a 🍴
   (cubiertos), tanto en el detalle del episodio como en el badge del

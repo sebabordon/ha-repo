@@ -1,4 +1,4 @@
-const CACHE = "headon-v1";
+const CACHE = "headon-v2";
 const ASSETS = ["/", "/static/style.css", "/static/app.js", "/static/icon.svg"];
 
 self.addEventListener("install", e => {

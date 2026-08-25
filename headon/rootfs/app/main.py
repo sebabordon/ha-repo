@@ -14,7 +14,7 @@ from auth import router as auth_router, admin_router, is_session_token_valid
 from oidc import router as sso_router
 from openpyxl import Workbook
 
-APP_VERSION = "0.3.6"
+APP_VERSION = "0.3.7"
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 
 
@@ -97,9 +97,16 @@ async def apple_touch_icon():
 async def favicon():
     return FileResponse("static/favicon.ico", media_type="image/x-icon")
 
+_index_html_cache: str | None = None
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return FileResponse("static/index.html")
+    global _index_html_cache
+    if _index_html_cache is None:
+        with open("static/index.html") as f:
+            _index_html_cache = f.read()
+    return HTMLResponse(_index_html_cache.replace("__APP_VERSION__", APP_VERSION))
 
 
 @app.get("/manifest.json")
