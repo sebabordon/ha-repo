@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
 
-from db import _get_db_lock
+from db import DB_LOCK_TIMEOUT, _get_db_lock
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +162,11 @@ def _conn():
     # serializa los writes de este módulo contra los de db.py, no solo entre sí.
     path = _find_db_path()
     lock = _get_db_lock(path)
-    lock.acquire()
+    if not lock.acquire(timeout=DB_LOCK_TIMEOUT):
+        raise TimeoutError(
+            f"No se pudo obtener el lock de DB para {path} tras {DB_LOCK_TIMEOUT}s "
+            "(posible deadlock en otro thread/job)"
+        )
     try:
         conn = sqlite3.connect(path, timeout=15)
         conn.row_factory = sqlite3.Row

@@ -141,6 +141,19 @@ app.include_router(admin.router,            prefix="/admin", tags=["admin"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+@app.get("/health")
+async def health():
+    """
+    Liviano a propósito (sin sesión ni DB): lo usa el watchdog de HA Supervisor
+    (config.yaml) para saber si el event loop sigue respondiendo. Si el proceso
+    se congela (ej. un lock sincrónico trabado), este endpoint deja de responder
+    igual que cualquier otro — un watchdog "tcp://" no lo detecta porque el
+    socket sigue aceptando conexiones a nivel de kernel aunque la app esté
+    trabada; uno "http://" sí, porque exige una respuesta real.
+    """
+    return {"status": "ok"}
+
+
 @app.get("/manifest.json")
 async def serve_manifest(request: Request):
     """PWA manifest dinámico — incluye shortcuts del usuario si está logueado."""

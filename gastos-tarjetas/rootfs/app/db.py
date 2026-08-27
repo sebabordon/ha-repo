@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 _db_locks: dict[str, threading.RLock] = {}
 _db_locks_meta = threading.Lock()
 
+# Si algo deja el lock tomado sin liberarlo (bug, proceso externo colgado en
+# medio de un `with _conn()`), sin timeout acá el próximo request/job queda
+# esperando para siempre — y como _conn() se llama sincrónicamente desde
+# coroutines, eso congela el event loop entero (todo FastAPI + el scheduler).
+# Con timeout, en cambio, ese request falla con un error claro a los 30s en
+# vez de trabar la app completa indefinidamente.
+DB_LOCK_TIMEOUT = 30
+
 
 def _get_db_lock(path: str) -> threading.RLock:
     with _db_locks_meta:
@@ -1187,7 +1195,11 @@ def _run_migrations(conn):
 def _conn():
     path = get_db_path()
     lock = _get_db_lock(path)
-    lock.acquire()
+    if not lock.acquire(timeout=DB_LOCK_TIMEOUT):
+        raise TimeoutError(
+            f"No se pudo obtener el lock de DB para {path} tras {DB_LOCK_TIMEOUT}s "
+            "(posible deadlock en otro thread/job)"
+        )
     try:
         conn = sqlite3.connect(path, timeout=15.0)
         conn.row_factory = sqlite3.Row
