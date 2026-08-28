@@ -257,6 +257,7 @@ document.querySelectorAll(".gtab").forEach(tab => {
     tab.classList.add("active");
     document.getElementById(`gtab-${tab.dataset.gtab}`).classList.add("active");
     if (tab.dataset.gtab === "transferencias") loadTransferWorkspace();
+    if (tab.dataset.gtab === "duplicados") loadDuplicates();
   });
 });
 
@@ -3523,6 +3524,130 @@ document.querySelectorAll(".tw-sh[data-twsort]").forEach(el => {
     if (_twData) renderTwCandidates();
   });
 });
+
+// ── Duplicados ─────────────────────────────────────────────────────────────────
+let _dupData = null;
+
+async function loadDuplicates() {
+  const res = await fetch(`${BASE}/api/gastos/duplicates`);
+  if (!res.ok) { showToast("Error al cargar duplicados", "err"); return; }
+  _dupData = await res.json();
+  renderDuplicates();
+  renderDupIgnored();
+}
+
+function _dupGroupRow(g) {
+  const amt = _fmtNum2(Math.abs(parseFloat(g.monto)));
+  const sign = parseFloat(g.monto) < 0 ? "+" : "−";
+  const zone = document.createElement("div");
+  zone.className = "tw-zone";
+  const title = document.createElement("div");
+  title.className = "tw-zone-title";
+  title.innerHTML =
+    `<span class="tw-item-date">${g.fecha}</span>` +
+    `${_fuenteBadge(g.fuente)}` +
+    `<span class="tw-item-desc">${escHtml(g.descripcion || "")}</span>` +
+    `<span class="tw-item-amount">${sign}${amt} ${escHtml(g.moneda)}</span>` +
+    `<span class="tw-col-count">(${g.items.length})</span>`;
+  const btnIgn = document.createElement("button");
+  btnIgn.className = "btn btn-sm tw-sug-btn-ign";
+  btnIgn.style.marginLeft = "auto";
+  btnIgn.textContent = "No es duplicado";
+  btnIgn.onclick = () => dupIgnoreGroup(g);
+  title.appendChild(btnIgn);
+  zone.appendChild(title);
+
+  g.items.forEach(it => {
+    const row = document.createElement("div");
+    row.className = "tw-pair-row";
+    row.innerHTML =
+      `<span class="tw-item-desc">#${it.id}${it.usuario ? " · " + escHtml(it.usuario) : ""}${it.categoria ? " · " + escHtml(it.categoria) : ""}</span>`;
+    const btnDel = document.createElement("button");
+    btnDel.className = "btn btn-sm btn-danger";
+    btnDel.style.cssText = "padding:.15rem .4rem;flex-shrink:0";
+    btnDel.textContent = "🗑";
+    btnDel.title = "Eliminar este registro duplicado";
+    btnDel.onclick = () => dupDeleteGasto(it.id);
+    row.appendChild(btnDel);
+    zone.appendChild(row);
+  });
+  return zone;
+}
+
+function renderDuplicates() {
+  const groups = (_dupData && _dupData.groups) || [];
+  const list  = document.getElementById("dup-list");
+  const empty = document.getElementById("dup-empty");
+  list.innerHTML = "";
+  empty.style.display = groups.length ? "none" : "";
+  groups.forEach(g => list.appendChild(_dupGroupRow(g)));
+}
+
+function dupDeleteGasto(id) {
+  showConfirm("¿Eliminar este gasto duplicado? Se elimina junto con su movimiento.", async () => {
+    const res = await fetch(`${BASE}/api/gastos/${id}`, {method:"DELETE"});
+    if (res.ok) { await loadDuplicates(); refreshAfterDataChange(); }
+    else showToast("No se pudo eliminar el gasto.", "err");
+  });
+}
+
+async function dupIgnoreGroup(g) {
+  const res = await fetch(`${BASE}/api/gastos/duplicates/ignore`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fuente: g.fuente, fecha: g.fecha, monto: g.monto, moneda: g.moneda, descripcion: g.descripcion }),
+  });
+  if (!res.ok) { showToast("Error al ignorar grupo", "err"); return; }
+  showToast("Grupo marcado como no duplicado", "ok");
+  await loadDuplicates();
+}
+
+async function dupUnignoreGroup(g) {
+  const res = await fetch(`${BASE}/api/gastos/duplicates/ignore`, {
+    method: "DELETE", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fuente: g.fuente, fecha: g.fecha, monto: g.monto, moneda: g.moneda, descripcion: g.descripcion }),
+  });
+  if (!res.ok) { showToast("Error al restaurar grupo", "err"); return; }
+  showToast("Grupo restaurado", "ok");
+  await loadDuplicates();
+}
+
+function renderDupIgnored() {
+  const ignored = (_dupData && _dupData.ignored) || [];
+  const zone = document.getElementById("dup-ignored-zone");
+  const list = document.getElementById("dup-ignored-list");
+  document.getElementById("dup-ignored-count").textContent = ignored.length ? `(${ignored.length})` : "";
+  if (!ignored.length) { zone.style.display = "none"; return; }
+  zone.style.display = "";
+  list.innerHTML = "";
+  ignored.forEach(g => {
+    const amt = _fmtNum2(Math.abs(parseFloat(g.monto)));
+    const sign = parseFloat(g.monto) < 0 ? "+" : "−";
+    const row = document.createElement("div");
+    row.className = "tw-pair-row tw-existing-row";
+    row.innerHTML =
+      `<span class="tw-item-date">${g.fecha}</span>` +
+      `${_fuenteBadge(g.fuente)}` +
+      `<span class="tw-item-desc">${escHtml((g.descripcion || "").slice(0, 28))}</span>` +
+      `<span class="tw-item-amount">${sign}${amt}</span>` +
+      `<span class="tw-col-count">(${g.items.length})</span>`;
+    const btn = document.createElement("button");
+    btn.className = "btn btn-sm tw-unmark-btn";
+    btn.textContent = "Restaurar";
+    btn.onclick = () => dupUnignoreGroup(g);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+}
+
+function dupToggleIgnored() {
+  const list  = document.getElementById("dup-ignored-list");
+  const arrow = document.getElementById("dup-ignored-arrow");
+  const open  = list.style.display === "none";
+  list.style.display = open ? "" : "none";
+  arrow.textContent  = open ? "▾" : "▸";
+}
+
+document.getElementById("btn-dup-refresh").addEventListener("click", loadDuplicates);
 
 // ── Import batches ────────────────────────────────────────────────────────────
 const _FUENTE_LABEL = {

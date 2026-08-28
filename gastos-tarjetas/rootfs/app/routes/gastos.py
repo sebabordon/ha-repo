@@ -17,6 +17,8 @@ from db import (list_gastos, list_categorias, monthly_summary, periodo_actual,
                 delete_all_gastos, get_gasto, delete_gasto_manual,
                 delete_gasto_any,
                 delete_scraper_gastos_batch,
+                find_duplicate_gastos, ignore_duplicate_group,
+                unignore_duplicate_group, get_ignored_duplicate_groups,
                 list_importaciones, rename_categoria_in_gastos)
 
 router = APIRouter()
@@ -166,6 +168,43 @@ def get_transfer_workspace(request: Request, days: int = Query(3)):
         "existing":             existing,
         "ignored":              get_ignored_transfer_pairs(),
     }
+
+
+@router.get("/gastos/duplicates")
+def get_duplicates(request: Request):
+    require_auth(request)
+    return {
+        "groups":  find_duplicate_gastos(),
+        "ignored": get_ignored_duplicate_groups(),
+    }
+
+
+@router.post("/gastos/duplicates/ignore")
+def post_ignore_duplicate(body: dict, request: Request):
+    require_auth(request)
+    fuente      = body.get("fuente")
+    fecha       = body.get("fecha")
+    monto       = body.get("monto")
+    moneda      = body.get("moneda")
+    descripcion = body.get("descripcion")
+    if not all([fuente, fecha, monto, moneda]) or descripcion is None:
+        return {"ok": False}
+    ignore_duplicate_group(fuente, fecha, str(monto), moneda, descripcion)
+    return {"ok": True}
+
+
+@router.delete("/gastos/duplicates/ignore")
+def delete_ignore_duplicate(body: dict, request: Request):
+    require_auth(request)
+    fuente      = body.get("fuente")
+    fecha       = body.get("fecha")
+    monto       = body.get("monto")
+    moneda      = body.get("moneda")
+    descripcion = body.get("descripcion")
+    if not all([fuente, fecha, monto, moneda]) or descripcion is None:
+        return {"ok": False}
+    unignore_duplicate_group(fuente, fecha, str(monto), moneda, descripcion)
+    return {"ok": True}
 
 
 @router.get("/gastos/detect-transfers")

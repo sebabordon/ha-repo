@@ -222,6 +222,7 @@
       <div class="gtabs">
         <button class="gtab active" data-gtab="movimientos">🧾 Movimientos</button>
         <button class="gtab" data-gtab="transferencias">⇄ Transferencias</button>
+        <button class="gtab" data-gtab="duplicados">🔁 Duplicados</button>
       </div>
 
       <!-- Sub-tab: Movimientos -->
@@ -431,6 +432,30 @@
         </div>
 
       </div><!-- /gtab-transferencias -->
+
+      <!-- Sub-tab: Duplicados -->
+      <div id="gtab-duplicados" class="gtab-content">
+
+        <div class="tw-toolbar">
+          <button id="btn-dup-refresh" class="btn btn-sm">↺ Actualizar</button>
+        </div>
+
+        <div id="dup-empty" class="tw-zone" style="display:none">
+          <div class="tw-zone-title">No se encontraron duplicados 🎉</div>
+        </div>
+
+        <div id="dup-list"></div>
+
+        <!-- Ignored groups (collapsible) -->
+        <div class="tw-zone" id="dup-ignored-zone" style="display:none">
+          <div class="tw-zone-title tw-zone-toggle" onclick="dupToggleIgnored()">
+            Grupos ignorados <span class="tw-col-count" id="dup-ignored-count"></span>
+            <span id="dup-ignored-arrow" class="tw-arrow">▸</span>
+          </div>
+          <div id="dup-ignored-list" style="display:none"></div>
+        </div>
+
+      </div><!-- /gtab-duplicados -->
 
     </section>
 

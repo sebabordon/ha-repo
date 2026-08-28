@@ -1,3 +1,8 @@
+## 1.2.82
+
+- **Nueva tab "🔁 Duplicados" en Gastos** (`static/index.html`, `static/app.js`, `db.py`, `routes/gastos.py`): a la derecha de Transferencias, agrupa gastos con misma cuenta + fecha + monto + moneda + descripción (2+ filas) y permite eliminar cada registro sobrante (`🗑`, reusa `DELETE /gastos/{id}` → `delete_gasto_any`) o marcar el grupo entero como "No es duplicado" (`POST/DELETE /gastos/duplicates/ignore`, tabla `duplicate_ignores` keyeada por firma de contenido, no por id, para sobrevivir a altas/bajas del grupo) cuando se trata de movimientos legítimos repetidos. Sigue el mismo patrón visual que Transferencias (`GET /gastos/duplicates`, zona colapsable de "Grupos ignorados").
+- Se revisó el repo por referencias a "FinanceMe" (nombre anterior del proyecto) — no quedan, el add-on ya está identificado como "SnapBudget" en `config.yaml` y en toda la UI/código.
+
 ## 1.2.81
 
 - **Fix: la app quedó colgada 27hs (504) sin que el watchdog de HA la reiniciara** (`config.yaml`, `rootfs/app/main.py`, `rootfs/app/db.py`, `rootfs/app/scrapers_db.py`): el 26/08 el proceso se congeló por completo (ni un log más, ni HTTP ni jobs del scheduler) hasta el reinicio manual del 27/08. Dos causas de fondo:

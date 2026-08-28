@@ -337,6 +337,20 @@ def init_db():
             )
         """)
 
+        # Duplicate groups the user dismissed as legitimate repeats (not a
+        # duplicate) — keyed by content signature, not ids, since the group's
+        # member ids can change (a duplicate row deleted, a new one imported).
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS duplicate_ignores (
+                fuente      TEXT NOT NULL,
+                fecha       TEXT NOT NULL,
+                monto       TEXT NOT NULL,
+                moneda      TEXT NOT NULL,
+                descripcion TEXT NOT NULL,
+                PRIMARY KEY (fuente, fecha, monto, moneda, descripcion)
+            )
+        """)
+
         # Import batches tracking table
         conn.execute("""
             CREATE TABLE IF NOT EXISTS importaciones (
@@ -1820,6 +1834,87 @@ def delete_gasto_any(gasto_id: int) -> bool:
             pass  # tabla movimientos_raw inexistente (sin scrapers) — nada que borrar
         conn.execute("DELETE FROM gastos WHERE id=?", (gasto_id,))
     return True
+
+
+def find_duplicate_gastos() -> list[dict]:
+    """
+    Detecta grupos de gastos duplicados: misma cuenta (fuente) + fecha + monto +
+    moneda + descripción, con 2+ filas. Excluye grupos que el usuario marcó como
+    "no es duplicado" (duplicate_ignores) — pensado para movimientos legítimos
+    que se repiten igual el mismo día (ej. dos compras idénticas).
+    """
+    with _conn() as conn:
+        rows = conn.execute("""
+            SELECT g.*
+            FROM gastos g
+            JOIN (
+                SELECT fuente, fecha, monto, moneda, descripcion
+                FROM gastos
+                GROUP BY fuente, fecha, monto, moneda, descripcion
+                HAVING COUNT(*) > 1
+            ) dup ON dup.fuente = g.fuente AND dup.fecha = g.fecha
+                 AND dup.monto = g.monto AND dup.moneda = g.moneda
+                 AND dup.descripcion = g.descripcion
+            LEFT JOIN duplicate_ignores di
+                 ON di.fuente = g.fuente AND di.fecha = g.fecha
+                AND di.monto = g.monto AND di.moneda = g.moneda
+                AND di.descripcion = g.descripcion
+            WHERE di.fuente IS NULL
+            ORDER BY g.fecha DESC, g.fuente, g.descripcion
+        """).fetchall()
+    groups: dict[tuple, list[dict]] = {}
+    for r in rows:
+        d = dict(r)
+        key = (d["fuente"], d["fecha"], d["monto"], d["moneda"], d["descripcion"])
+        groups.setdefault(key, []).append(d)
+    return [
+        {
+            "fuente": k[0], "fecha": k[1], "monto": k[2], "moneda": k[3],
+            "descripcion": k[4], "items": v,
+        }
+        for k, v in groups.items()
+    ]
+
+
+def ignore_duplicate_group(fuente: str, fecha: str, monto: str, moneda: str,
+                            descripcion: str) -> None:
+    """Persist a user-dismissed duplicate group so it never reappears."""
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO duplicate_ignores "
+            "(fuente, fecha, monto, moneda, descripcion) VALUES (?,?,?,?,?)",
+            (fuente, fecha, monto, moneda, descripcion),
+        )
+
+
+def unignore_duplicate_group(fuente: str, fecha: str, monto: str, moneda: str,
+                              descripcion: str) -> None:
+    """Remove a previously ignored duplicate group."""
+    with _conn() as conn:
+        conn.execute(
+            "DELETE FROM duplicate_ignores "
+            "WHERE fuente=? AND fecha=? AND monto=? AND moneda=? AND descripcion=?",
+            (fuente, fecha, monto, moneda, descripcion),
+        )
+
+
+def get_ignored_duplicate_groups() -> list[dict]:
+    """Return ignored duplicate groups, with the still-existing member gastos."""
+    with _conn() as conn:
+        ignored = conn.execute("SELECT * FROM duplicate_ignores").fetchall()
+        groups = []
+        for ig in ignored:
+            items = conn.execute(
+                "SELECT * FROM gastos WHERE fuente=? AND fecha=? AND monto=? "
+                "AND moneda=? AND descripcion=?",
+                (ig["fuente"], ig["fecha"], ig["monto"], ig["moneda"], ig["descripcion"]),
+            ).fetchall()
+            groups.append({
+                "fuente": ig["fuente"], "fecha": ig["fecha"], "monto": ig["monto"],
+                "moneda": ig["moneda"], "descripcion": ig["descripcion"],
+                "items": [dict(r) for r in items],
+            })
+    return groups
 
 
 def monthly_summary(excluir_especiales: bool = True) -> list[dict]:
