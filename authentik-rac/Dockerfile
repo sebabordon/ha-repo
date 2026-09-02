@@ -1,6 +1,6 @@
 # Mismo versionado que el add-on "authentik" principal — server y outposts
 # deben ir en la misma versión para evitar incompatibilidades de API/websocket.
-ARG AUTHENTIK_VERSION=2026.8.0
+ARG AUTHENTIK_VERSION=2026.8.1
 FROM ghcr.io/goauthentik/rac:${AUTHENTIK_VERSION}
 
 USER root
