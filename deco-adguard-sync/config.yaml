@@ -3,9 +3,12 @@ description: >
   Automatically syncs connected clients from your TP-Link Deco XE75 Pro
   to AdGuard Home using both APIs. Runs on startup and every 6 hours.
   Only devices with an IP >= min_ip_suffix are exported (e.g. 100 means
-  only IPs like 10.x.x.100 and above). Clients already existing in
-  AdGuard Home (matched by name or IP) are safely skipped.
-version: "1.0.4"
+  only IPs like 10.x.x.100 and above). Deco takes precedence over AdGuard:
+  existing clients (matched by fixed MAC or by name) get their IP updated
+  and the old one removed. New devices with a randomized privacy MAC are
+  not added as new clients, and clients no longer seen on the Deco for
+  more than stale_days are removed from AdGuard.
+version: "1.1.0"
 slug: "deco-adguard-sync"
 init: false
 arch:
@@ -41,6 +44,17 @@ options:
   # After that, syncs automatically every 6 hours.
   run_on_start: true
 
+  # Days a Deco-managed client can go unseen on the Deco before it's
+  # removed from AdGuard Home. Only clients created by this add-on are
+  # ever removed. Set to 0 to disable automatic cleanup.
+  stale_days: 7
+
+  # Skip creating new AdGuard clients for devices whose MAC looks like a
+  # randomized privacy address (common on iOS/Android per-network MAC
+  # randomization), since they cause false positives. Existing clients
+  # matched by name are still updated normally.
+  exclude_random_mac: true
+
 schema:
   deco_host: str
   deco_pass: password
@@ -49,3 +63,5 @@ schema:
   agh_pass: password
   min_ip_suffix: int
   run_on_start: bool
+  stale_days: int
+  exclude_random_mac: bool

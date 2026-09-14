@@ -8,9 +8,12 @@ Automatically syncs connected devices from your **TP-Link Deco XE75 Pro** into *
 
 1. Connects to the Deco and fetches all currently connected devices
 2. Filters out infrastructure devices by minimum IP (configurable)
-3. Compares against existing AdGuard Home clients (by name and by IP)
-4. Adds only new clients — existing ones are safely skipped
-5. All new clients are created with global settings and global blocked services enabled
+3. Compares against existing AdGuard Home clients — **Deco data takes precedence**:
+   - If a device's fixed (non-randomized) MAC matches an existing AdGuard client, that client is updated: name and IP are synced, the old IP is removed.
+   - Otherwise, if the device's name matches an existing client, its IP is updated (old IP removed). This is the primary match for phones, since iOS/Android randomize their MAC per network.
+   - If nothing matches, a new client is created — unless the device only has a randomized MAC, in which case it's skipped to avoid cluttering AdGuard with throwaway entries (configurable).
+4. Clients created by this add-on (tagged `deco-sync`) that stop appearing on the Deco for more than `stale_days` are removed from AdGuard. Manually created AdGuard clients are never touched.
+5. All new/updated clients keep global settings and global blocked services enabled
 
 The sync runs once on startup, then automatically every 6 hours.
 
@@ -35,6 +38,8 @@ The sync runs once on startup, then automatically every 6 hours.
 | `agh_pass` | AdGuard Home password | — |
 | `min_ip_suffix` | Minimum last IP octet to export | `100` → exports from x.x.x.100 upward |
 | `run_on_start` | Run a sync immediately on startup | `true` |
+| `stale_days` | Days a Deco-managed client can go unseen before it's removed from AdGuard | `7`, `0` disables cleanup |
+| `exclude_random_mac` | Skip creating new AdGuard clients for devices with a randomized MAC | `true` |
 
 ### About `min_ip_suffix`
 
@@ -45,7 +50,8 @@ For example, with `min_ip_suffix: 100`, only devices with IPs ending in `.100` o
 ## Notes
 
 - SSL certificate verification is disabled for both the Deco and AdGuard Home connections, since both typically use self-signed certificates on local networks
-- Clients already in AdGuard Home are matched by **name** and by **IP address** — so renaming a client in AdGuard Home won't cause duplicates
+- "Last seen" state for the stale cleanup is stored in `/data/deco_adguard_state.json`, which persists across add-on restarts/updates
+- A device is considered to have a "randomized MAC" when the locally-administered bit of its first octet is set — the standard signal for iOS/Android per-network privacy MACs
 - To force an immediate sync without waiting 6 hours, simply restart the add-on
 
 ## Requirements

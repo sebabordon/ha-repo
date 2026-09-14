@@ -7,9 +7,15 @@ AGH_USER=$(bashio::config 'agh_user')
 AGH_PASS=$(bashio::config 'agh_pass')
 MIN_IP=$(bashio::config 'min_ip_suffix')
 RUN_ON_START=$(bashio::config 'run_on_start')
+STALE_DAYS=$(bashio::config 'stale_days')
+EXCLUDE_RANDOM_MAC=$(bashio::config 'exclude_random_mac')
 
 run_sync() {
     bashio::log.info "Iniciando sincronizacion Deco -> AdGuard Home..."
+    EXTRA_ARGS=()
+    if ! bashio::var.true "$EXCLUDE_RANDOM_MAC"; then
+        EXTRA_ARGS+=(--no-exclude-random-mac)
+    fi
     python3 /app/deco_to_adguard.py \
         --deco-host  "$DECO_HOST" \
         --deco-pass  "$DECO_PASS" \
@@ -17,7 +23,10 @@ run_sync() {
         --agh-user   "$AGH_USER" \
         --agh-pass   "$AGH_PASS" \
         --min-ip     "$MIN_IP" \
-        --output     /tmp/clientes_adguard.yaml
+        --stale-days "$STALE_DAYS" \
+        --state-file /data/deco_adguard_state.json \
+        --output     /tmp/clientes_adguard.yaml \
+        "${EXTRA_ARGS[@]}"
     bashio::log.info "Sincronizacion completada."
 }
 
