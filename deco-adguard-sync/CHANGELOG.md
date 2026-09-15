@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.2.1
+- Fixed `400 invalid tag: "deco-sync"` on every add/update: AdGuard Home only accepts a fixed set of predefined tags (device type / OS), not arbitrary strings. Dropped the custom tag entirely — the stale cleanup was already based on `network_cidr`, not the tag, so this only removes dead code and the broken API calls
+
 ## 1.2.0
 - Added `build.yaml` (missing `build_from` per arch) — fixes Docker build failure `exit code 1` on 1.1.0 caused by an unset `BUILD_FROM`
 - Stale cleanup is now aggressive: it removes **any** AdGuard client whose IP/CIDR falls inside `network_cidr` (default `10.0.2.0/23`) and hasn't been seen on the Deco for `stale_days`, not only clients this add-on created. Clients outside that network, or identified only by MAC/ClientID, are never touched

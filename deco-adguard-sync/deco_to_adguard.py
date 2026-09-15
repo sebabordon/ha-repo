@@ -12,8 +12,8 @@ deco_to_adguard.py
    - Los dispositivos nuevos con MAC aleatoria (randomizacion de
      privacidad de iOS/Android) no se crean como clientes nuevos,
      salvo que ya existiera un cliente con ese nombre.
-   - Los clientes gestionados por este script (tag "deco-sync") que
-     dejan de verse en el Deco por mas de N dias se borran de AdGuard.
+   - Los clientes de AdGuard dentro de la red gestionada (network_cidr)
+     que dejan de verse en el Deco por mas de N dias se borran.
 
 Dependencias:
     pip install tplinkrouterc6u pyyaml requests
@@ -61,7 +61,6 @@ OUTPUT_DEFAULT     = "clientes_adguard.yaml"
 STATE_FILE_DEFAULT = "/data/deco_adguard_state.json"
 STALE_DAYS_DEFAULT = 7
 MIN_IP_SUFFIX      = 100  # override via --min-ip
-MANAGED_TAG        = "deco-sync"
 NETWORK_DEFAULT    = "10.0.2.0/23"
 
 def normalize_mac(mac: str) -> str:
@@ -141,7 +140,7 @@ def build_agh_client(name: str, mac: str, ip: str) -> dict:
         "use_global_blocked_services": True,
         "blocked_services": [],
         "upstreams": [],
-        "tags": [MANAGED_TAG],
+        "tags": [],
     }
 
 def fetch_devices(host: str, password: str) -> list[dict]:
@@ -280,9 +279,6 @@ def sync_to_adguard(
                 payload = dict(matched)
                 payload["ids"] = new_ids
                 payload["name"] = new_name
-                tags = set(payload.get("tags") or [])
-                tags.add(MANAGED_TAG)
-                payload["tags"] = sorted(tags)
                 if dry_run:
                     print(f"  [~] Dry-run update: '{matched['name']}' -> '{new_name}' {new_ids}")
                     updated += 1
@@ -337,9 +333,7 @@ def sync_to_adguard(
             last_seen = state.get(c["name"], {}).get("last_seen")
             if last_seen is None:
                 state[c["name"]] = {"last_seen": now}
-                managed = MANAGED_TAG in (c.get("tags") or [])
-                origin = "gestionado" if managed else "manual, dentro de la red"
-                print(f"  [?] '{c['name']}' ({origin}) sin historial, se registra ahora "
+                print(f"  [?] '{c['name']}' (dentro de la red) sin historial, se registra ahora "
                       f"(se evaluara en {stale_days} dias si sigue ausente).")
                 continue
             age = now_dt - datetime.fromisoformat(last_seen)
