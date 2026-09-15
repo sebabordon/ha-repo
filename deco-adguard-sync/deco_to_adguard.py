@@ -82,6 +82,27 @@ def is_ip_id(value: str) -> bool:
     except ValueError:
         return False
 
+_MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
+
+def is_mac_id(value: str) -> bool:
+    return bool(_MAC_RE.match(value.lower()))
+
+_GENERIC_NAMES = {"wlan0", "lwip0", "dot", "eth0", "eth1", "localhost", "unknown"}
+_GENERIC_NAME_RE = re.compile(r"^none-\d+$", re.IGNORECASE)
+
+def is_generic_name(raw_name: str, name_counts: dict[str, int]) -> bool:
+    """Nombres tecnicos/por defecto (interfaz de red, placeholder de AdGuard) o que
+    Deco reporta identicos para mas de un dispositivo en esta misma corrida no son
+    identidad confiable: no se usan para matchear ni para crear clientes nuevos."""
+    n = raw_name.strip().lower()
+    if not n:
+        return True
+    if n in _GENERIC_NAMES or _GENERIC_NAME_RE.match(n):
+        return True
+    if name_counts.get(sanitize_name(raw_name), 0) > 1:
+        return True
+    return False
+
 def client_in_network(client: dict, network: ipaddress.IPv4Network) -> bool:
     """True si alguno de los ids del cliente (IP o CIDR) cae dentro de la red gestionada.
     Clientes identificados solo por MAC o ClientID no se pueden ubicar en una red,
@@ -203,6 +224,75 @@ def build_yaml(devices: list[dict]) -> str:
         indent=2,
     )
 
+def _register(existing_by_name: dict, existing_by_id: dict, client: dict) -> None:
+    existing_by_name[client["name"]] = client
+    for id_ in client.get("ids", []):
+        existing_by_id[id_.lower()] = client
+
+def _unregister(existing_by_name: dict, existing_by_id: dict, client: dict) -> None:
+    existing_by_name.pop(client["name"], None)
+    for id_ in client.get("ids", []):
+        existing_by_id.pop(id_.lower(), None)
+
+def apply_add(session, url, payload, existing_by_name, existing_by_id, dry_run) -> bool:
+    if dry_run:
+        print(f"  [~] Dry-run add: {payload['name']} {payload['ids']}")
+    else:
+        r = session.post(f"{url}/control/clients/add", json=payload)
+        if r.status_code != 200:
+            print(f"  [!] Error agregando '{payload['name']}': {r.status_code} {r.text}")
+            return False
+        print(f"  [+] Agregado: {payload['name']} {payload['ids']}")
+    _register(existing_by_name, existing_by_id, payload)
+    return True
+
+def apply_update(session, url, old_name, payload, existing_by_name, existing_by_id, dry_run) -> bool:
+    if dry_run:
+        print(f"  [~] Dry-run update: '{old_name}' -> '{payload['name']}' {payload['ids']}")
+    else:
+        r = session.post(f"{url}/control/clients/update",
+                          json={"name": old_name, "data": payload})
+        if r.status_code != 200:
+            print(f"  [!] Error actualizando '{old_name}': {r.status_code} {r.text}")
+            return False
+        print(f"  [*] Actualizado: '{old_name}' -> '{payload['name']}' {payload['ids']}")
+    old = existing_by_name.get(old_name)
+    if old:
+        _unregister(existing_by_name, existing_by_id, old)
+    _register(existing_by_name, existing_by_id, payload)
+    return True
+
+def apply_delete(session, url, name, existing_by_name, existing_by_id, dry_run, reason="") -> bool:
+    suffix = f" ({reason})" if reason else ""
+    if dry_run:
+        print(f"  [~] Dry-run delete: '{name}'{suffix}")
+    else:
+        r = session.post(f"{url}/control/clients/delete", json={"name": name})
+        if r.status_code != 200:
+            print(f"  [!] Error borrando '{name}': {r.status_code} {r.text}")
+            return False
+        print(f"  [x] Borrado: '{name}'{suffix}")
+    client = existing_by_name.get(name)
+    if client:
+        _unregister(existing_by_name, existing_by_id, client)
+    return True
+
+def release_ip(session, url, ip, exclude_name, existing_by_name, existing_by_id, dry_run) -> None:
+    """Si otro cliente ya tiene esta IP, se la saca (Deco manda). Si se queda sin
+    ids, se borra: era un registro obsoleto que solo identificaba esa IP vieja."""
+    holder = existing_by_id.get(ip.lower())
+    if not holder or holder["name"] == exclude_name:
+        return
+    remaining = [i for i in holder.get("ids", []) if i != ip]
+    if remaining:
+        payload = dict(holder)
+        payload["ids"] = remaining
+        print(f"  [~] Liberando IP {ip} de '{holder['name']}' (ahora es de otro dispositivo)")
+        apply_update(session, url, holder["name"], payload, existing_by_name, existing_by_id, dry_run)
+    else:
+        apply_delete(session, url, holder["name"], existing_by_name, existing_by_id, dry_run,
+                     reason=f"se quedaba sin ids al liberar {ip}")
+
 def sync_to_adguard(
     devices: list[dict],
     agh_host: str,
@@ -227,19 +317,25 @@ def sync_to_adguard(
         print(f"[ERROR] No se pudo conectar a AdGuard Home: {exc}")
         sys.exit(1)
     existing_clients = resp.json().get("clients", [])
-    existing_by_name = {c["name"]: c for c in existing_clients}
+    existing_by_name: dict[str, dict] = {c["name"]: c for c in existing_clients}
     existing_by_id: dict[str, dict] = {}
     for c in existing_clients:
         for id_ in c.get("ids", []):
             existing_by_id[id_.lower()] = c
     print(f"[AdGuard] Clientes existentes: {len(existing_clients)}")
 
-    added = updated = unchanged = skipped_random = failed = 0
+    name_counts: dict[str, int] = {}
+    for dev in devices:
+        if dev["name"].strip():
+            n = sanitize_name(dev["name"])
+            name_counts[n] = name_counts.get(n, 0) + 1
+
+    added = updated = unchanged = skipped_random = skipped_generic = failed = 0
     current_names: set[str] = set()
     now = now_iso()
 
     for dev in devices:
-        name = sanitize_name(dev["name"] or dev["mac"] or "Desconocido")
+        raw_name = dev["name"] or ""
         ip = dev["ip"]
         mac_norm = None
         if dev["mac"]:
@@ -249,29 +345,35 @@ def sync_to_adguard(
                 mac_norm = None
         is_random = bool(mac_norm) and is_locally_administered_mac(mac_norm)
         usable_mac = mac_norm if (mac_norm and not is_random) else None
+        generic = is_generic_name(raw_name, name_counts)
+        name = None if generic else sanitize_name(raw_name)
 
         if not ip and not usable_mac:
-            print(f"[WARN] Saltando '{name}': no tiene IP ni MAC utilizable.")
+            print(f"[WARN] Saltando '{raw_name or dev['mac']}': no tiene IP ni MAC utilizable.")
             continue
 
         matched, match_reason = None, None
-        if usable_mac and usable_mac in existing_by_id:
-            matched, match_reason = existing_by_id[usable_mac], "mac"
-        elif name in existing_by_name:
+        if usable_mac and usable_mac.lower() in existing_by_id:
+            matched, match_reason = existing_by_id[usable_mac.lower()], "mac"
+        elif name and name in existing_by_name:
             matched, match_reason = existing_by_name[name], "name"
 
         if matched:
+            if ip:
+                release_ip(session, url, ip, matched["name"], existing_by_name, existing_by_id, dry_run)
             old_ids = matched.get("ids", [])
             new_ids = []
             if ip:
                 new_ids.append(ip)
             for id_ in old_ids:
-                if not is_ip_id(id_) and id_ not in new_ids:
+                if is_ip_id(id_) or is_mac_id(id_):
+                    continue  # se reemplazan por la IP/MAC actuales, no se acumulan
+                if id_ not in new_ids:
                     new_ids.append(id_)
             if usable_mac and usable_mac not in new_ids:
                 new_ids.append(usable_mac)
-            # Si matcheo por MAC y el Deco reporta otro nombre, el Deco manda.
-            new_name = name if match_reason == "mac" else matched["name"]
+            # Si matcheo por MAC y el Deco reporta un nombre real (no generico), el Deco manda.
+            new_name = name if (match_reason == "mac" and name) else matched["name"]
             current_names.add(new_name)
 
             changed = set(new_ids) != set(old_ids) or new_name != matched["name"]
@@ -279,53 +381,45 @@ def sync_to_adguard(
                 payload = dict(matched)
                 payload["ids"] = new_ids
                 payload["name"] = new_name
-                if dry_run:
-                    print(f"  [~] Dry-run update: '{matched['name']}' -> '{new_name}' {new_ids}")
+                if apply_update(session, url, matched["name"], payload, existing_by_name, existing_by_id, dry_run):
                     updated += 1
                 else:
-                    r = session.post(f"{url}/control/clients/update",
-                                      json={"name": matched["name"], "data": payload})
-                    if r.status_code == 200:
-                        print(f"  [*] Actualizado: '{matched['name']}' -> '{new_name}' {new_ids}")
-                        updated += 1
-                    else:
-                        print(f"  [!] Error actualizando '{matched['name']}': {r.status_code} {r.text}")
-                        failed += 1
+                    failed += 1
             else:
                 unchanged += 1
             state[new_name] = {"last_seen": now, "ip": ip, "mac": usable_mac}
             continue
 
         # Sin match: cliente nuevo
+        if generic:
+            skipped_generic += 1
+            print(f"  [-] Nombre generico/ambiguo sin match por MAC, no se crea: "
+                  f"'{raw_name or dev['mac']}' ({dev['mac']})")
+            continue
         if is_random and exclude_random_mac:
             skipped_random += 1
             print(f"  [-] MAC aleatoria, no se crea cliente nuevo: '{name}' ({dev['mac']})")
             continue
 
+        if ip:
+            release_ip(session, url, ip, None, existing_by_name, existing_by_id, dry_run)
         current_names.add(name)
         try:
             payload = build_agh_client(name, usable_mac or "", ip)
         except ValueError as exc:
             print(f"[WARN] Saltando '{name}': {exc}")
             continue
-        if dry_run:
-            print(f"  [~] Dry-run add: {payload['name']} {payload['ids']}")
+        if apply_add(session, url, payload, existing_by_name, existing_by_id, dry_run):
             added += 1
         else:
-            r = session.post(f"{url}/control/clients/add", json=payload)
-            if r.status_code == 200:
-                print(f"  [+] Agregado: {payload['name']} {payload['ids']}")
-                added += 1
-            else:
-                print(f"  [!] Error agregando '{payload['name']}': {r.status_code} {r.text}")
-                failed += 1
-                continue
+            failed += 1
+            continue
         state[name] = {"last_seen": now, "ip": ip, "mac": usable_mac}
 
     deleted = 0
     if stale_days > 0:
         now_dt = datetime.now(timezone.utc)
-        for c in existing_clients:
+        for c in list(existing_by_name.values()):
             if c["name"] in current_names:
                 continue
             if not client_in_network(c, managed_network):
@@ -338,23 +432,17 @@ def sync_to_adguard(
                 continue
             age = now_dt - datetime.fromisoformat(last_seen)
             if age >= timedelta(days=stale_days):
-                if dry_run:
-                    print(f"  [~] Dry-run delete: '{c['name']}' (sin verse hace {age.days}d)")
-                else:
-                    r = session.post(f"{url}/control/clients/delete", json={"name": c["name"]})
-                    if r.status_code == 200:
-                        print(f"  [x] Borrado: '{c['name']}' (sin verse hace {age.days}d)")
-                    else:
-                        print(f"  [!] Error borrando '{c['name']}': {r.status_code} {r.text}")
-                        continue
-                state.pop(c["name"], None)
-                deleted += 1
+                if apply_delete(session, url, c["name"], existing_by_name, existing_by_id, dry_run,
+                                 reason=f"sin verse hace {age.days}d"):
+                    state.pop(c["name"], None)
+                    deleted += 1
             else:
                 remaining = stale_days - age.days
                 print(f"  [.] '{c['name']}' ausente, en periodo de gracia ({remaining}d restantes).")
 
     print(f"\n[AdGuard] Resumen: {added} agregados, {updated} actualizados, "
           f"{unchanged} sin cambios, {skipped_random} omitidos (MAC aleatoria), "
+          f"{skipped_generic} omitidos (nombre ambiguo), "
           f"{deleted} borrados (stale), {failed} errores.")
     if dry_run:
         print("[AdGuard] Modo dry-run: no se realizaron cambios reales.")
