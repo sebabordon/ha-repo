@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.4.0
+- New `parental_exempt` option: list devices (by name or fixed MAC) that should have AdGuard's Parental Control turned off, while keeping ad-blocking and safe browsing on. Re-applied on every sync so it survives IP changes and renames, same as the rest of the sync
+
 ## 1.3.1
 - A device with an ambiguous/generic Deco hostname is no longer dropped outright when it has its own fixed (non-randomized) MAC: it's still created, just under a disambiguated name (`H110-79f4` instead of a colliding `H110`), since the MAC alone is enough to confirm a real, distinct identity. Only devices with an ambiguous name *and* no usable MAC are skipped
 
