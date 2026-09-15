@@ -9,6 +9,7 @@ MIN_IP=$(bashio::config 'min_ip_suffix')
 RUN_ON_START=$(bashio::config 'run_on_start')
 STALE_DAYS=$(bashio::config 'stale_days')
 EXCLUDE_RANDOM_MAC=$(bashio::config 'exclude_random_mac')
+NETWORK_CIDR=$(bashio::config 'network_cidr')
 
 run_sync() {
     bashio::log.info "Iniciando sincronizacion Deco -> AdGuard Home..."
@@ -24,6 +25,7 @@ run_sync() {
         --agh-pass   "$AGH_PASS" \
         --min-ip     "$MIN_IP" \
         --stale-days "$STALE_DAYS" \
+        --network    "$NETWORK_CIDR" \
         --state-file /data/deco_adguard_state.json \
         --output     /tmp/clientes_adguard.yaml \
         "${EXTRA_ARGS[@]}"

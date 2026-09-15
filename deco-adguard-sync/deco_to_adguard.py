@@ -62,6 +62,7 @@ STATE_FILE_DEFAULT = "/data/deco_adguard_state.json"
 STALE_DAYS_DEFAULT = 7
 MIN_IP_SUFFIX      = 100  # override via --min-ip
 MANAGED_TAG        = "deco-sync"
+NETWORK_DEFAULT    = "10.0.2.0/23"
 
 def normalize_mac(mac: str) -> str:
     digits = re.sub(r"[^0-9a-fA-F]", "", mac)
@@ -81,6 +82,21 @@ def is_ip_id(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+def client_in_network(client: dict, network: ipaddress.IPv4Network) -> bool:
+    """True si alguno de los ids del cliente (IP o CIDR) cae dentro de la red gestionada.
+    Clientes identificados solo por MAC o ClientID no se pueden ubicar en una red,
+    asi que se consideran fuera (protegidos)."""
+    for id_ in client.get("ids", []):
+        try:
+            if "/" in id_:
+                if ipaddress.ip_network(id_, strict=False).overlaps(network):
+                    return True
+            elif ipaddress.ip_address(id_) in network:
+                return True
+        except ValueError:
+            continue
+    return False
 
 def sanitize_name(name: str) -> str:
     name = name.strip()
@@ -196,8 +212,10 @@ def sync_to_adguard(
     state: dict,
     stale_days: int = STALE_DAYS_DEFAULT,
     exclude_random_mac: bool = True,
+    network: str = NETWORK_DEFAULT,
     dry_run: bool = False,
 ) -> None:
+    managed_network = ipaddress.ip_network(network, strict=False)
     url = agh_host.rstrip("/")
     print(f"\n[AdGuard] Conectando a {url} ...")
     session = requests.Session()
@@ -312,14 +330,16 @@ def sync_to_adguard(
     if stale_days > 0:
         now_dt = datetime.now(timezone.utc)
         for c in existing_clients:
-            if MANAGED_TAG not in (c.get("tags") or []):
-                continue
             if c["name"] in current_names:
                 continue
+            if not client_in_network(c, managed_network):
+                continue  # fuera de la red gestionada, se protege
             last_seen = state.get(c["name"], {}).get("last_seen")
             if last_seen is None:
                 state[c["name"]] = {"last_seen": now}
-                print(f"  [?] '{c['name']}' sin historial, se registra ahora "
+                managed = MANAGED_TAG in (c.get("tags") or [])
+                origin = "gestionado" if managed else "manual, dentro de la red"
+                print(f"  [?] '{c['name']}' ({origin}) sin historial, se registra ahora "
                       f"(se evaluara en {stale_days} dias si sigue ausente).")
                 continue
             age = now_dt - datetime.fromisoformat(last_seen)
@@ -361,6 +381,8 @@ def parse_args() -> argparse.Namespace:
                         help="Archivo donde se guarda la ultima vez visto de cada dispositivo")
     parser.add_argument("--stale-days", type=int, default=STALE_DAYS_DEFAULT,
                         help="Dias sin verse en el Deco antes de borrar el cliente en AdGuard (0 desactiva)")
+    parser.add_argument("--network", default=NETWORK_DEFAULT,
+                        help="Red gestionada (CIDR). Clientes de AdGuard fuera de esta red nunca se borran por stale")
     parser.add_argument("--min-ip", dest="min_ip", type=int, default=None,
                         help="Ultimo octeto minimo de IP a exportar (default: 100)")
     parser.add_argument("--no-exclude-random-mac", dest="exclude_random_mac",
@@ -406,6 +428,7 @@ def main() -> None:
             state=state,
             stale_days=args.stale_days,
             exclude_random_mac=args.exclude_random_mac,
+            network=args.network,
             dry_run=args.dry_run,
         )
         if not args.dry_run:

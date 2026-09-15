@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+- Added `build.yaml` (missing `build_from` per arch) — fixes Docker build failure `exit code 1` on 1.1.0 caused by an unset `BUILD_FROM`
+- Stale cleanup is now aggressive: it removes **any** AdGuard client whose IP/CIDR falls inside `network_cidr` (default `10.0.2.0/23`) and hasn't been seen on the Deco for `stale_days`, not only clients this add-on created. Clients outside that network, or identified only by MAC/ClientID, are never touched
+- New `network_cidr` option to control the managed range
+
 ## 1.1.0
 - Deco now takes precedence over AdGuard Home: existing clients (matched by fixed MAC, or by name when the MAC is a randomized privacy address) get their IP updated and the old IP removed
 - New devices with a randomized MAC are no longer added as new AdGuard clients (configurable via `exclude_random_mac`)

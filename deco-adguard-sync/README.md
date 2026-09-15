@@ -12,7 +12,7 @@ Automatically syncs connected devices from your **TP-Link Deco XE75 Pro** into *
    - If a device's fixed (non-randomized) MAC matches an existing AdGuard client, that client is updated: name and IP are synced, the old IP is removed.
    - Otherwise, if the device's name matches an existing client, its IP is updated (old IP removed). This is the primary match for phones, since iOS/Android randomize their MAC per network.
    - If nothing matches, a new client is created — unless the device only has a randomized MAC, in which case it's skipped to avoid cluttering AdGuard with throwaway entries (configurable).
-4. Clients created by this add-on (tagged `deco-sync`) that stop appearing on the Deco for more than `stale_days` are removed from AdGuard. Manually created AdGuard clients are never touched.
+4. **Any** AdGuard client whose IP/CIDR falls inside `network_cidr` — not just the ones this add-on created — that stops appearing on the Deco for more than `stale_days` is removed from AdGuard. Clients outside that network, or identified only by MAC/ClientID (no way to place them on a network), are never touched.
 5. All new/updated clients keep global settings and global blocked services enabled
 
 The sync runs once on startup, then automatically every 6 hours.
@@ -38,8 +38,9 @@ The sync runs once on startup, then automatically every 6 hours.
 | `agh_pass` | AdGuard Home password | — |
 | `min_ip_suffix` | Minimum last IP octet to export | `100` → exports from x.x.x.100 upward |
 | `run_on_start` | Run a sync immediately on startup | `true` |
-| `stale_days` | Days a Deco-managed client can go unseen before it's removed from AdGuard | `7`, `0` disables cleanup |
+| `stale_days` | Days a client can go unseen before it's removed from AdGuard | `7`, `0` disables cleanup |
 | `exclude_random_mac` | Skip creating new AdGuard clients for devices with a randomized MAC | `true` |
+| `network_cidr` | Network this sync manages; stale cleanup only ever touches clients inside it | `10.0.2.0/23` |
 
 ### About `min_ip_suffix`
 
@@ -49,6 +50,8 @@ For example, with `min_ip_suffix: 100`, only devices with IPs ending in `.100` o
 
 ## Notes
 
+- **Stale cleanup is aggressive within `network_cidr`**: any AdGuard client in that range not reported by the Deco for `stale_days` gets deleted, including ones you created manually in the AdGuard UI. If you keep static AdGuard clients for devices the Deco doesn't see (e.g. a device connected to a different AP, or identified only by a CIDR you assigned), either give them an IP outside `network_cidr` or lower `stale_days`/set it to `0`.
+- The first time a client is seen missing, its "last seen" is just recorded (not deleted yet) — real deletions only happen after `stale_days` of confirmed absence, so upgrading to this version doesn't wipe anything on the first run.
 - SSL certificate verification is disabled for both the Deco and AdGuard Home connections, since both typically use self-signed certificates on local networks
 - "Last seen" state for the stale cleanup is stored in `/data/deco_adguard_state.json`, which persists across add-on restarts/updates
 - A device is considered to have a "randomized MAC" when the locally-administered bit of its first octet is set — the standard signal for iOS/Android per-network privacy MACs

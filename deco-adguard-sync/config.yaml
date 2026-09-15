@@ -6,9 +6,10 @@ description: >
   only IPs like 10.x.x.100 and above). Deco takes precedence over AdGuard:
   existing clients (matched by fixed MAC or by name) get their IP updated
   and the old one removed. New devices with a randomized privacy MAC are
-  not added as new clients, and clients no longer seen on the Deco for
-  more than stale_days are removed from AdGuard.
-version: "1.1.0"
+  not added as new clients. Any AdGuard client inside network_cidr (not
+  only the ones this add-on created) that's no longer seen on the Deco
+  for more than stale_days is removed from AdGuard.
+version: "1.2.0"
 slug: "deco-adguard-sync"
 init: false
 arch:
@@ -44,10 +45,17 @@ options:
   # After that, syncs automatically every 6 hours.
   run_on_start: true
 
-  # Days a Deco-managed client can go unseen on the Deco before it's
-  # removed from AdGuard Home. Only clients created by this add-on are
-  # ever removed. Set to 0 to disable automatic cleanup.
+  # Days a client can go unseen on the Deco before it's removed from
+  # AdGuard Home. Applies to ANY AdGuard client whose IP/CIDR falls
+  # inside network_cidr, not just the ones this add-on created — set
+  # to 0 to disable automatic cleanup.
   stale_days: 7
+
+  # Network managed by this sync, in CIDR notation. Only AdGuard clients
+  # identified by an IP/CIDR inside this range are candidates for the
+  # stale cleanup above; anything outside it (or identified only by MAC
+  # or ClientID) is never touched.
+  network_cidr: "10.0.2.0/23"
 
   # Skip creating new AdGuard clients for devices whose MAC looks like a
   # randomized privacy address (common on iOS/Android per-network MAC
@@ -65,3 +73,4 @@ schema:
   run_on_start: bool
   stale_days: int
   exclude_random_mac: bool
+  network_cidr: str
