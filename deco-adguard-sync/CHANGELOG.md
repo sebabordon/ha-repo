@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.1
+- A device with an ambiguous/generic Deco hostname is no longer dropped outright when it has its own fixed (non-randomized) MAC: it's still created, just under a disambiguated name (`H110-79f4` instead of a colliding `H110`), since the MAC alone is enough to confirm a real, distinct identity. Only devices with an ambiguous name *and* no usable MAC are skipped
+
 ## 1.3.0
 - Fixed data corruption: devices with a generic/default hostname reported by more than one physical device (`wlan0`, `lwip0`, `dot`, AdGuard's own `none-N` placeholders, or any name Deco reports for 2+ devices in the same run) are no longer matched/merged by name — this was gluing unrelated MACs onto a single AdGuard client and flipping its IP on every run. These devices are now only touched via a real MAC match; otherwise they're skipped (new "omitidos (nombre ambiguo)" counter)
 - Fixed the resulting `400 another client uses the same IP` flood: when a device's IP is being assigned to a client, any other AdGuard client still holding that IP is now found and released first (and deleted if that was its only id) — this is what "remove the old IP" actually needs on a live instance, not just editing the target client

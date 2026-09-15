@@ -392,10 +392,19 @@ def sync_to_adguard(
 
         # Sin match: cliente nuevo
         if generic:
-            skipped_generic += 1
-            print(f"  [-] Nombre generico/ambiguo sin match por MAC, no se crea: "
-                  f"'{raw_name or dev['mac']}' ({dev['mac']})")
-            continue
+            if not usable_mac:
+                skipped_generic += 1
+                print(f"  [-] Nombre generico/ambiguo sin MAC fija, no se crea: "
+                      f"'{raw_name or dev['mac']}' ({dev['mac']})")
+                continue
+            # Nombre ambiguo pero MAC fija: hay identidad confiable, no se pierde el
+            # dispositivo, solo se desambigua el nombre para no chocar con otros.
+            base = sanitize_name(raw_name) if raw_name.strip() else "Dispositivo"
+            name = f"{base}-{usable_mac.replace(':', '')[-4:]}"
+            while name in existing_by_name:
+                name += "x"
+            print(f"  [i] Nombre ambiguo '{raw_name or 'sin nombre'}', se crea como "
+                  f"'{name}' (MAC fija confirma identidad)")
         if is_random and exclude_random_mac:
             skipped_random += 1
             print(f"  [-] MAC aleatoria, no se crea cliente nuevo: '{name}' ({dev['mac']})")
