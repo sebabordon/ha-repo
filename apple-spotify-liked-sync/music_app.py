@@ -24,44 +24,49 @@ def get_library_tracks():
 
     Each item: {"id": persistent ID, "name": str, "artist": str, "loved": bool}
     """
-    # NOTE: string-building with "&" must happen *outside* `tell application
-    # "Music"` — concatenating a boolean while still inside the tell block
-    # routes the "&" operation to Music.app itself and it errors out with
-    # -10001 ("descriptor type mismatch"). So we collect raw values first,
-    # then build the tab-separated output after leaving the tell block.
+    # NOTE: fetching one property at a time per track (e.g. `favorited of t`
+    # inside a `repeat with t in tracks` loop) means one IPC round-trip to
+    # Music.app per track per property — for an 8000+ track library that
+    # blows well past any sane timeout (measured: >300s and still not done).
+    # Fetching each property as a bulk list (`favorited of every track of
+    # library playlist 1`) is a single round-trip and takes well under a
+    # second regardless of library size. The repeat loop below only zips
+    # those already-fetched lists together by index — no further calls into
+    # Music.app — so it stays fast (a few seconds for 8000+ tracks).
     #
     # The love/heart property is called "favorited" on streaming (Apple
     # Music subscription) tracks and "loved" on local files — both exist in
-    # the wild, so each track tries "favorited" first and falls back to
-    # "loved".
+    # the wild, so the bulk fetch tries "favorited" first and falls back to
+    # "loved" if the library doesn't support it.
     script = '''
     tell application "Music"
-        set trackList to {}
-        repeat with t in (every track of library playlist 1)
-            set isFav to false
-            try
-                set isFav to favorited of t
-            on error
-                try
-                    set isFav to loved of t
-                end try
-            end try
-            set end of trackList to {persistent ID of t, name of t, artist of t, isFav}
-        end repeat
+        set idList to persistent ID of every track of library playlist 1
+        set nameList to name of every track of library playlist 1
+        set artistList to artist of every track of library playlist 1
+        try
+            set favList to favorited of every track of library playlist 1
+        on error
+            set favList to loved of every track of library playlist 1
+        end try
     end tell
 
-    set output to ""
-    repeat with rec in trackList
-        set trackId to item 1 of rec
-        set trackName to item 2 of rec
-        set trackArtist to item 3 of rec
-        if item 4 of rec then
+    set n to count of idList
+    set outList to {}
+    repeat with i from 1 to n
+        set trackId to item i of idList
+        set trackName to item i of nameList
+        set trackArtist to item i of artistList
+        if item i of favList then
             set trackLoved to "true"
         else
             set trackLoved to "false"
         end if
-        set output to output & trackId & tab & trackName & tab & trackArtist & tab & trackLoved & linefeed
+        set end of outList to trackId & tab & trackName & tab & trackArtist & tab & trackLoved
     end repeat
+
+    set AppleScript's text item delimiters to linefeed
+    set output to outList as text
+    set AppleScript's text item delimiters to ""
     return output
     '''
     raw = _run_applescript(script)

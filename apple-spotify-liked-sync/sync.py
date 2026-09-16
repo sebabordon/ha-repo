@@ -12,14 +12,69 @@ instead. The reverse direction (Apple Music love -> Spotify) is fully
 automatic since it uses the real Spotify Web API.
 """
 import argparse
+import html
 import os
+import subprocess
 import sys
+import urllib.parse
 
 import apple_catalog
 import matcher
 import music_app
 import spotify_client
 import state
+
+UNMATCHED_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "add_to_library.html")
+
+
+def _apple_music_link(name: str, artist: str) -> str:
+    """Best-effort deep link to open the track in Music.app/web for manual
+    "Add to Library" — via the free iTunes Search API (apple_catalog), same
+    lookup run_assist() uses. Falls back to an Apple Music search page for
+    the query if no confident candidate is found.
+    """
+    try:
+        candidates = apple_catalog.search(name, artist)
+    except Exception:
+        candidates = []
+    cand, score = matcher.best_candidate(name, artist, candidates)
+    if cand and score >= 0.5:
+        return cand["url"]
+    query = urllib.parse.quote(f"{name} {artist}")
+    return f"https://music.apple.com/{apple_catalog.STOREFRONT}/search?term={query}"
+
+
+def _write_unmatched_html(tracks):
+    """tracks: list of {"name", "artist"}. Writes an HTML page with a direct
+    Apple Music link per track so adding them to the library is one click.
+    """
+    rows = []
+    for t in tracks:
+        link = _apple_music_link(t["name"], t["artist"])
+        rows.append(
+            f"<li><a href=\"{html.escape(link)}\" target=\"_blank\">"
+            f"{html.escape(t['name'])} - {html.escape(t['artist'])}</a></li>"
+        )
+    page = f"""<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><title>Agregar a Apple Music</title>
+<style>
+body {{ font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }}
+li {{ margin-bottom: 10px; font-size: 16px; }}
+a {{ color: #fa233b; text-decoration: none; }}
+a:hover {{ text-decoration: underline; }}
+</style>
+</head>
+<body>
+<h2>Liked en Spotify, sin match en tu biblioteca de Apple Music</h2>
+<p>Abri cada link y toca "Agregar a la biblioteca" -- el proximo sync los va a amar automaticamente.</p>
+<ul>
+{chr(10).join(rows)}
+</ul>
+</body>
+</html>"""
+    with open(UNMATCHED_HTML_PATH, "w") as f:
+        f.write(page)
 
 
 def build_baseline(sp, spotify_tracks, apple_tracks):
@@ -144,12 +199,21 @@ def run_sync(dry_run: bool):
             unmatched.append(f"Loved on Apple Music, not found on Spotify: {t['name']} - {t['artist']}")
             record_match(key, apple_id=aid, name=t["name"], artist=t["artist"])
 
+    unmatched_spotify_tracks = [
+        {"name": m["name"], "artist": m["artist"]}
+        for m in matches.values()
+        if m.get("spotify_id") in current_spotify_liked_ids and not m.get("apple_id")
+    ]
+    unmatched_keys = {matcher.norm_key(t["name"], t["artist"]) for t in unmatched_spotify_tracks}
+    prev_notified_keys = set(prev.get("html_notified_keys", []))
+
     if not dry_run:
         state.save_state({
             "matches": matches,
             "spotify_liked_ids": sorted(current_spotify_liked_ids),
             "apple_loved_ids": sorted(current_apple_loved_ids),
             "rejected": prev.get("rejected", []),
+            "html_notified_keys": sorted(unmatched_keys),
         })
 
     print(f"\n{'[dry-run] ' if dry_run else ''}Done. "
@@ -159,6 +223,11 @@ def run_sync(dry_run: bool):
         print(f"\n{len(unmatched)} unmatched -- review manually:")
         for line in unmatched:
             print(f"  - {line}")
+
+    if unmatched_spotify_tracks:
+        _write_unmatched_html(unmatched_spotify_tracks)
+        if not dry_run and (unmatched_keys - prev_notified_keys):
+            subprocess.run(["open", UNMATCHED_HTML_PATH])
 
 
 def run_push(dry_run: bool):

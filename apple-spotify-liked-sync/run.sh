@@ -9,4 +9,4 @@ if [ -f .env ]; then
   set +a
 fi
 
-exec python3 sync.py "$@"
+exec venv/bin/python3 sync.py "$@"
