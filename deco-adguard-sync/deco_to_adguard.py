@@ -135,6 +135,16 @@ def load_state(path: str) -> dict:
         print(f"[WARN] No se pudo leer el estado ({path}): {exc}. Se empieza de cero.")
         return {}
 
+def parse_json_list(raw: str, flag_name: str) -> list[str]:
+    try:
+        value = json.loads(raw)
+        if not isinstance(value, list):
+            raise ValueError("no es una lista")
+        return value
+    except (json.JSONDecodeError, ValueError) as exc:
+        print(f"[WARN] {flag_name} invalido ({exc}), se ignora.")
+        return []
+
 def save_state(path: str, state: dict) -> None:
     p = Path(path)
     try:
@@ -293,10 +303,16 @@ def release_ip(session, url, ip, exclude_name, existing_by_name, existing_by_id,
         apply_delete(session, url, holder["name"], existing_by_name, existing_by_id, dry_run,
                      reason=f"se quedaba sin ids al liberar {ip}")
 
-def apply_parental_exemptions(session, url, exempt_list, existing_by_name, existing_by_id, dry_run):
-    """Fuerza parental_enabled=false para los clientes de la lista de excepciones
-    (matcheados por MAC o por nombre). Ad-block/safe browsing quedan siempre
-    activos para estos dispositivos, sin depender del toggle global."""
+def apply_exemptions(session, url, exempt_list, existing_by_name, existing_by_id, dry_run,
+                      disable_filtering: bool, label: str):
+    """Fuerza parental_enabled=false (y opcionalmente filtering/safebrowsing) para los
+    clientes de la lista (matcheados por MAC o por nombre)."""
+    desired = {
+        "use_global_settings": False,
+        "parental_enabled": False,
+        "filtering_enabled": not disable_filtering,
+        "safebrowsing_enabled": not disable_filtering,
+    }
     applied = unchanged = missing = 0
     for raw_entry in exempt_list:
         entry = raw_entry.strip()
@@ -312,18 +328,15 @@ def apply_parental_exemptions(session, url, exempt_list, existing_by_name, exist
             client = existing_by_name.get(entry)
         if not client:
             missing += 1
-            print(f"  [?] Excepcion parental '{entry}' no encontrada (todavia) en AdGuard.")
+            print(f"  [?] Excepcion '{label}' '{entry}' no encontrada (todavia) en AdGuard.")
             continue
-        if client.get("use_global_settings") is False and client.get("parental_enabled") is False:
+        if all(client.get(k) == v for k, v in desired.items()):
             unchanged += 1
             continue
         payload = dict(client)
-        payload["use_global_settings"] = False
-        payload["parental_enabled"] = False
-        payload["filtering_enabled"] = True
-        payload["safebrowsing_enabled"] = True
+        payload.update(desired)
         if apply_update(session, url, client["name"], payload, existing_by_name, existing_by_id, dry_run):
-            print(f"  [p] Sin control parental: '{client['name']}'")
+            print(f"  [p] {label}: '{client['name']}'")
             applied += 1
     return applied, unchanged, missing
 
@@ -337,6 +350,7 @@ def sync_to_adguard(
     exclude_random_mac: bool = True,
     network: str = NETWORK_DEFAULT,
     parental_exempt: list[str] | None = None,
+    unfiltered_devices: list[str] | None = None,
     dry_run: bool = False,
 ) -> None:
     managed_network = ipaddress.ip_network(network, strict=False)
@@ -486,15 +500,24 @@ def sync_to_adguard(
 
     parental_applied = parental_unchanged = parental_missing = 0
     if parental_exempt:
-        parental_applied, parental_unchanged, parental_missing = apply_parental_exemptions(
-            session, url, parental_exempt, existing_by_name, existing_by_id, dry_run)
+        parental_applied, parental_unchanged, parental_missing = apply_exemptions(
+            session, url, parental_exempt, existing_by_name, existing_by_id, dry_run,
+            disable_filtering=False, label="Sin control parental")
+
+    unfiltered_applied = unfiltered_unchanged = unfiltered_missing = 0
+    if unfiltered_devices:
+        unfiltered_applied, unfiltered_unchanged, unfiltered_missing = apply_exemptions(
+            session, url, unfiltered_devices, existing_by_name, existing_by_id, dry_run,
+            disable_filtering=True, label="Sin ningun bloqueo")
 
     print(f"\n[AdGuard] Resumen: {added} agregados, {updated} actualizados, "
           f"{unchanged} sin cambios, {skipped_random} omitidos (MAC aleatoria), "
           f"{skipped_generic} omitidos (nombre ambiguo), "
           f"{deleted} borrados (stale), {failed} errores. "
           f"Excepciones parentales: {parental_applied} aplicadas, "
-          f"{parental_unchanged} sin cambios, {parental_missing} no encontradas.")
+          f"{parental_unchanged} sin cambios, {parental_missing} no encontradas. "
+          f"Sin bloqueos: {unfiltered_applied} aplicados, "
+          f"{unfiltered_unchanged} sin cambios, {unfiltered_missing} no encontrados.")
     if dry_run:
         print("[AdGuard] Modo dry-run: no se realizaron cambios reales.")
 
@@ -518,6 +541,8 @@ def parse_args() -> argparse.Namespace:
                         help="Red gestionada (CIDR). Clientes de AdGuard fuera de esta red nunca se borran por stale")
     parser.add_argument("--parental-exempt-json", default="[]",
                         help="Lista JSON de nombres o MACs sin control parental, ej: '[\"AirdeSebastian\",\"aa:bb:cc:dd:ee:ff\"]'")
+    parser.add_argument("--unfiltered-json", default="[]",
+                        help="Lista JSON de nombres o MACs sin NINGUN bloqueo (parental+filtering+safebrowsing off)")
     parser.add_argument("--min-ip", dest="min_ip", type=int, default=None,
                         help="Ultimo octeto minimo de IP a exportar (default: 100)")
     parser.add_argument("--no-exclude-random-mac", dest="exclude_random_mac",
@@ -557,13 +582,8 @@ def main() -> None:
         print(yaml_str)
         print("-" * 60)
     if not args.no_upload:
-        try:
-            parental_exempt = json.loads(args.parental_exempt_json)
-            if not isinstance(parental_exempt, list):
-                raise ValueError("no es una lista")
-        except (json.JSONDecodeError, ValueError) as exc:
-            print(f"[WARN] --parental-exempt-json invalido ({exc}), se ignora.")
-            parental_exempt = []
+        parental_exempt = parse_json_list(args.parental_exempt_json, "--parental-exempt-json")
+        unfiltered_devices = parse_json_list(args.unfiltered_json, "--unfiltered-json")
         state = load_state(args.state_file)
         sync_to_adguard(
             devices, args.agh_host, args.agh_user, agh_pass,
@@ -572,6 +592,7 @@ def main() -> None:
             exclude_random_mac=args.exclude_random_mac,
             network=args.network,
             parental_exempt=parental_exempt,
+            unfiltered_devices=unfiltered_devices,
             dry_run=args.dry_run,
         )
         if not args.dry_run:

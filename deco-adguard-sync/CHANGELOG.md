@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.0
+- New `unfiltered_devices` option: like `parental_exempt`, but turns off every AdGuard block (parental + ad/tracker filtering + safe browsing) — meant for IoT/media devices (smart speakers, cameras, smart plugs, streaming boxes) that break when their own telemetry/API domains get blocked
+
 ## 1.4.0
 - New `parental_exempt` option: list devices (by name or fixed MAC) that should have AdGuard's Parental Control turned off, while keeping ad-blocking and safe browsing on. Re-applied on every sync so it survives IP changes and renames, same as the rest of the sync
 

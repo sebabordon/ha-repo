@@ -11,6 +11,7 @@ STALE_DAYS=$(bashio::config 'stale_days')
 EXCLUDE_RANDOM_MAC=$(bashio::config 'exclude_random_mac')
 NETWORK_CIDR=$(bashio::config 'network_cidr')
 PARENTAL_EXEMPT_JSON=$(bashio::config 'parental_exempt' | jq -c '.')
+UNFILTERED_JSON=$(bashio::config 'unfiltered_devices' | jq -c '.')
 
 run_sync() {
     bashio::log.info "Iniciando sincronizacion Deco -> AdGuard Home..."
@@ -28,6 +29,7 @@ run_sync() {
         --stale-days "$STALE_DAYS" \
         --network    "$NETWORK_CIDR" \
         --parental-exempt-json "$PARENTAL_EXEMPT_JSON" \
+        --unfiltered-json "$UNFILTERED_JSON" \
         --state-file /data/deco_adguard_state.json \
         --output     /tmp/clientes_adguard.yaml \
         "${EXTRA_ARGS[@]}"

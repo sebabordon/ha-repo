@@ -9,8 +9,9 @@ description: >
   not added as new clients. Any AdGuard client inside network_cidr (not
   only the ones this add-on created) that's no longer seen on the Deco
   for more than stale_days is removed from AdGuard. Devices listed in
-  parental_exempt get Parental Control turned off on every sync.
-version: "1.4.0"
+  parental_exempt get Parental Control turned off on every sync, and
+  devices in unfiltered_devices get every AdGuard block turned off.
+version: "1.5.0"
 slug: "deco-adguard-sync"
 init: false
 arch:
@@ -71,6 +72,13 @@ options:
   # survives IP/renames as long as the device is still identifiable.
   parental_exempt: []
 
+  # Devices with EVERY AdGuard block turned off (parental, ad/tracker
+  # filtering, and safe browsing) — one entry per line, name or fixed MAC.
+  # Meant for IoT/media devices (smart speakers, cameras, smart plugs,
+  # streaming boxes) that break when their own telemetry/API domains get
+  # blocked. Re-applied on every sync like parental_exempt.
+  unfiltered_devices: []
+
 schema:
   deco_host: str
   deco_pass: password
@@ -83,4 +91,6 @@ schema:
   exclude_random_mac: bool
   network_cidr: str
   parental_exempt:
+    - str
+  unfiltered_devices:
     - str

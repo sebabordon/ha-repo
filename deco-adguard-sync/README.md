@@ -17,6 +17,7 @@ Automatically syncs connected devices from your **TP-Link Deco XE75 Pro** into *
 4. **Any** AdGuard client whose IP/CIDR falls inside `network_cidr` — not just the ones this add-on created — that stops appearing on the Deco for more than `stale_days` is removed from AdGuard. Clients outside that network, or identified only by MAC/ClientID (no way to place them on a network), are never touched.
 5. All new/updated clients keep global settings and global blocked services enabled
 6. Every device listed in `parental_exempt` (by name or MAC) has Parental Control turned off on that client — ad-blocking and safe browsing stay on. Re-applied every sync, so it keeps working across IP/name changes as long as the device is still identifiable.
+7. Every device listed in `unfiltered_devices` gets **everything** turned off (parental, filtering, safe browsing) — meant for IoT/media devices that break when their telemetry or API domains get blocked. Same matching and re-apply behavior as `parental_exempt`.
 
 The sync runs once on startup, then automatically every 6 hours.
 
@@ -45,6 +46,7 @@ The sync runs once on startup, then automatically every 6 hours.
 | `exclude_random_mac` | Skip creating new AdGuard clients for devices with a randomized MAC | `true` |
 | `network_cidr` | Network this sync manages; stale cleanup only ever touches clients inside it | `10.0.2.0/23` |
 | `parental_exempt` | Devices with Parental Control forced off (ad-block/safe browsing stay on), one name or MAC per entry | `AirdeSebastian`, `Apple TV Living`, `aa:bb:cc:dd:ee:ff` |
+| `unfiltered_devices` | Devices with every AdGuard block forced off (parental + filtering + safe browsing), one name or MAC per entry | `Echo Dot Cocina`, `Sonoff Bomba`, `aa:bb:cc:dd:ee:ff` |
 
 ### About `min_ip_suffix`
 
@@ -54,7 +56,7 @@ For example, with `min_ip_suffix: 100`, only devices with IPs ending in `.100` o
 
 ## Notes
 
-- **`parental_exempt` matching**: each entry must match either the device's fixed MAC, or the exact name the client ends up with in AdGuard after sync (for devices with an ambiguous/generic Deco hostname, that's the disambiguated name, e.g. `H110-79f4` — check the AdGuard client list once if unsure). Matching by MAC is more robust since it doesn't depend on naming. `filtering_enabled` and `safebrowsing_enabled` are set to `true` explicitly for these devices and don't follow later changes to AdGuard's global toggles — only `parental_enabled` is what this option controls.
+- **`parental_exempt` / `unfiltered_devices` matching**: each entry must match either the device's fixed MAC, or the exact name the client ends up with in AdGuard after sync (for devices with an ambiguous/generic Deco hostname, that's the disambiguated name, e.g. `H110-79f4` — check the AdGuard client list once if unsure). Matching by MAC is more robust since it doesn't depend on naming. Both options set `filtering_enabled`/`safebrowsing_enabled` explicitly (`true` for `parental_exempt`, `false` for `unfiltered_devices`) and don't follow later changes to AdGuard's global toggles. If the same device is in both lists, `unfiltered_devices` wins (it's applied second).
 - **Stale cleanup is aggressive within `network_cidr`**: any AdGuard client in that range not reported by the Deco for `stale_days` gets deleted, including ones you created manually in the AdGuard UI. If you keep static AdGuard clients for devices the Deco doesn't see (e.g. a device connected to a different AP, or identified only by a CIDR you assigned), either give them an IP outside `network_cidr` or lower `stale_days`/set it to `0`.
 - The first time a client is seen missing, its "last seen" is just recorded (not deleted yet) — real deletions only happen after `stale_days` of confirmed absence, so upgrading to this version doesn't wipe anything on the first run.
 - SSL certificate verification is disabled for both the Deco and AdGuard Home connections, since both typically use self-signed certificates on local networks
