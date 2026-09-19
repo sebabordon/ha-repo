@@ -10,8 +10,10 @@ RUN_ON_START=$(bashio::config 'run_on_start')
 STALE_DAYS=$(bashio::config 'stale_days')
 EXCLUDE_RANDOM_MAC=$(bashio::config 'exclude_random_mac')
 NETWORK_CIDR=$(bashio::config 'network_cidr')
-PARENTAL_EXEMPT_JSON=$(bashio::config 'parental_exempt' | jq -c '.')
-UNFILTERED_JSON=$(bashio::config 'unfiltered_devices' | jq -c '.')
+# bashio::config imprime los valores de una lista uno por linea (no JSON), asi
+# que para pasarle un array real al script leemos /data/options.json directo.
+PARENTAL_EXEMPT_JSON=$(jq -c '.parental_exempt // []' /data/options.json)
+UNFILTERED_JSON=$(jq -c '.unfiltered_devices // []' /data/options.json)
 
 run_sync() {
     bashio::log.info "Iniciando sincronizacion Deco -> AdGuard Home..."

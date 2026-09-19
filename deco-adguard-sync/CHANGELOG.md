@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.1
+- Fixed `parental_exempt`/`unfiltered_devices` silently doing nothing: `bashio::config` prints list values one per line, not as JSON, so piping it through `jq -c '.'` produced invalid JSON and both lists were dropped every run. Reads `/data/options.json` directly instead, which is unambiguous JSON
+
 ## 1.5.0
 - New `unfiltered_devices` option: like `parental_exempt`, but turns off every AdGuard block (parental + ad/tracker filtering + safe browsing) — meant for IoT/media devices (smart speakers, cameras, smart plugs, streaming boxes) that break when their own telemetry/API domains get blocked
 
