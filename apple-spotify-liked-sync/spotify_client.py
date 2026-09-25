@@ -21,7 +21,17 @@ def get_client() -> spotipy.Spotify:
         cache_path=TOKEN_PATH,
         open_browser=True,
     )
-    return spotipy.Spotify(auth_manager=auth_manager)
+    # retries=0: on 429 spotipy would otherwise sleep for the whole Retry-After
+    # (hours), wedging the launchd job. Fail fast; sync.py backs off instead.
+    return spotipy.Spotify(auth_manager=auth_manager, retries=0, status_retries=0)
+
+
+def get_head(sp: spotipy.Spotify):
+    """Cheap 1-request change probe: (total likes, id of most recent like)."""
+    r = sp.current_user_saved_tracks(limit=1)
+    items = r.get("items", [])
+    top = items[0]["track"]["id"] if items and items[0].get("track") else None
+    return r.get("total", 0), top
 
 
 def get_liked_tracks(sp: spotipy.Spotify):

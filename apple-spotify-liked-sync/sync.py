@@ -16,7 +16,10 @@ import html
 import os
 import subprocess
 import sys
+import time
 import urllib.parse
+
+from spotipy.exceptions import SpotifyException
 
 import apple_catalog
 import matcher
@@ -24,6 +27,8 @@ import music_app
 import spotify_client
 import state
 
+RATE_LIMIT_PATH = os.path.join(state.CONFIG_DIR, "rate_limit_until")
+RATE_LIMIT_BACKOFF = 3600
 UNMATCHED_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "add_to_library.html")
 
 
@@ -95,21 +100,31 @@ def build_baseline(sp, spotify_tracks, apple_tracks):
 
 def run_sync(dry_run: bool):
     sp = spotify_client.get_client()
-
-    print("Fetching Spotify Liked Songs...")
-    spotify_tracks = spotify_client.get_liked_tracks(sp)
-    spotify_by_id = {t["id"]: t for t in spotify_tracks}
-    current_spotify_liked_ids = set(spotify_by_id)
+    prev = state.load_state()
 
     print("Fetching Apple Music library (can take a while for large libraries)...")
     apple_tracks = music_app.get_library_tracks()
     apple_by_id = {t["id"]: t for t in apple_tracks}
     current_apple_loved_ids = {t["id"] for t in apple_tracks if t["loved"]}
 
+    # Unchanged Apple side + unchanged Spotify head (total, newest like) means
+    # nothing to sync: skip the ~20-request full liked-songs download that
+    # was tripping Spotify's rate limit when polling every 30 minutes.
+    head = spotify_client.get_head(sp)
+    if (prev and prev.get("spotify_head") == list(head)
+            and set(prev["apple_loved_ids"]) == current_apple_loved_ids):
+        print(f"No changes (Spotify: {head[0]} liked. Apple Music: {len(apple_tracks)} in library, "
+              f"{len(current_apple_loved_ids)} loved).")
+        return
+
+    print("Fetching Spotify Liked Songs...")
+    spotify_tracks = spotify_client.get_liked_tracks(sp)
+    spotify_by_id = {t["id"]: t for t in spotify_tracks}
+    current_spotify_liked_ids = set(spotify_by_id)
+
     print(f"Spotify: {len(current_spotify_liked_ids)} liked. "
           f"Apple Music: {len(apple_tracks)} in library, {len(current_apple_loved_ids)} loved.")
 
-    prev = state.load_state()
     if prev is None:
         print("\nNo prior state found — recording baseline, no changes will be applied this run.")
         matches = build_baseline(sp, spotify_tracks, apple_tracks)
@@ -208,13 +223,17 @@ def run_sync(dry_run: bool):
     prev_notified_keys = set(prev.get("html_notified_keys", []))
 
     if not dry_run:
-        state.save_state({
+        new_state = {
             "matches": matches,
             "spotify_liked_ids": sorted(current_spotify_liked_ids),
             "apple_loved_ids": sorted(current_apple_loved_ids),
             "rejected": prev.get("rejected", []),
             "html_notified_keys": sorted(unmatched_keys),
-        })
+        }
+        # Only trust the probe if we didn't change Spotify ourselves this run.
+        if current_spotify_liked_ids == {t["id"] for t in spotify_tracks}:
+            new_state["spotify_head"] = list(head)
+        state.save_state(new_state)
 
     print(f"\n{'[dry-run] ' if dry_run else ''}Done. "
           f"{len(spotify_added)} new Spotify likes, {len(apple_added)} new Apple loves, "
@@ -498,11 +517,27 @@ if __name__ == "__main__":
             print(f"Missing required env var: {var}", file=sys.stderr)
             sys.exit(1)
 
-    if args.assist:
-        run_assist()
-    elif args.review:
-        run_review(min_score=args.min_score)
-    elif args.push:
-        run_push(dry_run=args.dry_run)
-    else:
-        run_sync(dry_run=args.dry_run)
+    try:
+        until = float(open(RATE_LIMIT_PATH).read())
+    except (OSError, ValueError):
+        until = 0
+    if time.time() < until:
+        print(f"Spotify rate limit active, skipping until {time.strftime('%H:%M', time.localtime(until))}.")
+        sys.exit(0)
+
+    try:
+        if args.assist:
+            run_assist()
+        elif args.review:
+            run_review(min_score=args.min_score)
+        elif args.push:
+            run_push(dry_run=args.dry_run)
+        else:
+            run_sync(dry_run=args.dry_run)
+    except SpotifyException as e:
+        if e.http_status != 429:
+            raise
+        os.makedirs(state.CONFIG_DIR, exist_ok=True)
+        with open(RATE_LIMIT_PATH, "w") as f:
+            f.write(str(time.time() + RATE_LIMIT_BACKOFF))
+        print(f"Spotify rate limit hit; backing off {RATE_LIMIT_BACKOFF // 60} min.")
