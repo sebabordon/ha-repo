@@ -113,7 +113,7 @@ def _write_unmatched_html(tracks):
     # Two Spotify likes of the same song (different releases) map to one Apple add.
     unique = {}
     for t in tracks:
-        key = matcher.norm_key(t["name"], t["artist"])
+        key = matcher.norm_key(t["name"], t["artist"]) + ("::live" if "live" in t["name"].lower() else "")
         if key not in unique or (t.get("url") and not unique[key].get("url")):
             unique[key] = t
     seen_urls = set()
