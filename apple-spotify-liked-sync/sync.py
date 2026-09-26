@@ -110,6 +110,21 @@ def _write_unmatched_html(tracks):
     """tracks: list of {"name", "artist"}. Writes an HTML page with a direct
     Apple Music link per track so adding them to the library is one click.
     """
+    # Two Spotify likes of the same song (different releases) map to one Apple add.
+    unique = {}
+    for t in tracks:
+        key = matcher.norm_key(t["name"], t["artist"])
+        if key not in unique or (t.get("url") and not unique[key].get("url")):
+            unique[key] = t
+    seen_urls = set()
+    tracks = []
+    for t in unique.values():
+        if t.get("url"):
+            if t["url"] in seen_urls:
+                continue
+            seen_urls.add(t["url"])
+        tracks.append(t)
+
     groups = {"add": [], "searching": [], "nolink": []}
     for t in sorted(tracks, key=lambda t: (t["artist"].lower(), t["name"].lower())):
         label = f"{html.escape(t['name'])} - {html.escape(t['artist'])}"
