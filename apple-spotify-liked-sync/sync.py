@@ -80,6 +80,22 @@ def _resolve_links(pending, limit=LOOKUPS_PER_RUN):
     return done > 0
 
 
+def _tokens(text):
+    return set(matcher._normalize(text).split())
+
+
+def _loose_library_hit(c, lib):
+    """A library track that looks like the same song under a different title
+    (version suffixes etc.) -- shown to the user, never auto-matched."""
+    name, artist = _tokens(c["name"]), _tokens(matcher.primary_artist(c["artist"]))
+    if not name:
+        return None
+    for lname, lartist, t in lib:
+        if lname and (artist & lartist) and (name <= lname or lname <= name):
+            return t
+    return None
+
+
 def _reconcile_pending(candidates, apple_tracks, matches, dry_run):
     """candidates: Spotify likes with no Apple match yet, as
     {"name", "artist", "spotify_id"}. Any that now exist in the local Apple
@@ -87,11 +103,22 @@ def _reconcile_pending(candidates, apple_tracks, matches, dry_run):
     (still_pending, newly_loved_apple_ids).
     """
     copies = _copies_by_key(apple_tracks)
+    cache = []
+
+    def lib_tokens():
+        if not cache:
+            cache.extend((_tokens(t["name"]), _tokens(t["artist"]), t) for t in apple_tracks)
+        return cache
+
     still, loved = [], set()
     for c in candidates:
         key = matcher.norm_key(c["name"], c["artist"])
         a = (copies.get(key) or [None])[0] or matcher.best_match(c["name"], c["artist"], apple_tracks)
         if not a:
+            c.pop("maybe", None)
+            hit = _loose_library_hit(c, lib_tokens())
+            if hit:
+                c["maybe"] = f"{hit['name']} - {hit['artist']}" + (" (con corazon)" if hit["loved"] else "")
             still.append(c)
             continue
         a = _prefer_loved(a, copies)
@@ -125,10 +152,13 @@ def _write_unmatched_html(tracks):
             seen_urls.add(t["url"])
         tracks.append(t)
 
-    groups = {"add": [], "searching": [], "nolink": []}
+    groups = {"add": [], "maybe": [], "searching": [], "nolink": []}
     for t in sorted(tracks, key=lambda t: (t["artist"].lower(), t["name"].lower())):
         label = f"{html.escape(t['name'])} - {html.escape(t['artist'])}"
-        if t.get("url"):
+        if t.get("maybe"):
+            link = f" <small><a href=\"{html.escape(t['url'])}\" target=\"_blank\">agregar igual</a></small>" if t.get("url") else ""
+            groups["maybe"].append(f"<li>{label}<br><small>en tu biblioteca: {html.escape(t['maybe'])}</small>{link}</li>")
+        elif t.get("url"):
             groups["add"].append(f"<li><a href=\"{html.escape(t['url'])}\" target=\"_blank\">{label}</a></li>")
         elif "url" in t:
             spotify = f"https://open.spotify.com/track/{t['spotify_id']}"
@@ -148,6 +178,7 @@ def _write_unmatched_html(tracks):
 
     body = (
         section("Agregar", 'Abri el link y toca "Agregar a la biblioteca". El proximo sync lo ama y lo saca de esta lista.', groups["add"])
+        + section("Posible ya en tu biblioteca", "Parece la misma cancion con otro titulo o version. Si es otra version, usa 'agregar igual'.", groups["maybe"])
         + section("Buscando link", "Todavia no se busco el link directo; aparecen en las proximas corridas.", groups["searching"])
         + section("Sin link en Apple Music", "No estan en el catalogo de Apple Music AR (o no se encontro con confianza).", groups["nolink"])
     )
