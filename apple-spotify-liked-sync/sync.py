@@ -110,18 +110,27 @@ def _write_unmatched_html(tracks):
     """tracks: list of {"name", "artist"}. Writes an HTML page with a direct
     Apple Music link per track so adding them to the library is one click.
     """
-    rows = []
-    for t in sorted(tracks, key=lambda t: (t['artist'].lower(), t['name'].lower())):
+    groups = {"add": [], "searching": [], "nolink": []}
+    for t in sorted(tracks, key=lambda t: (t["artist"].lower(), t["name"].lower())):
         label = f"{html.escape(t['name'])} - {html.escape(t['artist'])}"
         if t.get("url"):
-            rows.append(f"<li><a href=\"{html.escape(t['url'])}\" target=\"_blank\">{label}</a></li>")
+            groups["add"].append(f"<li><a href=\"{html.escape(t['url'])}\" target=\"_blank\">{label}</a></li>")
         elif "url" in t:
             spotify = f"https://open.spotify.com/track/{t['spotify_id']}"
-            rows.append(f"<li>{label} <small>(no esta en el catalogo de Apple Music AR - "
-                        f"<a href=\"{spotify}\" target=\"_blank\">Spotify</a>)</small></li>")
+            groups["nolink"].append(f"<li>{label} <small><a href=\"{spotify}\" target=\"_blank\">Spotify</a></small></li>")
         else:
-            link = _apple_music_link(t["name"], t["artist"])
-            rows.append(f"<li><a href=\"{html.escape(link)}\" target=\"_blank\">{label}</a> <small>(buscando link...)</small></li>")
+            groups["searching"].append(f"<li>{label}</li>")
+
+    def section(title, note, items):
+        if not items:
+            return ""
+        return f"<h3>{title} ({len(items)})</h3><p class=\"note\">{note}</p><ul>{chr(10).join(items)}</ul>"
+
+    body = (
+        section("Agregar", 'Abri el link y toca "Agregar a la biblioteca". El proximo sync lo ama y lo saca de esta lista.', groups["add"])
+        + section("Buscando link", "Todavia no se busco el link directo; aparecen en las proximas corridas.", groups["searching"])
+        + section("Sin link en Apple Music", "No estan en el catalogo de Apple Music AR (o no se encontro con confianza).", groups["nolink"])
+    )
     page = f"""<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="utf-8"><title>Agregar a Apple Music</title>
@@ -130,14 +139,13 @@ body {{ font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px a
 li {{ margin-bottom: 10px; font-size: 16px; }}
 a {{ color: #fa233b; text-decoration: none; }}
 a:hover {{ text-decoration: underline; }}
+.note {{ color: #666; margin-top: -6px; }}
+h3 {{ margin-top: 32px; }}
 </style>
 </head>
 <body>
-<h2>Liked en Spotify, sin match en tu biblioteca de Apple Music ({len(rows)})</h2>
-<p>Abri cada link, busca el tema y toca "Agregar a la biblioteca" -- el proximo sync lo ama automaticamente y lo saca de esta lista.</p>
-<ul>
-{chr(10).join(rows)}
-</ul>
+<h2>Liked en Spotify, sin match en tu biblioteca de Apple Music ({len(tracks)})</h2>
+{body}
 </body>
 </html>"""
     with open(UNMATCHED_HTML_PATH, "w") as f:
