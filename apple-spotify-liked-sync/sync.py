@@ -33,12 +33,51 @@ UNMATCHED_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "
 
 
 def _apple_music_link(name: str, artist: str) -> str:
-    """Apple Music search page for the track. A per-track iTunes API lookup
-    doesn't scale to hundreds of pending tracks (rate limits), so one click
-    lands on the search results and you add it from there.
-    """
+    """Fallback when no direct link was resolved (see _resolve_links)."""
     query = urllib.parse.quote(f"{name} {artist}")
     return f"https://music.apple.com/{apple_catalog.STOREFRONT}/search?term={query}"
+
+
+LOOKUPS_PER_RUN = 15
+
+
+def _copies_by_key(apple_tracks):
+    """norm_key -> every library copy (the same song can be in the library
+    several times: single + album, remaster...)."""
+    idx = {}
+    for t in apple_tracks:
+        idx.setdefault(matcher.norm_key(t["name"], t["artist"]), []).append(t)
+    return idx
+
+
+def _prefer_loved(track, copies):
+    """If another copy of the same song is already loved, use that one so
+    loving a match never creates a duplicate favorite."""
+    for c in copies.get(matcher.norm_key(track["name"], track["artist"]), [track]):
+        if c["loved"]:
+            return c
+    return track
+
+
+def _resolve_links(pending, limit=LOOKUPS_PER_RUN):
+    """Fill t["url"] with a direct Apple Music link via the free iTunes API,
+    at most `limit` lookups per run (it rate-limits at ~20/min). "" means
+    looked up, no confident hit -> the HTML falls back to a search link.
+    Returns True if anything was resolved.
+    """
+    done = 0
+    for t in pending:
+        if "url" in t:
+            continue
+        if done >= limit:
+            break
+        done += 1
+        try:
+            cand, score = matcher.best_candidate(t["name"], t["artist"], apple_catalog.search(t["name"], t["artist"]))
+        except Exception:
+            continue
+        t["url"] = cand["url"] if cand and score >= 0.5 else ""
+    return done > 0
 
 
 def _reconcile_pending(candidates, apple_tracks, matches, dry_run):
@@ -47,16 +86,15 @@ def _reconcile_pending(candidates, apple_tracks, matches, dry_run):
     library get loved there and recorded in matches. Returns
     (still_pending, newly_loved_apple_ids).
     """
-    by_key = {}
-    for t in apple_tracks:
-        by_key.setdefault(matcher.norm_key(t["name"], t["artist"]), t)
+    copies = _copies_by_key(apple_tracks)
     still, loved = [], set()
     for c in candidates:
         key = matcher.norm_key(c["name"], c["artist"])
-        a = by_key.get(key) or matcher.best_match(c["name"], c["artist"], apple_tracks)
+        a = (copies.get(key) or [None])[0] or matcher.best_match(c["name"], c["artist"], apple_tracks)
         if not a:
             still.append(c)
             continue
+        a = _prefer_loved(a, copies)
         if not a["loved"]:
             print(f"Now in Apple Music library -> loving: {c['name']} - {c['artist']}")
             if not dry_run:
@@ -74,7 +112,7 @@ def _write_unmatched_html(tracks):
     """
     rows = []
     for t in sorted(tracks, key=lambda t: (t['artist'].lower(), t['name'].lower())):
-        link = _apple_music_link(t["name"], t["artist"])
+        link = t.get("url") or _apple_music_link(t["name"], t["artist"])
         rows.append(
             f"<li><a href=\"{html.escape(link)}\" target=\"_blank\">"
             f"{html.escape(t['name'])} - {html.escape(t['artist'])}</a></li>"
@@ -134,20 +172,22 @@ def run_sync(dry_run: bool):
             and set(prev["apple_loved_ids"]) == current_apple_loved_ids):
         print(f"No changes (Spotify: {head[0]} liked. Apple Music: {len(apple_tracks)} in library, "
               f"{len(current_apple_loved_ids)} loved).")
+        matches, pending, loved = prev["matches"], prev["pending_add"], set()
+        changed = False
         # Library grew/shrank: some pending tracks may have been added by hand.
-        if prev.get("apple_count") != len(apple_tracks) and prev["pending_add"]:
-            matches = prev["matches"]
-            still, loved = _reconcile_pending(prev["pending_add"], apple_tracks, matches, dry_run)
+        if prev.get("apple_count") != len(apple_tracks) and pending:
+            pending, loved = _reconcile_pending(pending, apple_tracks, matches, dry_run)
+            changed = True
+        if _resolve_links(pending):
+            changed = True
+        if changed:
             if not dry_run:
-                prev.update(matches=matches, pending_add=still, apple_count=len(apple_tracks),
+                prev.update(matches=matches, pending_add=pending, apple_count=len(apple_tracks),
                             apple_loved_ids=sorted(current_apple_loved_ids | loved),
-                            html_notified_keys=sorted(matcher.norm_key(t["name"], t["artist"]) for t in still))
+                            html_notified_keys=sorted(matcher.norm_key(t["name"], t["artist"]) for t in pending))
                 state.save_state(prev)
-            if still:
-                _write_unmatched_html(still)
-        elif not dry_run and prev.get("apple_count") != len(apple_tracks):
-            prev["apple_count"] = len(apple_tracks)
-            state.save_state(prev)
+            if pending:
+                _write_unmatched_html(pending)
         return
 
     print("Fetching Spotify Liked Songs...")
@@ -206,6 +246,8 @@ def run_sync(dry_run: bool):
                     spotify_client.remove_track(sp, m["spotify_id"])
                 current_spotify_liked_ids.discard(m["spotify_id"])
 
+    copies = _copies_by_key(apple_tracks)
+
     # Additions
     spotify_added = current_spotify_liked_ids - prev_spotify_ids
     for sid in spotify_added:
@@ -216,6 +258,7 @@ def run_sync(dry_run: bool):
         if not apple_track:
             apple_track = matcher.best_match(t["name"], t["artist"], apple_tracks)
         if apple_track:
+            apple_track = _prefer_loved(apple_track, copies)
             if not apple_track["loved"]:
                 print(f"New Spotify like -> loving on Apple Music: {t['name']} - {t['artist']}")
                 if not dry_run:
@@ -255,6 +298,11 @@ def run_sync(dry_run: bool):
             candidates.append({"name": t["name"], "artist": t["artist"], "spotify_id": sid})
     unmatched_spotify_tracks, newly_loved = _reconcile_pending(candidates, apple_tracks, matches, dry_run)
     current_apple_loved_ids |= newly_loved
+    prev_urls = {p["spotify_id"]: p["url"] for p in prev.get("pending_add") or [] if "url" in p}
+    for t in unmatched_spotify_tracks:
+        if t["spotify_id"] in prev_urls:
+            t["url"] = prev_urls[t["spotify_id"]]
+    _resolve_links(unmatched_spotify_tracks)
     unmatched_keys = {matcher.norm_key(t["name"], t["artist"]) for t in unmatched_spotify_tracks}
     prev_notified_keys = set(prev.get("html_notified_keys", []))
 
@@ -305,6 +353,7 @@ def run_push(dry_run: bool):
     apple_by_key = {}
     for t in apple_tracks:
         apple_by_key.setdefault(matcher.norm_key(t["name"], t["artist"]), t)
+    copies_all = _copies_by_key(apple_tracks)
 
     print(f"Spotify: {len(spotify_tracks)} liked. Apple Music: {len(apple_tracks)} in library, "
           f"{sum(1 for t in apple_tracks if t['loved'])} favorited.\n")
@@ -318,6 +367,7 @@ def run_push(dry_run: bool):
         key = matcher.norm_key(t["name"], t["artist"])
         apple_t = apple_by_key.get(key) or matcher.best_match(t["name"], t["artist"], apple_tracks)
         if apple_t:
+            apple_t = _prefer_loved(apple_t, copies_all)
             matches[key] = {"spotify_id": t["id"], "apple_id": apple_t["id"], "name": t["name"], "artist": t["artist"]}
             if apple_t["loved"]:
                 already += 1
