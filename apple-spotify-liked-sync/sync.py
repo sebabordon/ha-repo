@@ -186,8 +186,8 @@ def run_sync(dry_run: bool):
                             apple_loved_ids=sorted(current_apple_loved_ids | loved),
                             html_notified_keys=sorted(matcher.norm_key(t["name"], t["artist"]) for t in pending))
                 state.save_state(prev)
-            if pending:
-                _write_unmatched_html(pending)
+        if pending:
+            _write_unmatched_html(pending)
         return
 
     print("Fetching Spotify Liked Songs...")
@@ -225,6 +225,8 @@ def run_sync(dry_run: bool):
         entry["artist"] = artist or entry["artist"]
         matches[key] = entry
 
+    copies = _copies_by_key(apple_tracks)
+
     # Removals first, so a fresh like elsewhere this run isn't immediately undone.
     spotify_removed = prev_spotify_ids - current_spotify_liked_ids
     for m in matches.values():
@@ -240,13 +242,13 @@ def run_sync(dry_run: bool):
     apple_removed = prev_apple_ids - current_apple_loved_ids
     for m in matches.values():
         if m.get("apple_id") in apple_removed and m.get("spotify_id"):
-            if m["spotify_id"] in current_spotify_liked_ids:
+            other_copy_loved = any(
+                c["loved"] for c in copies.get(matcher.norm_key(m["name"], m["artist"]), []))
+            if m["spotify_id"] in current_spotify_liked_ids and not other_copy_loved:
                 print(f"Un-loved on Apple Music -> removing from Spotify Liked Songs: {m['name']} - {m['artist']}")
                 if not dry_run:
                     spotify_client.remove_track(sp, m["spotify_id"])
                 current_spotify_liked_ids.discard(m["spotify_id"])
-
-    copies = _copies_by_key(apple_tracks)
 
     # Additions
     spotify_added = current_spotify_liked_ids - prev_spotify_ids
