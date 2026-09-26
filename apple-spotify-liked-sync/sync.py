@@ -121,10 +121,15 @@ def _write_unmatched_html(tracks):
         else:
             groups["searching"].append(f"<li>{label}</li>")
 
+    first_open = [True]
+
     def section(title, note, items):
         if not items:
             return ""
-        return f"<h3>{title} ({len(items)})</h3><p class=\"note\">{note}</p><ul>{chr(10).join(items)}</ul>"
+        attr = " open" if first_open[0] else ""
+        first_open[0] = False
+        return (f"<details{attr}><summary>{title} ({len(items)})</summary>"
+                f"<p class=\"note\">{note}</p><ul>{chr(10).join(items)}</ul></details>")
 
     body = (
         section("Agregar", 'Abri el link y toca "Agregar a la biblioteca". El proximo sync lo ama y lo saca de esta lista.', groups["add"])
@@ -140,7 +145,11 @@ li {{ margin-bottom: 10px; font-size: 16px; }}
 a {{ color: #fa233b; text-decoration: none; }}
 a:hover {{ text-decoration: underline; }}
 .note {{ color: #666; margin-top: -6px; }}
-h3 {{ margin-top: 32px; }}
+details {{ margin-top: 24px; }}
+summary {{ font-size: 18px; font-weight: 600; cursor: pointer; list-style: none; }}
+summary::-webkit-details-marker {{ display: none; }}
+summary::before {{ content: "+"; display: inline-block; width: 1.2em; color: #fa233b; }}
+details[open] > summary::before {{ content: "\\2212"; }}
 </style>
 </head>
 <body>
