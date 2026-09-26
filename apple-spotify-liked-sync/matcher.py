@@ -14,6 +14,10 @@ _NOISE_PATTERNS = [
     r"\(live[^)]*\)", r"-\s*live[^-]*$",
     r"\(deluxe[^)]*\)", r"\(bonus track\)",
     r"\(radio edit\)", r"\(single version\)", r"\(album version\)",
+    r"\(from [^)]*\)", r"-\s*from [^-]*$",
+    r"\(edit\)", r"-\s*edit$", r"\(lp version\)",
+    r"\(\d{4} remaster(ed)?[^)]*\)", r"-\s*\d{4} remaster(ed)?[^-]*$",
+    r"\(remasteriz\w*[^)]*\)", r"-\s*remasteriz\w*[^-]*$",
 ]
 
 MATCH_THRESHOLD = 0.87

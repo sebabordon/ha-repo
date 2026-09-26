@@ -76,7 +76,7 @@ def _resolve_links(pending, limit=LOOKUPS_PER_RUN):
             cand, score = matcher.best_candidate(t["name"], t["artist"], apple_catalog.search(t["name"], t["artist"]))
         except Exception:
             continue
-        t["url"] = cand["url"] if cand and score >= 0.5 else ""
+        t["url"] = cand["url"] if cand and score >= 0.75 else ""
     return done > 0
 
 
@@ -112,11 +112,16 @@ def _write_unmatched_html(tracks):
     """
     rows = []
     for t in sorted(tracks, key=lambda t: (t['artist'].lower(), t['name'].lower())):
-        link = t.get("url") or _apple_music_link(t["name"], t["artist"])
-        rows.append(
-            f"<li><a href=\"{html.escape(link)}\" target=\"_blank\">"
-            f"{html.escape(t['name'])} - {html.escape(t['artist'])}</a></li>"
-        )
+        label = f"{html.escape(t['name'])} - {html.escape(t['artist'])}"
+        if t.get("url"):
+            rows.append(f"<li><a href=\"{html.escape(t['url'])}\" target=\"_blank\">{label}</a></li>")
+        elif "url" in t:
+            spotify = f"https://open.spotify.com/track/{t['spotify_id']}"
+            rows.append(f"<li>{label} <small>(no esta en el catalogo de Apple Music AR - "
+                        f"<a href=\"{spotify}\" target=\"_blank\">Spotify</a>)</small></li>")
+        else:
+            link = _apple_music_link(t["name"], t["artist"])
+            rows.append(f"<li><a href=\"{html.escape(link)}\" target=\"_blank\">{label}</a> <small>(buscando link...)</small></li>")
     page = f"""<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="utf-8"><title>Agregar a Apple Music</title>
@@ -294,7 +299,9 @@ def run_sync(dry_run: bool):
 
     candidates = []
     for sid in current_spotify_liked_ids:
-        t = spotify_by_id[sid]
+        t = spotify_by_id.get(sid)
+        if t is None:
+            continue
         m = matches.get(matcher.norm_key(t["name"], t["artist"]))
         if not (m and m.get("apple_id")):
             candidates.append({"name": t["name"], "artist": t["artist"], "spotify_id": sid})
