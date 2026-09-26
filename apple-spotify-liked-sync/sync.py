@@ -33,20 +33,39 @@ UNMATCHED_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "
 
 
 def _apple_music_link(name: str, artist: str) -> str:
-    """Best-effort deep link to open the track in Music.app/web for manual
-    "Add to Library" — via the free iTunes Search API (apple_catalog), same
-    lookup run_assist() uses. Falls back to an Apple Music search page for
-    the query if no confident candidate is found.
+    """Apple Music search page for the track. A per-track iTunes API lookup
+    doesn't scale to hundreds of pending tracks (rate limits), so one click
+    lands on the search results and you add it from there.
     """
-    try:
-        candidates = apple_catalog.search(name, artist)
-    except Exception:
-        candidates = []
-    cand, score = matcher.best_candidate(name, artist, candidates)
-    if cand and score >= 0.5:
-        return cand["url"]
     query = urllib.parse.quote(f"{name} {artist}")
     return f"https://music.apple.com/{apple_catalog.STOREFRONT}/search?term={query}"
+
+
+def _reconcile_pending(candidates, apple_tracks, matches, dry_run):
+    """candidates: Spotify likes with no Apple match yet, as
+    {"name", "artist", "spotify_id"}. Any that now exist in the local Apple
+    library get loved there and recorded in matches. Returns
+    (still_pending, newly_loved_apple_ids).
+    """
+    by_key = {}
+    for t in apple_tracks:
+        by_key.setdefault(matcher.norm_key(t["name"], t["artist"]), t)
+    still, loved = [], set()
+    for c in candidates:
+        key = matcher.norm_key(c["name"], c["artist"])
+        a = by_key.get(key) or matcher.best_match(c["name"], c["artist"], apple_tracks)
+        if not a:
+            still.append(c)
+            continue
+        if not a["loved"]:
+            print(f"Now in Apple Music library -> loving: {c['name']} - {c['artist']}")
+            if not dry_run:
+                music_app.set_loved(a["id"], True)
+            a["loved"] = True
+            loved.add(a["id"])
+        matches[key] = {"spotify_id": c["spotify_id"], "apple_id": a["id"],
+                        "name": c["name"], "artist": c["artist"]}
+    return still, loved
 
 
 def _write_unmatched_html(tracks):
@@ -54,7 +73,7 @@ def _write_unmatched_html(tracks):
     Apple Music link per track so adding them to the library is one click.
     """
     rows = []
-    for t in tracks:
+    for t in sorted(tracks, key=lambda t: (t['artist'].lower(), t['name'].lower())):
         link = _apple_music_link(t["name"], t["artist"])
         rows.append(
             f"<li><a href=\"{html.escape(link)}\" target=\"_blank\">"
@@ -71,8 +90,8 @@ a:hover {{ text-decoration: underline; }}
 </style>
 </head>
 <body>
-<h2>Liked en Spotify, sin match en tu biblioteca de Apple Music</h2>
-<p>Abri cada link y toca "Agregar a la biblioteca" -- el proximo sync los va a amar automaticamente.</p>
+<h2>Liked en Spotify, sin match en tu biblioteca de Apple Music ({len(rows)})</h2>
+<p>Abri cada link, busca el tema y toca "Agregar a la biblioteca" -- el proximo sync lo ama automaticamente y lo saca de esta lista.</p>
 <ul>
 {chr(10).join(rows)}
 </ul>
@@ -111,10 +130,24 @@ def run_sync(dry_run: bool):
     # nothing to sync: skip the ~20-request full liked-songs download that
     # was tripping Spotify's rate limit when polling every 30 minutes.
     head = spotify_client.get_head(sp)
-    if (prev and prev.get("spotify_head") == list(head)
+    if (prev and prev.get("pending_add") is not None and prev.get("spotify_head") == list(head)
             and set(prev["apple_loved_ids"]) == current_apple_loved_ids):
         print(f"No changes (Spotify: {head[0]} liked. Apple Music: {len(apple_tracks)} in library, "
               f"{len(current_apple_loved_ids)} loved).")
+        # Library grew/shrank: some pending tracks may have been added by hand.
+        if prev.get("apple_count") != len(apple_tracks) and prev["pending_add"]:
+            matches = prev["matches"]
+            still, loved = _reconcile_pending(prev["pending_add"], apple_tracks, matches, dry_run)
+            if not dry_run:
+                prev.update(matches=matches, pending_add=still, apple_count=len(apple_tracks),
+                            apple_loved_ids=sorted(current_apple_loved_ids | loved),
+                            html_notified_keys=sorted(matcher.norm_key(t["name"], t["artist"]) for t in still))
+                state.save_state(prev)
+            if still:
+                _write_unmatched_html(still)
+        elif not dry_run and prev.get("apple_count") != len(apple_tracks):
+            prev["apple_count"] = len(apple_tracks)
+            state.save_state(prev)
         return
 
     print("Fetching Spotify Liked Songs...")
@@ -214,11 +247,14 @@ def run_sync(dry_run: bool):
             unmatched.append(f"Loved on Apple Music, not found on Spotify: {t['name']} - {t['artist']}")
             record_match(key, apple_id=aid, name=t["name"], artist=t["artist"])
 
-    unmatched_spotify_tracks = [
-        {"name": m["name"], "artist": m["artist"]}
-        for m in matches.values()
-        if m.get("spotify_id") in current_spotify_liked_ids and not m.get("apple_id")
-    ]
+    candidates = []
+    for sid in current_spotify_liked_ids:
+        t = spotify_by_id[sid]
+        m = matches.get(matcher.norm_key(t["name"], t["artist"]))
+        if not (m and m.get("apple_id")):
+            candidates.append({"name": t["name"], "artist": t["artist"], "spotify_id": sid})
+    unmatched_spotify_tracks, newly_loved = _reconcile_pending(candidates, apple_tracks, matches, dry_run)
+    current_apple_loved_ids |= newly_loved
     unmatched_keys = {matcher.norm_key(t["name"], t["artist"]) for t in unmatched_spotify_tracks}
     prev_notified_keys = set(prev.get("html_notified_keys", []))
 
@@ -229,6 +265,8 @@ def run_sync(dry_run: bool):
             "apple_loved_ids": sorted(current_apple_loved_ids),
             "rejected": prev.get("rejected", []),
             "html_notified_keys": sorted(unmatched_keys),
+            "pending_add": unmatched_spotify_tracks,
+            "apple_count": len(apple_tracks),
         }
         # Only trust the probe if we didn't change Spotify ourselves this run.
         if current_spotify_liked_ids == {t["id"] for t in spotify_tracks}:
