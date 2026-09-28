@@ -61,13 +61,17 @@ def _prefer_loved(track, copies):
 
 def _resolve_links(pending, limit=LOOKUPS_PER_RUN):
     """Fill t["url"] with a direct Apple Music link via the free iTunes API,
-    at most `limit` lookups per run (it rate-limits at ~20/min). "" means
-    looked up, no confident hit -> the HTML falls back to a search link.
-    Returns True if anything was resolved.
+    at most `limit` lookups per run (it rate-limits at ~20/min).
+
+    Only a confident hit is cached. A miss is NOT cached as permanent — the
+    catalog lookup can miss on one run (ranked past the top results, a
+    transient gap) and hit on a later one, so those get retried each run
+    within the budget instead of getting stuck as "no link" forever.
+    Returns True if anything changed.
     """
-    done = 0
+    done = changed = 0
     for t in pending:
-        if "url" in t:
+        if t.get("url"):
             continue
         if done >= limit:
             break
@@ -76,8 +80,11 @@ def _resolve_links(pending, limit=LOOKUPS_PER_RUN):
             cand, score = matcher.best_candidate(t["name"], t["artist"], apple_catalog.search(t["name"], t["artist"]))
         except Exception:
             continue
-        t["url"] = cand["url"] if cand and score >= 0.75 else ""
-    return done > 0
+        t["checked"] = True
+        if cand and score >= 0.75:
+            t["url"] = cand["url"]
+        changed += 1
+    return changed > 0
 
 
 def _tokens(text):
@@ -160,7 +167,7 @@ def _write_unmatched_html(tracks):
             groups["maybe"].append(f"<li>{label}<br><small>en tu biblioteca: {html.escape(t['maybe'])}</small>{link}</li>")
         elif t.get("url"):
             groups["add"].append(f"<li><a href=\"{html.escape(t['url'])}\" target=\"_blank\">{label}</a></li>")
-        elif "url" in t:
+        elif t.get("checked"):
             spotify = f"https://open.spotify.com/track/{t['spotify_id']}"
             groups["nolink"].append(f"<li>{label} <small><a href=\"{spotify}\" target=\"_blank\">Spotify</a></small></li>")
         else:
@@ -370,10 +377,14 @@ def run_sync(dry_run: bool):
             candidates.append({"name": t["name"], "artist": t["artist"], "spotify_id": sid})
     unmatched_spotify_tracks, newly_loved = _reconcile_pending(candidates, apple_tracks, matches, dry_run)
     current_apple_loved_ids |= newly_loved
-    prev_urls = {p["spotify_id"]: p["url"] for p in prev.get("pending_add") or [] if "url" in p}
+    prev_by_id = {p["spotify_id"]: p for p in prev.get("pending_add") or []}
     for t in unmatched_spotify_tracks:
-        if t["spotify_id"] in prev_urls:
-            t["url"] = prev_urls[t["spotify_id"]]
+        old = prev_by_id.get(t["spotify_id"])
+        if old:
+            if old.get("url"):
+                t["url"] = old["url"]
+            if old.get("checked"):
+                t["checked"] = True
     _resolve_links(unmatched_spotify_tracks)
     unmatched_keys = {matcher.norm_key(t["name"], t["artist"]) for t in unmatched_spotify_tracks}
     prev_notified_keys = set(prev.get("html_notified_keys", []))
