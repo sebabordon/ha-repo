@@ -247,20 +247,19 @@ def run_sync(dry_run: bool):
             and set(prev["apple_loved_ids"]) == current_apple_loved_ids):
         print(f"No changes (Spotify: {head[0]} liked. Apple Music: {len(apple_tracks)} in library, "
               f"{len(current_apple_loved_ids)} loved).")
-        matches, pending, loved = prev["matches"], prev["pending_add"], set()
-        changed = False
-        # Library grew/shrank: some pending tracks may have been added by hand.
-        if prev.get("apple_count") != len(apple_tracks) and pending:
-            pending, loved = _reconcile_pending(pending, apple_tracks, matches, dry_run)
-            changed = True
-        if _resolve_links(pending):
-            changed = True
-        if changed:
-            if not dry_run:
-                prev.update(matches=matches, pending_add=pending, apple_count=len(apple_tracks),
-                            apple_loved_ids=sorted(current_apple_loved_ids | loved),
-                            html_notified_keys=sorted(matcher.norm_key(t["name"], t["artist"]) for t in pending))
-                state.save_state(prev)
+        matches, pending = prev["matches"], prev["pending_add"]
+        # Always re-check pending against the current library -- it's a local
+        # comparison (no API calls), so there's no reason to gate it on the
+        # library's track *count* changing: a track can go from unloved to
+        # loved (or a stale entry can turn out to already match) without the
+        # count moving at all, and that shouldn't leave pending stuck stale.
+        pending, loved = _reconcile_pending(pending, apple_tracks, matches, dry_run)
+        links_changed = _resolve_links(pending)
+        if not dry_run:
+            prev.update(matches=matches, pending_add=pending, apple_count=len(apple_tracks),
+                        apple_loved_ids=sorted(current_apple_loved_ids | loved),
+                        html_notified_keys=sorted(matcher.norm_key(t["name"], t["artist"]) for t in pending))
+            state.save_state(prev)
         if pending:
             _write_unmatched_html(pending)
         return
