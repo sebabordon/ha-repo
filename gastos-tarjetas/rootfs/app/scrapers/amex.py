@@ -1258,6 +1258,7 @@ class AmexScraper(BaseScraper):
         mes_resumen = Counter(fechas).most_common(1)[0][0] if fechas else None
 
         # Enriquecer gastos USD con TC del momento
+        _tc = None
         if any(r.get("moneda") == "USD" for r in records):
             from user_config import read_user_config, config_default
             from tc import fetch_tc_dolar
@@ -1271,6 +1272,29 @@ class AmexScraper(BaseScraper):
                 log_fn(f"  [amex-pdf] TC USD ({_tipo}): ${_tc:.2f}")
 
         parser      = PARSERS["amex"]
+
+        # Reconciliación net vs SALDO ACTUAL del PDF (ARS y USD): sin este ajuste
+        # el widget de vencimientos mostraba la suma de renglones, que no coincide
+        # con el total a pagar del resumen (ej. créditos "DEV PERCEPCION RG 5617"
+        # que el widget excluye del neto pero AMEX ya descontó del saldo). Mismo
+        # mecanismo que routes/upload.py (subida manual) y scrapers/bbva.py.
+        from scrapers_db import append_resumen_credit_adjustments
+        _adj = append_resumen_credit_adjustments(
+            records,
+            stmt_ars       = getattr(parser, "stmt_total_ars", None),
+            stmt_usd       = getattr(parser, "stmt_total_usd", None),
+            fuente         = fuente_target,
+            mes_resumen    = mes_resumen,
+            fecha_venc     = getattr(parser, "fecha_vencimiento", None),
+            archivo_origen = filename,
+            usuario        = usuario_default,
+            tc_ars         = _tc,
+        )
+        if _adj["ars"] is not None:
+            log_fn(f"  [amex-pdf] ajuste Créditos del resumen ARS: {_adj['ars']:.2f}")
+        if _adj["usd"] is not None:
+            log_fn(f"  [amex-pdf] ajuste Créditos del resumen USD: {_adj['usd']:.2f}")
+
         import_info = {
             "fuente":         fuente_target,
             "archivo":        filename,

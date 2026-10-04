@@ -1187,6 +1187,64 @@ def _run_migrations(conn):
             logger.info(f"[dedup_scraper_gastos_v2] eliminados {_total_dedup_v2} gastos duplicados de scraper")
         conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_scraper_gastos_v2')")
 
+    if "resumen_credit_adjust_backfill_v1" not in done:
+        # v1.2.83: la auto-descarga de resúmenes AMEX (scrapers/amex.py) no llamaba a
+        # append_resumen_credit_adjustments() como sí lo hacen la subida manual y el
+        # scraper BBVA, así que el neto del widget de vencimientos no cerraba con el
+        # SALDO ACTUAL del PDF (caso real: $5.749.093 vs $5.747.324,44 del resumen —
+        # créditos RG 5617 que AMEX ya descontó pero el neto excluye). Backfill del
+        # renglón sintético "Créditos del resumen" para las importaciones ya hechas,
+        # con la misma definición de neto y el mismo criterio (solo delta negativo,
+        # solo si la importación todavía no tiene un ajuste en esa moneda).
+        _imps = conn.execute(
+            "SELECT id, fuente, archivo, mes_resumen, fecha_venc, total_ars, total_usd "
+            "FROM importaciones WHERE total_ars IS NOT NULL OR total_usd IS NOT NULL"
+        ).fetchall()
+        _n_adj = 0
+        for _imp in _imps:
+            _imp_id, _fuente, _archivo, _mes, _venc, _t_ars, _t_usd = tuple(_imp)
+            _rows = conn.execute(
+                "SELECT descripcion, monto, moneda, usuario, tc_ars FROM gastos WHERE import_id=?",
+                (_imp_id,),
+            ).fetchall()
+            if not _rows:
+                continue
+            _fecha = (_mes + "-01") if _mes else str(_venc or "")
+            for _mon, _stmt in (("ARS", _t_ars), ("USD", _t_usd)):
+                if _stmt is None:
+                    continue
+                _cur = [r for r in _rows if r[2] == _mon]
+                if any((r[0] or "") == "Créditos del resumen" for r in _cur):
+                    continue
+                _net = 0.0
+                for r in _cur:
+                    try:
+                        _m = float(r[1])
+                    except (TypeError, ValueError):
+                        continue
+                    if _mon == "ARS" and "5617" in (r[0] or "").upper() and _m < 0:
+                        continue
+                    _net += _m
+                _delta = round(float(_stmt) - _net, 2)
+                if _delta >= -0.5:
+                    continue
+                _usuario = next((r[3] for r in _rows if r[3]), None)
+                _tc      = next((r[4] for r in _cur if r[4]), None) if _mon == "USD" else None
+                conn.execute(
+                    "INSERT INTO gastos (fecha, descripcion, monto, moneda, fuente, categoria, "
+                    "categoria_fuente, archivo_origen, usuario, import_id, tc_ars) "
+                    "VALUES (?, 'Créditos del resumen', ?, ?, ?, 'Créditos tarjeta', 'auto', ?, ?, ?, ?)",
+                    (_fecha, str(_delta), _mon, _fuente, _archivo or _fuente, _usuario, _imp_id, _tc),
+                )
+                _n_adj += 1
+                logger.info(
+                    f"[resumen_credit_adjust_backfill_v1] import {_imp_id} ({_fuente} {_venc}) "
+                    f"{_mon}: ajuste {_delta:.2f}"
+                )
+        if _n_adj:
+            conn.execute("INSERT OR IGNORE INTO categorias (nombre) VALUES ('Créditos tarjeta')")
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('resumen_credit_adjust_backfill_v1')")
+
     # app_log table — creada directamente con el conn existente para evitar
     # el conflicto de lock que ocurriría si abriéramos una segunda conexión
     # mientras _run_migrations ya tiene una transacción activa.
