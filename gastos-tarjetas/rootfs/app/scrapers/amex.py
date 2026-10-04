@@ -56,6 +56,33 @@ _NBSP = "\xa0"
 # Detecta el número de cuota en la descripción: "3/12", "01/6", "03/24", etc.
 _CUOTA_RE = re.compile(r"\b(\d{1,2}/\d{1,3})\b")
 
+# ── OTP (código de verificación por mail/SMS en el login) ─────────────────────
+# Input donde AMEX pide el código (heurístico: la SPA cambia ids seguido).
+_OTP_INPUT_SEL = (
+    "input[autocomplete='one-time-code'], "
+    "input[name*='otp' i], input[id*='otp' i], "
+    "input[name*='code' i], input[id*='code' i], "
+    "input[name*='codigo' i], input[id*='codigo' i], "
+    "input[name*='verif' i], input[id*='verif' i]"
+)
+# Textos de la pantalla de verificación (elección de canal o ingreso del código).
+_OTP_TEXT_HINTS = (
+    "código de verificación", "codigo de verificacion", "código de seguridad",
+    "codigo de seguridad", "código único", "codigo unico", "código temporal",
+    "verificá tu identidad", "verifica tu identidad", "verificar tu identidad",
+    "confirmá tu identidad", "confirma tu identidad",
+    "verification code", "one-time", "verify your identity",
+)
+_OUTLOOK_DEFAULT_URL = "https://outlook.live.com/mail/0/"
+_OTP_SENDER_DEFAULT  = "american express, amex"
+# Código "anclado" a la palabra código/code; si no, cualquier número de 6 dígitos.
+_OTP_CODE_ANCHORED_RE = re.compile(r"(?:c[oó]digo|code)\D{0,60}?(\d{4,8})\b", re.IGNORECASE)
+_OTP_CODE_RE          = re.compile(r"(?<![\d.,$])(\d{6})(?![\d.,])")
+
+
+class _OtpUnavailable(Exception):
+    """No se pudo obtener el OTP automáticamente (Outlook no logueado, timeout, etc.)."""
+
 
 class AmexScraper(BaseScraper):
     fuente       = "amex"
@@ -271,28 +298,32 @@ class AmexScraper(BaseScraper):
         """Avisa por push que AMEX pidió un captcha en el login — sólo tiene
         sentido cuando el login corre headful en la Mac (WebDriver remoto),
         donde el usuario puede ver la ventana y clickearlo a mano."""
+        self._notify_manual(
+            "🔒 AMEX pide verificación",
+            "Apareció un captcha \"no soy un robot\" en el login — andá a la Mac y resolvelo a mano.",
+            "captcha",
+        )
+
+    def _notify_manual(self, title: str, body: str, what: str) -> None:
+        """Push a todas las suscripciones pidiendo una acción manual en la
+        ventana de Chrome de la Mac (sólo con WebDriver remoto)."""
         if not getattr(self, "_remote_url", ""):
             return
         try:
             from routes.push import list_subscriptions, send_push
             subs = list_subscriptions()
             if not subs:
-                logger.warning("[amex] captcha detectado pero sin suscripciones push — no se pudo avisar")
+                logger.warning("[amex] %s detectado pero sin suscripciones push — no se pudo avisar", what)
                 return
-            ok, dead = send_push(
-                subs,
-                "🔒 AMEX pide verificación",
-                "Apareció un captcha \"no soy un robot\" en el login — andá a la Mac y resolvelo a mano.",
-                "/",
-            )
-            logger.info("[amex] aviso de captcha enviado a %d suscripción(es)", ok)
+            ok, dead = send_push(subs, title, body, "/")
+            logger.info("[amex] aviso de %s enviado a %d suscripción(es)", what, ok)
             if dead:
                 from db import _conn
                 with _conn() as conn:
                     for ep in dead:
                         conn.execute("DELETE FROM push_subscriptions WHERE endpoint=?", (ep,))
         except Exception as exc:
-            logger.warning("[amex] error notificando captcha: %s", exc)
+            logger.warning("[amex] error notificando %s: %s", what, exc)
 
     def _login_diag(self, driver) -> str:
         """Captura diagnóstico del estado del browser para errores de login."""
@@ -477,11 +508,27 @@ class AmexScraper(BaseScraper):
         # positivo en cada login y dispararía el push de más.
         deadline = time.time() + 45
         captcha_notified = False
+        otp_handled = False
+        otp_manual = False
         portal_ok = False
         while time.time() < deadline:
             if self.find(driver, _portal_sel) is not None:
                 portal_ok = True
                 break
+            if not otp_handled and self._otp_screen(driver):
+                otp_handled = True
+                if self._handle_otp(driver, config):
+                    deadline = time.time() + 60    # código enviado: esperar el portal
+                else:
+                    otp_manual = True
+                    self._notify_manual(
+                        "🔑 AMEX pide un código",
+                        "AMEX pidió un código de verificación (mail/SMS) y no se pudo "
+                        "leer solo — ingresalo a mano en la ventana de Chrome de la Mac.",
+                        "OTP",
+                    )
+                    deadline = time.time() + 300   # dar tiempo a ingresarlo a mano
+                continue
             if not captcha_notified and self._captcha_present(driver):
                 captcha_notified = True
                 logger.warning(
@@ -499,11 +546,321 @@ class AmexScraper(BaseScraper):
                 "\nCaptcha detectado y notificado, pero no se resolvió a tiempo."
                 if captcha_notified else ""
             )
+            if otp_manual:
+                extra += "\nAMEX pidió un código OTP que no se pudo leer de Outlook ni se ingresó a mano a tiempo."
+            elif otp_handled:
+                extra += "\nAMEX pidió un código OTP; se ingresó el leído de Outlook pero el portal no cargó (¿código incorrecto?)."
             raise TimeoutException(
                 f"Portal post-login no cargó.{extra}{_post_submit_info}\n{diag}"
             )
         logger.info("[amex] do_login: portal cargado, URL = %s", driver.current_url[:100])
         logger.info("[amex] Login exitoso")
+
+    # ── OTP: código de verificación por mail ──────────────────────────────────
+    # Desde 10/2026 AMEX pide, en el login frío, un código que manda por mail o
+    # SMS. El Chrome de la Mac (WebDriver remoto) con perfil persistente puede
+    # quedar logueado también en Outlook web: abrimos Outlook en otra pestaña
+    # del MISMO browser, esperamos el mail nuevo de AMEX y copiamos el código.
+    # Sin credenciales nuevas ni app registrada en Microsoft. Si no se puede
+    # (Outlook no logueado, timeout), avisamos por push para ingresarlo a mano.
+
+    def _otp_screen(self, driver) -> bool:
+        """True si el browser está en la pantalla de verificación por código
+        (elección de canal mail/SMS o ingreso del código)."""
+        if self._find_visible(driver, _OTP_INPUT_SEL) is not None:
+            return True
+        try:
+            body = (driver.execute_script("return document.body.innerText || '';") or "").lower()
+        except Exception:
+            return False
+        return any(h in body for h in _OTP_TEXT_HINTS)
+
+    def _handle_otp(self, driver, config: dict) -> bool:
+        """
+        Resuelve la pantalla de OTP leyendo el código de Outlook web.
+        Devuelve True si se ingresó un código, False si hay que hacerlo a mano.
+        """
+        enabled = config.get("otp_outlook", True)
+        if str(enabled).strip().lower() in ("", "0", "false", "off", "no"):
+            logger.info("[amex] OTP: lectura automática desde Outlook desactivada — se pide ingreso manual")
+            return False
+
+        outlook_url = (config.get("otp_outlook_url") or "").strip() or _OUTLOOK_DEFAULT_URL
+        senders = [
+            x.strip().lower()
+            for x in ((config.get("otp_remitente") or "").strip() or _OTP_SENDER_DEFAULT).split(",")
+            if x.strip()
+        ]
+        try:
+            timeout = int(str(config.get("otp_timeout") or "").strip() or 180)
+        except ValueError:
+            timeout = 180
+
+        amex_tab = driver.current_window_handle
+        mail_tab = None
+        logger.info("[amex] OTP: pantalla de verificación detectada — leyendo el código desde %s", outlook_url)
+        logger.info("[amex] OTP: pantalla AMEX = %s",
+                    (driver.execute_script("return (document.body.innerText||'').substring(0,400);") or "").replace("\n", " | "))
+        try:
+            # 1. Abrir Outlook ANTES de pedir el código: foto de los mails de
+            #    AMEX que ya están, para reconocer el nuevo.
+            driver.switch_to.new_window("tab")
+            mail_tab = driver.current_window_handle
+            self._outlook_open(driver, outlook_url)
+            seen_items, seen_codes = self._outlook_snapshot(driver, senders)
+            logger.info("[amex] OTP: Outlook listo — %d mail(s) de AMEX previos en la bandeja", len(seen_items))
+
+            # 2. Volver a AMEX y pedir el código por mail.
+            driver.switch_to.window(amex_tab)
+            self._otp_request_email(driver)
+
+            # 3. Esperar el mail nuevo y extraer el código.
+            driver.switch_to.window(mail_tab)
+            code = self._outlook_wait_code(driver, senders, seen_items, seen_codes, timeout)
+            logger.info("[amex] OTP: código leído de Outlook (%s…)", code[:2])
+        except _OtpUnavailable as exc:
+            logger.warning("[amex] OTP: %s", exc)
+            self._otp_back_to(driver, amex_tab, mail_tab)
+            return False
+        except Exception as exc:
+            logger.warning("[amex] OTP: error leyendo el código de Outlook: %s", exc, exc_info=True)
+            self._otp_back_to(driver, amex_tab, mail_tab)
+            return False
+
+        self._otp_back_to(driver, amex_tab, mail_tab)
+        try:
+            self._otp_submit_code(driver, code)
+        except Exception as exc:
+            logger.warning("[amex] OTP: no se pudo ingresar el código en AMEX: %s\n%s",
+                           exc, self._login_diag(driver))
+            return False
+        return True
+
+    @staticmethod
+    def _otp_back_to(driver, amex_tab, mail_tab) -> None:
+        """Cierra la pestaña de Outlook (si quedó abierta) y vuelve a la de AMEX."""
+        try:
+            if mail_tab and mail_tab in driver.window_handles:
+                driver.switch_to.window(mail_tab)
+                driver.close()
+        except Exception:
+            pass
+        try:
+            driver.switch_to.window(amex_tab)
+        except Exception:
+            pass
+
+    # ── Lado AMEX ─────────────────────────────────────────────────────────────
+
+    def _otp_request_email(self, driver) -> None:
+        """
+        Si AMEX ofrece elegir canal (mail / SMS), elige el mail y confirma el
+        envío. Si ya muestra el input del código, no hace nada (el código ya
+        salió — se lo busca igual en el mail).
+        """
+        if self._find_visible(driver, _OTP_INPUT_SEL) is not None:
+            logger.info("[amex] OTP: AMEX ya pide el código (sin elección de canal)")
+            return
+
+        # Opción "mail": radio/label/botón cuyo texto tenga un email enmascarado
+        # (s***@outlook.com) o diga correo/e-mail.
+        picked = driver.execute_script("""
+            var re = /@|correo|e-?mail/i;
+            var cands = document.querySelectorAll(
+                'label, [role="radio"], [role="option"], [role="button"], button, li, a, input[type="radio"]');
+            for (var i = 0; i < cands.length; i++) {
+                var el = cands[i];
+                if (!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)) continue;
+                var txt = (el.innerText || el.value || el.getAttribute('aria-label') || '');
+                if (el.tagName === 'INPUT' && el.labels && el.labels.length) txt = el.labels[0].innerText;
+                if (!re.test(txt) || txt.length > 200) continue;
+                var radio = el.tagName === 'INPUT' ? el : el.querySelector('input[type="radio"]');
+                (radio || el).click();
+                return txt.trim().substring(0, 80);
+            }
+            return null;
+        """)
+        logger.info("[amex] OTP: opción de canal elegida = %r", picked)
+        time.sleep(1)
+
+        btn = self._otp_find_button(
+            driver, ("enviar", "continuar", "siguiente", "send", "continue", "next"),
+        )
+        if btn is not None:
+            logger.info("[amex] OTP: click en %r para enviar el código", (btn.text or "")[:40])
+            self._human_click(driver, btn)
+        else:
+            logger.info("[amex] OTP: no encontré botón de envío — sigo esperando el input del código")
+        try:
+            self.wait_visible(driver, _OTP_INPUT_SEL, timeout=25)
+        except Exception:
+            logger.warning("[amex] OTP: el input del código no apareció tras pedir el envío\n%s",
+                           self._login_diag(driver))
+
+    def _otp_find_button(self, driver, words: tuple[str, ...]):
+        """Primer botón visible+habilitado cuyo texto contenga alguna de `words`."""
+        from selenium.webdriver.common.by import By
+        for el in driver.find_elements(
+            By.CSS_SELECTOR, "button, input[type='submit'], [role='button']"
+        ):
+            try:
+                if not (el.is_displayed() and el.is_enabled()):
+                    continue
+                txt = (el.text or el.get_attribute("value") or "").strip().lower()
+                if txt and any(w in txt for w in words):
+                    return el
+            except Exception:
+                pass
+        return None
+
+    def _otp_submit_code(self, driver, code: str) -> None:
+        """Escribe el código en AMEX (un input, o un input por dígito), tilda
+        "recordar este dispositivo" si existe, y confirma."""
+        from selenium.webdriver.common.by import By
+
+        boxes = [
+            el for el in driver.find_elements(By.CSS_SELECTOR, "input")
+            if el.get_attribute("maxlength") == "1" and el.is_displayed()
+        ]
+        if len(boxes) >= len(code):
+            logger.info("[amex] OTP: ingresando código en %d casillas", len(boxes))
+            for el, ch in zip(boxes, code):
+                self._human_click(driver, el)
+                el.send_keys(ch)
+        else:
+            inp = self.wait_visible(driver, _OTP_INPUT_SEL, timeout=10)
+            self._human_click(driver, inp)
+            inp.clear()
+            self._human_type(inp, code)
+        time.sleep(0.5)
+
+        # "Recordar este dispositivo" → menos OTPs en los próximos logins.
+        driver.execute_script("""
+            var re = /record|recuerd|remember|confi|trust/i;
+            var boxes = document.querySelectorAll('input[type="checkbox"]');
+            for (var i = 0; i < boxes.length; i++) {
+                var b = boxes[i];
+                var lbl = (b.labels && b.labels.length) ? b.labels[0].innerText : (b.getAttribute('aria-label') || '');
+                if (re.test(lbl) && !b.checked) b.click();
+            }
+        """)
+
+        btn = self._otp_find_button(
+            driver, ("verificar", "confirmar", "continuar", "ingresar", "enviar",
+                     "verify", "confirm", "continue", "submit"),
+        ) or self._find_visible(driver, "button[type='submit'], input[type='submit']")
+        if btn is None:
+            raise RuntimeError("no encontré el botón para confirmar el código")
+        logger.info("[amex] OTP: confirmando código con %r", (btn.text or "")[:40])
+        self._human_click(driver, btn)
+
+    # ── Lado Outlook web ──────────────────────────────────────────────────────
+
+    _OUTLOOK_LIST_SEL = "div[role='listbox'] div[role='option'], div[role='option'][data-convid]"
+
+    def _outlook_open(self, driver, url: str) -> None:
+        """Carga Outlook web y espera la lista de mails. Si redirige al login de
+        Microsoft, el perfil de Chrome de la Mac no está logueado en Outlook."""
+        driver.get(url)
+        deadline = time.time() + 45
+        while time.time() < deadline:
+            cur = (driver.current_url or "").lower()
+            if any(h in cur for h in ("login.live.com", "login.microsoftonline.com", "signup.live.com")) \
+                    or "microsoft.com/es-ar/microsoft-365/outlook" in cur:
+                raise _OtpUnavailable(
+                    "Outlook no tiene sesión en el Chrome de la Mac. Abrí Chrome con el perfil "
+                    "configurado en 'WebDriver remoto — Perfil Chrome', entrá a Outlook una vez "
+                    "y tildá 'Mantener la sesión iniciada'."
+                )
+            if self.find(driver, self._OUTLOOK_LIST_SEL) is not None:
+                time.sleep(1)
+                return
+            time.sleep(1)
+        raise _OtpUnavailable(f"Outlook web no cargó la bandeja en 45s (URL: {driver.current_url[:100]})")
+
+    def _outlook_items(self, driver, senders: list[str]) -> list[str]:
+        """Texto (aria-label + texto visible) de los mails de la lista que
+        parecen de AMEX, de arriba (más nuevo) hacia abajo."""
+        texts = driver.execute_script("""
+            var out = [];
+            var items = document.querySelectorAll(arguments[0]);
+            for (var i = 0; i < items.length && i < 40; i++) {
+                out.push(((items[i].getAttribute('aria-label') || '') + ' \\n ' + (items[i].innerText || '')));
+            }
+            return out;
+        """, self._OUTLOOK_LIST_SEL) or []
+        return [t for t in texts if any(s in t.lower() for s in senders)]
+
+    @staticmethod
+    def _otp_codes(text: str) -> list[str]:
+        codes = _OTP_CODE_ANCHORED_RE.findall(text)
+        return codes or _OTP_CODE_RE.findall(text)
+
+    def _outlook_snapshot(self, driver, senders: list[str]) -> tuple[set, set]:
+        items = self._outlook_items(driver, senders)
+        codes = {c for t in items for c in self._otp_codes(t)}
+        return set(items), codes
+
+    def _outlook_wait_code(
+        self, driver, senders: list[str], seen_items: set, seen_codes: set, timeout: int,
+    ) -> str:
+        """Espera un mail de AMEX que no estaba en la foto inicial y devuelve
+        el código. Si la vista previa no lo trae, abre el mail y lo lee del
+        cuerpo."""
+        deadline = time.time() + timeout
+        last_refresh = time.time()
+        while time.time() < deadline:
+            for text in self._outlook_items(driver, senders):
+                if text in seen_items:
+                    continue
+                fresh = [c for c in self._otp_codes(text) if c not in seen_codes]
+                if fresh:
+                    return fresh[0]
+                code = self._outlook_code_from_body(driver, text, seen_codes)
+                if code:
+                    return code
+                seen_items.add(text)   # mail nuevo de AMEX pero sin código (otro aviso)
+            if time.time() - last_refresh > 20:
+                # Outlook actualiza la lista por push, pero refrescar cada tanto
+                # cubre una pestaña en segundo plano que no se repinta.
+                try:
+                    self._outlook_open(driver, driver.current_url)
+                except _OtpUnavailable:
+                    raise
+                except Exception:
+                    pass
+                last_refresh = time.time()
+            time.sleep(3)
+        raise _OtpUnavailable(
+            f"no llegó a Outlook un mail nuevo de AMEX con código en {timeout}s "
+            f"(remitentes buscados: {', '.join(senders)})"
+        )
+
+    def _outlook_code_from_body(self, driver, item_text: str, seen_codes: set) -> Optional[str]:
+        """Abre el mail de la lista cuyo texto es `item_text` y busca el código
+        en el panel de lectura."""
+        clicked = driver.execute_script("""
+            var items = document.querySelectorAll(arguments[0]);
+            for (var i = 0; i < items.length; i++) {
+                var t = (items[i].getAttribute('aria-label') || '') + ' \\n ' + (items[i].innerText || '');
+                if (t === arguments[1]) { items[i].click(); return true; }
+            }
+            return false;
+        """, self._OUTLOOK_LIST_SEL, item_text)
+        if not clicked:
+            return None
+        for _ in range(10):
+            time.sleep(1)
+            body = driver.execute_script("""
+                var el = document.querySelector(
+                    "div[aria-label='Cuerpo del mensaje'], div[aria-label='Message body'], " +
+                    "div[role='document'], #ReadingPaneContainerId, div[role='main']");
+                return el ? (el.innerText || '') : '';
+            """) or ""
+            fresh = [c for c in self._otp_codes(body) if c not in seen_codes]
+            if fresh:
+                return fresh[0]
+        return None
 
     # ── Scrape principal ──────────────────────────────────────────────────────
 
