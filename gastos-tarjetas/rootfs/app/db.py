@@ -222,6 +222,11 @@ def get_special_categorias() -> set[str]:
 
 
 def init_db():
+    # Mensajes de las migraciones que se loguean recién al cerrar la transacción:
+    # el DBLogHandler escribe en app_log con OTRA conexión, que mientras esta
+    # transacción tiene el lock de escritura espera los 15s de busy_timeout por
+    # cada logger.info() (ver resumen_credit_adjust_backfill_v1, v1.2.85).
+    deferred_logs: list[str] = []
     with _conn() as conn:
         # WAL: lecturas concurrentes con una escritura sin bloquearse mutuamente.
         # Es un setting persistente del archivo; basta con setearlo una vez por DB.
@@ -542,10 +547,13 @@ def init_db():
             )
 
         # ── One-time migrations ─────────────────────────────────────────────────
-        _run_migrations(conn)
+        _run_migrations(conn, deferred_logs)
+
+    for _msg in deferred_logs:
+        logger.info(_msg)
 
 
-def _run_migrations(conn):
+def _run_migrations(conn, deferred_logs: list | None = None):
     """Apply any pending one-time DB migrations in order."""
     done = {r[0] for r in conn.execute("SELECT name FROM db_migrations").fetchall()}
 
@@ -1237,10 +1245,11 @@ def _run_migrations(conn):
                     (_fecha, str(_delta), _mon, _fuente, _archivo or _fuente, _usuario, _imp_id, _tc),
                 )
                 _n_adj += 1
-                logger.info(
-                    f"[resumen_credit_adjust_backfill_v1] import {_imp_id} ({_fuente} {_venc}) "
-                    f"{_mon}: ajuste {_delta:.2f}"
-                )
+                if deferred_logs is not None:
+                    deferred_logs.append(
+                        f"[resumen_credit_adjust_backfill_v1] import {_imp_id} ({_fuente} {_venc}) "
+                        f"{_mon}: ajuste {_delta:.2f}"
+                    )
         if _n_adj:
             conn.execute("INSERT OR IGNORE INTO categorias (nombre) VALUES ('Créditos tarjeta')")
         conn.execute("INSERT INTO db_migrations (name) VALUES ('resumen_credit_adjust_backfill_v1')")
