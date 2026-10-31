@@ -34,7 +34,12 @@ link_dir() {
         return 0
     fi
     if [ -L "$dst" ]; then rm -f "$dst"
-    elif [ -d "$dst" ]; then rmdir "$dst" 2>/dev/null || { echo "[cwng] WARN: $dst no está vacío, no se enlaza $label"; return 0; }
+    elif [ -d "$dst" ]; then
+        # La imagen trae el directorio con contenido por defecto (efímero, vive
+        # en el filesystem del contenedor): se aparta en vez de borrarlo.
+        if mountpoint -q "$dst"; then echo "[cwng] WARN: $dst es un mountpoint, no se enlaza $label"; return 0; fi
+        rm -rf "${dst}.default"
+        mv "$dst" "${dst}.default" || { echo "[cwng] WARN: no se pudo apartar $dst, no se enlaza $label"; return 0; }
     fi
     ln -s "$src" "$dst"
     echo "[cwng] $label: $src -> $dst"
