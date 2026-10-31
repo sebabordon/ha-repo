@@ -1,0 +1,43 @@
+---
+name: Calibre-Web-NextGen
+version: "4.1.60"
+slug: calibre_web_nextgen
+description: >-
+  Biblioteca de eBooks (fork activo de Calibre-Web-Automated) con acceso a
+  /media/Libros del host de Home Assistant.
+url: https://github.com/sebabordon/ha-repo/tree/main/calibre-web-nextgen
+stage: stable
+arch:
+  - amd64
+  - aarch64
+# La imagen upstream trae su propio s6-overlay (/init).
+init: false
+ingress: true
+ingress_port: 8099
+ingress_stream: true
+panel_icon: mdi:bookshelf
+panel_title: Libros
+ports:
+  8083/tcp: 8083
+ports_description:
+  8083/tcp: "Web UI + Kobo Sync + KOReader kosync (para dispositivos fuera de HA)"
+map:
+  - type: media
+    read_only: false
+  - type: share
+    read_only: false
+  - type: app_config
+    read_only: false
+    path: /config
+options:
+  PUID: 0
+  PGID: 0
+  TZ: ""
+  library: "/media/Libros"
+  ingest: ""
+schema:
+  PUID: int
+  PGID: int
+  TZ: "str?"
+  library: "str?"
+  ingest: "str?"
