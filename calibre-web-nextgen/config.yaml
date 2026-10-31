@@ -1,6 +1,6 @@
 ---
 name: Calibre-Web-NextGen
-version: "4.1.60-1"
+version: "4.1.60-2"
 slug: calibre_web_nextgen
 description: >-
   Biblioteca de eBooks (fork activo de Calibre-Web-Automated) con acceso a
@@ -35,9 +35,13 @@ options:
   TZ: ""
   library: "/media/Libros"
   ingest: ""
+  trusted_origins: ""
+  trusted_proxy_count: 1
 schema:
   PUID: int
   PGID: int
   TZ: "str?"
   library: "str?"
   ingest: "str?"
+  trusted_origins: "str?"
+  trusted_proxy_count: "int(1,10)"
