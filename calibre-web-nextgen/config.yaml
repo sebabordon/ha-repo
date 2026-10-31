@@ -1,6 +1,6 @@
 ---
 name: Calibre-Web-NextGen
-version: "4.1.60"
+version: "4.1.60-1"
 slug: calibre_web_nextgen
 description: >-
   Biblioteca de eBooks (fork activo de Calibre-Web-Automated) con acceso a
