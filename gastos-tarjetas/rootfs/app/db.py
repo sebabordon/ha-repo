@@ -53,6 +53,108 @@ _EGRESO_EXPR = "CASE WHEN CAST(monto AS REAL) > 0 THEN CAST(monto AS REAL) ELSE 
 # need their sign flipped (CC parsers already return positive = expense).
 _CC_FUENTES = frozenset(("amex", "bbva_mc", "bbva_visa", "galicia_mc"))
 
+# Fuentes que reciben movimientos tanto del scraper como del PDF del resumen:
+# el mismo consumo puede entrar dos veces (ver reconcile_scraper_vs_pdf).
+_PDF_SCRAPER_FUENTES = ("amex", "bbva_mc", "bbva_visa")
+# Ventana de fechas (±días) para emparejar un gasto del scraper con el del PDF;
+# misma que usa scrapers_db.consolidate_scraper_duplicates.
+_PDF_MATCH_DAYS = 5
+
+
+def find_pdf_gasto_for(conn, fuente: str, moneda: str, monto, fecha: str,
+                       desc: str = "", exclude_ids=()):
+    """
+    Devuelve el gasto de PDF (archivo_origen no scraper/manual) que cubre un
+    consumo del scraper, o None. Usa la conexión recibida (sirve dentro de
+    migraciones). Un gasto-PDF ya conciliado con otro movimiento raw
+    (estado='matched') cuenta como consumido: así N compras idénticas no
+    absorben una compra legítima extra.
+    """
+    import difflib
+    import re
+    from datetime import datetime, timedelta
+    try:
+        fecha_dt = datetime.fromisoformat(str(fecha)[:10])
+        monto_f  = float(monto)
+    except (TypeError, ValueError):
+        return None
+    d_from = (fecha_dt - timedelta(days=_PDF_MATCH_DAYS)).strftime("%Y-%m-%d")
+    d_to   = (fecha_dt + timedelta(days=_PDF_MATCH_DAYS)).strftime("%Y-%m-%d")
+    excl   = list(exclude_ids)
+    excl_sql = f" AND g.id NOT IN ({','.join('?' * len(excl))})" if excl else ""
+    rows = conn.execute(
+        f"""SELECT g.id, g.descripcion, g.categoria, g.categoria_fuente
+            FROM gastos g
+            WHERE g.fuente=? AND g.moneda=?
+              AND ABS(CAST(g.monto AS REAL) - ?) < 0.02
+              AND g.fecha BETWEEN ? AND ?
+              AND g.archivo_origen IS NOT NULL
+              AND g.archivo_origen NOT IN ('scraper', 'manual')
+              AND NOT EXISTS (SELECT 1 FROM movimientos_raw m
+                              WHERE m.gasto_id = g.id AND m.estado = 'matched')
+              {excl_sql}""",
+        (fuente, moneda, monto_f, d_from, d_to, *excl),
+    ).fetchall()
+    cuota_re = re.compile(r"\b(\d{1,2}/\d{1,3})\b")
+    d_low    = (desc or "").lower().strip()
+    cuota_s  = cuota_re.search(d_low)
+    best, best_ratio = None, -1.0
+    for r in rows:
+        dp = str(r["descripcion"] or "").lower().strip()
+        cuota_p = cuota_re.search(dp)
+        if cuota_s and cuota_p and cuota_s.group(1) != cuota_p.group(1):
+            continue
+        ratio = difflib.SequenceMatcher(None, dp, d_low).ratio()
+        if ratio > best_ratio:
+            best, best_ratio = r, ratio
+    return best
+
+
+def reconcile_scraper_vs_pdf(conn, fuentes=_PDF_SCRAPER_FUENTES, log=None) -> int:
+    """
+    Limpieza: elimina gastos del scraper que ya están cubiertos por un gasto
+    de PDF (el resumen es la fuente autoritativa). Empareja uno-a-uno, hereda
+    categoría manual y deja el movimiento raw como 'matched' apuntando al PDF.
+    Usa solo `conn`. Devuelve cuántos gastos del scraper borró.
+    """
+    removed = 0
+    used_pdf: set[int] = set()
+    for fuente in fuentes:
+        scr = conn.execute(
+            """SELECT id, fecha, monto, moneda, descripcion, categoria, categoria_fuente
+               FROM gastos WHERE fuente=? AND archivo_origen='scraper'
+               ORDER BY fecha, id""",
+            (fuente,),
+        ).fetchall()
+        for s in scr:
+            pdf = find_pdf_gasto_for(conn, fuente, s["moneda"], s["monto"], s["fecha"],
+                                     s["descripcion"], exclude_ids=used_pdf)
+            if not pdf:
+                continue
+            used_pdf.add(pdf["id"])
+            if s["categoria"] and (
+                (s["categoria_fuente"] == "manual" and pdf["categoria_fuente"] != "manual")
+                or (s["categoria_fuente"] != "manual" and not pdf["categoria"])
+            ):
+                conn.execute(
+                    "UPDATE gastos SET categoria=?, categoria_fuente=? WHERE id=?",
+                    (s["categoria"], s["categoria_fuente"], pdf["id"]),
+                )
+            conn.execute(
+                "UPDATE movimientos_raw SET estado='matched', gasto_id=? WHERE gasto_id=?",
+                (pdf["id"], s["id"]),
+            )
+            conn.execute("DELETE FROM gastos WHERE id=?", (s["id"],))
+            removed += 1
+            if log is not None:
+                log.append(
+                    f"[reconcile_pdf_scraper] {fuente} {s['fecha']} {s['monto']} "
+                    f"{(s['descripcion'] or '')[:40]!r}: gasto scraper id={s['id']} "
+                    f"→ PDF id={pdf['id']}"
+                )
+    return removed
+
+
 # Categories that are always considered "special" regardless of user rules.
 _BUILTIN_SPECIALS = frozenset({"Transferencia", "Transferencia Intercuentas", "Pago de Tarjeta"})
 
@@ -1253,6 +1355,19 @@ def _run_migrations(conn, deferred_logs: list | None = None):
         if _n_adj:
             conn.execute("INSERT OR IGNORE INTO categorias (nombre) VALUES ('Créditos tarjeta')")
         conn.execute("INSERT INTO db_migrations (name) VALUES ('resumen_credit_adjust_backfill_v1')")
+
+    if "dedup_pdf_vs_scraper_v1" not in done:
+        # v1.2.86: duplicados PDF↔scraper en AMEX/BBVA tarjetas. La conciliación
+        # (consolidate_scraper_duplicates) solo corría al importar el PDF; si el
+        # scraper traía el consumo después, o estaba aún 'unmatched', quedaban
+        # ambos gastos. Limpia lo acumulado (el fix de raíz está en
+        # scrapers_db.auto_import_unmatched). Logs diferidos: ver 1.2.85.
+        _logs: list[str] = []
+        _n = reconcile_scraper_vs_pdf(conn, log=_logs)
+        if deferred_logs is not None:
+            deferred_logs.extend(_logs)
+            deferred_logs.append(f"[dedup_pdf_vs_scraper_v1] eliminados {_n} gastos de scraper duplicados del PDF")
+        conn.execute("INSERT INTO db_migrations (name) VALUES ('dedup_pdf_vs_scraper_v1')")
 
     # app_log table — creada directamente con el conn existente para evitar
     # el conflicto de lock que ocurriría si abriéramos una segunda conexión

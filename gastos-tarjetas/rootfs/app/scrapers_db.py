@@ -970,8 +970,24 @@ def auto_import_unmatched(fuente: str) -> int:
     if not rows:
         return 0
 
+    from db import _PDF_SCRAPER_FUENTES, find_pdf_gasto_for
+
     imported = 0
     for raw in rows:
+        # Tarjetas con PDF: si el resumen ya cargó este consumo, no crear otro
+        # gasto — el raw queda 'matched' con el gasto del PDF.
+        if raw["fuente"] in _PDF_SCRAPER_FUENTES:
+            with _conn() as conn:
+                pdf = find_pdf_gasto_for(conn, raw["fuente"], raw["moneda"],
+                                         raw["monto"], raw["fecha"], raw["descripcion"])
+                if pdf:
+                    conn.execute(
+                        "UPDATE movimientos_raw SET estado='matched', gasto_id=? WHERE id=?",
+                        (pdf["id"], raw["id"]),
+                    )
+                    logger.info("[auto-import] %s raw id=%d ya cubierto por PDF gasto id=%d — no se crea gasto",
+                                raw["fuente"], raw["id"], pdf["id"])
+                    continue
         # Usar solo categorización por reglas (sync). La función `categorize`
         # es async (llama a LLMs) y no se puede await desde un contexto sync.
         cat = None
