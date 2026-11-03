@@ -1,4 +1,5 @@
 import io
+import re
 from datetime import date
 from typing import Optional
 
@@ -290,6 +291,25 @@ def delete_gasto(gasto_id: int, request: Request):
     return {"ok": True}
 
 
+_KW_CUOTA_RE = re.compile(
+    r"\b(?:cuota|cta|c)\.?\s*\d{1,3}\s*(?:/|de)\s*\d{1,3}\b|\b\d{1,3}/\d{1,3}\b",
+    re.IGNORECASE,
+)
+_KW_NUM_TOKEN_RE = re.compile(r"^(?:n[°º.]?|nro\.?)?[\d.,/-]+$", re.IGNORECASE)
+
+
+def _keyword_suggestion(desc: str) -> str | None:
+    """
+    Keyword sugerido para una regla de categoría a partir de la descripción del
+    gasto: sin "CUOTA xx/yy" ni los códigos numéricos que AMEX/MP agregan al
+    final (ej. "MERPAGO*PARKING 184886422" → "MERPAGO*PARKING").
+    """
+    txt = _KW_CUOTA_RE.sub(" ", desc or "")
+    tokens = [t for t in txt.split() if not _KW_NUM_TOKEN_RE.match(t)
+              and t.lower() not in ("n°", "nº", "nro", "nro.", "cuota")]
+    return " ".join(tokens) or None
+
+
 @router.patch("/gastos/{gasto_id}/categoria")
 def patch_categoria(gasto_id: int, body: dict, request: Request):
     require_auth(request)
@@ -297,7 +317,7 @@ def patch_categoria(gasto_id: int, body: dict, request: Request):
     gasto = get_gasto(gasto_id)
     update_categoria(gasto_id, categoria)
     # Return suggestion so the frontend can prompt the user before adding to rules
-    sugerencia = gasto["descripcion"] if (categoria and gasto) else None
+    sugerencia = _keyword_suggestion(gasto["descripcion"]) if (categoria and gasto) else None
     return {"ok": True, "sugerencia_keyword": sugerencia, "categoria": categoria}
 
 

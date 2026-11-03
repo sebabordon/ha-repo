@@ -1,3 +1,7 @@
+## 1.2.87
+
+- **Keyword sugerido sin números de referencia ni cuotas** (`routes/gastos.py`): al asignar una categoría a un gasto, el aviso "¿Agregar keyword a …?" proponía la descripción cruda (ej. `merpago*parking 184886422`, `starbucks 278656278656`, `… CUOTA 02/03`), que nunca vuelve a coincidir. Nuevo `_keyword_suggestion()` quita "CUOTA xx/yy" (y variantes `C.03/12`, `Cuota 3 de 12`) y los tokens numéricos (códigos de operación, `N° 206 000594`); queda `merpago*parking`, `starbucks`, `cencosud sa`. Si no queda texto, no se ofrece sugerencia.
+
 ## 1.2.86
 
 - **Fix: duplicados recurrentes PDF↔scraper en AMEX y BBVA tarjetas** (`scrapers_db.py`, `db.py`): el mismo consumo aparecía dos veces (uno del resumen PDF y otro del scraper). La conciliación `consolidate_scraper_duplicates` solo corría al importar el PDF, así que si el scraper traía el consumo después, o el movimiento todavía estaba `unmatched` en ese momento, `auto_import_unmatched` creaba un gasto nuevo encima del del PDF. Ahora `auto_import_unmatched` busca antes un gasto de PDF equivalente (misma fuente/moneda/monto ±0,02, fecha ±5 días, cuota N/M compatible) y, si existe, deja el raw en `matched` sin crear gasto; un gasto-PDF ya conciliado cuenta como consumido, así que una compra legítima extra del mismo monto no se pierde. Nuevo helper `find_pdf_gasto_for` en `db.py`.
