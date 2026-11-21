@@ -10,6 +10,9 @@ RUN_ON_START=$(bashio::config 'run_on_start')
 STALE_DAYS=$(bashio::config 'stale_days')
 EXCLUDE_RANDOM_MAC=$(bashio::config 'exclude_random_mac')
 NETWORK_CIDR=$(bashio::config 'network_cidr')
+PIHOLE_HOST=$(bashio::config 'pihole_host')
+PIHOLE_PASS=$(bashio::config 'pihole_pass')
+ADGUARD_ENABLED=$(bashio::config 'adguard_enabled')
 # bashio::config imprime los valores de una lista uno por linea (no JSON), asi
 # que para pasarle un array real al script leemos /data/options.json directo.
 PARENTAL_EXEMPT_JSON=$(jq -c '.parental_exempt // []' /data/options.json)
@@ -20,6 +23,12 @@ run_sync() {
     EXTRA_ARGS=()
     if ! bashio::var.true "$EXCLUDE_RANDOM_MAC"; then
         EXTRA_ARGS+=(--no-exclude-random-mac)
+    fi
+    if [ -n "$PIHOLE_HOST" ] && [ "$PIHOLE_HOST" != "null" ]; then
+        EXTRA_ARGS+=(--pihole-host "$PIHOLE_HOST" --pihole-pass "$PIHOLE_PASS")
+    fi
+    if [ "$ADGUARD_ENABLED" = "false" ]; then
+        EXTRA_ARGS+=(--no-adguard)
     fi
     python3 /app/deco_to_adguard.py \
         --deco-host  "$DECO_HOST" \

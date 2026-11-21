@@ -38,6 +38,7 @@ import ipaddress
 import json
 import re
 import sys
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -521,6 +522,187 @@ def sync_to_adguard(
     if dry_run:
         print("[AdGuard] Modo dry-run: no se realizaron cambios reales.")
 
+def sync_to_pihole(
+    devices: list[dict],
+    host: str,
+    password: str,
+    state: dict,
+    stale_days: int = STALE_DAYS_DEFAULT,
+    exclude_random_mac: bool = True,
+    dry_run: bool = False,
+) -> None:
+    """Sincroniza los dispositivos del Deco como 'clients' de Pi-hole v6.
+    Pi-hole identifica cada cliente por un unico identificador (MAC fija o IP) y
+    guarda el nombre del dispositivo en el campo 'comment'. Solo se borran por
+    stale los clientes que este add-on creo/vio (rastreados en el state)."""
+    url = host.rstrip("/")
+    if not url.startswith("http"):
+        url = f"http://{url}"
+    print(f"\n[Pi-hole] Conectando a {url} ...")
+    session = requests.Session()
+    session.verify = False
+    try:
+        r = session.post(f"{url}/api/auth", json={"password": password}, timeout=15)
+        r.raise_for_status()
+        sess = r.json().get("session", {})
+        if not sess.get("valid"):
+            raise RuntimeError(sess.get("message") or "autenticacion rechazada")
+        if sess.get("sid"):
+            session.headers["sid"] = sess["sid"]
+    except Exception as exc:
+        print(f"[ERROR] No se pudo autenticar en Pi-hole: {exc}")
+        return
+    try:
+        _sync_pihole_clients(session, url, devices, state, stale_days, exclude_random_mac, dry_run)
+    finally:
+        try:
+            session.delete(f"{url}/api/auth", timeout=10)
+        except requests.RequestException:
+            pass
+
+def _ph_quote(identifier: str) -> str:
+    return urllib.parse.quote(identifier, safe="")
+
+def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_random_mac, dry_run) -> None:
+    try:
+        resp = session.get(f"{url}/api/clients", timeout=15)
+        resp.raise_for_status()
+    except Exception as exc:
+        print(f"[ERROR] No se pudieron leer los clientes de Pi-hole: {exc}")
+        return
+    existing = resp.json().get("clients", [])
+    by_id = {c["client"].lower(): c for c in existing}
+    by_comment = {(c.get("comment") or "").strip(): c for c in existing if (c.get("comment") or "").strip()}
+    print(f"[Pi-hole] Clientes existentes: {len(existing)}")
+
+    ph_state = state.setdefault("_pihole", {})
+    name_counts: dict[str, int] = {}
+    for dev in devices:
+        if dev["name"].strip():
+            n = sanitize_name(dev["name"])
+            name_counts[n] = name_counts.get(n, 0) + 1
+
+    def add(identifier, comment, groups):
+        if dry_run:
+            print(f"  [~] Dry-run add: {comment} ({identifier})")
+            return True
+        r = session.post(f"{url}/api/clients",
+                         json={"client": identifier, "comment": comment, "groups": groups}, timeout=15)
+        if r.status_code not in (200, 201):
+            print(f"  [!] Error agregando '{comment}': {r.status_code} {r.text}")
+            return False
+        print(f"  [+] Agregado: {comment} ({identifier})")
+        return True
+
+    def update(identifier, comment, groups):
+        if dry_run:
+            print(f"  [~] Dry-run update: {comment} ({identifier})")
+            return True
+        r = session.put(f"{url}/api/clients/{_ph_quote(identifier)}",
+                        json={"comment": comment, "groups": groups}, timeout=15)
+        if r.status_code not in (200, 201):
+            print(f"  [!] Error actualizando '{comment}': {r.status_code} {r.text}")
+            return False
+        print(f"  [*] Actualizado: {comment} ({identifier})")
+        return True
+
+    def delete(identifier, reason=""):
+        suffix = f" ({reason})" if reason else ""
+        if dry_run:
+            print(f"  [~] Dry-run delete: {identifier}{suffix}")
+            return True
+        r = session.delete(f"{url}/api/clients/{_ph_quote(identifier)}", timeout=15)
+        if r.status_code not in (200, 204):
+            print(f"  [!] Error borrando '{identifier}': {r.status_code} {r.text}")
+            return False
+        print(f"  [x] Borrado: {identifier}{suffix}")
+        return True
+
+    added = updated = unchanged = skipped = deleted = failed = 0
+    seen_comments: set[str] = set()
+    now = now_iso()
+
+    for dev in devices:
+        raw_name = dev["name"] or ""
+        ip = dev["ip"]
+        mac_norm = None
+        if dev["mac"]:
+            try:
+                mac_norm = normalize_mac(dev["mac"])
+            except ValueError:
+                mac_norm = None
+        is_random = bool(mac_norm) and is_locally_administered_mac(mac_norm)
+        usable_mac = mac_norm if (mac_norm and not is_random) else None
+        generic = is_generic_name(raw_name, name_counts)
+        name = None if generic else sanitize_name(raw_name)
+        identifier = usable_mac or ip
+        if not identifier:
+            continue
+
+        matched = by_id.get(identifier.lower())
+        if not matched and name:
+            matched = by_comment.get(name)
+
+        if matched:
+            comment = name or (matched.get("comment") or "").strip() or identifier
+            groups = matched.get("groups") or [0]
+            seen_comments.add(comment)
+            if matched["client"].lower() != identifier.lower():
+                # Pi-hole no permite cambiar el identificador: se reemplaza conservando grupos
+                if delete(matched["client"], reason="identificador cambio") and add(identifier, comment, groups):
+                    by_id.pop(matched["client"].lower(), None)
+                    updated += 1
+                else:
+                    failed += 1
+                    continue
+            elif (matched.get("comment") or "").strip() != comment:
+                if update(identifier, comment, groups):
+                    updated += 1
+                else:
+                    failed += 1
+                    continue
+            else:
+                unchanged += 1
+            ph_state[comment] = {"last_seen": now, "id": identifier}
+            continue
+
+        if generic:
+            if not usable_mac:
+                skipped += 1
+                continue
+            base = sanitize_name(raw_name) if raw_name.strip() else "Dispositivo"
+            name = f"{base}-{usable_mac.replace(':', '')[-4:]}"
+        if is_random and exclude_random_mac:
+            skipped += 1
+            print(f"  [-] MAC aleatoria, no se crea cliente nuevo: '{name}' ({dev['mac']})")
+            continue
+        seen_comments.add(name)
+        if add(identifier, name, [0]):
+            added += 1
+            ph_state[name] = {"last_seen": now, "id": identifier}
+            by_id[identifier.lower()] = {"client": identifier, "comment": name, "groups": [0]}
+        else:
+            failed += 1
+
+    if stale_days > 0:
+        now_dt = datetime.now(timezone.utc)
+        for comment, info in list(ph_state.items()):
+            if comment in seen_comments:
+                continue
+            age = now_dt - datetime.fromisoformat(info["last_seen"])
+            if age < timedelta(days=stale_days):
+                print(f"  [.] '{comment}' ausente en Pi-hole, periodo de gracia ({stale_days - age.days}d restantes).")
+                continue
+            current = by_comment.get(comment) or by_id.get((info.get("id") or "").lower())
+            if current is None or delete(current["client"], reason=f"sin verse hace {age.days}d"):
+                ph_state.pop(comment, None)
+                deleted += 1 if current else 0
+
+    print(f"\n[Pi-hole] Resumen: {added} agregados, {updated} actualizados, {unchanged} sin cambios, "
+          f"{skipped} omitidos, {deleted} borrados (stale), {failed} errores.")
+    if dry_run:
+        print("[Pi-hole] Modo dry-run: no se realizaron cambios reales.")
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Sincroniza clientes del Deco XE75 Pro -> AdGuard Home.",
@@ -532,6 +714,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--agh-host",  default=AGH_HOST_DEFAULT)
     parser.add_argument("--agh-user",  default=AGH_USER_DEFAULT)
     parser.add_argument("--agh-pass",  default=None)
+    parser.add_argument("--no-adguard", action="store_true",
+                        help="No sincronizar con AdGuard Home (solo Pi-hole)")
+    parser.add_argument("--pihole-host", default="",
+                        help="URL o IP de Pi-hole v6 (si se omite, no se sincroniza Pi-hole)")
+    parser.add_argument("--pihole-pass", default=None)
     parser.add_argument("--output",    default=OUTPUT_DEFAULT)
     parser.add_argument("--state-file", default=STATE_FILE_DEFAULT,
                         help="Archivo donde se guarda la ultima vez visto de cada dispositivo")
@@ -566,7 +753,12 @@ def main() -> None:
 
     deco_pass = args.deco_pass or getpass.getpass("[?] Contrasena del Deco: ")
     agh_pass  = None
-    if not args.no_upload:
+    use_agh = not args.no_upload and not args.no_adguard
+    use_ph = not args.no_upload and bool(args.pihole_host)
+    pihole_pass = None
+    if use_ph:
+        pihole_pass = args.pihole_pass or getpass.getpass("[?] Contrasena de Pi-hole: ")
+    if use_agh:
         agh_pass = args.agh_pass or getpass.getpass("[?] Contrasena de AdGuard Home: ")
     devices = fetch_devices(args.deco_host, deco_pass)
     if not devices:
@@ -585,16 +777,25 @@ def main() -> None:
         parental_exempt = parse_json_list(args.parental_exempt_json, "--parental-exempt-json")
         unfiltered_devices = parse_json_list(args.unfiltered_json, "--unfiltered-json")
         state = load_state(args.state_file)
-        sync_to_adguard(
-            devices, args.agh_host, args.agh_user, agh_pass,
-            state=state,
-            stale_days=args.stale_days,
-            exclude_random_mac=args.exclude_random_mac,
-            network=args.network,
-            parental_exempt=parental_exempt,
-            unfiltered_devices=unfiltered_devices,
-            dry_run=args.dry_run,
-        )
+        if use_agh:
+            sync_to_adguard(
+                devices, args.agh_host, args.agh_user, agh_pass,
+                state=state,
+                stale_days=args.stale_days,
+                exclude_random_mac=args.exclude_random_mac,
+                network=args.network,
+                parental_exempt=parental_exempt,
+                unfiltered_devices=unfiltered_devices,
+                dry_run=args.dry_run,
+            )
+        if use_ph:
+            sync_to_pihole(
+                devices, args.pihole_host, pihole_pass,
+                state=state,
+                stale_days=args.stale_days,
+                exclude_random_mac=args.exclude_random_mac,
+                dry_run=args.dry_run,
+            )
         if not args.dry_run:
             save_state(args.state_file, state)
 

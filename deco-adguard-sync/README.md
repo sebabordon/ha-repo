@@ -40,6 +40,9 @@ The sync runs once on startup, then automatically every 6 hours.
 | `agh_host` | AdGuard Home URL with port | `https://10.0.2.232:3002` |
 | `agh_user` | AdGuard Home username | `admin` |
 | `agh_pass` | AdGuard Home password | — |
+| `pihole_host` | Pi-hole v6 hostname, IP or URL; empty disables Pi-hole sync | `10.0.2.5` or `http://10.0.2.5:8080` |
+| `pihole_pass` | Pi-hole web/API password | — |
+| `adguard_enabled` | Sync to AdGuard Home (turn off for Pi-hole only) | `true` |
 | `min_ip_suffix` | Minimum last IP octet to export | `100` → exports from x.x.x.100 upward |
 | `run_on_start` | Run a sync immediately on startup | `true` |
 | `stale_days` | Days a client can go unseen before it's removed from AdGuard | `7`, `0` disables cleanup |
@@ -53,6 +56,10 @@ The sync runs once on startup, then automatically every 6 hours.
 This filters out infrastructure devices (router, APs, switches, servers) which typically have low IPs like `.1`, `.2`, `.10`, etc.
 
 For example, with `min_ip_suffix: 100`, only devices with IPs ending in `.100` or higher will be exported to AdGuard Home.
+
+## Pi-hole sync
+
+When `pihole_host` is set, devices are also pushed to Pi-hole **v6** (REST API) as clients: identifier = fixed MAC (or IP if none), name stored in the client comment, default group. Changed IP/MAC/name are updated; clients the add-on created and haven't seen for `stale_days` are deleted (clients it didn't create are never touched). Randomized-MAC devices aren't created, same as AdGuard. `parental_exempt`/`unfiltered_devices` don't apply to Pi-hole. Pi-hole v5 is not supported.
 
 ## Notes
 

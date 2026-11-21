@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.0
+- New optional Pi-hole (v6) sync: `pihole_host` (hostname, IP or URL) and `pihole_pass`. Deco devices become Pi-hole clients identified by fixed MAC (or IP), with the device name as the client comment; renamed/re-IP'd devices are updated, and clients this add-on created are removed after `stale_days` unseen. Randomized-MAC and ambiguous-name rules match the AdGuard sync
+- New `adguard_enabled` option (default `true`) to sync only to Pi-hole
+- `parental_exempt` / `unfiltered_devices` remain AdGuard-only
+
 ## 1.5.1
 - Fixed `parental_exempt`/`unfiltered_devices` silently doing nothing: `bashio::config` prints list values one per line, not as JSON, so piping it through `jq -c '.'` produced invalid JSON and both lists were dropped every run. Reads `/data/options.json` directly instead, which is unambiguous JSON
 

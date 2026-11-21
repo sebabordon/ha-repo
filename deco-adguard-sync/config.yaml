@@ -1,7 +1,7 @@
 name: "Deco → AdGuard Sync"
 description: >
   Automatically syncs connected clients from your TP-Link Deco XE75 Pro
-  to AdGuard Home using both APIs. Runs on startup and every 6 hours.
+  to AdGuard Home and/or Pi-hole (v6) using their APIs. Runs on startup and every 6 hours.
   Only devices with an IP >= min_ip_suffix are exported (e.g. 100 means
   only IPs like 10.x.x.100 and above). Deco takes precedence over AdGuard:
   existing clients (matched by fixed MAC or by name) get their IP updated
@@ -11,7 +11,7 @@ description: >
   for more than stale_days is removed from AdGuard. Devices listed in
   parental_exempt get Parental Control turned off on every sync, and
   devices in unfiltered_devices get every AdGuard block turned off.
-version: "1.5.1"
+version: "1.6.0"
 slug: "deco-adguard-sync"
 init: false
 arch:
@@ -36,6 +36,17 @@ options:
 
   # AdGuard Home password
   agh_pass: ""
+
+  # Pi-hole (v6) host or URL, e.g. "10.0.2.5" or "http://10.0.2.5:8080".
+  # Leave empty to disable Pi-hole sync. Clients are created by fixed MAC
+  # (or IP) with the device name stored as the client comment.
+  pihole_host: ""
+
+  # Pi-hole web/API password (Settings → Web interface / API)
+  pihole_pass: ""
+
+  # Sync to AdGuard Home. Turn off to sync only to Pi-hole.
+  adguard_enabled: true
 
   # Only export devices whose IP last octet is >= this value.
   # Example: 100 means only IPs ending in .100 or higher are exported.
@@ -82,6 +93,9 @@ options:
 schema:
   deco_host: str
   deco_pass: password
+  pihole_host: str?
+  pihole_pass: password?
+  adguard_enabled: bool?
   agh_host: str
   agh_user: str
   agh_pass: password
