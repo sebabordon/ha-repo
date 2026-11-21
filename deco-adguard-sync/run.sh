@@ -27,7 +27,7 @@ run_sync() {
         EXTRA_ARGS+=(--no-exclude-random-mac)
     fi
     if [ -n "$PIHOLE_HOST" ] && [ "$PIHOLE_HOST" != "null" ]; then
-        EXTRA_ARGS+=(--pihole-host "$PIHOLE_HOST" --pihole-pass "$PIHOLE_PASS")
+        EXTRA_ARGS+=(--pihole-host "$PIHOLE_HOST" "--pihole-pass=$PIHOLE_PASS")
         [ "$PIHOLE_PARENTAL_GROUP" != "null" ] && EXTRA_ARGS+=(--pihole-parental-group "$PIHOLE_PARENTAL_GROUP")
         [ -n "$PIHOLE_UNFILTERED_GROUP" ] && [ "$PIHOLE_UNFILTERED_GROUP" != "null" ] && EXTRA_ARGS+=(--pihole-unfiltered-group "$PIHOLE_UNFILTERED_GROUP")
     fi
@@ -36,10 +36,10 @@ run_sync() {
     fi
     python3 /app/deco_to_adguard.py \
         --deco-host  "$DECO_HOST" \
-        --deco-pass  "$DECO_PASS" \
+        "--deco-pass=$DECO_PASS" \
         --agh-host   "$AGH_HOST" \
         --agh-user   "$AGH_USER" \
-        --agh-pass   "$AGH_PASS" \
+        "--agh-pass=$AGH_PASS" \
         --min-ip     "$MIN_IP" \
         --stale-days "$STALE_DAYS" \
         --network    "$NETWORK_CIDR" \

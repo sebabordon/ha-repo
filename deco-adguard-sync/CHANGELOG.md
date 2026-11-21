@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.6.2
+- Fixed `argument --pihole-pass: expected one argument` crash loop when a password starts with `-`: passwords are now passed as `--opt=value`
+
 ## 1.6.1
 - Pi-hole groups: `parental_exempt` and `unfiltered_devices` now also apply to Pi-hole. `pihole_parental_group` is added to every synced client except exempt ones; `unfiltered_devices` are moved to ONLY `pihole_unfiltered_group` (default "Unfiltered", keep it without lists). Groups are created if missing and re-applied each sync; clients' groups are left untouched if neither feature is configured
 

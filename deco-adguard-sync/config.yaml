@@ -11,7 +11,7 @@ description: >
   for more than stale_days is removed from AdGuard. Devices listed in
   parental_exempt get Parental Control turned off on every sync, and
   devices in unfiltered_devices get every AdGuard block turned off.
-version: "1.6.1"
+version: "1.6.2"
 slug: "deco-adguard-sync"
 init: false
 arch:
