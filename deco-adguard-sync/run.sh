@@ -12,6 +12,8 @@ EXCLUDE_RANDOM_MAC=$(bashio::config 'exclude_random_mac')
 NETWORK_CIDR=$(bashio::config 'network_cidr')
 PIHOLE_HOST=$(bashio::config 'pihole_host')
 PIHOLE_PASS=$(bashio::config 'pihole_pass')
+PIHOLE_PARENTAL_GROUP=$(bashio::config 'pihole_parental_group')
+PIHOLE_UNFILTERED_GROUP=$(bashio::config 'pihole_unfiltered_group')
 ADGUARD_ENABLED=$(bashio::config 'adguard_enabled')
 # bashio::config imprime los valores de una lista uno por linea (no JSON), asi
 # que para pasarle un array real al script leemos /data/options.json directo.
@@ -26,6 +28,8 @@ run_sync() {
     fi
     if [ -n "$PIHOLE_HOST" ] && [ "$PIHOLE_HOST" != "null" ]; then
         EXTRA_ARGS+=(--pihole-host "$PIHOLE_HOST" --pihole-pass "$PIHOLE_PASS")
+        [ "$PIHOLE_PARENTAL_GROUP" != "null" ] && EXTRA_ARGS+=(--pihole-parental-group "$PIHOLE_PARENTAL_GROUP")
+        [ -n "$PIHOLE_UNFILTERED_GROUP" ] && [ "$PIHOLE_UNFILTERED_GROUP" != "null" ] && EXTRA_ARGS+=(--pihole-unfiltered-group "$PIHOLE_UNFILTERED_GROUP")
     fi
     if [ "$ADGUARD_ENABLED" = "false" ]; then
         EXTRA_ARGS+=(--no-adguard)

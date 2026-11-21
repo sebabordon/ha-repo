@@ -530,6 +530,10 @@ def sync_to_pihole(
     stale_days: int = STALE_DAYS_DEFAULT,
     exclude_random_mac: bool = True,
     dry_run: bool = False,
+    parental_group: str = "",
+    unfiltered_group: str = "Unfiltered",
+    parental_exempt: list[str] | None = None,
+    unfiltered_devices: list[str] | None = None,
 ) -> None:
     """Sincroniza los dispositivos del Deco como 'clients' de Pi-hole v6.
     Pi-hole identifica cada cliente por un unico identificador (MAC fija o IP) y
@@ -553,7 +557,9 @@ def sync_to_pihole(
         print(f"[ERROR] No se pudo autenticar en Pi-hole: {exc}")
         return
     try:
-        _sync_pihole_clients(session, url, devices, state, stale_days, exclude_random_mac, dry_run)
+        _sync_pihole_clients(session, url, devices, state, stale_days, exclude_random_mac, dry_run,
+                             parental_group, unfiltered_group,
+                             parental_exempt or [], unfiltered_devices or [])
     finally:
         try:
             session.delete(f"{url}/api/auth", timeout=10)
@@ -563,7 +569,54 @@ def sync_to_pihole(
 def _ph_quote(identifier: str) -> str:
     return urllib.parse.quote(identifier, safe="")
 
-def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_random_mac, dry_run) -> None:
+def _ph_ensure_group(session, url, name: str, dry_run: bool) -> int | None:
+    """Devuelve el id del grupo de Pi-hole con ese nombre, creandolo si no existe."""
+    name = name.strip()
+    if not name:
+        return None
+    def lookup():
+        r = session.get(f"{url}/api/groups", timeout=15)
+        r.raise_for_status()
+        for g in r.json().get("groups", []):
+            if g.get("name", "").lower() == name.lower():
+                return g["id"]
+        return None
+    try:
+        gid = lookup()
+        if gid is not None:
+            return gid
+        if dry_run:
+            print(f"  [~] Dry-run: se crearia el grupo '{name}'")
+            return -1
+        r = session.post(f"{url}/api/groups",
+                         json={"name": name, "comment": "Creado por Deco sync", "enabled": True},
+                         timeout=15)
+        if r.status_code not in (200, 201):
+            print(f"  [!] No se pudo crear el grupo '{name}': {r.status_code} {r.text}")
+            return None
+        print(f"  [+] Grupo creado: '{name}' (asignale listas en Pi-hole si hace falta)")
+        return lookup()
+    except Exception as exc:
+        print(f"[WARN] Error con el grupo '{name}': {exc}")
+        return None
+
+def _ph_in_list(entries: list[str], names: set[str], mac: str | None) -> bool:
+    for raw in entries:
+        e = raw.strip()
+        if not e:
+            continue
+        try:
+            if mac and normalize_mac(e) == mac:
+                return True
+        except ValueError:
+            pass
+        if e.lower() in names:
+            return True
+    return False
+
+def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_random_mac, dry_run,
+                         parental_group="", unfiltered_group="Unfiltered",
+                         parental_exempt=(), unfiltered_devices=()) -> None:
     try:
         resp = session.get(f"{url}/api/clients", timeout=15)
         resp.raise_for_status()
@@ -574,6 +627,20 @@ def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_rando
     by_id = {c["client"].lower(): c for c in existing}
     by_comment = {(c.get("comment") or "").strip(): c for c in existing if (c.get("comment") or "").strip()}
     print(f"[Pi-hole] Clientes existentes: {len(existing)}")
+
+    parental_id = _ph_ensure_group(session, url, parental_group, dry_run) if parental_group.strip() else None
+    unfilt_id = _ph_ensure_group(session, url, unfiltered_group, dry_run) if unfiltered_devices else None
+    groups_managed = parental_id is not None or unfilt_id is not None
+
+    def desired_groups(names: set[str], mac, current: list[int] | None) -> list[int]:
+        if not groups_managed:
+            return current or [0]
+        if unfilt_id is not None and _ph_in_list(unfiltered_devices, names, mac):
+            return [unfilt_id]
+        base = [g for g in (current or [0]) if g not in (parental_id, unfilt_id)] or [0]
+        if parental_id is not None and not _ph_in_list(parental_exempt, names, mac):
+            base.append(parental_id)
+        return sorted(set(base))
 
     ph_state = state.setdefault("_pihole", {})
     name_counts: dict[str, int] = {}
@@ -645,7 +712,9 @@ def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_rando
 
         if matched:
             comment = name or (matched.get("comment") or "").strip() or identifier
-            groups = matched.get("groups") or [0]
+            names = {comment.lower(), raw_name.strip().lower()}
+            current = matched.get("groups") or [0]
+            groups = desired_groups(names, usable_mac, current)
             seen_comments.add(comment)
             if matched["client"].lower() != identifier.lower():
                 # Pi-hole no permite cambiar el identificador: se reemplaza conservando grupos
@@ -655,7 +724,7 @@ def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_rando
                 else:
                     failed += 1
                     continue
-            elif (matched.get("comment") or "").strip() != comment:
+            elif (matched.get("comment") or "").strip() != comment or set(groups) != set(current):
                 if update(identifier, comment, groups):
                     updated += 1
                 else:
@@ -677,10 +746,11 @@ def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_rando
             print(f"  [-] MAC aleatoria, no se crea cliente nuevo: '{name}' ({dev['mac']})")
             continue
         seen_comments.add(name)
-        if add(identifier, name, [0]):
+        new_groups = desired_groups({name.lower(), raw_name.strip().lower()}, usable_mac, None)
+        if add(identifier, name, new_groups):
             added += 1
             ph_state[name] = {"last_seen": now, "id": identifier}
-            by_id[identifier.lower()] = {"client": identifier, "comment": name, "groups": [0]}
+            by_id[identifier.lower()] = {"client": identifier, "comment": name, "groups": new_groups}
         else:
             failed += 1
 
@@ -719,6 +789,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pihole-host", default="",
                         help="URL o IP de Pi-hole v6 (si se omite, no se sincroniza Pi-hole)")
     parser.add_argument("--pihole-pass", default=None)
+    parser.add_argument("--pihole-parental-group", default="",
+                        help="Grupo de Pi-hole (ej. con listas de contenido adulto) que se asigna a todos los clientes salvo los exentos")
+    parser.add_argument("--pihole-unfiltered-group", default="Unfiltered",
+                        help="Grupo (sin listas) donde van los dispositivos de --unfiltered-json")
     parser.add_argument("--output",    default=OUTPUT_DEFAULT)
     parser.add_argument("--state-file", default=STATE_FILE_DEFAULT,
                         help="Archivo donde se guarda la ultima vez visto de cada dispositivo")
@@ -795,6 +869,10 @@ def main() -> None:
                 stale_days=args.stale_days,
                 exclude_random_mac=args.exclude_random_mac,
                 dry_run=args.dry_run,
+                parental_group=args.pihole_parental_group,
+                unfiltered_group=args.pihole_unfiltered_group,
+                parental_exempt=parental_exempt,
+                unfiltered_devices=unfiltered_devices,
             )
         if not args.dry_run:
             save_state(args.state_file, state)

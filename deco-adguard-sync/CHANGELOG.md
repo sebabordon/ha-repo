@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.6.1
+- Pi-hole groups: `parental_exempt` and `unfiltered_devices` now also apply to Pi-hole. `pihole_parental_group` is added to every synced client except exempt ones; `unfiltered_devices` are moved to ONLY `pihole_unfiltered_group` (default "Unfiltered", keep it without lists). Groups are created if missing and re-applied each sync; clients' groups are left untouched if neither feature is configured
+
 ## 1.6.0
 - New optional Pi-hole (v6) sync: `pihole_host` (hostname, IP or URL) and `pihole_pass`. Deco devices become Pi-hole clients identified by fixed MAC (or IP), with the device name as the client comment; renamed/re-IP'd devices are updated, and clients this add-on created are removed after `stale_days` unseen. Randomized-MAC and ambiguous-name rules match the AdGuard sync
 - New `adguard_enabled` option (default `true`) to sync only to Pi-hole
