@@ -11,7 +11,7 @@ description: >
   for more than stale_days is removed from AdGuard. Devices listed in
   parental_exempt get Parental Control turned off on every sync, and
   devices in unfiltered_devices get every AdGuard block turned off.
-version: "1.7.1"
+version: "1.7.2"
 slug: "deco-adguard-sync"
 init: false
 arch:
@@ -28,7 +28,8 @@ options:
   # Local admin password for the Deco (set in the Deco app under More → Local Management)
   deco_pass: ""
 
-  # URL of your AdGuard Home instance, including port
+  # URL of your AdGuard Home instance, including port.
+  # Not needed if adguard_enabled is false.
   agh_host: "https://10.0.2.232:3002"
 
   # AdGuard Home username
@@ -109,9 +110,9 @@ schema:
   pihole_exempt_group: str?
   pihole_unfiltered_group: str?
   adguard_enabled: bool?
-  agh_host: str
-  agh_user: str
-  agh_pass: password
+  agh_host: str?
+  agh_user: str?
+  agh_pass: password?
   min_ip_suffix: int
   run_on_start: bool
   stale_days: int

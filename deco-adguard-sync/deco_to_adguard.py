@@ -854,29 +854,40 @@ def main() -> None:
         parental_exempt = parse_json_list(args.parental_exempt_json, "--parental-exempt-json")
         unfiltered_devices = parse_json_list(args.unfiltered_json, "--unfiltered-json")
         state = load_state(args.state_file)
-        if use_agh:
-            sync_to_adguard(
-                devices, args.agh_host, args.agh_user, agh_pass,
-                state=state,
-                stale_days=args.stale_days,
-                exclude_random_mac=args.exclude_random_mac,
-                network=args.network,
-                parental_exempt=parental_exempt,
-                unfiltered_devices=unfiltered_devices,
-                dry_run=args.dry_run,
-            )
+        if not use_agh and not use_ph:
+            print("[WARN] Ningun destino configurado (AdGuard desactivado y sin pihole_host): nada que sincronizar.")
+        # Cada destino es independiente: si uno falla o no responde, el otro igual se sincroniza.
         if use_ph:
-            sync_to_pihole(
-                devices, args.pihole_host, pihole_pass,
-                state=state,
-                stale_days=args.stale_days,
-                exclude_random_mac=args.exclude_random_mac,
-                dry_run=args.dry_run,
-                exempt_group=args.pihole_exempt_group,
-                unfiltered_group=args.pihole_unfiltered_group,
-                parental_exempt=parental_exempt,
-                unfiltered_devices=unfiltered_devices,
-            )
+            try:
+                sync_to_pihole(
+                    devices, args.pihole_host, pihole_pass,
+                    state=state,
+                    stale_days=args.stale_days,
+                    exclude_random_mac=args.exclude_random_mac,
+                    dry_run=args.dry_run,
+                    exempt_group=args.pihole_exempt_group,
+                    unfiltered_group=args.pihole_unfiltered_group,
+                    parental_exempt=parental_exempt,
+                    unfiltered_devices=unfiltered_devices,
+                )
+            except Exception as exc:
+                print(f"[ERROR] Fallo la sincronizacion con Pi-hole: {exc}")
+        if use_agh:
+            try:
+                sync_to_adguard(
+                    devices, args.agh_host, args.agh_user, agh_pass,
+                    state=state,
+                    stale_days=args.stale_days,
+                    exclude_random_mac=args.exclude_random_mac,
+                    network=args.network,
+                    parental_exempt=parental_exempt,
+                    unfiltered_devices=unfiltered_devices,
+                    dry_run=args.dry_run,
+                )
+            except SystemExit:
+                print("[ERROR] AdGuard Home no disponible; se continua sin el.")
+            except Exception as exc:
+                print(f"[ERROR] Fallo la sincronizacion con AdGuard: {exc}")
         if not args.dry_run:
             save_state(args.state_file, state)
 

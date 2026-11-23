@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.2
+- Pi-hole and AdGuard are now independent: Pi-hole syncs first and an unreachable/failing AdGuard no longer aborts the run. `agh_host`/`agh_user`/`agh_pass` are optional so AdGuard can be decommissioned (`adguard_enabled: false`); a warning is logged if no target is configured
+
 ## 1.7.1
 - Pi-hole: every synced client now ends up in exactly one group. Clients migrated from 1.6.x with extra groups (e.g. Default + Parental) are corrected on the next sync; exempt/unfiltered ones leave Default, the rest stay only in Default
 
