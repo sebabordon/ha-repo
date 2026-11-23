@@ -630,12 +630,9 @@ def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_rando
 
     exempt_id = _ph_ensure_group(session, url, exempt_group, dry_run) if parental_exempt else None
     unfilt_id = _ph_ensure_group(session, url, unfiltered_group, dry_run) if unfiltered_devices else None
-    groups_managed = exempt_id is not None or unfilt_id is not None
 
     def desired_groups(names: set[str], mac, current: list[int] | None) -> list[int]:
         """Cada dispositivo sincronizado queda en UN solo grupo."""
-        if not groups_managed:
-            return current or [0]
         if unfilt_id is not None and _ph_in_list(unfiltered_devices, names, mac):
             return [unfilt_id]
         if exempt_id is not None and _ph_in_list(parental_exempt, names, mac):

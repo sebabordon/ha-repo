@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.3
+- Pi-hole: the single-group normalization is now always applied to synced clients, even when `parental_exempt` and `unfiltered_devices` are empty (before, legacy `[Default, Parental]` clients were left untouched in that case)
+
 ## 1.7.2
 - Pi-hole and AdGuard are now independent: Pi-hole syncs first and an unreachable/failing AdGuard no longer aborts the run. `agh_host`/`agh_user`/`agh_pass` are optional so AdGuard can be decommissioned (`adguard_enabled: false`); a warning is logged if no target is configured
 
