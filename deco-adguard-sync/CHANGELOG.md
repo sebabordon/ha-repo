@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.0
+- Pi-hole groups reworked: exempt/unfiltered devices now live in exactly one group each instead of Default + extras. `parental_exempt` -> `pihole_exempt_group` (default "Adultos", replaces `pihole_parental_group`); `unfiltered_devices` -> `pihole_unfiltered_group`. Everyone else stays in Default, where you put the parental lists
+
 ## 1.6.2
 - Fixed `argument --pihole-pass: expected one argument` crash loop when a password starts with `-`: passwords are now passed as `--opt=value`
 

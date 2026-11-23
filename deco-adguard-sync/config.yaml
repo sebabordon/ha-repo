@@ -11,7 +11,7 @@ description: >
   for more than stale_days is removed from AdGuard. Devices listed in
   parental_exempt get Parental Control turned off on every sync, and
   devices in unfiltered_devices get every AdGuard block turned off.
-version: "1.6.2"
+version: "1.7.0"
 slug: "deco-adguard-sync"
 init: false
 arch:
@@ -45,11 +45,11 @@ options:
   # Pi-hole web/API password (Settings → Web interface / API)
   pihole_pass: ""
 
-  # Pi-hole group assigned (together with Default) to every synced client
-  # EXCEPT those in parental_exempt / unfiltered_devices. Attach your
-  # adult/content blocklists to this group in Pi-hole. Created if missing.
-  # Leave empty to not manage it.
-  pihole_parental_group: ""
+  # Pi-hole group for parental_exempt devices (adults). They are moved to
+  # ONLY this group (not Default), so attach your normal ad lists to it but
+  # NOT the parental/adult lists, which go on Default. Created automatically
+  # when parental_exempt is non-empty.
+  pihole_exempt_group: "Adultos"
 
   # Pi-hole group for unfiltered_devices: they are moved to ONLY this group
   # (not Default), so keep it without any lists/rules attached. Created
@@ -106,7 +106,7 @@ schema:
   deco_pass: password
   pihole_host: str?
   pihole_pass: password?
-  pihole_parental_group: str?
+  pihole_exempt_group: str?
   pihole_unfiltered_group: str?
   adguard_enabled: bool?
   agh_host: str

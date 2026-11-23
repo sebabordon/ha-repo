@@ -42,7 +42,7 @@ The sync runs once on startup, then automatically every 6 hours.
 | `agh_pass` | AdGuard Home password | — |
 | `pihole_host` | Pi-hole v6 hostname, IP or URL; empty disables Pi-hole sync | `10.0.2.5` or `http://10.0.2.5:8080` |
 | `pihole_pass` | Pi-hole web/API password | — |
-| `pihole_parental_group` | Pi-hole group for the parental/content lists; applied to all clients except exempt ones | `Parental` |
+| `pihole_exempt_group` | Pi-hole group for `parental_exempt` devices (no parental lists) | `Adultos` |
 | `pihole_unfiltered_group` | Pi-hole group (no lists) for `unfiltered_devices` | `Unfiltered` |
 | `adguard_enabled` | Sync to AdGuard Home (turn off for Pi-hole only) | `true` |
 | `min_ip_suffix` | Minimum last IP octet to export | `100` → exports from x.x.x.100 upward |
@@ -61,7 +61,7 @@ For example, with `min_ip_suffix: 100`, only devices with IPs ending in `.100` o
 
 ## Pi-hole sync
 
-When `pihole_host` is set, devices are also pushed to Pi-hole **v6** (REST API) as clients: identifier = fixed MAC (or IP if none), name stored in the client comment, default group. Changed IP/MAC/name are updated; clients the add-on created and haven't seen for `stale_days` are deleted (clients it didn't create are never touched). Randomized-MAC devices aren't created, same as AdGuard. **Groups:** if `pihole_parental_group` is set, it's added (with Default) to every synced client except those in `parental_exempt`/`unfiltered_devices`; attach your content blocklists to that group in Pi-hole. `unfiltered_devices` are placed in only `pihole_unfiltered_group` (default `Unfiltered`, keep it without lists, so they get no blocking). Missing groups are created automatically and assignments are re-applied every sync. Pi-hole v5 is not supported.
+When `pihole_host` is set, devices are also pushed to Pi-hole **v6** (REST API) as clients: identifier = fixed MAC (or IP if none), name stored in the client comment, default group. Changed IP/MAC/name are updated; clients the add-on created and haven't seen for `stale_days` are deleted (clients it didn't create are never touched). Randomized-MAC devices aren't created, same as AdGuard. **Groups:** every device lives in exactly one group. Default = everyone else (put your parental/adult lists here); `parental_exempt` devices go ONLY to `pihole_exempt_group` (default `Adultos`: attach normal ad lists, not the adult ones); `unfiltered_devices` go ONLY to `pihole_unfiltered_group` (default `Unfiltered`: no lists). Missing groups are created automatically and re-applied every sync.
 
 ## Notes
 

@@ -530,7 +530,7 @@ def sync_to_pihole(
     stale_days: int = STALE_DAYS_DEFAULT,
     exclude_random_mac: bool = True,
     dry_run: bool = False,
-    parental_group: str = "",
+    exempt_group: str = "Adultos",
     unfiltered_group: str = "Unfiltered",
     parental_exempt: list[str] | None = None,
     unfiltered_devices: list[str] | None = None,
@@ -558,7 +558,7 @@ def sync_to_pihole(
         return
     try:
         _sync_pihole_clients(session, url, devices, state, stale_days, exclude_random_mac, dry_run,
-                             parental_group, unfiltered_group,
+                             exempt_group, unfiltered_group,
                              parental_exempt or [], unfiltered_devices or [])
     finally:
         try:
@@ -615,7 +615,7 @@ def _ph_in_list(entries: list[str], names: set[str], mac: str | None) -> bool:
     return False
 
 def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_random_mac, dry_run,
-                         parental_group="", unfiltered_group="Unfiltered",
+                         exempt_group="Adultos", unfiltered_group="Unfiltered",
                          parental_exempt=(), unfiltered_devices=()) -> None:
     try:
         resp = session.get(f"{url}/api/clients", timeout=15)
@@ -628,19 +628,20 @@ def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_rando
     by_comment = {(c.get("comment") or "").strip(): c for c in existing if (c.get("comment") or "").strip()}
     print(f"[Pi-hole] Clientes existentes: {len(existing)}")
 
-    parental_id = _ph_ensure_group(session, url, parental_group, dry_run) if parental_group.strip() else None
+    exempt_id = _ph_ensure_group(session, url, exempt_group, dry_run) if parental_exempt else None
     unfilt_id = _ph_ensure_group(session, url, unfiltered_group, dry_run) if unfiltered_devices else None
-    groups_managed = parental_id is not None or unfilt_id is not None
+    groups_managed = exempt_id is not None or unfilt_id is not None
 
     def desired_groups(names: set[str], mac, current: list[int] | None) -> list[int]:
+        """Un dispositivo en excepcion queda SOLO en su grupo (no en Default)."""
         if not groups_managed:
             return current or [0]
         if unfilt_id is not None and _ph_in_list(unfiltered_devices, names, mac):
             return [unfilt_id]
-        base = [g for g in (current or [0]) if g not in (parental_id, unfilt_id)] or [0]
-        if parental_id is not None and not _ph_in_list(parental_exempt, names, mac):
-            base.append(parental_id)
-        return sorted(set(base))
+        if exempt_id is not None and _ph_in_list(parental_exempt, names, mac):
+            return [exempt_id]
+        base = [g for g in (current or []) if g not in (exempt_id, unfilt_id)]
+        return sorted(set(base)) or [0]
 
     ph_state = state.setdefault("_pihole", {})
     name_counts: dict[str, int] = {}
@@ -789,8 +790,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pihole-host", default="",
                         help="URL o IP de Pi-hole v6 (si se omite, no se sincroniza Pi-hole)")
     parser.add_argument("--pihole-pass", default=None)
-    parser.add_argument("--pihole-parental-group", default="",
-                        help="Grupo de Pi-hole (ej. con listas de contenido adulto) que se asigna a todos los clientes salvo los exentos")
+    parser.add_argument("--pihole-exempt-group", default="Adultos",
+                        help="Grupo de Pi-hole (sin listas parentales) donde van los dispositivos de --parental-exempt-json")
     parser.add_argument("--pihole-unfiltered-group", default="Unfiltered",
                         help="Grupo (sin listas) donde van los dispositivos de --unfiltered-json")
     parser.add_argument("--output",    default=OUTPUT_DEFAULT)
@@ -869,7 +870,7 @@ def main() -> None:
                 stale_days=args.stale_days,
                 exclude_random_mac=args.exclude_random_mac,
                 dry_run=args.dry_run,
-                parental_group=args.pihole_parental_group,
+                exempt_group=args.pihole_exempt_group,
                 unfiltered_group=args.pihole_unfiltered_group,
                 parental_exempt=parental_exempt,
                 unfiltered_devices=unfiltered_devices,
