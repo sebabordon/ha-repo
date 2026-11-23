@@ -633,15 +633,17 @@ def _sync_pihole_clients(session, url, devices, state, stale_days, exclude_rando
     groups_managed = exempt_id is not None or unfilt_id is not None
 
     def desired_groups(names: set[str], mac, current: list[int] | None) -> list[int]:
-        """Un dispositivo en excepcion queda SOLO en su grupo (no en Default)."""
+        """Cada dispositivo sincronizado queda en UN solo grupo."""
         if not groups_managed:
             return current or [0]
         if unfilt_id is not None and _ph_in_list(unfiltered_devices, names, mac):
             return [unfilt_id]
         if exempt_id is not None and _ph_in_list(parental_exempt, names, mac):
             return [exempt_id]
-        base = [g for g in (current or []) if g not in (exempt_id, unfilt_id)]
-        return sorted(set(base)) or [0]
+        # Resto: un solo grupo. Corrige clientes migrados de 1.6.x ([0, parental], [0, ...]):
+        # si estan en Default, quedan solo en Default; si estan en otro grupo propio, se respeta uno.
+        base = sorted({g for g in (current or []) if g not in (exempt_id, unfilt_id)})
+        return [0] if (not base or 0 in base) else [base[0]]
 
     ph_state = state.setdefault("_pihole", {})
     name_counts: dict[str, int] = {}

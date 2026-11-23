@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.7.1
+- Pi-hole: every synced client now ends up in exactly one group. Clients migrated from 1.6.x with extra groups (e.g. Default + Parental) are corrected on the next sync; exempt/unfiltered ones leave Default, the rest stay only in Default
+
 ## 1.7.0
 - Pi-hole groups reworked: exempt/unfiltered devices now live in exactly one group each instead of Default + extras. `parental_exempt` -> `pihole_exempt_group` (default "Adultos", replaces `pihole_parental_group`); `unfiltered_devices` -> `pihole_unfiltered_group`. Everyone else stays in Default, where you put the parental lists
 
