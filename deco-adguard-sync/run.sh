@@ -14,6 +14,8 @@ PIHOLE_HOST=$(bashio::config 'pihole_host')
 PIHOLE_PASS=$(bashio::config 'pihole_pass')
 PIHOLE_EXEMPT_GROUP=$(bashio::config 'pihole_exempt_group')
 PIHOLE_UNFILTERED_GROUP=$(bashio::config 'pihole_unfiltered_group')
+PIHOLE_LOCAL_DNS=$(bashio::config 'pihole_local_dns')
+PIHOLE_DNS_SUFFIX=$(bashio::config 'pihole_dns_suffix')
 ADGUARD_ENABLED=$(bashio::config 'adguard_enabled')
 # bashio::config imprime los valores de una lista uno por linea (no JSON), asi
 # que para pasarle un array real al script leemos /data/options.json directo.
@@ -29,6 +31,10 @@ run_sync() {
     if [ -n "$PIHOLE_HOST" ] && [ "$PIHOLE_HOST" != "null" ]; then
         EXTRA_ARGS+=(--pihole-host "$PIHOLE_HOST" "--pihole-pass=$PIHOLE_PASS")
         [ -n "$PIHOLE_EXEMPT_GROUP" ] && [ "$PIHOLE_EXEMPT_GROUP" != "null" ] && EXTRA_ARGS+=(--pihole-exempt-group "$PIHOLE_EXEMPT_GROUP")
+        if bashio::var.true "$PIHOLE_LOCAL_DNS"; then
+            EXTRA_ARGS+=(--pihole-local-dns)
+            [ "$PIHOLE_DNS_SUFFIX" != "null" ] && EXTRA_ARGS+=("--pihole-dns-suffix=$PIHOLE_DNS_SUFFIX")
+        fi
         [ -n "$PIHOLE_UNFILTERED_GROUP" ] && [ "$PIHOLE_UNFILTERED_GROUP" != "null" ] && EXTRA_ARGS+=(--pihole-unfiltered-group "$PIHOLE_UNFILTERED_GROUP")
     fi
     if [ "$ADGUARD_ENABLED" = "false" ]; then

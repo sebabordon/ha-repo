@@ -44,6 +44,8 @@ The sync runs once on startup, then automatically every 6 hours.
 | `pihole_pass` | Pi-hole web/API password | — |
 | `pihole_exempt_group` | Pi-hole group for `parental_exempt` devices (no parental lists) | `Adultos` |
 | `pihole_unfiltered_group` | Pi-hole group (no lists) for `unfiltered_devices` | `Unfiltered` |
+| `pihole_local_dns` | Write each device to Pi-hole `dns.hosts` (names + reverse DNS) | `true` |
+| `pihole_dns_suffix` | Domain suffix for those records | `sbsoft.com.ar` |
 | `adguard_enabled` | Sync to AdGuard Home (turn off for Pi-hole only) | `true` |
 | `min_ip_suffix` | Minimum last IP octet to export | `100` → exports from x.x.x.100 upward |
 | `run_on_start` | Run a sync immediately on startup | `true` |

@@ -534,6 +534,7 @@ def sync_to_pihole(
     unfiltered_group: str = "Unfiltered",
     parental_exempt: list[str] | None = None,
     unfiltered_devices: list[str] | None = None,
+    local_dns_suffix: str | None = None,
 ) -> None:
     """Sincroniza los dispositivos del Deco como 'clients' de Pi-hole v6.
     Pi-hole identifica cada cliente por un unico identificador (MAC fija o IP) y
@@ -560,11 +561,115 @@ def sync_to_pihole(
         _sync_pihole_clients(session, url, devices, state, stale_days, exclude_random_mac, dry_run,
                              exempt_group, unfiltered_group,
                              parental_exempt or [], unfiltered_devices or [])
+        if local_dns_suffix is not None:
+            sync_pihole_local_dns(session, url, devices, state, local_dns_suffix, stale_days, dry_run)
     finally:
         try:
             session.delete(f"{url}/api/auth", timeout=10)
         except requests.RequestException:
             pass
+
+def _dns_label(name: str) -> str:
+    """Nombre del Deco -> etiqueta DNS valida ('Apple TV Living' -> 'apple-tv-living')."""
+    label = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    return label[:63]
+
+def sync_pihole_local_dns(session, url, devices, state, suffix: str, stale_days: int,
+                          dry_run: bool) -> None:
+    """Carga 'IP nombre.sufijo' en dns.hosts de Pi-hole para que resuelva nombres (y PTR) de
+    los dispositivos, ya que el Deco no sirve DNS inverso. Solo toca los registros que este
+    add-on creo (rastreados en el state); los demas se respetan. Un unico PATCH = un solo
+    reload de dnsmasq."""
+    suffix = suffix.strip().strip(".").lower()
+    try:
+        r = session.get(f"{url}/api/config/dns/hosts", timeout=15)
+        r.raise_for_status()
+        existing = list(r.json().get("config", {}).get("dns", {}).get("hosts", []))
+    except Exception as exc:
+        print(f"[WARN] DNS local: no se pudo leer dns.hosts de Pi-hole: {exc}")
+        return
+
+    name_counts: dict[str, int] = {}
+    for dev in devices:
+        if dev["name"].strip():
+            n = sanitize_name(dev["name"])
+            name_counts[n] = name_counts.get(n, 0) + 1
+
+    desired: dict[str, str] = {}  # fqdn -> ip
+    for dev in devices:
+        raw, ip = dev["name"] or "", dev["ip"]
+        if not ip or is_generic_name(raw, name_counts):
+            continue
+        label = _dns_label(raw)
+        if not label:
+            continue
+        fqdn = f"{label}.{suffix}" if suffix else label
+        if fqdn in desired and desired[fqdn] != ip:
+            print(f"  [-] DNS local: nombre duplicado '{fqdn}', se omite {ip}")
+            continue
+        desired[fqdn] = ip
+
+    managed: dict = state.setdefault("_pihole_dns", {})
+    now = now_iso()
+    now_dt = datetime.now(timezone.utc)
+
+    def parse(entry: str):
+        parts = entry.split()
+        return (parts[0], parts[1].lower()) if len(parts) >= 2 else (None, None)
+
+    # Registros ajenos (no creados por este add-on) se conservan tal cual.
+    foreign_hosts = set()
+    result: list[str] = []
+    for entry in existing:
+        ip, host = parse(entry)
+        if host is None or host in managed:
+            continue  # los gestionados se reconstruyen abajo
+        foreign_hosts.add(host)
+        result.append(entry)
+
+    for fqdn, ip in sorted(desired.items()):
+        if fqdn in foreign_hosts:
+            print(f"  [?] DNS local: '{fqdn}' ya existe en Pi-hole (no es de este add-on), no se toca.")
+            continue
+        result.append(f"{ip} {fqdn}")
+        managed[fqdn] = {"ip": ip, "last_seen": now}
+
+    deleted = 0
+    for fqdn, info in list(managed.items()):
+        if fqdn in desired:
+            continue
+        age = now_dt - datetime.fromisoformat(info["last_seen"])
+        if stale_days > 0 and age >= timedelta(days=stale_days):
+            managed.pop(fqdn, None)
+            deleted += 1
+            print(f"  [x] DNS local borrado: {fqdn} (sin verse hace {age.days}d)")
+        elif stale_days == 0:
+            managed.pop(fqdn, None)  # sin periodo de gracia
+            deleted += 1
+        else:
+            result.append(f"{info['ip']} {fqdn}")  # periodo de gracia: se conserva
+
+    # Un mismo IP con dos nombres gestionados: el PTR devolveria el viejo; gana el actual.
+    ip_to_current = {ip: fqdn for fqdn, ip in desired.items()}
+    result = [e for e in result
+              if not (parse(e)[1] in managed and parse(e)[1] not in desired
+                      and parse(e)[0] in ip_to_current)]
+    for fqdn in [f for f in managed if f not in desired and managed[f]["ip"] in ip_to_current]:
+        managed.pop(fqdn, None)
+
+    if sorted(result) == sorted(existing):
+        print(f"[Pi-hole] DNS local: {len(desired)} registros, sin cambios.")
+        return
+    if dry_run:
+        print(f"[Pi-hole] Dry-run DNS local: {len(desired)} registros, {deleted} borrados.")
+        return
+    r = session.patch(f"{url}/api/config", json={"config": {"dns": {"hosts": sorted(result)}}},
+                      timeout=30)
+    if r.status_code not in (200, 201):
+        print(f"[ERROR] DNS local: Pi-hole rechazo el cambio: {r.status_code} {r.text}")
+        return
+    print(f"[Pi-hole] DNS local actualizado: {len(desired)} registros "
+          f"({len(result)} en total en dns.hosts), {deleted} borrados.")
 
 def _ph_quote(identifier: str) -> str:
     return urllib.parse.quote(identifier, safe="")
@@ -789,6 +894,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pihole-host", default="",
                         help="URL o IP de Pi-hole v6 (si se omite, no se sincroniza Pi-hole)")
     parser.add_argument("--pihole-pass", default=None)
+    parser.add_argument("--pihole-local-dns", action="store_true",
+                        help="Cargar 'IP nombre.sufijo' de cada dispositivo en dns.hosts de Pi-hole (nombres + DNS inverso)")
+    parser.add_argument("--pihole-dns-suffix", default="",
+                        help="Sufijo de dominio para los registros DNS locales (ej. sbsoft.com.ar)")
     parser.add_argument("--pihole-exempt-group", default="Adultos",
                         help="Grupo de Pi-hole (sin listas parentales) donde van los dispositivos de --parental-exempt-json")
     parser.add_argument("--pihole-unfiltered-group", default="Unfiltered",
@@ -866,6 +975,7 @@ def main() -> None:
                     unfiltered_group=args.pihole_unfiltered_group,
                     parental_exempt=parental_exempt,
                     unfiltered_devices=unfiltered_devices,
+                    local_dns_suffix=args.pihole_dns_suffix if args.pihole_local_dns else None,
                 )
             except Exception as exc:
                 print(f"[ERROR] Fallo la sincronizacion con Pi-hole: {exc}")

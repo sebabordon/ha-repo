@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.0
+- New `pihole_local_dns` + `pihole_dns_suffix`: every synced device is written to Pi-hole `dns.hosts` as `IP name.suffix` (e.g. `fausto-pc.sbsoft.com.ar`), giving Pi-hole device names and reverse DNS since the Deco does not answer PTR. One PATCH per sync; only records created by this add-on are managed (manual ones are never touched); renamed/re-IP'd devices are updated and absent ones removed after `stale_days`
+
 ## 1.7.3
 - Pi-hole: the single-group normalization is now always applied to synced clients, even when `parental_exempt` and `unfiltered_devices` are empty (before, legacy `[Default, Parental]` clients were left untouched in that case)
 

@@ -11,7 +11,7 @@ description: >
   for more than stale_days is removed from AdGuard. Devices listed in
   parental_exempt get Parental Control turned off on every sync, and
   devices in unfiltered_devices get every AdGuard block turned off.
-version: "1.7.3"
+version: "1.8.0"
 slug: "deco-adguard-sync"
 init: false
 arch:
@@ -56,6 +56,16 @@ options:
   # (not Default), so keep it without any lists/rules attached. Created
   # automatically when unfiltered_devices is non-empty.
   pihole_unfiltered_group: "Unfiltered"
+
+  # Load every synced device into Pi-hole local DNS (dns.hosts) as
+  # "IP name.suffix", so Pi-hole shows device names and answers reverse DNS
+  # (the Deco does not serve PTR for its clients). Only records created by
+  # this add-on are touched; manual ones are never modified.
+  pihole_local_dns: true
+
+  # Domain suffix for those records, e.g. "sbsoft.com.ar" -> fausto-pc.sbsoft.com.ar.
+  # Leave empty for bare names.
+  pihole_dns_suffix: "sbsoft.com.ar"
 
   # Sync to AdGuard Home. Turn off to sync only to Pi-hole.
   adguard_enabled: true
@@ -108,6 +118,8 @@ schema:
   pihole_host: str?
   pihole_pass: password?
   pihole_exempt_group: str?
+  pihole_local_dns: bool?
+  pihole_dns_suffix: str?
   pihole_unfiltered_group: str?
   adguard_enabled: bool?
   agh_host: str?
