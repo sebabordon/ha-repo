@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.9
+
+- Bump automático de Authentik 2026.8.6 → 2026.8.7. Ver [release notes](https://docs.goauthentik.io/releases/2026.8/) antes de aplicar el update desde Home Assistant.
+
+
 ## 0.2.8
 
 - Bump automático de Authentik 2026.8.5 → 2026.8.6. Ver [release notes](https://docs.goauthentik.io/releases/2026.8/) antes de aplicar el update desde Home Assistant.
